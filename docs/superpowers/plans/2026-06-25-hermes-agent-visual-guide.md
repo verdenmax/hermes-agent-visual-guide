@@ -1,6 +1,6 @@
 # Hermes Agent 图解学习指南 — 实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 制作一份详细、双语、图解的 Hermes Agent 设计原理学习指南（25 章 / 7 部分），仿照 `llama-cpp-visual-guide` 的零依赖 Python 生成器形态。
 
@@ -101,7 +101,7 @@ hermes-agent-visual-guide/
 **Files:**
 - Create: `README.md`、`LICENSE`、`LICENSE-CONTENT`、`.gitignore`
 
-- [ ] **Step 1: 写 `.gitignore`**
+- [x] **Step 1: 写 `.gitignore`**
 
 ```
 __pycache__/
@@ -109,19 +109,19 @@ __pycache__/
 .DS_Store
 ```
 
-- [ ] **Step 2: 写 `LICENSE`（MIT，覆盖 `src/` 生成器/校验脚本）**
+- [x] **Step 2: 写 `LICENSE`（MIT，覆盖 `src/` 生成器/校验脚本）**
 
 填入标准 MIT 文本，版权行：`Copyright (c) 2026 verdenmax`。
 
-- [ ] **Step 3: 写 `LICENSE-CONTENT`（CC BY 4.0，覆盖课程内容）**
+- [x] **Step 3: 写 `LICENSE-CONTENT`（CC BY 4.0，覆盖课程内容）**
 
 填入 `Creative Commons Attribution 4.0 International` 标准声明摘要 + 指向 `https://creativecommons.org/licenses/by/4.0/` 的链接。
 
-- [ ] **Step 4: 写 `README.md`**
+- [x] **Step 4: 写 `README.md`**
 
 包含：项目简介（第三方非官方、解释 hermes-agent 设计、不含其源码）、双语徽章、构建方式（`cd src && python3 build.py`）、打印方式（`build_print.py`）、校验方式（`check_html.py`/`check_links.py`）、项目结构、双许可声明。仿 llama-cpp README 结构。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add README.md LICENSE LICENSE-CONTENT .gitignore
@@ -133,11 +133,11 @@ git commit -m "chore: project meta files (README, dual license, gitignore)"
 **Files:**
 - Create: `src/shell.py`（以 llama-cpp `src/shell.py` 为基底改造）
 
-- [ ] **Step 1: 复制基底并改品牌**
+- [x] **Step 1: 复制基底并改品牌**
 
 从 llama-cpp `src/shell.py` 复制 `esc()`、`head_meta()`、`bi()`、`page()`、`index_page()`、`FAVICON`、`INDEX_FILE`、整段 `CSS`。把 `og:site_name`、FAVICON 文案、品牌串改为 Hermes（favicon 文字 `☤`，`site_name`="Hermes Agent 设计图解"）。
 
-- [ ] **Step 2: PAGES 先只含第 1 章**
+- [x] **Step 2: PAGES 先只含第 1 章**
 
 ```python
 # (filename, title_zh, title_en, part_zh, part_en)
@@ -147,7 +147,7 @@ PAGES = [
 ]
 ```
 
-- [ ] **Step 3: 金色主题——覆盖 CSS 变量**
+- [x] **Step 3: 金色主题——覆盖 CSS 变量**
 
 在 `CSS` 的 `:root` 把 accent 系改为 Hermes 金色（保留其余变量）：
 
@@ -161,7 +161,7 @@ PAGES = [
 }
 ```
 
-- [ ] **Step 4: 新增两个框 + 约束徽章样式**
+- [x] **Step 4: 新增两个框 + 约束徽章样式**
 
 在 `CSS` 末尾追加：
 
@@ -179,12 +179,12 @@ PAGES = [
   color:var(--purple); border:1px solid var(--purple); margin:0 .2rem; white-space:nowrap; }
 ```
 
-- [ ] **Step 5: 验证可导入**
+- [x] **Step 5: 验证可导入**
 
 Run: `cd src && python3 -c "import shell; print(len(shell.PAGES), shell.INDEX_FILE)"`
 Expected: 打印 `1 index.html`，无异常。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/shell.py
@@ -196,13 +196,13 @@ git commit -m "feat: shell.py with Hermes gold theme + collab/design cards"
 **Files:**
 - Create: `src/build.py`、`src/build_print.py`、`src/check_links.py`、`src/check_html.py`（均以 llama-cpp 同名文件为基底）
 
-- [ ] **Step 1: 复制 `build.py`、`build_print.py`、`check_links.py`**
+- [x] **Step 1: 复制 `build.py`、`build_print.py`、`check_links.py`**
 
 几乎照搬。改动点：
 - `build_print.py`：`TITLE`/`INTRO`/`TOC` 文案改为 Hermes、课数措辞改为"全 25 章"。
 - `check_links.py`：`ALLOW_MISSING` 改为 `{"hermes-agent-visual-guide-zh.pdf","hermes-agent-visual-guide-en.pdf"}`。
 
-- [ ] **Step 2: 复制 `check_html.py` 并改常量**
+- [x] **Step 2: 复制 `check_html.py` 并改常量**
 
 改动点：
 - `MAX_LESSON = 25`
@@ -210,7 +210,7 @@ git commit -m "feat: shell.py with Hermes gold theme + collab/design cards"
 - `SOFT_EXEMPT = {"25-design-principles-glossary.html"}`（末章速查豁免图密度/要点卡）
 - index pill 正则沿用 `共 (\d+) 课 · (\d+) 个部分`（`index_page` 会生成该串）
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/build.py src/build_print.py src/check_links.py src/check_html.py
@@ -222,11 +222,11 @@ git commit -m "feat: build + print + html/link check scripts (MAX_LESSON=25)"
 **Files:**
 - Create: `src/registry.py`、`src/quizzes.py`、`src/part1.py`
 
-- [ ] **Step 1: `quizzes.py`——从 llama-cpp 复制 `render()` 接口**
+- [x] **Step 1: `quizzes.py`——从 llama-cpp 复制 `render()` 接口**
 
 复制 llama-cpp `quizzes.py` 的 `render(fname, lang)` 与数据结构；`QUIZZES` 先放第 1 章一道占位双语题（合法结构即可，阶段 1 再写实）。
 
-- [ ] **Step 2: `registry.py`——仅导入 part1**
+- [x] **Step 2: `registry.py`——仅导入 part1**
 
 ```python
 import part1
@@ -235,16 +235,16 @@ CONTENT = {
 }
 ```
 
-- [ ] **Step 3: `part1.py`——第 1 章占位（合规最小内容）**
+- [x] **Step 3: `part1.py`——第 1 章占位（合规最小内容）**
 
 `LESSON_01 = {"zh": ..., "en": ...}`，每语种含：一段 `lead`、一个 `card analogy`、一个 `layers` 或 `flow` 图、一个 `card key`（本课要点 / Key points）。够触发 `check_html` 0 ERR（CJK<3000 的 WARN 可接受）。**内容为占位，阶段 1 写实。**
 
-- [ ] **Step 4: build + 校验**
+- [x] **Step 4: build + 校验**
 
 Run: `cd src && python3 build.py && python3 build_print.py && python3 check_html.py && python3 check_links.py`
 Expected: build 写出 `lessons/01-*.html` + `index.html` + `print_*.html`；`check_html` 打印 `0 error(s)`；`check_links` 打印 `all N internal links resolve`。
 
-- [ ] **Step 5: Commit（含生成产物）**
+- [x] **Step 5: Commit（含生成产物）**
 
 ```bash
 git add src/registry.py src/quizzes.py src/part1.py index.html lessons/ print_zh.html print_en.html
@@ -253,7 +253,7 @@ git commit -m "feat: pipeline smoke test — placeholder lesson 1 builds & check
 
 ### Task 0.5 — 提交 plan 并锁定阶段 0
 
-- [ ] **Step 1: Commit plan**
+- [x] **Step 1: Commit plan**
 
 ```bash
 git add docs/superpowers/plans/2026-06-25-hermes-agent-visual-guide.md
