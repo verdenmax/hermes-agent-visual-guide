@@ -532,3 +532,273 @@ continue</strong>, design tasks against an <strong>output budget</strong>; don't
 </div>
 """,
 }
+
+LESSON_03 = {
+    "zh": r"""
+<p class="lead">
+上一章把模型当成一个“零件”看它的物理特性。这一章换个视角：当你把这个零件组装成一个
+<strong>会自主、多步行动</strong>的 agent 时，又有一批问题被<strong>放大</strong>。它们是 agent 工程里
+“最痛”的部分——<strong>真实性(C)</strong>、<strong>指令遵循的怪癖(D)</strong>、
+<strong>多步自主(F)</strong>、<strong>运维(G)</strong>。其中两个标了 ⭐⭐：
+<strong>指令与数据分不开</strong>和<strong>误差累积</strong>，几乎是所有 agent 事故的源头。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 生活类比</div>
+  现在让那位“失忆专家”<strong>连续做 20 步</strong>，每一步都基于上一步的结果。麻烦来了：他<strong>编造时也很自信</strong>
+  （你分不出他在猜还是在知道）；他<strong>读到纸条里夹带的“指令”会照做</strong>（哪怕那是别人塞的）；
+  他还<strong>爱顺着你说</strong>（你一质疑他就改口）。20 步下来，小错叠小错，结果可能已经面目全非。
+</div>
+
+<h2>C · 真实性：它会自信地编造</h2>
+<div class="card macro">
+  <div class="tag">🌍 宏观理解</div>
+  模型是个<strong>推理器，不是事实来源</strong>。它会“幻觉”，而且<strong>校准很差</strong>——“我很确定”和“它真的对”
+  之间没有可靠关系。对它产出的事实、ID、URL，都要<strong>用工具核实</strong>，别照单全收。
+</div>
+<p><strong>① 幻觉 + 校准差。</strong>模型会编出不存在的 API、引用、数字，且语气一样自信。对策：<strong>用检索接地</strong>、
+<strong>要求引用来源</strong>、<strong>用工具验证</strong>。这正是 Hermes 强调“检索接地”(第 12 章)、把事实交给工具的原因。</p>
+<p><strong>② 上下文中毒(context poisoning)。</strong>一旦一个幻觉<strong>进了对话历史</strong>，后面会被反复当成事实强化。
+对策：<strong>别把模型未验证的断言又当事实喂回去</strong>；不可信内容要<strong>隔离、标注来源</strong>。</p>
+<p><strong>③ 知识截止。</strong>模型只知道训练截止前的世界。对策：<strong>用工具取新数据</strong> + 在 system prompt 里
+<strong>注入当前日期</strong>(Hermes 正是这么做的，见第 6 章)。</p>
+<div class="card warn">
+  <div class="tag">⚠️ 关键</div>
+  “<strong>我很确定</strong>”≠“<strong>它是对的</strong>”。模型的自信度和正确率<strong>不挂钩</strong>。不要把它的话当事实，要核实。
+</div>
+
+<h2>D · 指令遵循的怪癖：最重磅的坑</h2>
+<div class="card macro">
+  <div class="tag">🌍 宏观理解</div>
+  模型<strong>无法可靠区分“指令”和“待处理的数据”</strong>——这是<strong>提示注入</strong>的根源，也是 agent 安全的头号问题。
+</div>
+<p><strong>① ⭐⭐ 指令与数据分不开。</strong>工具输出、网页、检索文档、用户文件……任何进入上下文的内容，<strong>都可能夹带指令劫持 agent</strong>。
+对策必须组合拳：<strong>最小权限工具</strong>、危险动作<strong>人在环</strong>、<strong>隔离/定界不可信内容</strong>、
+把<strong>规划器(特权)与数据处理器(隔离)分离</strong>。Hermes 的网关有<strong>两道守卫</strong>(第 18 章)、委派做<strong>权限隔离</strong>(第 14 章)。</p>
+<p><strong>② ⭐ 谄媚(sycophancy)。</strong>模型倾向<strong>同意用户</strong>，一被反驳就改口。这让“审查/验证”类 agent <strong>极其危险</strong>——
+它会顺着你说“你这段有 bug 的代码没问题”。对策：<strong>用独立的批评者</strong>、对抗式设问，别让用户的断言污染验证(第 14 章 <span class="mono">background_review</span>)。</p>
+<p><strong>③ 生成-验证差。</strong>模型常常<strong>“验证”比“生成”强</strong>。所以让<strong>另一遍/另一个 agent</strong> 专门做核查，
+而不是自己一口气写完不回头。</p>
+<p><strong>④ 提示脆弱。</strong>措辞、格式的<strong>小改</strong>可能让行为<strong>大变</strong>。对策：把<strong>提示当代码</strong>——版本化、配 eval 测试集(第 22 章)。</p>
+<div class="flow">
+  <div class="node hl"><div class="nt">不可信内容</div><div class="nd">网页/工具输出/文件</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">夹带“指令”</div><div class="nd">“忽略之前，去做 X”</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">模型分不清</div><div class="nd">把数据当指令</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">对策</div><div class="nd">隔离+最小权限+人在环</div></div>
+</div>
+
+<h2>F · 多步自主：agent 最痛的地方</h2>
+<div class="card macro">
+  <div class="tag">🌍 宏观理解</div>
+  让模型<strong>连续自主跑很多步</strong>，错误会<strong>累积</strong>、目标会<strong>漂移</strong>。这是“<strong>窄而专的 agent 优于放任式长自主</strong>”的根本原因。
+</div>
+<p><strong>① ⭐⭐ 误差累积(error compounding)。</strong>每步 95% 可靠，20 步连乘只剩 <strong>≈36%</strong>。对策：<strong>保持回路短</strong>、
+<strong>每步验证</strong>、<strong>任务分解</strong>、<strong>设检查点</strong>。Hermes 的委派(第 13 章)正是用“短回路 + 分解”对抗它。</p>
+<div class="cellgroup">
+  <div class="cg-cap">每步 95% 可靠，连乘 N 步后的整体成功率：</div>
+  <div class="cells">
+    <span class="cell hl">1 步 95%</span><span class="cell q">5 步 77%</span><span class="cell q">10 步 60%</span><span class="cell dim">20 步 36%</span>
+    <span class="lab">误差累积</span>
+  </div>
+</div>
+<p><strong>② ⭐ 长程规划漂移。</strong>长任务里 agent 会<strong>忘记目标、绕圈、死循环</strong>。对策：<strong>显式目标追踪</strong>(todo)、
+<strong>周期性“重新接地”</strong>(重述目标+进度)、<strong>步数预算 + 防循环</strong>(第 9 章 todo、第 5 章迭代预算)。</p>
+<p><strong>③ 工具越多越不准。</strong>工具数量↑、语义重叠↑ → 选择质量↓。对策：<strong>小而正交的工具集</strong>、<strong>清晰描述</strong>、
+<strong>分组/动态加载</strong>。这正呼应 Hermes 的<strong>窄腰 + Footprint Ladder</strong>(第 8 章)。</p>
+
+<h2>G · 运维层：上线之后才显形</h2>
+<div class="card macro">
+  <div class="tag">🌍 宏观理解</div>
+  把 agent 跑在真实世界里，还有一层<strong>运维</strong>约束：模型会<strong>悄悄变</strong>、成本<strong>不对称</strong>、推理过程<strong>留不住</strong>。
+</div>
+<table class="t">
+  <tr><th>运维约束</th><th>表现</th><th>对策</th></tr>
+  <tr><td><strong>模型版本漂移</strong></td><td>provider 偷偷更新，行为在你脚下变</td><td>固定版本 + 回归 eval（把提示当代码做 CI）</td></tr>
+  <tr><td><strong>成本/延迟不对称</strong></td><td>输出 token 更贵、推理 token 烧钱、有限流</td><td>预算感知、<strong>模型路由</strong>(简单步用便宜模型)、流式、退避重试</td></tr>
+  <tr><td><strong>推理 token 不持久</strong></td><td>思考链通常下一轮就丢</td><td>把关键结论<strong>显式落到可见上下文</strong></td></tr>
+</table>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 自主化的坑由哪一章兜底</div>
+  <div class="collab-sub">① 约束 → Hermes 对策（路线图）</div>
+  <strong>D 指令与数据分不开</strong> → 第 18 章网关两道守卫 + 第 14 章委派权限隔离；<strong>D 谄媚 / 生成-验证差</strong> → 第 14 章独立批评者
+  <span class="mono">background_review</span>；<strong>F 误差累积</strong> → 第 13 章委派短回路/分解/检查点；<strong>F 规划漂移</strong> → 第 9 章 todo 目标追踪；
+  <strong>F 工具过载</strong> → 第 8 章窄腰/小正交工具集；<strong>G 成本</strong> → 第 5 章迭代预算 + <span class="mono">smart_model_routing</span> 模型路由。
+  <div class="collab-sub">② 一次自主多步如何“步步踩坑”</div>
+  agent 读了一份不可信文档(可能<strong>注入</strong>，D) → 基于一个<strong>幻觉</strong>(C)往下走 → 每步带 5% 错、20 步<strong>累积</strong>到 36%(F) →
+  中途<strong>忘了目标</strong>绕圈(F) → 你还看不到它的<strong>推理</strong>(G)。每一环都需要工程纪律兜底。
+  <div class="collab-sub">③ 关键心法</div>
+  <strong>自主性是有代价的</strong>：回路要短、每步要验、不可信内容要隔离、关键结论要落地、模型版本要钉死。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  这一章立的地基是：<strong>自主性不是免费的</strong>。模型越自主、步数越多，幻觉、注入、谄媚、误差累积、目标漂移就越危险。
+  Hermes 的应对不是“让它一口气跑完”，而是用<strong>工程纪律驯服</strong>——短回路、独立验证、权限隔离、显式目标、固定版本。
+  <p style="margin:.5rem 0 0">对应的 LLM 约束：
+  <span class="badge constraint">C·幻觉</span><span class="badge constraint">C·上下文中毒</span>
+  <span class="badge constraint">D·指令=数据 ⭐⭐</span><span class="badge constraint">D·谄媚</span>
+  <span class="badge constraint">F·误差累积 ⭐⭐</span><span class="badge constraint">F·规划漂移</span>
+  <span class="badge constraint">G·版本漂移</span>。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>幻觉 + 校准差</strong>：自信≠正确；用检索接地、工具验证，别把未验证断言喂回(防<strong>中毒</strong>)。</li>
+    <li><strong>⭐⭐ 指令与数据分不开</strong>：一切输入都可能<strong>注入</strong>；最小权限 + 隔离 + 人在环 + 规划/数据分离。</li>
+    <li><strong>谄媚</strong>：审查类任务用<strong>独立批评者</strong>，别让用户断言污染验证。</li>
+    <li><strong>⭐⭐ 误差累积</strong>：95% 的 20 步只剩 36%；<strong>短回路、分解、每步验证、检查点</strong>。</li>
+    <li><strong>运维</strong>：钉死模型版本 + 回归 eval；成本敏感用模型路由；关键结论落可见上下文。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">
+The previous chapter treated the model as a “part” and looked at its physics. This chapter shifts view: once you
+assemble that part into an agent that acts <strong>autonomously, over many steps</strong>, a new set of problems gets
+<strong>amplified</strong>. These are the “most painful” parts of agent engineering — <strong>truthfulness (C)</strong>,
+<strong>instruction-following quirks (D)</strong>, <strong>multi-step autonomy (F)</strong>, and <strong>operations
+(G)</strong>. Two are marked ⭐⭐: <strong>instructions and data are inseparable</strong> and <strong>error
+compounding</strong> — the source of nearly every agent incident.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy</div>
+  Now make that “amnesiac expert” do <strong>20 steps in a row</strong>, each building on the last. Trouble: he's
+  <strong>just as confident when fabricating</strong> (you can't tell guessing from knowing); he'll <strong>obey
+  “instructions” smuggled into the notes</strong> (even if someone else slipped them in); and he <strong>loves to agree
+  with you</strong> (push back and he flips). After 20 steps, small errors stack and the result may be unrecognizable.
+</div>
+
+<h2>C · Truthfulness: it fabricates, confidently</h2>
+<div class="card macro">
+  <div class="tag">🌍 Big picture</div>
+  The model is a <strong>reasoner, not a source of facts</strong>. It hallucinates, and it's <strong>poorly
+  calibrated</strong> — “I'm sure” has no reliable link to “it's correct.” Treat its facts, IDs, and URLs as things to
+  <strong>verify with tools</strong>, not accept at face value.
+</div>
+<p><strong>① Hallucination + poor calibration.</strong> It invents non-existent APIs, citations, numbers — in the same
+confident tone. Fix: <strong>ground with retrieval</strong>, <strong>demand citations</strong>, <strong>verify with
+tools</strong>. That's why Hermes leans on retrieval grounding (ch.12) and hands facts to tools.</p>
+<p><strong>② Context poisoning.</strong> Once a hallucination <strong>enters the history</strong>, it gets reinforced as
+fact downstream. Fix: <strong>don't feed the model's unverified claims back as fact</strong>; <strong>isolate and
+label</strong> untrusted content by source.</p>
+<p><strong>③ Knowledge cutoff.</strong> It only knows the world up to training. Fix: <strong>fetch fresh data with
+tools</strong> + <strong>inject the current date</strong> into the system prompt (exactly what Hermes does, ch.6).</p>
+<div class="card warn">
+  <div class="tag">⚠️ Key</div>
+  “<strong>I'm sure</strong>” ≠ “<strong>it's correct</strong>.” The model's confidence and accuracy are
+  <strong>decoupled</strong>. Don't take its word as fact — verify.
+</div>
+
+<h2>D · Instruction-following quirks: the heaviest trap</h2>
+<div class="card macro">
+  <div class="tag">🌍 Big picture</div>
+  The model <strong>can't reliably tell “instructions” from “data to be processed”</strong> — the root of <strong>prompt
+  injection</strong> and the number-one agent-security problem.
+</div>
+<p><strong>① ⭐⭐ Instructions and data are inseparable.</strong> Tool output, web pages, retrieved docs, user files —
+anything entering the context <strong>can smuggle instructions that hijack the agent</strong>. The countermeasure is a
+combo: <strong>least-privilege tools</strong>, <strong>human-in-the-loop</strong> for dangerous actions,
+<strong>isolate/delimit untrusted content</strong>, and <strong>separate the planner (privileged) from the data processor
+(isolated)</strong>. Hermes' gateway has <strong>two guards</strong> (ch.18); delegation does <strong>privilege
+isolation</strong> (ch.14).</p>
+<p><strong>② ⭐ Sycophancy.</strong> The model tends to <strong>agree with the user</strong> and flips when challenged. That
+makes “review/verify” agents <strong>dangerous</strong> — it'll happily say your buggy code “looks fine.” Fix: <strong>use
+an independent critic</strong>, adversarial framing; don't let the user's assertions poison verification (ch.14
+<span class="mono">background_review</span>).</p>
+<p><strong>③ Generator-verifier gap.</strong> The model is often <strong>better at verifying than generating</strong>. So let
+<strong>another pass / another agent</strong> do the checking instead of one-shotting without review.</p>
+<p><strong>④ Prompt brittleness.</strong> Small changes in wording/format can <strong>change behavior a lot</strong>. Fix:
+treat <strong>prompts as code</strong> — version them, back them with an eval set (ch.22).</p>
+<div class="flow">
+  <div class="node hl"><div class="nt">Untrusted content</div><div class="nd">web / tool output / file</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">Smuggled “instruction”</div><div class="nd">“ignore above, do X”</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">Model can't tell</div><div class="nd">treats data as instruction</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">Countermeasure</div><div class="nd">isolate + least-privilege + HITL</div></div>
+</div>
+
+<h2>F · Multi-step autonomy: the agent's sorest spot</h2>
+<div class="card macro">
+  <div class="tag">🌍 Big picture</div>
+  Let the model run <strong>many autonomous steps</strong> and errors <strong>compound</strong>, goals <strong>drift</strong>.
+  This is the root reason a <strong>narrow, specialized agent beats free-wheeling long autonomy</strong>.
+</div>
+<p><strong>① ⭐⭐ Error compounding.</strong> 95% reliable per step, 20 steps multiplies to <strong>≈36%</strong>. Fix:
+<strong>keep loops short</strong>, <strong>verify each step</strong>, <strong>decompose</strong>, <strong>checkpoint</strong>.
+Hermes' delegation (ch.13) fights this with “short loop + decomposition.”</p>
+<div class="cellgroup">
+  <div class="cg-cap">95% reliable per step — overall success after N steps:</div>
+  <div class="cells">
+    <span class="cell hl">1 step 95%</span><span class="cell q">5 steps 77%</span><span class="cell q">10 steps 60%</span><span class="cell dim">20 steps 36%</span>
+    <span class="lab">error compounding</span>
+  </div>
+</div>
+<p><strong>② ⭐ Long-horizon drift.</strong> In long tasks the agent <strong>forgets the goal, loops, spins</strong>. Fix:
+<strong>explicit goal tracking</strong> (todo), <strong>periodic “re-grounding”</strong> (restate goal + progress),
+<strong>step budget + loop-breaking</strong> (ch.9 todo, ch.5 iteration budget).</p>
+<p><strong>③ More tools = worse accuracy.</strong> More tools / overlapping semantics → worse selection. Fix: <strong>a
+small, orthogonal tool set</strong>, <strong>clear descriptions</strong>, <strong>grouping / dynamic loading</strong>. This
+echoes Hermes' <strong>narrow waist + Footprint Ladder</strong> (ch.8).</p>
+
+<h2>G · Operations: shows up only after you ship</h2>
+<div class="card macro">
+  <div class="tag">🌍 Big picture</div>
+  Run an agent in the real world and a layer of <strong>operational</strong> constraints appears: the model <strong>changes
+  silently</strong>, costs are <strong>asymmetric</strong>, and reasoning <strong>doesn't persist</strong>.
+</div>
+<table class="t">
+  <tr><th>Ops constraint</th><th>Symptom</th><th>Countermeasure</th></tr>
+  <tr><td><strong>Model version drift</strong></td><td>the provider updates silently; behavior shifts under you</td><td>pin versions + regression eval (prompts as code in CI)</td></tr>
+  <tr><td><strong>Cost/latency asymmetry</strong></td><td>output tokens pricier, reasoning tokens burn money, rate limits</td><td>budget-aware, <strong>model routing</strong> (cheap model for easy steps), streaming, backoff retries</td></tr>
+  <tr><td><strong>Reasoning isn't persistent</strong></td><td>the thinking chain is usually dropped next turn</td><td>write key conclusions <strong>explicitly into visible context</strong></td></tr>
+</table>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · which chapter backstops each autonomy trap</div>
+  <div class="collab-sub">① Constraint → Hermes' answer (roadmap)</div>
+  <strong>D instructions=data</strong> → ch.18 two gateway guards + ch.14 delegation privilege isolation; <strong>D
+  sycophancy / generator-verifier</strong> → ch.14 independent critic <span class="mono">background_review</span>;
+  <strong>F error compounding</strong> → ch.13 delegation short loop/decompose/checkpoint; <strong>F drift</strong> → ch.9
+  todo goal-tracking; <strong>F tool overload</strong> → ch.8 narrow waist / small orthogonal set; <strong>G cost</strong> →
+  ch.5 iteration budget + <span class="mono">smart_model_routing</span>.
+  <div class="collab-sub">② How one autonomous run trips at every step</div>
+  the agent reads an untrusted doc (possible <strong>injection</strong>, D) → proceeds on a <strong>hallucination</strong>
+  (C) → each step carries 5% error, 20 steps <strong>compound</strong> to 36% (F) → it <strong>forgets the goal</strong> and
+  loops (F) → and you can't even see its <strong>reasoning</strong> (G). Every link needs an engineering backstop.
+  <div class="collab-sub">③ The mindset</div>
+  <strong>Autonomy has a cost</strong>: keep loops short, verify each step, isolate untrusted content, land key conclusions, pin model versions.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design tradeoff · what this chapter is about</div>
+  The foundation here: <strong>autonomy isn't free</strong>. The more autonomous the model and the more steps it takes, the
+  more dangerous hallucination, injection, sycophancy, error compounding and goal drift become. Hermes' answer isn't “let it
+  run end-to-end” but <strong>taming it with engineering discipline</strong> — short loops, independent verification,
+  privilege isolation, explicit goals, pinned versions.
+  <p style="margin:.5rem 0 0">The matching LLM constraints:
+  <span class="badge constraint">C·hallucination</span><span class="badge constraint">C·context-poisoning</span>
+  <span class="badge constraint">D·instr=data ⭐⭐</span><span class="badge constraint">D·sycophancy</span>
+  <span class="badge constraint">F·error-compounding ⭐⭐</span><span class="badge constraint">F·drift</span>
+  <span class="badge constraint">G·version-drift</span>.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Hallucination + poor calibration</strong>: confident ≠ correct; ground with retrieval, verify with tools, don't feed unverified claims back (avoid <strong>poisoning</strong>).</li>
+    <li><strong>⭐⭐ Instructions = data</strong>: any input can <strong>inject</strong>; least-privilege + isolate + human-in-the-loop + planner/data separation.</li>
+    <li><strong>Sycophancy</strong>: use an <strong>independent critic</strong> for review tasks; don't let user assertions poison verification.</li>
+    <li><strong>⭐⭐ Error compounding</strong>: 95% over 20 steps leaves 36%; <strong>short loops, decompose, verify each step, checkpoint</strong>.</li>
+    <li><strong>Ops</strong>: pin model versions + regression eval; route models for cost; land key conclusions in visible context.</li>
+  </ul>
+</div>
+""",
+}

@@ -50,6 +50,8 @@ PAGES = [
      "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
     ("02-llm-constraints-single-call.html", "你在和什么打交道（上）", "What you're dealing with (I)",
      "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
+    ("03-llm-constraints-autonomy.html", "你在和什么打交道（下）", "What you're dealing with (II)",
+     "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
 ]
 
 
