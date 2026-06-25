@@ -211,6 +211,40 @@ QUIZZES = {
              "en": "How do the iteration budget (parent 90 / subagent 50) and interruptibility together prevent an agent from spinning out? Without them, which ch.3 LLM constraint runs wild?"},
         ],
     },
+    "06-system-prompt-caching.html": {
+        "mcq": [
+            {
+                "q": {"zh": "system prompt 的三层为什么按 stable → context → volatile 排序？",
+                      "en": "Why are the system prompt's three tiers ordered stable → context → volatile?"},
+                "opts": [
+                    {"zh": "按字母顺序", "en": "Alphabetical order"},
+                    {"zh": "前缀缓存逐字节比较，把最易变的 volatile 压到末尾，改动只动尾巴、不殃及已缓存前缀", "en": "The prefix cache compares byte-by-byte; putting the most volatile tier last means edits only touch the tail, never the cached prefix"},
+                    {"zh": "volatile 最重要，放最后强调", "en": "Volatile is most important, placed last for emphasis"},
+                    {"zh": "随机排列", "en": "Random arrangement"},
+                ],
+                "answer": 1,
+                "why": {"zh": "前缀缓存从头逐字节比对，首个不同字节起整段作废；把每轮可能变的 memory/时间戳压到 volatile 末尾，就只动字符串尾巴，前面 stable/context 前缀的缓存毫发无伤。",
+                        "en": "The prefix cache matches byte-by-byte from the start and voids everything from the first differing byte; pushing per-turn-changing memory/timestamps into the volatile tail moves only the string's end, leaving the cached stable/context prefix intact."},
+            },
+            {
+                "q": {"zh": "system_and_3 缓存布局打几个断点、大约省多少输入成本？",
+                      "en": "How many breakpoints does system_and_3 place, and roughly how much input cost does it save?"},
+                "opts": [
+                    {"zh": "1 个断点，省 ~10%", "en": "1 breakpoint, ~10%"},
+                    {"zh": "4 个断点（system + 最后 3 条非 system），省 ~75%", "en": "4 breakpoints (system + last 3 non-system), ~75%"},
+                    {"zh": "8 个断点，省 ~50%", "en": "8 breakpoints, ~50%"},
+                    {"zh": "每条消息一个断点，省 100%", "en": "One per message, 100%"},
+                ],
+                "answer": 1,
+                "why": {"zh": "apply_anthropic_cache_control 只用一种布局：system 前缀 + 最后 3 条非 system，共 4 个 cache_control 断点、同一 TTL；命中前缀按缓存读取价计费，多轮输入成本压到约四分之一（~75% 折扣）。",
+                        "en": "apply_anthropic_cache_control uses one layout: system prefix + last 3 non-system = 4 cache_control breakpoints at one TTL; the hit prefix bills at the cache-read price, collapsing multi-turn input cost to about a quarter (~75% off)."},
+            },
+        ],
+        "open": [
+            {"zh": "context 注入扫描为什么用克制的「context」档、而不用更激进的 strict 档？这在「指令=数据(约束 D)」与「别误杀正常项目文档」之间是怎样一处权衡？",
+             "en": "Why does context-injection scanning use the restrained 'context' scope rather than the aggressive strict scope? How is that a trade-off between constraint D (instructions=data) and not killing legitimate project docs?"},
+        ],
+    },
 }
 
 

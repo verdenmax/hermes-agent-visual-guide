@@ -56,6 +56,8 @@ PAGES = [
      "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
     ("05-conversation-lifecycle.html", "一次对话的生命周期", "Lifecycle of one conversation",
      "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
+    ("06-system-prompt-caching.html", "System Prompt 与缓存", "System prompt & caching",
+     "第二部分 · Agent 核心", "Part 2 · The Agent Core"),
 ]
 
 

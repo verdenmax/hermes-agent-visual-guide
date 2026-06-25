@@ -338,6 +338,7 @@ details[open] > summary { list-style: none; }
   <li>What you're dealing with (II)</li>
   <li>Project map · the narrow waist</li>
   <li>Lifecycle of one conversation</li>
+  <li>System prompt & caching</li>
 </ol></div>
 <section class="lesson-print">
 <h1>What is Hermes</h1>
@@ -1215,6 +1216,219 @@ merged: List[Dict] = []
   <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
   <ul>
     <li>How do the iteration budget (parent 90 / subagent 50) and interruptibility together prevent an agent from spinning out? Without them, which ch.3 LLM constraint runs wild?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>System prompt & caching</h1>
+
+<p class="lead">
+This is the book's <strong>core chapter</strong>. Almost every Hermes design ultimately answers one question: <strong>does it break the prompt cache?</strong> This chapter nails three things — how the system prompt is assembled in <strong>three tiers</strong>, why it stays <strong>byte-for-byte stable</strong> within a session, and how Anthropic's cache breakpoints cut multi-turn input cost by <strong>~75%</strong>. One sentence is enough to remember: <strong>the system prompt is built once per session; the only exception is context compression</strong>.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy</div>
+  Think of the system prompt as a building's <strong>foundation and load-bearing walls</strong>: poured <strong>once</strong> at the start, relied on by the whole structure, and <strong>never knocked down and re-poured halfway through</strong> — that would collapse the building. Now view caching from another angle: it's like a <strong>prepaid “prefix pass”</strong> — the first turn pays <strong>full price</strong> to compute that long prefix and stores it in the upstream cache; every later turn, as long as the prefix hasn't changed by <strong>a single byte</strong>, only pays the balance (the few new lines), saving exactly the cost of recomputing the prefix. The moment you change the prefix mid-session (swap tools, reload memory, rebuild the prompt), the pass is void and every turn pays full price again.
+</div>
+
+<h2>Macro: three tiers ordered by stability</h2>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture</div>
+  The system prompt isn't a randomly concatenated blob — it's <strong>three tiers ordered by stability</strong>: <span class="mono">stable</span> (identity / tools / skills / environment, nearly constant), <span class="mono">context</span> (caller message + project context files, fixed for the session), and <span class="mono">volatile</span> (memory snapshot / user profile / timestamp, the most likely to change). The three are joined with <span class="mono">\n\n</span> into one string, <strong>built once at session start</strong>, cached on <span class="mono">agent._cached_system_prompt</span>, and reused verbatim every turn. Pushing the <strong>most volatile content to the very end</strong> means that even when it changes, only the <strong>tail</strong> of the string moves — <strong>the already-cached prefix is untouched</strong>.
+</div>
+
+<p>Why does this discipline deserve the <strong>whole book</strong> bending to it? Because it directly sets the <strong>cost order of magnitude</strong>. A personal agent's conversations tend to be <strong>long</strong> — dozens to hundreds of turns, with that long prefix resent again and again. On a cache hit, a long conversation's marginal cost is almost just “the few new lines”; once the cache breaks, every turn pays full price from scratch. Chapter 1's iron rule — “the prompt cache is sacred” — finally lands here on <strong>concrete code and numbers</strong>.</p>
+
+<h2>The three tiers: more stable goes first</h2>
+<p>The assembly entry is <span class="mono">build_system_prompt_parts()</span> (<span class="mono">system_prompt.py:113</span>), which returns a three-key dict <span class="mono">{stable, context, volatile}</span>. The order is anything but arbitrary — <strong>the more stable goes first, the more volatile goes last</strong>:</p>
+
+<div class="layers">
+  <div class="layer l-core"><div class="lh"><span class="badge">stable · most stable</span><span class="name">identity / tools / skills / env</span></div>
+    <div class="ld">SOUL.md or DEFAULT_AGENT_IDENTITY, tool & computer-use guidance, the <strong>skills prompt</strong> (ch.9), per-model operational guidance, environment & platform hints. Essentially <strong>constant</strong> for the whole session.</div></div>
+  <div class="layer l-main"><div class="lh"><span class="badge">context · fixed in-session</span><span class="name">system_message + context files</span></div>
+    <div class="ld">The caller-supplied <span class="mono">system_message</span>, plus project files like <strong>AGENTS.md / .cursorrules</strong> discovered under <span class="mono">TERMINAL_CWD</span>. <strong>Unchanged</strong> during the session.</div></div>
+  <div class="layer l-app"><div class="lh"><span class="badge">volatile · most volatile</span><span class="name">memory / USER.md / timestamp</span></div>
+    <div class="ld">Memory snapshot, <strong>USER.md profile</strong> (ch.11), external memory-provider block, timestamp / session / model / provider line. Most likely to change, so <strong>pushed to the very end</strong>.</div></div>
+</div>
+
+<p>Why insist on <strong>three tiers</strong> rather than mashing everything into one block? Because the cache is a <strong>prefix</strong> cache — it compares byte by byte from the start, and at the first differing byte <strong>everything from there on is invalidated</strong>. If a volatile timestamp or memory sat at the very front, every turn would change it and void the whole prefix. The essence of tiering is to <strong>physically separate</strong> the three kinds of content — “nearly never changes,” “fixed within the session,” and “may change each turn” — so that volatility only ever lands at the <strong>tail</strong> of the string.</p>
+
+<p>This “build once, reuse all session” discipline is pinned word-for-word in <span class="mono">system_prompt.py</span>'s module docstring:</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/system_prompt.py</span><span class="ln">3-19 · excerpt</span></div>
+  <pre><span class="cm">The agent's system prompt is built once per session and reused across all</span>
+<span class="cm">turns — only context compression triggers a rebuild.  This keeps the</span>
+<span class="cm">upstream prefix cache warm.</span>
+
+<span class="cm">Three tiers are joined with `\n\n`:</span>
+  * stable   — identity (SOUL.md or DEFAULT_AGENT_IDENTITY), tool guidance,
+               computer-use guidance, nous subscription block, tool-use
+               enforcement guidance + per-model operational guidance,
+               skills prompt, alibaba model-name workaround,
+               environment hints, platform hints.
+  * context  — caller-supplied system_message plus context files
+               (AGENTS.md / .cursorrules / etc.) discovered under TERMINAL_CWD.
+  * volatile — memory snapshot, USER.md profile, external memory
+               provider block, timestamp/session/model/provider line.</pre>
+</div>
+<p>Fix your eyes on <span class="inline">built once per session … only context compression triggers a rebuild</span>. This is the most important invariant of the chapter — and of the whole book. <span class="mono">build_system_prompt_parts()</span>'s own docstring spells out the consequence even more bluntly: <span class="inline">Hermes never re-renders parts of this string mid-session — that's the only way to keep upstream prompt caches warm across turns</span>.</p>
+
+<h2>The caching strategy: system_and_3 places 4 breakpoints</h2>
+<p>With a byte-stable prefix in hand, all that's left is to tell the upstream “where reuse may begin.” Hermes uses just <strong>one</strong> layout — <span class="mono">system_and_3</span>: one <span class="mono">cache_control</span> breakpoint on the <strong>system prompt</strong> and one on each of the <strong>last 3 non-system messages</strong>, <strong>4 in total</strong>, all at the same TTL (5 minutes or 1 hour). It cuts multi-turn input token cost by <strong>~75%</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/prompt_caching.py</span><span class="ln">1-79 · simplified</span></div>
+  <pre><span class="cm">Single layout: system_and_3. 4 cache_control breakpoints — system</span>
+<span class="cm">prompt + last 3 non-system messages, all at the same TTL (5m or 1h).</span>
+<span class="cm">Reduces input token costs by ~75% on multi-turn conversations ...</span>
+
+<span class="kw">def</span> <span class="fn">apply_anthropic_cache_control</span>(api_messages, cache_ttl=<span class="st">"5m"</span>, native_anthropic=<span class="kw">False</span>):
+    messages = copy.deepcopy(api_messages)            <span class="cm"># deep copy; never mutate the original</span>
+    marker = _build_marker(cache_ttl)
+    breakpoints_used = 0
+    <span class="kw">if</span> messages[0].get(<span class="st">"role"</span>) == <span class="st">"system"</span>:
+        _apply_cache_marker(messages[0], marker)      <span class="cm"># breakpoint ①: the system prefix</span>
+        breakpoints_used += 1
+    remaining = 4 - breakpoints_used
+    non_sys = [i <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(messages))
+               <span class="kw">if</span> messages[i].get(<span class="st">"role"</span>) != <span class="st">"system"</span>]
+    <span class="kw">for</span> idx <span class="kw">in</span> non_sys[-remaining:]:               <span class="cm"># breakpoints ②③④: last 3 non-system</span>
+        _apply_cache_marker(messages[idx], marker)
+    <span class="kw">return</span> messages</pre>
+</div>
+<p>Two details here are worth noting. First, the very first line does <span class="mono">copy.deepcopy</span> on the whole message list — it <strong>never marks the original</strong>; breakpoints are added only to the copy sent this turn, so the cached “clean” message sequence is never polluted. Second, all 4 breakpoints share <strong>one TTL</strong> (<span class="mono">5m</span> or <span class="mono">1h</span>): a short chat is cheap at 5 minutes, a long session can switch to 1 hour to keep the prefix “warm” longer. Either way the placement is always the one layout: “system + last 3.”</p>
+<p>Draw it out and it's obvious — the prefix (system) plus the 3 most recent tail messages, exactly 4 🔖:</p>
+<div class="cellgroup">
+  <div class="cg-cap"><b>system_and_3</b>: where the 4 cache_control breakpoints land</div>
+  <div class="cells">
+    <span class="cell hl">system 🔖</span>
+    <span class="cell dim">msg-7</span>
+    <span class="cell dim">msg-6</span>
+    <span class="cell dim">msg-5</span>
+    <span class="cell dim">msg-4</span>
+    <span class="cell">msg-3 🔖</span>
+    <span class="cell">msg-2 🔖</span>
+    <span class="cell">msg-1 🔖</span>
+  </div>
+  <div class="cg-cap">The prefix breakpoint hits the long <b>stable+context+volatile</b> block; the trailing 3 roll forward with the newest turns. The whole grey middle hits the prefix cache — <b>recomputed for free</b>.</div>
+</div>
+
+<p>Why <strong>~75%</strong> and not 100%? Because a cache hit isn't <strong>free</strong> — it's a <strong>discount</strong>: the hit prefix bills at the <strong>cache-read price</strong> (usually a small fraction of full price), while the new tail still bills at full price. In a long multi-turn conversation the vast majority of tokens are the <strong>same fixed prefix resent every turn</strong> — each turn they pay the discounted price, so the conversation's input cost collapses to roughly a quarter. This also explains the <strong>reverse cost</strong>: change a single byte of the prefix mid-session and, from that turn on, the <strong>whole prefix loses the cache and is recomputed at full price</strong> — the deeper the conversation, the more that one slip hurts. “Don't touch the prefix” isn't fussiness; it's real money.</p>
+
+<h2>The last gate guarding the prefix: scan before injection</h2>
+<p>The <span class="mono">context</span> tier drops files like <strong>AGENTS.md / .cursorrules</strong> verbatim into the system prompt. The catch: these files may come from a cloned repo and may hide a <strong>prompt injection</strong>. Once it enters the system prompt it becomes <strong>part of the session's fixed prefix</strong>, and the user has <strong>no chance whatsoever</strong> to intercept. So Hermes scans <strong>before</strong> injecting:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/prompt_builder.py</span><span class="ln">46-62 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_scan_context_content</span>(content: str, filename: str) -&gt; str:
+    <span class="cm"># scan for injection BEFORE the context file enters the system prompt</span>
+    findings = _scan_for_threats(content, scope=<span class="st">"context"</span>)
+    <span class="kw">if</span> findings:
+        logger.warning(<span class="st">"Context file %s blocked: %s"</span>, filename, <span class="st">", "</span>.join(findings))
+        <span class="kw">return</span> <span class="st">f"[BLOCKED: {filename} contained potential prompt injection (…). Content not loaded.]"</span>
+    <span class="kw">return</span> content</pre>
+</div>
+<p>The comment states the reason plainly: <span class="inline">the file would otherwise enter the system prompt verbatim and the user has no chance to intervene</span>. On a hit it's swapped for a <span class="mono">[BLOCKED: …]</span> placeholder, keeping the threat <strong>out of</strong> the prefix. This maps straight onto an inherent LLM constraint: <span class="badge constraint">D·instr=data</span> — the model can't tell “instructions” from “data,” so external text fed into the prompt must <strong>clear security first</strong>.</p>
+
+<p>The gate is also <strong>restrained</strong>: it uses the <span class="mono">"context"</span> scope — covering classic injection, promptware / C2, and role-play hijack, but <strong>not</strong> the more aggressive strict-scope rules (SSH backdoor, persistence, exfil URL). The reason is in the comment: context files often come from a <strong>cloned repo</strong> (security research, infra docs), where strict scope would kill normal content. The scan must block injection without rejecting every project doc — that boundary is itself a design trade-off.</p>
+
+<h2>In one session, where reads and writes go</h2>
+<p>There's exactly one discipline that guards the cache: <strong>reads only enter the prefix at session start, writes only append to the tail, and the session never rebuilds</strong>. As a single line:</p>
+<div class="flow">
+  <div class="node hl"><div class="nt">Session start</div><div class="nd">three tiers → fixed prefix</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">Each turn</div><div class="nd">apply…cache_control, 4 breakpoints</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">Cache hit</div><div class="nd">prefix reused, ~75% saved</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">Write = append tail</div><div class="nd">nudge / skill / memory, no rebuild</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">Only exception</div><div class="nd">context compression → rebuild</div></div>
+</div>
+
+<p>So what about the <strong>one exception</strong> — context compression? When a conversation grows close to the model's context window, Hermes <strong>summarizes and compresses</strong> the early history into a shorter span and splices it back. That step <strong>necessarily</strong> rewrites the prefix, so the cache is <strong>bound to be voided</strong> — which is exactly why it's designed to fire only as a <strong>last resort</strong>: spend one “cache reset” to buy back room to keep talking. Outside of that, within the automatic turn loop there is <strong>no reason whatsoever</strong> to rebuild the system prompt mid-session (details in ch.15). <em>(Strictly speaking, a user-initiated switch of model / personality or a manual system-prompt edit also triggers a rebuild — but those are explicit, <strong>out-of-band</strong> events, not part of a normal turn; inside the loop, compression stays the only rebuild.)</em></p>
+
+<p>Each tier maps to a piece of “cross-chapter teamwork” — all of it bending to the <strong>same caching discipline</strong>:</p>
+<table class="t">
+  <tr><th>Tier</th><th>What it holds</th><th>Changes in-session?</th><th>Who maintains it (cross-ch.)</th></tr>
+  <tr><td class="mono">stable</td><td>identity / tools / skills list / env</td><td>No</td><td>skills → stable (ch.9)</td></tr>
+  <tr><td class="mono">context</td><td>system_message + project files</td><td>No</td><td>scan before injection (this ch.)</td></tr>
+  <tr><td class="mono">volatile</td><td>memory / USER.md / timestamp</td><td>Yes (but at the tail)</td><td>memory / USER.md (ch.11)</td></tr>
+</table>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the whole system guards the cache together</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  This chapter's three pieces: <strong>build_system_prompt_parts()</strong> (<span class="mono">system_prompt.py:113</span>) builds the three tiers,
+  <strong>apply_anthropic_cache_control()</strong> (<span class="mono">prompt_caching.py:49</span>) places 4 breakpoints,
+  <strong>_scan_context_content()</strong> (<span class="mono">prompt_builder.py:46</span>) scans before injection. Every other part bends to the same caching discipline:
+  <strong>skills list</strong>→stable (ch.9), <strong>memory / USER.md</strong>→volatile (ch.11),
+  <strong>learning nudge</strong>→appended to the tail (ch.9), <strong>search results</strong>→tool messages (ch.12),
+  <strong>context compression</strong>→the only allowed rebuild (ch.15), <strong>auxiliary models</strong>→separate session, never polluting the main cache (ch.10).
+  <div class="collab-sub">② Data-flow timing</div>
+  Session start: the three tiers assemble into a <strong>fixed prefix</strong> → each turn <span class="mono">apply_anthropic_cache_control</span> places 4 breakpoints and hits the cache;
+  <strong>reads</strong> (skills / memory / search) enter the prefix only at session start, <strong>or</strong> get appended at the tail as tool / user messages;
+  <strong>writes</strong> (nudge / new skill / new memory) only append to the tail, <strong>no rebuild this session</strong> — they enter the prefix only next session;
+  <strong>the only exception</strong> = compression, which rewrites history and necessarily voids the cache, so it fires only when unavoidable (ch.15).
+  <div class="collab-sub">③ The key point</div>
+  The three tiers are <strong>ordered by stability</strong> (stable→context→volatile), pushing the most volatile memory <strong>to the very end</strong> —
+  so even when it changes, only the tail of the string moves and <strong>the already-cached stable / context prefix is untouched</strong>. That is the whole point of “volatile last, prefix unharmed.”
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  One throughline dominates everything: <strong>★ the prompt cache is sacred</strong>. The system prompt is <strong>built once per session</strong>, and the <strong>only</strong> moment a rebuild is allowed is context compression (ch.15). From that follow three <strong>anti-patterns</strong> you <strong>never</strong> do mid-session:
+  ① swap the toolset (the tool schema is part of the prefix too — swap it and it all dies); ② reload memory / re-read USER.md (rewrites the volatile prefix);
+  ③ rebuild the system prompt (change even one byte and the whole prefix cache is void, multiplying cost).
+  <p style="margin:.5rem 0 0">It treats two inherent LLM constraints at once: <span class="badge constraint">A·lost-in-the-middle</span> — the tiers pin the most critical identity / instructions <strong>up front</strong>, held stable;
+  <span class="badge constraint">D·instr=data</span> — context is scanned <strong>before</strong> injection so external files can't masquerade as instructions inside the prefix.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Three tiers</strong>: <span class="mono">stable → context → volatile</span> ordered by stability, built by <span class="mono">build_system_prompt_parts()</span> and, in <span class="mono">build_system_prompt()</span>, joined with <span class="mono">\n\n</span>.</li>
+    <li><strong>Byte-stable in-session</strong>: built <strong>once per session</strong>, cached on <span class="mono">_cached_system_prompt</span>; the <strong>only</strong> rebuild trigger = context compression (ch.15).</li>
+    <li><strong>system_and_3</strong>: <span class="mono">apply_anthropic_cache_control</span> places <strong>4</strong> cache_control breakpoints on system + last 3 non-system messages, saving <strong>~75%</strong>.</li>
+    <li><strong>Memory goes last</strong>: the most volatile content sits in volatile, so changing it <strong>doesn't disturb</strong> the already-cached stable / context prefix.</li>
+    <li><strong>Scan before injection</strong>: context files pass <span class="mono">_scan_context_content</span> <strong>before</strong> entering the system prompt; a hit is swapped for <span class="mono">[BLOCKED:…]</span>, guarding the prefix (constraint D).</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Why are the system prompt's three tiers ordered stable → context → volatile?</div>
+  <ol class="opts">
+    <li>Volatile is most important, placed last for emphasis</li>
+    <li>The prefix cache compares byte-by-byte; putting the most volatile tier last means edits only touch the tail, never the cached prefix</li>
+    <li>Alphabetical order</li>
+    <li>Random arrangement</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. The prefix cache matches byte-by-byte from the start and voids everything from the first differing byte; pushing per-turn-changing memory/timestamps into the volatile tail moves only the string's end, leaving the cached stable/context prefix intact.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. How many breakpoints does system_and_3 place, and roughly how much input cost does it save?</div>
+  <ol class="opts">
+    <li>8 breakpoints, ~50%</li>
+    <li>1 breakpoint, ~10%</li>
+    <li>4 breakpoints (system + last 3 non-system), ~75%</li>
+    <li>One per message, 100%</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. apply_anthropic_cache_control uses one layout: system prefix + last 3 non-system = 4 cache_control breakpoints at one TTL; the hit prefix bills at the cache-read price, collapsing multi-turn input cost to about a quarter (~75% off).</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Why does context-injection scanning use the restrained 'context' scope rather than the aggressive strict scope? How is that a trade-off between constraint D (instructions=data) and not killing legitimate project docs?</li>
   </ul>
 </div>
 </div>

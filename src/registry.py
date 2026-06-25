@@ -5,6 +5,7 @@ both import this so the chapter set stays in sync with shell.PAGES. Add a
 chapter by (1) appending it to shell.PAGES and (2) mapping it here.
 """
 import part1
+import part2
 
 CONTENT = {
     "01-what-is-hermes.html": part1.LESSON_01,
@@ -12,4 +13,5 @@ CONTENT = {
     "03-llm-constraints-autonomy.html": part1.LESSON_03,
     "04-project-map-narrow-waist.html": part1.LESSON_04,
     "05-conversation-lifecycle.html": part1.LESSON_05,
+    "06-system-prompt-caching.html": part2.LESSON_06,
 }
