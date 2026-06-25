@@ -33,4 +33,5 @@ CONTENT = {
     "19-tui-desktop.html": part5.LESSON_19,
     "20-config-profiles.html": part5.LESSON_20,
     "21-cron-kanban.html": part6.LESSON_21,
+    "22-eval-batch-trajectory.html": part6.LESSON_22,
 }

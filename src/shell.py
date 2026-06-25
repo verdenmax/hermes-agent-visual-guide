@@ -88,6 +88,8 @@ PAGES = [
      "第五部分 · 多端与网关", "Part 5 · Surfaces & Gateway"),
     ("21-cron-kanban.html", "Cron 与 Kanban", "Cron & Kanban",
      "第六部分 · 自动化与研究", "Part 6 · Automation & Research"),
+    ("22-eval-batch-trajectory.html", "评测、批量与轨迹", "Eval, batch & trajectory",
+     "第六部分 · 自动化与研究", "Part 6 · Automation & Research"),
 ]
 
 

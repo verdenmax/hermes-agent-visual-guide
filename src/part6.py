@@ -198,3 +198,213 @@ agent = AIAgent(
 </div>
 """
 }
+
+
+LESSON_22 = {
+    "zh": r"""
+<p class="lead">Hermes 不只是个产品,它是 Nous Research 的<strong>研究工具</strong>:要批量跑成千上万条 prompt、把每次对话的<strong>完整轨迹</strong>(含推理、工具调用)落盘成训练数据,还要在「模型每周都在变」的现实里写出<strong>不会天天挂掉</strong>的测试。这一章讲三件相关的事:批量、轨迹、评测哲学。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 工厂的质检流水线</div>
+  把一堆原料(prompt)送上<strong>多条并行产线</strong>(batch workers),每件产品记录<strong>完整工序</strong>(trajectory:每步推理 + 每次工具调用)。出厂前<strong>质检</strong>:不合格的(比如全程零推理)直接剔除,不混进成品库(训练集)。而质检标准看的是「<strong>是否符合规格</strong>」(不变量),不是「<strong>是否和上一批一模一样</strong>」(快照)——因为配方本来就会升级。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 数据流水线 + 抗漂移测试</div>
+  <strong>批量</strong>:多 worker 并行跑 AIAgent,每条 prompt 独立。<strong>轨迹</strong>:把对话转成 JSONL 训练样本,带 <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>,并<strong>过滤低质</strong>(零推理样本丢弃)。<strong>评测</strong>:测试锁<strong>行为不变量</strong>而非数据快照——模型目录、config 版本天天变,锁快照只会让 CI 天天红。
+</div>
+
+<h2>批量:并行 worker + 轨迹落盘</h2>
+<p>批处理把 prompt 分批,每个 worker 跑完一条就质检、落盘:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">batch_runner.py</span><span class="ln">400-487 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_process_batch_worker</span>(args):
+    <span class="cm">&quot;&quot;&quot;Worker function to process a single batch of prompts.&quot;&quot;&quot;</span>
+    batch_num, batch_data, output_dir, completed, config = args
+    ...
+    <span class="kw">if</span> result[<span class="st">"success"</span>] <span class="kw">and</span> result[<span class="st">"trajectory"</span>]:
+        <span class="kw">if</span> <span class="kw">not</span> reasoning.get(<span class="st">"has_any_reasoning"</span>, <span class="kw">True</span>):
+            <span class="kw">continue</span>                       <span class="cm"># 丢弃全程零推理的样本</span>
+        trajectory_entry = {
+            <span class="st">"conversations"</span>: result[<span class="st">"trajectory"</span>],
+            <span class="st">"metadata"</span>: result[<span class="st">"metadata"</span>],
+            <span class="st">"tool_stats"</span>: tool_stats,        <span class="cm"># {tool: {count,success,failure}}</span>
+        }
+        f.write(json.dumps(trajectory_entry, ensure_ascii=<span class="kw">False</span>) + <span class="st">"\n"</span>)  <span class="cm"># 追加 JSONL</span></pre>
+</div>
+<p>三个要点:① <strong>并行</strong>——多 worker 各跑各的 prompt,互不依赖(无状态,约束 B 又一次发力);② <strong>质量过滤</strong>——<span class="mono">has_any_reasoning</span> 为假就 <span class="mono">continue</span> 丢弃,训练集只收有推理的样本;③ <strong>JSONL 追加</strong>——每条样本一行,带 <span class="mono">tool_stats</span> 等元数据,是标准的 RL/SFT 训练格式。</p>
+
+<h2>轨迹:一次对话变一条训练样本</h2>
+<p>单次运行也能存轨迹,由一个开关控制:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">run_agent.py</span><span class="ln">1716-1729 · 节选</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_save_trajectory</span>(self, messages, user_query, completed):
+    <span class="cm">&quot;&quot;&quot;Save conversation trajectory to JSONL file.&quot;&quot;&quot;</span>
+    <span class="kw">if</span> <span class="kw">not</span> self.save_trajectories:    <span class="cm"># 开关:默认关</span>
+        <span class="kw">return</span>
+    trajectory = self._convert_to_trajectory_format(messages, user_query, completed)
+    _save_trajectory_to_file(trajectory, self.model, completed)</pre>
+</div>
+<p><span class="mono">save_trajectories</span> 默认关(生产对话不留痕),研究时打开。<span class="mono">_convert_to_trajectory_format</span> 把内部的 <span class="mono">messages</span>(system/user/assistant/tool 四类角色 + reasoning)转成训练用的轨迹格式,落盘成 JSONL(成功样本进 <span class="mono">trajectory_samples.jsonl</span>、失败的进 <span class="mono">failed_trajectories.jsonl</span>;<span class="mono">model</span> 记进每条样本的元数据)。<strong>同一个 agent 核心,既服务真实对话,又顺手产出研究数据</strong>——这正是「研究工具」的一鱼两吃。</p>
+
+<h2>评测:锁不变量,别锁快照</h2>
+<p>研究项目最容易踩的测试坑——把「当前数据」写死进断言。模型每周都在变,这种测试天天挂:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">AGENTS.md · 测试规约(项目纪律)</span><span class="ln">Don't write change-detector tests</span></div>
+  <pre><span class="cm"># ❌ change-detector:数据一变就挂(模型目录每次发布都变)</span>
+<span class="kw">assert</span> <span class="st">"gemini-2.5-pro"</span> <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"gemini"</span>]
+<span class="kw">assert</span> DEFAULT_CONFIG[<span class="st">"_config_version"</span>] == 21
+
+<span class="cm"># ✅ 行为契约/不变量:锁「关系」,不锁「快照」</span>
+<span class="kw">assert</span> <span class="st">"gemini"</span> <span class="kw">in</span> _PROVIDER_MODELS
+<span class="kw">assert</span> len(_PROVIDER_MODELS[<span class="st">"gemini"</span>]) &gt;= 1
+<span class="kw">assert</span> raw[<span class="st">"_config_version"</span>] == DEFAULT_CONFIG[<span class="st">"_config_version"</span>]
+<span class="kw">for</span> m <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"huggingface"</span>]:
+    <span class="kw">assert</span> m.lower() <span class="kw">in</span> DEFAULT_CONTEXT_LENGTHS_LOWER</pre>
+</div>
+<p>规则一句话:<strong>测试若读起来像「当前数据的快照」,删掉;若读起来像「两份数据必须如何关联」的契约,留下。</strong>「gemini 目录里必须有 gemini-2.5-pro」是快照(下个模型发布就错);「gemini 目录至少有一个模型」「每个模型都有对应的上下文长度」是<strong>不变量</strong>——数据怎么更新都不破。这让测试<strong>抗模型/数据漂移</strong>,routine 更新不再天天红 CI。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">一批 prompt 切分,丢给多个 <span class="mono">_process_batch_worker</span> 并行</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">每个 worker 独立跑 AIAgent(第 7 章核心循环),产出 trajectory</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">质量过滤:零推理样本 <span class="mono">continue</span> 丢弃</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><span class="mono">trajectory_entry</span>(conversations + tool_stats + metadata)写 JSONL 一行</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">评测/回归用<strong>不变量</strong>断言(非快照),抗模型漂移</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「研究数据流水线 + 抗漂移评测」</div>
+  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
+  本章核心:<strong>_process_batch_worker</strong>(并行批量)、<strong>_save_trajectory</strong>(轨迹落盘)、<strong>trajectory_entry</strong>(JSONL schema)、<strong>不变量测试</strong>(评测哲学)。跨章节配合:批量跑的是 <strong>AIAgent 核心循环</strong>(第 7 章),轨迹里存的 reasoning 也来自那里;<span class="mono">tool_stats</span> 统计的是<strong>工具</strong>(第 8 章)调用;并行 worker 各自<strong>无状态独立</strong>(约束 B,第 2 章);轨迹按完成状态写 JSONL(<span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span>),批量则落进 <span class="mono">data/&lt;run&gt;/</span>。
+  <div class="collab-sub">② 数据流时序</div>
+  prompts 切批 → 多 <span class="mono">_process_batch_worker</span> 并行(各跑 AIAgent)→ 质量过滤(零推理丢弃)→ <span class="mono">trajectory_entry</span> 写 JSONL → 聚合 <span class="mono">tool_stats</span>;评测侧:不变量断言抗数据漂移。
+  <div class="collab-sub">③ 关键点</div>
+  研究数据流水线 = <strong>并行批量 + 完整轨迹 + 质量过滤</strong>;同一个 agent 核心既服务真实对话又产出训练数据。评测的工程纪律 = <strong>锁行为不变量、不锁数据快照</strong>,让「模型/数据天天变」不再天天破测试。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>并行批量 + 完整轨迹 + 质量过滤 + 行为契约测试 = 可规模化的研究数据流水线 + 抗漂移评测</strong>。它主要治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——研究要规模:成千上万条 prompt 得并行跑、轨迹得标准化落盘、CI 得在「模型每周变」下还能维护。批量 worker、JSONL 轨迹、不变量测试,把「做研究」做成可规模化、低维护的基础设施。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·误差累积</span>——评测的本职就是<strong>量化 agent 在多轮自主里误差累积到什么程度</strong>;轨迹的质量门槛(必须有推理)<strong>剔除低质样本</strong>,免得垃圾数据喂进训练、把误差固化进下一代模型。不变量测试也防回归在迭代中悄悄累积。</p>
+  <p style="margin:.5rem 0 0">反模式:写 <strong>change-detector 测试</strong>——把模型目录、config 版本号、枚举数量写死进断言。模型一发布、配置一升级,这些测试就<strong>集体变红</strong>,逼工程师花时间「修测试」而非修 bug。锁不变量,不锁快照。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>并行批量</strong>:<span class="mono">_process_batch_worker</span> 多 worker 各跑独立 prompt(无状态,约束 B),规模化生成数据。</li>
+    <li><strong>完整轨迹</strong>:对话转 JSONL 训练样本,带 <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>;<span class="mono">save_trajectories</span> 开关默认关。</li>
+    <li><strong>质量过滤</strong>:零推理样本 <span class="mono">continue</span> 丢弃,训练集只收有推理的高质数据。</li>
+    <li><strong>一鱼两吃</strong>:同一个 AIAgent 核心,既服务真实对话、又顺手产出研究轨迹。</li>
+    <li><strong>抗漂移评测</strong>:测试锁<strong>行为不变量</strong>(关系)而非<strong>数据快照</strong>(具体值);不写 change-detector,免得模型/config 一变就全红。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">Hermes isn't just a product — it's Nous Research's <strong>research tool</strong>: it must batch-run thousands of prompts, persist each conversation's <strong>full trajectory</strong> (reasoning, tool calls) as training data, and — in a world where models change weekly — write tests that <strong>don't break every day</strong>. This chapter covers three related things: batching, trajectories, and the testing philosophy.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · the factory QC line</div>
+  Feed raw material (prompts) onto <strong>parallel production lines</strong> (batch workers); each product records its <strong>full process</strong> (the trajectory: every reasoning step + every tool call). Before shipping, <strong>QC</strong>: rejects (e.g. zero reasoning throughout) are discarded, never entering the stock (the training set). And QC checks "<strong>does it meet spec</strong>" (invariants), not "<strong>is it identical to the last batch</strong>" (a snapshot) — because the recipe is meant to evolve.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · a data pipeline + drift-proof tests</div>
+  <strong>Batch</strong>: multiple workers run AIAgent in parallel, each prompt independent. <strong>Trajectory</strong>: turn a conversation into a JSONL training sample carrying <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>, and <strong>filter low quality</strong> (drop zero-reasoning samples). <strong>Eval</strong>: tests lock <strong>behavioral invariants</strong>, not data snapshots — model catalogs and config versions change daily; lock a snapshot and CI goes red daily.
+</div>
+
+<h2>Batch: parallel workers + trajectory persistence</h2>
+<p>Batching splits prompts; each worker QCs and persists as soon as one finishes:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">batch_runner.py</span><span class="ln">400-487 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_process_batch_worker</span>(args):
+    <span class="cm">&quot;&quot;&quot;Worker function to process a single batch of prompts.&quot;&quot;&quot;</span>
+    batch_num, batch_data, output_dir, completed, config = args
+    ...
+    <span class="kw">if</span> result[<span class="st">"success"</span>] <span class="kw">and</span> result[<span class="st">"trajectory"</span>]:
+        <span class="kw">if</span> <span class="kw">not</span> reasoning.get(<span class="st">"has_any_reasoning"</span>, <span class="kw">True</span>):
+            <span class="kw">continue</span>                       <span class="cm"># discard samples with zero reasoning</span>
+        trajectory_entry = {
+            <span class="st">"conversations"</span>: result[<span class="st">"trajectory"</span>],
+            <span class="st">"metadata"</span>: result[<span class="st">"metadata"</span>],
+            <span class="st">"tool_stats"</span>: tool_stats,        <span class="cm"># {tool: {count,success,failure}}</span>
+        }
+        f.write(json.dumps(trajectory_entry, ensure_ascii=<span class="kw">False</span>) + <span class="st">"\n"</span>)  <span class="cm"># append JSONL</span></pre>
+</div>
+<p>Three points: ① <strong>parallel</strong> — workers each run their own prompt, independent (stateless, constraint B at work again); ② <strong>quality filter</strong> — <span class="mono">continue</span> to drop when <span class="mono">has_any_reasoning</span> is false, the training set takes only samples with reasoning; ③ <strong>JSONL append</strong> — one sample per line with metadata like <span class="mono">tool_stats</span>, the standard RL/SFT training format.</p>
+
+<h2>Trajectory: one conversation becomes one training sample</h2>
+<p>A single run can save a trajectory too, gated by one switch:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">run_agent.py</span><span class="ln">1716-1729 · excerpt</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_save_trajectory</span>(self, messages, user_query, completed):
+    <span class="cm">&quot;&quot;&quot;Save conversation trajectory to JSONL file.&quot;&quot;&quot;</span>
+    <span class="kw">if</span> <span class="kw">not</span> self.save_trajectories:    <span class="cm"># switch: off by default</span>
+        <span class="kw">return</span>
+    trajectory = self._convert_to_trajectory_format(messages, user_query, completed)
+    _save_trajectory_to_file(trajectory, self.model, completed)</pre>
+</div>
+<p><span class="mono">save_trajectories</span> is off by default (production chats leave no trace), turned on for research. <span class="mono">_convert_to_trajectory_format</span> turns the internal <span class="mono">messages</span> (system/user/assistant/tool roles + reasoning) into the training trajectory format, written to JSONL (successful samples into <span class="mono">trajectory_samples.jsonl</span>, failed ones into <span class="mono">failed_trajectories.jsonl</span>; <span class="mono">model</span> recorded as per-sample metadata). <strong>The same agent core both serves real conversations and produces research data</strong> — the two-for-one of a "research tool."</p>
+
+<h2>Eval: lock invariants, not snapshots</h2>
+<p>The easiest testing trap in a research project — freezing "current data" into assertions. Models change weekly, so such tests break daily:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">AGENTS.md · testing rule (project discipline)</span><span class="ln">Don't write change-detector tests</span></div>
+  <pre><span class="cm"># ❌ change-detector: breaks whenever data changes (catalog changes every release)</span>
+<span class="kw">assert</span> <span class="st">"gemini-2.5-pro"</span> <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"gemini"</span>]
+<span class="kw">assert</span> DEFAULT_CONFIG[<span class="st">"_config_version"</span>] == 21
+
+<span class="cm"># ✅ behavior contract / invariant: lock the RELATION, not the snapshot</span>
+<span class="kw">assert</span> <span class="st">"gemini"</span> <span class="kw">in</span> _PROVIDER_MODELS
+<span class="kw">assert</span> len(_PROVIDER_MODELS[<span class="st">"gemini"</span>]) &gt;= 1
+<span class="kw">assert</span> raw[<span class="st">"_config_version"</span>] == DEFAULT_CONFIG[<span class="st">"_config_version"</span>]
+<span class="kw">for</span> m <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"huggingface"</span>]:
+    <span class="kw">assert</span> m.lower() <span class="kw">in</span> DEFAULT_CONTEXT_LENGTHS_LOWER</pre>
+</div>
+<p>The rule in one line: <strong>if a test reads like a snapshot of current data, delete it; if it reads like a contract about how two pieces of data must relate, keep it.</strong> "the gemini catalog must contain gemini-2.5-pro" is a snapshot (wrong on the next release); "the gemini catalog has at least one model," "every model has a context length" are <strong>invariants</strong> — unbroken however the data updates. This makes tests <strong>drift-proof</strong> against model/data churn, so routine updates no longer redden CI daily.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">a batch of prompts is split and handed to several <span class="mono">_process_batch_worker</span> in parallel</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">each worker runs AIAgent independently (ch.7 core loop), producing a trajectory</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">quality filter: zero-reasoning samples are <span class="mono">continue</span>-dropped</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><span class="mono">trajectory_entry</span> (conversations + tool_stats + metadata) written as one JSONL line</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">eval/regression use <strong>invariant</strong> assertions (not snapshots), drift-proof</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "research data pipeline + drift-proof eval"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>_process_batch_worker</strong> (parallel batch), <strong>_save_trajectory</strong> (trajectory persistence), <strong>trajectory_entry</strong> (JSONL schema), <strong>invariant tests</strong> (eval philosophy). Cross-chapter teamwork: batching runs the <strong>AIAgent core loop</strong> (ch.7), and the reasoning stored in trajectories comes from there; <span class="mono">tool_stats</span> counts <strong>tool</strong> (ch.8) calls; parallel workers are each <strong>stateless and independent</strong> (constraint B, ch.2); trajectories are written by completion status (<span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span>), batches into <span class="mono">data/&lt;run&gt;/</span>.
+  <div class="collab-sub">② Data-flow timing</div>
+  prompts split into batches → several <span class="mono">_process_batch_worker</span> in parallel (each runs AIAgent) → quality filter (drop zero-reasoning) → <span class="mono">trajectory_entry</span> written to JSONL → aggregate <span class="mono">tool_stats</span>; on the eval side: invariant assertions resist data drift.
+  <div class="collab-sub">③ The key point</div>
+  The research data pipeline = <strong>parallel batch + full trajectory + quality filter</strong>; the same agent core both serves real conversations and produces training data. The engineering discipline of eval = <strong>lock behavioral invariants, not data snapshots</strong>, so "models/data change daily" no longer breaks tests daily.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>parallel batch + full trajectory + quality filter + behavior-contract tests = a scalable research data pipeline + drift-proof eval</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — research needs scale: thousands of prompts must run in parallel, trajectories must persist in a standard format, and CI must stay maintainable while "models change weekly." Batch workers, JSONL trajectories, and invariant tests make "doing research" a scalable, low-maintenance infrastructure.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·error accumulation</span> — eval's very job is to <strong>quantify how much error accumulates over an agent's multi-turn autonomy</strong>; the trajectory's quality gate (reasoning required) <strong>discards low-quality samples</strong>, lest garbage data feed training and bake the error into the next model. Invariant tests also stop regressions from quietly accumulating across iterations.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern: writing <strong>change-detector tests</strong> — freezing model catalogs, config version numbers, enumeration counts into assertions. The moment a model ships or a config bumps, these tests <strong>all go red</strong>, forcing engineers to spend time "fixing the test" instead of fixing bugs. Lock invariants, not snapshots.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Parallel batch</strong>: <span class="mono">_process_batch_worker</span> runs independent prompts across workers (stateless, constraint B), generating data at scale.</li>
+    <li><strong>Full trajectory</strong>: a conversation becomes a JSONL training sample with <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>; <span class="mono">save_trajectories</span> is off by default.</li>
+    <li><strong>Quality filter</strong>: zero-reasoning samples are <span class="mono">continue</span>-dropped; the training set takes only high-quality samples with reasoning.</li>
+    <li><strong>Two-for-one</strong>: the same AIAgent core both serves real conversations and produces research trajectories.</li>
+    <li><strong>Drift-proof eval</strong>: tests lock <strong>behavioral invariants</strong> (relations) not <strong>data snapshots</strong> (specific values); no change-detectors, so a model/config change doesn't redden everything.</li>
+  </ul>
+</div>
+"""
+}

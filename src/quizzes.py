@@ -755,6 +755,40 @@ QUIZZES = {
              "en": "How does cron's trio of 'isolated session + skip_memory + not mirrored into the main conversation' embody the book's throughline that 'per-conversation prompt caching is sacred'? Why is pouring cron results straight into the main session history an anti-pattern?"},
         ],
     },
+    "22-eval-batch-trajectory.html": {
+        "mcq": [
+            {
+                "q": {"zh": "Hermes 批量跑成千上万条 prompt 生成训练数据,怎么同时保证数据质量?",
+                      "en": "Hermes batch-runs thousands of prompts to generate training data — how does it also ensure data quality?"},
+                "opts": [
+                    {"zh": "不过滤,全部入库", "en": "No filtering; everything goes in"},
+                    {"zh": "多 worker 并行跑独立 prompt(无状态),每条对话转成 JSONL 轨迹;全程零推理的样本 continue 丢弃,训练集只收有推理的高质样本", "en": "Multiple workers run independent prompts in parallel (stateless), each conversation becomes a JSONL trajectory; samples with zero reasoning throughout are continue-dropped, the training set takes only high-quality samples with reasoning"},
+                    {"zh": "人工逐条审核", "en": "Hand-review each one"},
+                    {"zh": "每条只跑一次就行", "en": "Just run each once"},
+                ],
+                "answer": 1,
+                "why": {"zh": "_process_batch_worker 多 worker 并行跑独立 prompt(无状态,约束 B);has_any_reasoning 为假就 continue 丢弃零推理样本;每条样本一行 JSONL,带 conversations/tool_stats/metadata。质量过滤在数据进训练集前就把垃圾样本挡掉。",
+                        "en": "_process_batch_worker runs independent prompts across workers (stateless, constraint B); a false has_any_reasoning triggers continue to drop zero-reasoning samples; each sample is one JSONL line with conversations/tool_stats/metadata. The quality filter blocks junk before data enters the training set."},
+            },
+            {
+                "q": {"zh": "两个测试:`assert 'gemini-2.5-pro' in models` 和 `assert len(models) >= 1`,哪个是好测试,为什么?",
+                      "en": "Two tests: `assert 'gemini-2.5-pro' in models` vs `assert len(models) >= 1` — which is the good one, and why?"},
+                "opts": [
+                    {"zh": "第一个,因为它更精确", "en": "The first, because it's more precise"},
+                    {"zh": "第二个:它是行为不变量(数据怎么更新都不破);第一个是数据快照,下个模型一发布就挂——典型 change-detector", "en": "The second: it's a behavioral invariant (unbroken however data updates); the first is a data snapshot that breaks on the next model release — a classic change-detector"},
+                    {"zh": "都好", "en": "Both are good"},
+                    {"zh": "都不好", "en": "Neither is good"},
+                ],
+                "answer": 1,
+                "why": {"zh": "change-detector(快照)在「数据本就会变」(模型目录每周更新)时一变就挂,逼工程师花时间修测试而非修 bug。不变量(契约)锁的是「两份数据必须如何关联」(目录至少有一个模型、每个模型都有上下文长度),数据怎么更新都成立,抗模型漂移。规则:测试若像当前数据的快照就删,若像数据间关系的契约就留。",
+                        "en": "A change-detector (snapshot) breaks whenever data changes (catalogs update weekly), forcing engineers to fix tests instead of bugs. An invariant (contract) locks how two pieces of data must relate (catalog has at least one model; every model has a context length), holding however data updates, drift-proof. Rule: if a test reads like a snapshot of current data, delete it; if like a contract about how data relates, keep it."},
+            },
+        ],
+        "open": [
+            {"zh": "为什么同一个 AIAgent 核心既能服务真实对话、又能顺手产出研究轨迹数据?这种「一鱼两吃」对 Nous 做 RL/eval 研究有什么价值?为什么 save_trajectories 默认关?",
+             "en": "Why can the same AIAgent core both serve real conversations and produce research trajectory data? What is this 'two-for-one' worth for Nous's RL/eval research? Why is save_trajectories off by default?"},
+        ],
+    },
 }
 
 

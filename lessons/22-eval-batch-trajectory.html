@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var l=localStorage.getItem('havg-lang');if(l==='en'){document.documentElement.dataset.lang='en';document.documentElement.lang='en';}}catch(e){}</script>
+<title>22 · 评测、批量与轨迹 / Eval, batch &amp; trajectory · Hermes Agent 设计图解</title>
+<meta name="description" content="第六部分 · 自动化与研究｜评测、批量与轨迹 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="theme-color" content="#c2630e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAzMiAzMic+PHJlY3Qgd2lkdGg9JzMyJyBoZWlnaHQ9JzMyJyByeD0nNycgZmlsbD0nI2M4YTAyYycvPjx0ZXh0IHg9JzE2JyB5PScyMicgZm9udC1mYW1pbHk9J3N5c3RlbS11aSxzYW5zLXNlcmlmJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nODAwJyBmaWxsPScjZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz7imKQ8L3RleHQ+PC9zdmc+">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Hermes Agent 设计图解">
+<meta property="og:title" content="22 · 评测、批量与轨迹 / Eval, batch &amp; trajectory · Hermes Agent 设计图解">
+<meta property="og:description" content="第六部分 · 自动化与研究｜评测、批量与轨迹 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="22 · 评测、批量与轨迹 / Eval, batch &amp; trajectory · Hermes Agent 设计图解">
+<meta name="twitter:description" content="第六部分 · 自动化与研究｜评测、批量与轨迹 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --ink: #1d2129;
+  --muted: #5b6470; --faint: #8a939f; --line: #e1e5ea;
+  --accent: #c8a02c; --accent-soft: #faf1d6; --accent-ink: #8a6d12;
+  --blue: #2563eb; --blue-soft: #e7efff; --amber: #b4690e; --amber-soft: #fdf1dd;
+  --purple: #7c3aed; --purple-soft: #f0e9ff; --red: #d23f3f; --red-soft: #fbe6e6;
+  --code-bg: #0f172a; --code-ink: #e2e8f0; --code-line: #1e293b;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232c; --ink: #e6edf3;
+    --muted: #9aa6b2; --faint: #6e7a86; --line: #2a323c;
+    --accent: #e3c05a; --accent-soft: #2e2510; --accent-ink: #f0d488;
+    --blue: #6ea8fe; --blue-soft: #16243f; --amber: #e0a44a; --amber-soft: #33270f;
+    --purple: #b794f6; --purple-soft: #271a40; --red: #f08080; --red-soft: #3a1a1a;
+    --code-bg: #0a0f1a; --code-ink: #d8e2f0; --code-line: #14202f;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+html { scroll-behavior: smooth; overflow-x: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+code, .mono { font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; overflow-wrap: break-word; }
+
+/* ---- top progress bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 50; background: var(--panel);
+  border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
+}
+.topbar-inner {
+  max-width: 960px; margin: 0 auto; padding: .7rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.topbar .home { font-size: .82rem; color: var(--muted); font-weight: 600; display:flex; gap:.5rem; align-items:center; }
+.topbar .home b { color: var(--accent); }
+.topbar .pill { font-size: .72rem; color: var(--muted); background: var(--panel-2);
+  padding: .2rem .6rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.progress { height: 3px; background: var(--panel-2); }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--blue)); }
+
+.wrap { max-width: 820px; margin: 0 auto; padding: 2.4rem 1.25rem 5rem; }
+
+/* ---- hero ---- */
+.hero { margin-bottom: 2rem; }
+.hero .part { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: .55rem; }
+.hero h1 { font-size: 2.05rem; line-height: 1.2; letter-spacing: -.01em; font-weight: 750; }
+.hero .lead { margin-top: .9rem; font-size: 1.06rem; color: var(--muted); }
+
+h2 { font-size: 1.32rem; margin: 2.4rem 0 .9rem; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: .55rem; }
+h2::before { content: ""; width: 4px; height: 1.05em; background: var(--accent); border-radius: 3px; display: inline-block; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+p { margin: .7rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .3rem 0; }
+strong { color: var(--ink); font-weight: 680; }
+.inline { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: .08em .4em; font-size: .9em; color: var(--accent-ink); }
+
+/* ---- callout cards ---- */
+.card { border-radius: var(--radius); padding: 1.05rem 1.2rem; margin: 1.2rem 0;
+  border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.card .tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.card.macro { border-left: 4px solid var(--blue); }
+.card.macro .tag { color: var(--blue); }
+.card.detail { border-left: 4px solid var(--purple); }
+.card.detail .tag { color: var(--purple); }
+.card.analogy { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+.card.analogy .tag { color: var(--amber); }
+.card.key { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.key .tag { color: var(--accent-ink); }
+.card.warn { border-left: 4px solid var(--red); background: var(--red-soft); }
+.card.warn .tag { color: var(--red); }
+.card.spark { border-left: 4px solid #e0a000;
+  background: linear-gradient(100deg, rgba(224,160,0,.12), transparent 70%); }
+.card.spark .tag { color: #c98a00; }
+@media (prefers-color-scheme: dark) { .card.spark .tag { color: #f0c050; } }
+
+/* ---- code file callout ---- */
+.codefile { margin: 1.2rem 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  box-shadow: var(--shadow); }
+.codefile .cf-head { display: flex; align-items: center; gap: .55rem; padding: .5rem .85rem;
+  background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: .8rem; }
+.codefile .cf-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink:0; }
+.codefile .cf-head .path { font-family: ui-monospace, monospace; color: var(--ink); font-weight: 600; }
+.codefile .cf-head .ln { margin-left: auto; color: var(--faint); font-size: .72rem; }
+.codefile pre { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem;
+  overflow-x: auto; font-size: .82rem; line-height: 1.6; }
+.codefile pre .cm { color: #7d8aa3; }
+.codefile pre .kw { color: #c792ea; }
+.codefile pre .fn { color: #82aaff; }
+.codefile pre .st { color: #c3e88d; }
+.codefile pre .nb { color: #f78c6c; }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem; border-radius: 12px;
+  overflow-x: auto; font-size: .83rem; line-height: 1.6; margin: 1.1rem 0; box-shadow: var(--shadow); }
+pre.code .cm { color: #7d8aa3; } pre.code .kw { color: #c792ea; }
+pre.code .fn { color: #82aaff; } pre.code .st { color: #c3e88d; } pre.code .nb { color: #f78c6c; }
+
+/* ---- collapsible accordion (details/summary) ---- */
+.accordion { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  margin: .7rem 0; box-shadow: var(--shadow); overflow: hidden; }
+.accordion > summary { cursor: pointer; padding: .85rem 1.1rem; font-weight: 650; font-size: .96rem;
+  list-style: none; display: flex; align-items: center; gap: .6rem; user-select: none; }
+.accordion > summary::-webkit-details-marker { display: none; }
+.accordion > summary::after { content: "▶"; font-size: .68rem; color: var(--accent);
+  margin-left: auto; transition: transform .15s ease; }
+.accordion[open] > summary::after { transform: rotate(90deg); }
+.accordion > summary:hover { background: var(--panel-2); }
+.accordion[open] > summary { border-bottom: 1px solid var(--line); }
+.accordion .badge-num { background: var(--accent-soft); color: var(--accent-ink);
+  width: 1.6rem; height: 1.6rem; border-radius: 7px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: .82rem; font-weight: 700; flex-shrink: 0; }
+.accordion .hint { font-size: .72rem; color: var(--faint); font-weight: 400; }
+.acc-body { padding: .9rem 1.1rem 1.1rem; }
+.acc-intro { color: var(--muted); font-size: .9rem; margin: .2rem 0 .4rem; }
+.qa { margin: 1rem 0; }
+.qa:first-child { margin-top: .3rem; }
+.qa .q { font-weight: 680; font-size: .9rem; display: flex; gap: .45rem; align-items: center; margin-bottom: .3rem; }
+.qa .a { color: var(--muted); font-size: .9rem; }
+.qa .a strong { color: var(--ink); }
+.qa pre.code { margin: .5rem 0 0; font-size: .78rem; }
+
+/* ---- flow diagram ---- */
+.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 1.3rem 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.2rem 1rem; box-shadow: var(--shadow); }
+.flow .node { flex: 1 1 0; min-width: 110px; text-align: center; padding: .7rem .5rem;
+  border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.flow .node .nt { font-weight: 700; font-size: .92rem; }
+.flow .node .nd { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+.flow .node.hl { background: var(--accent-soft); border-color: var(--accent); }
+.flow .arrow { align-self: center; color: var(--faint); font-size: 1.3rem; padding: 0 .35rem; }
+
+/* vertical flow */
+.vflow { margin: 1.3rem 0; }
+.vflow .step { display: flex; gap: .9rem; position: relative; padding-bottom: 1.1rem; }
+.vflow .step:not(:last-child)::before { content:""; position:absolute; left: 15px; top: 34px; bottom: -2px;
+  width: 2px; background: var(--line); }
+.vflow .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; z-index:1; }
+.vflow .sc h4 { margin: .25rem 0 .2rem; font-size: 1rem; }
+.vflow .sc p { margin: .15rem 0; font-size: .92rem; color: var(--muted); }
+.vflow .sc .mono { font-size: .8rem; color: var(--accent-ink); }
+
+/* layered architecture */
+.layers { margin: 1.3rem 0; display: flex; flex-direction: column; gap: .55rem; }
+.layer { border-radius: 12px; padding: .85rem 1.1rem; border: 1px solid var(--line); background: var(--panel);
+  box-shadow: var(--shadow); }
+.layer .lh { display: flex; align-items: center; gap: .6rem; }
+.layer .lh .badge { font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; }
+.layer .lh .name { font-weight: 700; font-family: ui-monospace, monospace; }
+.layer .ld { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
+.layer.l-core { border-left: 4px solid var(--accent); } .layer.l-core .badge { background: var(--accent-soft); color: var(--accent-ink); }
+.layer.l-main { border-left: 4px solid var(--blue); } .layer.l-main .badge { background: var(--blue-soft); color: var(--blue); }
+.layer.l-part { border-left: 4px solid var(--purple); } .layer.l-part .badge { background: var(--purple-soft); color: var(--purple); }
+.layer.l-app { border-left: 4px solid var(--amber); } .layer.l-app .badge { background: var(--amber-soft); color: var(--amber); }
+
+/* two-column compare */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0; }
+@media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+.col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; box-shadow: var(--shadow); min-width: 0; }
+.col h4 { margin: 0 0 .4rem; font-size: .95rem; }
+
+table.t { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .9rem;
+  background: var(--panel); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+table.t th, table.t td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--line); }
+table.t th { background: var(--panel-2); font-size: .8rem; letter-spacing: .02em; }
+table.t tr:last-child td { border-bottom: none; }
+table.t td.mono, table.t td .mono { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--accent-ink); }
+@media (max-width: 640px) {
+  /* Wide multi-column tables: scroll within their own box instead of
+     forcing page-level horizontal overflow (which clipped right columns). */
+  table.t { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.t th, table.t td { padding: .5rem .6rem; }
+}
+.selftest { margin: 2.2rem 0 0; border-top: 2px dashed var(--line); padding-top: 1.2rem; }
+.selftest > h2 { margin-top: .2rem; }
+.quiz { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+  border-radius: 12px; padding: .9rem 1.1rem; margin: 1rem 0; box-shadow: var(--shadow); }
+.quiz .qn { font-weight: 650; }
+.quiz ol.opts { list-style: upper-alpha; margin: .55rem 0 .6rem 1.5rem; padding: 0; }
+.quiz ol.opts li { margin: .3rem 0; padding-left: .15rem; }
+.quiz details.accordion { margin: .5rem 0 0; }
+.selftest code { font-family: ui-monospace, monospace; font-size: .9em; color: var(--accent-ink);
+  background: var(--accent-soft); padding: 0 .28em; border-radius: 4px; }
+
+/* footer nav */
+.footnav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem;
+  padding-top: 1.4rem; border-top: 1px solid var(--line); }
+.footnav a { flex: 1; padding: .85rem 1.1rem; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow); transition: .15s; }
+.footnav a:hover { border-color: var(--accent); transform: translateY(-1px); }
+.footnav a.next { text-align: right; }
+.footnav .dir { font-size: .72rem; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.footnav .ttl { font-weight: 700; color: var(--ink); margin-top: .15rem; }
+.footnav a.disabled { opacity: .35; pointer-events: none; }
+
+/* index page */
+.toc { display: grid; gap: .7rem; margin-top: 1.6rem; }
+.toc-part { font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--accent); margin: 1.4rem 0 .2rem; }
+.toc a { display: flex; align-items: center; gap: .9rem; padding: .85rem 1.05rem; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); transition: .15s; }
+.toc a:hover { border-color: var(--accent); transform: translateX(3px); }
+.toc .n { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+.toc .tt { font-weight: 650; color: var(--ink); }
+.toc .ts { font-size: .8rem; color: var(--muted); margin-left: auto; text-align: right; }
+.toc-search { position: relative; margin: 1.6rem 0 -.4rem; }
+.toc-search input { width: 100%; box-sizing: border-box; padding: .75rem 2.8rem .75rem 1rem;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font-size: .98rem; box-shadow: var(--shadow); }
+.toc-search input:focus { outline: none; border-color: var(--accent); }
+.toc-search .qcount { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  color: var(--faint); font-size: .8rem; pointer-events: none; }
+.toc a.hide, .toc .toc-part.hide { display: none; }
+.toc-empty { display: none; color: var(--muted); padding: 1rem; text-align: center; }
+.toc-empty.show { display: block; }
+.hero.index h1 { font-size: 2.3rem; }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:1rem; font-size:.8rem; color:var(--muted); }
+.legend span { display:flex; align-items:center; gap:.4rem; }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+.pdf-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1.1rem;
+  background:var(--accent); color:#fff; border-radius:10px; font-size:.9rem; font-weight:650;
+  box-shadow:var(--shadow); transition:.15s; }
+.pdf-btn:hover { background:var(--accent-ink); transform:translateY(-1px); }
+
+/* ---- bilingual language switch ----
+   Contract: <html> must carry data-lang="zh" (default) or "en".
+   page()/index_page() hard-code data-lang="zh"; LANG_BOOT may switch to "en". */
+html[data-lang="en"] .lang-zh { display: none !important; }
+html[data-lang="zh"] .lang-en { display: none !important; }
+.langtoggle { font-size:.72rem; font-weight:700; color:var(--accent-ink);
+  background:var(--accent-soft); border:1px solid var(--accent); border-radius:999px;
+  padding:.22rem .7rem; cursor:pointer; line-height:1.4; white-space:nowrap; }
+.langtoggle:hover { background:var(--accent); color:#fff; }
+
+/* ---- schematic: cell strips (token sequences / quant blocks / KV columns) ---- */
+.cellgroup { margin: 1.2rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.cellgroup .cg-cap { font-size: .82rem; color: var(--muted); margin-bottom: .55rem; }
+.cellgroup .cg-cap b { color: var(--ink); }
+.cells { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.cells + .cells { margin-top: .5rem; }
+.cell { min-width: 2.1rem; padding: .38rem .5rem; text-align: center; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: .78rem;
+  font-family: ui-monospace, monospace; white-space: nowrap; }
+.cell.scale { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); font-weight: 700; }
+.cell.hl    { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cell.q     { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.cell.dim   { opacity: .45; }
+.cells .lab { font-size: .76rem; color: var(--faint); padding: 0 .35rem; }
+.cells .sep { color: var(--faint); padding: 0 .1rem; }
+
+/* ---- schematic: timeline lanes (prefill vs decode, step-by-step) ---- */
+.timeline { margin: 1.2rem 0; display: flex; flex-direction: column; gap: .5rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.timeline .lane { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.timeline .lane-label { min-width: 6rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.timeline .tslot { padding: .4rem .6rem; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--line); font-size: .78rem; text-align: center; font-family: ui-monospace, monospace; }
+.timeline .tslot.span { flex: 1; min-width: 8rem; background: var(--blue-soft); border-color: var(--blue);
+  color: var(--blue); font-weight: 700; }
+.timeline .tslot.now { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+/* ---- worked-example trace: one concrete input, stepped through ---- */
+.trace { margin: 1.3rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.trace .tcap { font-size: .82rem; color: var(--muted); margin-bottom: .7rem; }
+.trace .tcap b { color: var(--accent-ink); }
+.trace .stations { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.trace .stn { flex: 1 1 0; min-width: 116px; border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem; background: var(--bg); }
+.trace .stn h5 { margin: 0 0 .45rem; font-size: .8rem; color: var(--ink); }
+.trace .cellrow { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.trace .vc { min-width: 2.1rem; padding: .32rem .45rem; text-align: center; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); font: 600 .76rem ui-monospace, monospace; white-space: nowrap; }
+.trace .vc.hot  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.trace .vc.blue { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.trace .vc.dim  { opacity: .42; }
+.trace .tlab { font-size: .68rem; color: var(--faint); margin-top: .35rem; }
+.trace .op { align-self: center; color: var(--accent); font: 700 .72rem ui-monospace, monospace;
+  padding: 0 .5rem; text-align: center; white-space: nowrap; }
+.trace svg { max-width: 100%; height: auto; display: block; margin: .3rem auto; }
+@media (max-width: 640px) { .trace .stations { flex-direction: column; } .trace .op { padding: .3rem 0; } }
+/* 🧩 collaboration-mechanism card */
+.card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
+.card.collab .tag { color: var(--blue); }
+.card.collab .collab-sub { font-weight:700; font-size:.82rem; margin:.85rem 0 .3rem; color:var(--ink); }
+/* 🎯 design-tradeoff card */
+.card.design { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.design .tag { color: var(--accent-ink); }
+/* A-G constraint back-reference badge */
+.badge.constraint { display:inline-block; font-size:.7rem; font-weight:700;
+  padding:.1rem .45rem; border-radius:999px; background:var(--purple-soft);
+  color:var(--purple); border:1px solid var(--purple); margin:0 .15rem; white-space:nowrap; }
+</style>
+</head><body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
+    <span class="pill"><span class="lang-zh">第六部分 · 自动化与研究</span><span class="lang-en">Part 6 · Automation &amp; Research</span></span>
+    <span class="pill">22 / 22</span>
+    <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
+  </div>
+  <div class="progress"><span style="width:100%"></span></div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="part"><span class="lang-zh">第六部分 · 自动化与研究</span><span class="lang-en">Part 6 · Automation &amp; Research</span></div>
+    <h1><span class="lang-zh">评测、批量与轨迹</span><span class="lang-en">Eval, batch &amp; trajectory</span></h1>
+  </div>
+  <div class="lang-zh">
+<p class="lead">Hermes 不只是个产品,它是 Nous Research 的<strong>研究工具</strong>:要批量跑成千上万条 prompt、把每次对话的<strong>完整轨迹</strong>(含推理、工具调用)落盘成训练数据,还要在「模型每周都在变」的现实里写出<strong>不会天天挂掉</strong>的测试。这一章讲三件相关的事:批量、轨迹、评测哲学。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 工厂的质检流水线</div>
+  把一堆原料(prompt)送上<strong>多条并行产线</strong>(batch workers),每件产品记录<strong>完整工序</strong>(trajectory:每步推理 + 每次工具调用)。出厂前<strong>质检</strong>:不合格的(比如全程零推理)直接剔除,不混进成品库(训练集)。而质检标准看的是「<strong>是否符合规格</strong>」(不变量),不是「<strong>是否和上一批一模一样</strong>」(快照)——因为配方本来就会升级。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 数据流水线 + 抗漂移测试</div>
+  <strong>批量</strong>:多 worker 并行跑 AIAgent,每条 prompt 独立。<strong>轨迹</strong>:把对话转成 JSONL 训练样本,带 <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>,并<strong>过滤低质</strong>(零推理样本丢弃)。<strong>评测</strong>:测试锁<strong>行为不变量</strong>而非数据快照——模型目录、config 版本天天变,锁快照只会让 CI 天天红。
+</div>
+
+<h2>批量:并行 worker + 轨迹落盘</h2>
+<p>批处理把 prompt 分批,每个 worker 跑完一条就质检、落盘:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">batch_runner.py</span><span class="ln">400-487 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_process_batch_worker</span>(args):
+    <span class="cm">&quot;&quot;&quot;Worker function to process a single batch of prompts.&quot;&quot;&quot;</span>
+    batch_num, batch_data, output_dir, completed, config = args
+    ...
+    <span class="kw">if</span> result[<span class="st">"success"</span>] <span class="kw">and</span> result[<span class="st">"trajectory"</span>]:
+        <span class="kw">if</span> <span class="kw">not</span> reasoning.get(<span class="st">"has_any_reasoning"</span>, <span class="kw">True</span>):
+            <span class="kw">continue</span>                       <span class="cm"># 丢弃全程零推理的样本</span>
+        trajectory_entry = {
+            <span class="st">"conversations"</span>: result[<span class="st">"trajectory"</span>],
+            <span class="st">"metadata"</span>: result[<span class="st">"metadata"</span>],
+            <span class="st">"tool_stats"</span>: tool_stats,        <span class="cm"># {tool: {count,success,failure}}</span>
+        }
+        f.write(json.dumps(trajectory_entry, ensure_ascii=<span class="kw">False</span>) + <span class="st">"\n"</span>)  <span class="cm"># 追加 JSONL</span></pre>
+</div>
+<p>三个要点:① <strong>并行</strong>——多 worker 各跑各的 prompt,互不依赖(无状态,约束 B 又一次发力);② <strong>质量过滤</strong>——<span class="mono">has_any_reasoning</span> 为假就 <span class="mono">continue</span> 丢弃,训练集只收有推理的样本;③ <strong>JSONL 追加</strong>——每条样本一行,带 <span class="mono">tool_stats</span> 等元数据,是标准的 RL/SFT 训练格式。</p>
+
+<h2>轨迹:一次对话变一条训练样本</h2>
+<p>单次运行也能存轨迹,由一个开关控制:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">run_agent.py</span><span class="ln">1716-1729 · 节选</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_save_trajectory</span>(self, messages, user_query, completed):
+    <span class="cm">&quot;&quot;&quot;Save conversation trajectory to JSONL file.&quot;&quot;&quot;</span>
+    <span class="kw">if</span> <span class="kw">not</span> self.save_trajectories:    <span class="cm"># 开关:默认关</span>
+        <span class="kw">return</span>
+    trajectory = self._convert_to_trajectory_format(messages, user_query, completed)
+    _save_trajectory_to_file(trajectory, self.model, completed)</pre>
+</div>
+<p><span class="mono">save_trajectories</span> 默认关(生产对话不留痕),研究时打开。<span class="mono">_convert_to_trajectory_format</span> 把内部的 <span class="mono">messages</span>(system/user/assistant/tool 四类角色 + reasoning)转成训练用的轨迹格式,落盘成 JSONL(成功样本进 <span class="mono">trajectory_samples.jsonl</span>、失败的进 <span class="mono">failed_trajectories.jsonl</span>;<span class="mono">model</span> 记进每条样本的元数据)。<strong>同一个 agent 核心,既服务真实对话,又顺手产出研究数据</strong>——这正是「研究工具」的一鱼两吃。</p>
+
+<h2>评测:锁不变量,别锁快照</h2>
+<p>研究项目最容易踩的测试坑——把「当前数据」写死进断言。模型每周都在变,这种测试天天挂:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">AGENTS.md · 测试规约(项目纪律)</span><span class="ln">Don't write change-detector tests</span></div>
+  <pre><span class="cm"># ❌ change-detector:数据一变就挂(模型目录每次发布都变)</span>
+<span class="kw">assert</span> <span class="st">"gemini-2.5-pro"</span> <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"gemini"</span>]
+<span class="kw">assert</span> DEFAULT_CONFIG[<span class="st">"_config_version"</span>] == 21
+
+<span class="cm"># ✅ 行为契约/不变量:锁「关系」,不锁「快照」</span>
+<span class="kw">assert</span> <span class="st">"gemini"</span> <span class="kw">in</span> _PROVIDER_MODELS
+<span class="kw">assert</span> len(_PROVIDER_MODELS[<span class="st">"gemini"</span>]) &gt;= 1
+<span class="kw">assert</span> raw[<span class="st">"_config_version"</span>] == DEFAULT_CONFIG[<span class="st">"_config_version"</span>]
+<span class="kw">for</span> m <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"huggingface"</span>]:
+    <span class="kw">assert</span> m.lower() <span class="kw">in</span> DEFAULT_CONTEXT_LENGTHS_LOWER</pre>
+</div>
+<p>规则一句话:<strong>测试若读起来像「当前数据的快照」,删掉;若读起来像「两份数据必须如何关联」的契约,留下。</strong>「gemini 目录里必须有 gemini-2.5-pro」是快照(下个模型发布就错);「gemini 目录至少有一个模型」「每个模型都有对应的上下文长度」是<strong>不变量</strong>——数据怎么更新都不破。这让测试<strong>抗模型/数据漂移</strong>,routine 更新不再天天红 CI。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">一批 prompt 切分,丢给多个 <span class="mono">_process_batch_worker</span> 并行</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">每个 worker 独立跑 AIAgent(第 7 章核心循环),产出 trajectory</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">质量过滤:零推理样本 <span class="mono">continue</span> 丢弃</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><span class="mono">trajectory_entry</span>(conversations + tool_stats + metadata)写 JSONL 一行</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">评测/回归用<strong>不变量</strong>断言(非快照),抗模型漂移</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「研究数据流水线 + 抗漂移评测」</div>
+  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
+  本章核心:<strong>_process_batch_worker</strong>(并行批量)、<strong>_save_trajectory</strong>(轨迹落盘)、<strong>trajectory_entry</strong>(JSONL schema)、<strong>不变量测试</strong>(评测哲学)。跨章节配合:批量跑的是 <strong>AIAgent 核心循环</strong>(第 7 章),轨迹里存的 reasoning 也来自那里;<span class="mono">tool_stats</span> 统计的是<strong>工具</strong>(第 8 章)调用;并行 worker 各自<strong>无状态独立</strong>(约束 B,第 2 章);轨迹按完成状态写 JSONL(<span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span>),批量则落进 <span class="mono">data/&lt;run&gt;/</span>。
+  <div class="collab-sub">② 数据流时序</div>
+  prompts 切批 → 多 <span class="mono">_process_batch_worker</span> 并行(各跑 AIAgent)→ 质量过滤(零推理丢弃)→ <span class="mono">trajectory_entry</span> 写 JSONL → 聚合 <span class="mono">tool_stats</span>;评测侧:不变量断言抗数据漂移。
+  <div class="collab-sub">③ 关键点</div>
+  研究数据流水线 = <strong>并行批量 + 完整轨迹 + 质量过滤</strong>;同一个 agent 核心既服务真实对话又产出训练数据。评测的工程纪律 = <strong>锁行为不变量、不锁数据快照</strong>,让「模型/数据天天变」不再天天破测试。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>并行批量 + 完整轨迹 + 质量过滤 + 行为契约测试 = 可规模化的研究数据流水线 + 抗漂移评测</strong>。它主要治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——研究要规模:成千上万条 prompt 得并行跑、轨迹得标准化落盘、CI 得在「模型每周变」下还能维护。批量 worker、JSONL 轨迹、不变量测试,把「做研究」做成可规模化、低维护的基础设施。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·误差累积</span>——评测的本职就是<strong>量化 agent 在多轮自主里误差累积到什么程度</strong>;轨迹的质量门槛(必须有推理)<strong>剔除低质样本</strong>,免得垃圾数据喂进训练、把误差固化进下一代模型。不变量测试也防回归在迭代中悄悄累积。</p>
+  <p style="margin:.5rem 0 0">反模式:写 <strong>change-detector 测试</strong>——把模型目录、config 版本号、枚举数量写死进断言。模型一发布、配置一升级,这些测试就<strong>集体变红</strong>,逼工程师花时间「修测试」而非修 bug。锁不变量,不锁快照。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>并行批量</strong>:<span class="mono">_process_batch_worker</span> 多 worker 各跑独立 prompt(无状态,约束 B),规模化生成数据。</li>
+    <li><strong>完整轨迹</strong>:对话转 JSONL 训练样本,带 <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>;<span class="mono">save_trajectories</span> 开关默认关。</li>
+    <li><strong>质量过滤</strong>:零推理样本 <span class="mono">continue</span> 丢弃,训练集只收有推理的高质数据。</li>
+    <li><strong>一鱼两吃</strong>:同一个 AIAgent 核心,既服务真实对话、又顺手产出研究轨迹。</li>
+    <li><strong>抗漂移评测</strong>:测试锁<strong>行为不变量</strong>(关系)而非<strong>数据快照</strong>(具体值);不写 change-detector,免得模型/config 一变就全红。</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. Hermes 批量跑成千上万条 prompt 生成训练数据,怎么同时保证数据质量?</div>
+  <ol class="opts">
+    <li>多 worker 并行跑独立 prompt(无状态),每条对话转成 JSONL 轨迹;全程零推理的样本 continue 丢弃,训练集只收有推理的高质样本</li>
+    <li>每条只跑一次就行</li>
+    <li>人工逐条审核</li>
+    <li>不过滤,全部入库</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：A</strong>。_process_batch_worker 多 worker 并行跑独立 prompt(无状态,约束 B);has_any_reasoning 为假就 continue 丢弃零推理样本;每条样本一行 JSONL,带 conversations/tool_stats/metadata。质量过滤在数据进训练集前就把垃圾样本挡掉。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. 两个测试:`assert 'gemini-2.5-pro' in models` 和 `assert len(models) >= 1`,哪个是好测试,为什么?</div>
+  <ol class="opts">
+    <li>第一个,因为它更精确</li>
+    <li>第二个:它是行为不变量(数据怎么更新都不破);第一个是数据快照,下个模型一发布就挂——典型 change-detector</li>
+    <li>都好</li>
+    <li>都不好</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。change-detector(快照)在「数据本就会变」(模型目录每周更新)时一变就挂,逼工程师花时间修测试而非修 bug。不变量(契约)锁的是「两份数据必须如何关联」(目录至少有一个模型、每个模型都有上下文长度),数据怎么更新都成立,抗模型漂移。规则:测试若像当前数据的快照就删,若像数据间关系的契约就留。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>为什么同一个 AIAgent 核心既能服务真实对话、又能顺手产出研究轨迹数据?这种「一鱼两吃」对 Nous 做 RL/eval 研究有什么价值?为什么 save_trajectories 默认关?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="lang-en">
+<p class="lead">Hermes isn't just a product — it's Nous Research's <strong>research tool</strong>: it must batch-run thousands of prompts, persist each conversation's <strong>full trajectory</strong> (reasoning, tool calls) as training data, and — in a world where models change weekly — write tests that <strong>don't break every day</strong>. This chapter covers three related things: batching, trajectories, and the testing philosophy.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · the factory QC line</div>
+  Feed raw material (prompts) onto <strong>parallel production lines</strong> (batch workers); each product records its <strong>full process</strong> (the trajectory: every reasoning step + every tool call). Before shipping, <strong>QC</strong>: rejects (e.g. zero reasoning throughout) are discarded, never entering the stock (the training set). And QC checks "<strong>does it meet spec</strong>" (invariants), not "<strong>is it identical to the last batch</strong>" (a snapshot) — because the recipe is meant to evolve.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · a data pipeline + drift-proof tests</div>
+  <strong>Batch</strong>: multiple workers run AIAgent in parallel, each prompt independent. <strong>Trajectory</strong>: turn a conversation into a JSONL training sample carrying <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>, and <strong>filter low quality</strong> (drop zero-reasoning samples). <strong>Eval</strong>: tests lock <strong>behavioral invariants</strong>, not data snapshots — model catalogs and config versions change daily; lock a snapshot and CI goes red daily.
+</div>
+
+<h2>Batch: parallel workers + trajectory persistence</h2>
+<p>Batching splits prompts; each worker QCs and persists as soon as one finishes:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">batch_runner.py</span><span class="ln">400-487 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_process_batch_worker</span>(args):
+    <span class="cm">&quot;&quot;&quot;Worker function to process a single batch of prompts.&quot;&quot;&quot;</span>
+    batch_num, batch_data, output_dir, completed, config = args
+    ...
+    <span class="kw">if</span> result[<span class="st">"success"</span>] <span class="kw">and</span> result[<span class="st">"trajectory"</span>]:
+        <span class="kw">if</span> <span class="kw">not</span> reasoning.get(<span class="st">"has_any_reasoning"</span>, <span class="kw">True</span>):
+            <span class="kw">continue</span>                       <span class="cm"># discard samples with zero reasoning</span>
+        trajectory_entry = {
+            <span class="st">"conversations"</span>: result[<span class="st">"trajectory"</span>],
+            <span class="st">"metadata"</span>: result[<span class="st">"metadata"</span>],
+            <span class="st">"tool_stats"</span>: tool_stats,        <span class="cm"># {tool: {count,success,failure}}</span>
+        }
+        f.write(json.dumps(trajectory_entry, ensure_ascii=<span class="kw">False</span>) + <span class="st">"\n"</span>)  <span class="cm"># append JSONL</span></pre>
+</div>
+<p>Three points: ① <strong>parallel</strong> — workers each run their own prompt, independent (stateless, constraint B at work again); ② <strong>quality filter</strong> — <span class="mono">continue</span> to drop when <span class="mono">has_any_reasoning</span> is false, the training set takes only samples with reasoning; ③ <strong>JSONL append</strong> — one sample per line with metadata like <span class="mono">tool_stats</span>, the standard RL/SFT training format.</p>
+
+<h2>Trajectory: one conversation becomes one training sample</h2>
+<p>A single run can save a trajectory too, gated by one switch:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">run_agent.py</span><span class="ln">1716-1729 · excerpt</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_save_trajectory</span>(self, messages, user_query, completed):
+    <span class="cm">&quot;&quot;&quot;Save conversation trajectory to JSONL file.&quot;&quot;&quot;</span>
+    <span class="kw">if</span> <span class="kw">not</span> self.save_trajectories:    <span class="cm"># switch: off by default</span>
+        <span class="kw">return</span>
+    trajectory = self._convert_to_trajectory_format(messages, user_query, completed)
+    _save_trajectory_to_file(trajectory, self.model, completed)</pre>
+</div>
+<p><span class="mono">save_trajectories</span> is off by default (production chats leave no trace), turned on for research. <span class="mono">_convert_to_trajectory_format</span> turns the internal <span class="mono">messages</span> (system/user/assistant/tool roles + reasoning) into the training trajectory format, written to JSONL (successful samples into <span class="mono">trajectory_samples.jsonl</span>, failed ones into <span class="mono">failed_trajectories.jsonl</span>; <span class="mono">model</span> recorded as per-sample metadata). <strong>The same agent core both serves real conversations and produces research data</strong> — the two-for-one of a "research tool."</p>
+
+<h2>Eval: lock invariants, not snapshots</h2>
+<p>The easiest testing trap in a research project — freezing "current data" into assertions. Models change weekly, so such tests break daily:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">AGENTS.md · testing rule (project discipline)</span><span class="ln">Don't write change-detector tests</span></div>
+  <pre><span class="cm"># ❌ change-detector: breaks whenever data changes (catalog changes every release)</span>
+<span class="kw">assert</span> <span class="st">"gemini-2.5-pro"</span> <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"gemini"</span>]
+<span class="kw">assert</span> DEFAULT_CONFIG[<span class="st">"_config_version"</span>] == 21
+
+<span class="cm"># ✅ behavior contract / invariant: lock the RELATION, not the snapshot</span>
+<span class="kw">assert</span> <span class="st">"gemini"</span> <span class="kw">in</span> _PROVIDER_MODELS
+<span class="kw">assert</span> len(_PROVIDER_MODELS[<span class="st">"gemini"</span>]) &gt;= 1
+<span class="kw">assert</span> raw[<span class="st">"_config_version"</span>] == DEFAULT_CONFIG[<span class="st">"_config_version"</span>]
+<span class="kw">for</span> m <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"huggingface"</span>]:
+    <span class="kw">assert</span> m.lower() <span class="kw">in</span> DEFAULT_CONTEXT_LENGTHS_LOWER</pre>
+</div>
+<p>The rule in one line: <strong>if a test reads like a snapshot of current data, delete it; if it reads like a contract about how two pieces of data must relate, keep it.</strong> "the gemini catalog must contain gemini-2.5-pro" is a snapshot (wrong on the next release); "the gemini catalog has at least one model," "every model has a context length" are <strong>invariants</strong> — unbroken however the data updates. This makes tests <strong>drift-proof</strong> against model/data churn, so routine updates no longer redden CI daily.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">a batch of prompts is split and handed to several <span class="mono">_process_batch_worker</span> in parallel</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">each worker runs AIAgent independently (ch.7 core loop), producing a trajectory</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">quality filter: zero-reasoning samples are <span class="mono">continue</span>-dropped</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><span class="mono">trajectory_entry</span> (conversations + tool_stats + metadata) written as one JSONL line</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">eval/regression use <strong>invariant</strong> assertions (not snapshots), drift-proof</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "research data pipeline + drift-proof eval"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>_process_batch_worker</strong> (parallel batch), <strong>_save_trajectory</strong> (trajectory persistence), <strong>trajectory_entry</strong> (JSONL schema), <strong>invariant tests</strong> (eval philosophy). Cross-chapter teamwork: batching runs the <strong>AIAgent core loop</strong> (ch.7), and the reasoning stored in trajectories comes from there; <span class="mono">tool_stats</span> counts <strong>tool</strong> (ch.8) calls; parallel workers are each <strong>stateless and independent</strong> (constraint B, ch.2); trajectories are written by completion status (<span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span>), batches into <span class="mono">data/&lt;run&gt;/</span>.
+  <div class="collab-sub">② Data-flow timing</div>
+  prompts split into batches → several <span class="mono">_process_batch_worker</span> in parallel (each runs AIAgent) → quality filter (drop zero-reasoning) → <span class="mono">trajectory_entry</span> written to JSONL → aggregate <span class="mono">tool_stats</span>; on the eval side: invariant assertions resist data drift.
+  <div class="collab-sub">③ The key point</div>
+  The research data pipeline = <strong>parallel batch + full trajectory + quality filter</strong>; the same agent core both serves real conversations and produces training data. The engineering discipline of eval = <strong>lock behavioral invariants, not data snapshots</strong>, so "models/data change daily" no longer breaks tests daily.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>parallel batch + full trajectory + quality filter + behavior-contract tests = a scalable research data pipeline + drift-proof eval</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — research needs scale: thousands of prompts must run in parallel, trajectories must persist in a standard format, and CI must stay maintainable while "models change weekly." Batch workers, JSONL trajectories, and invariant tests make "doing research" a scalable, low-maintenance infrastructure.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·error accumulation</span> — eval's very job is to <strong>quantify how much error accumulates over an agent's multi-turn autonomy</strong>; the trajectory's quality gate (reasoning required) <strong>discards low-quality samples</strong>, lest garbage data feed training and bake the error into the next model. Invariant tests also stop regressions from quietly accumulating across iterations.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern: writing <strong>change-detector tests</strong> — freezing model catalogs, config version numbers, enumeration counts into assertions. The moment a model ships or a config bumps, these tests <strong>all go red</strong>, forcing engineers to spend time "fixing the test" instead of fixing bugs. Lock invariants, not snapshots.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Parallel batch</strong>: <span class="mono">_process_batch_worker</span> runs independent prompts across workers (stateless, constraint B), generating data at scale.</li>
+    <li><strong>Full trajectory</strong>: a conversation becomes a JSONL training sample with <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>; <span class="mono">save_trajectories</span> is off by default.</li>
+    <li><strong>Quality filter</strong>: zero-reasoning samples are <span class="mono">continue</span>-dropped; the training set takes only high-quality samples with reasoning.</li>
+    <li><strong>Two-for-one</strong>: the same AIAgent core both serves real conversations and produces research trajectories.</li>
+    <li><strong>Drift-proof eval</strong>: tests lock <strong>behavioral invariants</strong> (relations) not <strong>data snapshots</strong> (specific values); no change-detectors, so a model/config change doesn't redden everything.</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Hermes batch-runs thousands of prompts to generate training data — how does it also ensure data quality?</div>
+  <ol class="opts">
+    <li>Multiple workers run independent prompts in parallel (stateless), each conversation becomes a JSONL trajectory; samples with zero reasoning throughout are continue-dropped, the training set takes only high-quality samples with reasoning</li>
+    <li>Just run each once</li>
+    <li>Hand-review each one</li>
+    <li>No filtering; everything goes in</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. _process_batch_worker runs independent prompts across workers (stateless, constraint B); a false has_any_reasoning triggers continue to drop zero-reasoning samples; each sample is one JSONL line with conversations/tool_stats/metadata. The quality filter blocks junk before data enters the training set.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. Two tests: `assert 'gemini-2.5-pro' in models` vs `assert len(models) >= 1` — which is the good one, and why?</div>
+  <ol class="opts">
+    <li>The first, because it's more precise</li>
+    <li>The second: it's a behavioral invariant (unbroken however data updates); the first is a data snapshot that breaks on the next model release — a classic change-detector</li>
+    <li>Both are good</li>
+    <li>Neither is good</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. A change-detector (snapshot) breaks whenever data changes (catalogs update weekly), forcing engineers to fix tests instead of bugs. An invariant (contract) locks how two pieces of data must relate (catalog has at least one model; every model has a context length), holding however data updates, drift-proof. Rule: if a test reads like a snapshot of current data, delete it; if like a contract about how data relates, keep it.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Why can the same AIAgent core both serve real conversations and produce research trajectory data? What is this 'two-for-one' worth for Nous's RL/eval research? Why is save_trajectories off by default?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="footnav"><a class="prev" href="21-cron-kanban.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">Cron 与 Kanban</span><span class="lang-en">Cron &amp; Kanban</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
+</div>
+<script>
+function havgSetLang(l){
+  l=(l==='en')?'en':'zh';
+  var d=document.documentElement;
+  d.dataset.lang=l; d.lang=(l==='en'?'en':'zh-CN');
+  try{localStorage.setItem('havg-lang',l);}catch(e){}
+}
+function havgToggleLang(){
+  havgSetLang(document.documentElement.dataset.lang==='en'?'zh':'en');
+}
+</script>
+</body></html>
