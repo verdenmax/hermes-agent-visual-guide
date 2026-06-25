@@ -857,6 +857,40 @@ QUIZZES = {
              "en": "Hermes's security philosophy is 'never let the probabilistic model be the judge; nail the trust boundary to deterministic code.' From three angles — dangerous-command approval, injection isolation (ch.18), and supply-chain pinning — explain how each realizes this and why the model's judgment can't be trusted."},
         ],
     },
+    "25-design-principles.html": {
+        "mcq": [
+            {
+                "q": {"zh": "把全书 25 章横着收一遍,最粗的三条设计线是什么?",
+                      "en": "Gathering all 25 chapters horizontally, what are the three thickest design lines?"},
+                "opts": [
+                    {"zh": "性能 / 安全 / 界面", "en": "Performance / security / UI"},
+                    {"zh": "缓存神圣线、自我进化线、窄腰线", "en": "The sacred-cache line, the self-evolution line, the narrow-waist line"},
+                    {"zh": "前端 / 后端 / 数据库", "en": "Frontend / backend / database"},
+                    {"zh": "输入 / 处理 / 输出", "en": "Input / processing / output"},
+                ],
+                "answer": 1,
+                "why": {"zh": "三条贯穿全书的设计线:① 缓存神圣(ch6 system prompt 稳定→ch15 压缩唯一例外→ch18 控制命令旁路→ch21 cron 独立会话→ch23 技能 user message);② 自我进化(ch9 nudge→ch10 Curator→ch11 记忆→ch12 跨会话搜索);③ 窄腰(ch4 哲学→ch8 工具 Footprint Ladder→ch16 多后端→ch17 适配器→ch23 插件/MCP)。",
+                        "en": "Three lines running through the book: the sacred cache (ch6 stable system prompt -> ch15 compression as the only exception -> ch18 control-command bypass -> ch21 cron isolated session -> ch23 skill user-message); self-evolution (ch9 nudge -> ch10 Curator -> ch11 memory -> ch12 cross-session search); the narrow waist (ch4 philosophy -> ch8 tool Footprint Ladder -> ch16 multi-backend -> ch17 adapters -> ch23 plugins/MCP)."},
+            },
+            {
+                "q": {"zh": "LLM 的 B·无状态约束(每次调用都失忆),Hermes 主要靠什么治?",
+                      "en": "The LLM's B·statelessness constraint (it forgets between calls) — how does Hermes mainly treat it?"},
+                "opts": [
+                    {"zh": "换更大的模型", "en": "Use a bigger model"},
+                    {"zh": "把状态外置到核心之外:system prompt 身份(ch6)、记忆(ch11)、profile 状态盘(ch20)、会话 spawn-per-call 快照(ch16);模型只是个纯函数", "en": "Externalize state outside the core: system-prompt identity (ch6), memory (ch11), the profile state directory (ch20), spawn-per-call session snapshot (ch16); the model is just a pure function"},
+                    {"zh": "把整段对话都缓存起来", "en": "Cache the whole conversation"},
+                    {"zh": "不治,接受失忆", "en": "Don't treat it, accept the amnesia"},
+                ],
+                "answer": 1,
+                "why": {"zh": "B·无状态的对策是「状态外置」:内核本身无记忆,记忆/技能/profile 全在外部文件,模型只是个把上下文映射到输出的纯函数。所以记忆(ch11)、身份(ch6 system prompt)、profile 状态盘(ch20)、会话快照(ch16 spawn-per-call)都是外置状态的不同侧面——这也是 Hermes「自我进化」存在的根本理由。",
+                        "en": "The countermeasure for B·statelessness is 'externalize state': the core itself has no memory; memory/skills/profile all live in external files, and the model is just a pure function mapping context to output. So memory (ch11), identity (ch6 system prompt), the profile store (ch20), and session snapshots (ch16 spawn-per-call) are facets of externalized state — the very reason Hermes's 'self-evolution' exists."},
+            },
+        ],
+        "open": [
+            {"zh": "用一句话概括 Hermes 的设计基因,并解释「状态外置 / 上下文神圣 / 窄腰厚边」这三句各自对抗 LLM 的哪个固有缺陷(A–G)。为什么说「安全是横切的——绝不让概率模型当裁判」?",
+             "en": "Summarize Hermes's design DNA in one sentence, and explain which inherent LLM flaw (A–G) each of 'externalize state / sacred context / narrow waist, thick edges' fights. Why is 'security the cross-cut — never let the probabilistic model be the judge'?"},
+        ],
+    },
 }
 
 

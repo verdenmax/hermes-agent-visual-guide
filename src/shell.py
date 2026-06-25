@@ -94,6 +94,8 @@ PAGES = [
      "第六部分 · 自动化与研究", "Part 6 · Automation & Research"),
     ("24-security.html", "安全与威胁模型", "Security & threat model",
      "第七部分 · 横向专题与收束", "Part 7 · Cross-Cutting & Synthesis"),
+    ("25-design-principles.html", "设计原则横向收束", "Design principles synthesis",
+     "第七部分 · 横向专题与收束", "Part 7 · Cross-Cutting & Synthesis"),
 ]
 
 

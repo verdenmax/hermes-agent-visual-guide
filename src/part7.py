@@ -204,3 +204,161 @@ dependencies = [
 </div>
 """
 }
+
+
+LESSON_25 = {
+    "zh": r"""
+<p class="lead">读完 24 章,你会发现 Hermes 的每个设计其实都在反复回答<strong>同一个问题</strong>:LLM 有 7 个固有缺陷(A–G),而 agent 要让模型在真实世界里<strong>自主、连续、安全</strong>地干活——每一处工程,都是在治其中某个缺陷。这一章把全书横着收一遍:三条贯穿的<strong>设计线</strong> + 一张 <strong>A–G 约束矩阵</strong> + 一份<strong>术语表</strong>。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 把星星连成星座</div>
+  前面每一章像一颗<strong>独立的星</strong>(系统提示、记忆、委派、网关……)。但它们不是孤立的——把它们<strong>连起来</strong>,会浮现出几条清晰的<strong>设计线</strong>。看懂这些线,你就从"知道每个零件"升级到"理解这台机器为什么长这样"。面试官真正想听的,正是这些线。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 一句话总纲</div>
+  <strong>无状态、易被淹没、分不清指令与数据的概率模型,要在真实世界里长期自主干活。</strong>Hermes 的全部工程,就是围绕这句话的 7 个隐患(A–G)展开:把状态<strong>外置</strong>、把上下文<strong>守住</strong>、把能力<strong>推到边缘</strong>、把安全<strong>钉进代码</strong>。三条最粗的线:<strong>缓存神圣线、自我进化线、窄腰线</strong>。
+</div>
+
+<h2>线一:每个会话的 prompt 缓存神圣不可侵犯</h2>
+<p>这是全书<strong>出现最多</strong>的一条线。长对话每轮复用缓存前缀,任何改动过去上下文的操作都让缓存作废、成本翻倍。于是每个部件都为它让路:</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">6</span><span class="sc">System Prompt 整会话<strong>逐字节稳定</strong>,缓存前缀常驻</span></div>
+  <div class="step"><span class="num">15</span><span class="sc">上下文压缩是<strong>唯一</strong>会重建前缀的例外(故默认到 50% 才触发、防抖动)</span></div>
+  <div class="step"><span class="num">18</span><span class="sc">控制命令(<span class="mono">/stop</span>/<span class="mono">/approve</span>)在网关<strong>旁路</strong>,不混进对话历史破坏角色交替</span></div>
+  <div class="step"><span class="num">21</span><span class="sc">Cron 起<strong>独立会话</strong>、不镜像进主对话,后台自动化不搅乱缓存</span></div>
+  <div class="step"><span class="num">23</span><span class="sc">技能注入为 <strong>user message</strong>(append-only),不进 system prompt</span></div>
+</div>
+
+<h2>线二:自我进化(跨会话学习)</h2>
+<p>Hermes 的招牌——它会<strong>越用越懂你</strong>。这条线把"一次性对话"升级成"持续成长的伙伴":</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">9</span><span class="sc">学习<strong>nudge</strong>:模型被引导把可复用的解法<strong>写成技能</strong></span></div>
+  <div class="step"><span class="num">10</span><span class="sc"><strong>Curator</strong>:后台园丁给技能记使用量、自动归档陈旧的(只动 agent 自建的)</span></div>
+  <div class="step"><span class="num">11</span><span class="sc"><strong>记忆</strong>:MEMORY/USER 双层 + provider,把"你是谁"沉淀下来</span></div>
+  <div class="step"><span class="num">12</span><span class="sc"><strong>跨会话搜索</strong>(FTS5):新会话能翻出旧会话的相关片段</span></div>
+</div>
+
+<h2>线三:窄腰(核心薄,能力在边缘)</h2>
+<p>每个核心工具都在<strong>每次 API 调用</strong>发送,所以核心面的每寸都金贵。Hermes 把核心做成一根<strong>窄腰</strong>,能力全长在边缘:</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">4</span><span class="sc"><strong>窄腰哲学</strong>:核心是窄通道,复杂度往两端推</span></div>
+  <div class="step"><span class="num">8</span><span class="sc">工具系统 + <strong>Footprint Ladder</strong>:新能力优先非核心工具</span></div>
+  <div class="step"><span class="num">16</span><span class="sc">终端<strong>多后端</strong>(local/docker/ssh/modal)差异关进边缘子类</span></div>
+  <div class="step"><span class="num">17</span><span class="sc">28+ <strong>平台适配器</strong>把差异翻译成统一 MessageEvent,核心只认抽象</span></div>
+  <div class="step"><span class="num">23</span><span class="sc"><strong>插件/技能/MCP</strong>:连主流平台适配器都是边缘插件</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 A–G 约束矩阵 · 每个 LLM 缺陷由哪些章治</div>
+  <div class="collab-sub">A · 中间遗失(长上下文里中间信息被忽略)</div>
+  引入(第 2 章)→ 治:窄腰精简核心工具(第 4/8/23 章)、上下文压缩(第 15 章)、委派把中间过程关进子上下文(第 13 章)。
+  <div class="collab-sub">B · 无状态(模型每次调用都失忆)</div>
+  引入(第 2 章)→ 治:外置状态——system prompt 身份(第 6 章)、记忆(第 11 章)、profile 状态盘(第 20 章)、会话 spawn-per-call 快照(第 16 章)。
+  <div class="collab-sub">C · 幻觉 / D · 指令=数据 / E · 结构化输出脆弱</div>
+  (C/D 第 3 章引入、E 第 2 章引入)→ C 治:生成-验证分离(第 14 章)、工具拿真实数据(第 8 章);D 治:网关守卫(第 18 章)、纵深防御(第 24 章);E 治:工具 schema + 在地修复(第 7/8 章)。
+  <div class="collab-sub">F · 误差累积 / G · 运维</div>
+  (第 3 章引入)→ F 治:审查(第 14 章)、评测(第 22 章)、压缩(第 15 章);G 治:几乎每章——网关(17)、Cron(21)、Profiles(20)、安全(24)都是运维基础设施。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 元设计哲学 · 全书的取舍总账</div>
+  把 7 条约束收成一句:<strong>无状态、概率性、易被淹没、分不清指令与数据的内核 + 一切确定性都外置到代码与文件</strong>。
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span> <span class="badge constraint">B·无状态</span> <span class="badge constraint">C·幻觉</span> <span class="badge constraint">D·指令=数据</span> <span class="badge constraint">E·结构化脆弱</span> <span class="badge constraint">F·误差累积</span> <span class="badge constraint">G·运维</span></p>
+  <p style="margin:.5rem 0 0">三句话记住 Hermes 的设计基因:① <strong>状态外置</strong>——内核无记忆,记忆/技能/profile 都在外部文件,模型只是个纯函数;② <strong>上下文神圣</strong>——缓存前缀逐字节稳定,只有压缩这唯一例外;③ <strong>窄腰厚边</strong>——核心薄到能放进脑子,能力全长在插件/技能/MCP 的边缘。安全则是横切:<strong>绝不让概率性的模型当裁判</strong>,信任边界一律钉在确定性的代码上。</p>
+  <p style="margin:.5rem 0 0">反模式(全书共同的敌人):把状态塞进模型、改动已缓存的上下文、什么能力都加成核心工具、让模型自己判断安全——每一个都直接撞上某条 A–G 约束。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 术语表 · 速查</div>
+  <ul>
+    <li><strong>A–G 约束</strong>:LLM 7 个固有缺陷(中间遗失/无状态/幻觉/指令=数据/结构化输出脆弱/误差累积/运维);全书每个设计都在治其一。</li>
+    <li><strong>缓存前缀(prefix cache)</strong>:长对话复用的、逐字节稳定的上下文开头;改它=作废=成本翻倍。压缩是唯一例外(第 6/15 章)。</li>
+    <li><strong>窄腰(narrow waist)</strong>:核心薄、能力在边缘;新能力按 <strong>Footprint Ladder</strong> 选最小足迹那一阶(第 4/23 章)。</li>
+    <li><strong>轨迹(trajectory)</strong>:一次对话转成的 JSONL 训练样本(含推理 + 工具调用),供 RL/eval(第 22 章)。</li>
+    <li><strong>leaf / orchestrator</strong>:子代理角色;leaf 被剥离 delegate/memory 等高危工具(最小权限,第 13/24 章)。</li>
+    <li><strong>skip_memory / catchup / check_fn</strong>:cron 不跑记忆免污染(第 21 章)/ 错过任务的半周期补跑窗口(第 21 章)/ 工具的服务门控、没配凭据就不出现(第 8/23 章)。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">After 24 chapters, you'll see every Hermes design answering <strong>the same question</strong>: an LLM has 7 inherent flaws (A–G), yet an agent must make the model work <strong>autonomously, continuously, and safely</strong> in the real world — every piece of engineering treats one of those flaws. This chapter gathers the whole book horizontally: three running <strong>design lines</strong> + an <strong>A–G constraint matrix</strong> + a <strong>glossary</strong>.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · connecting stars into constellations</div>
+  Each earlier chapter is a <strong>separate star</strong> (system prompt, memory, delegation, gateway…). But they aren't isolated — <strong>connect them</strong> and clear <strong>design lines</strong> emerge. See the lines and you graduate from "knowing each part" to "understanding why this machine is shaped this way." That's exactly what an interviewer wants to hear.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · the one-sentence thesis</div>
+  <strong>A stateless, easily-drowned, instruction-vs-data-blind probabilistic model must work autonomously, long-term, in the real world.</strong> All of Hermes's engineering revolves around the 7 hazards (A–G) of that sentence: <strong>externalize</strong> state, <strong>guard</strong> the context, <strong>push</strong> capability to the edges, <strong>nail</strong> security into code. The three thickest lines: <strong>the sacred-cache line, the self-evolution line, the narrow-waist line</strong>.
+</div>
+
+<h2>Line 1: per-conversation prompt caching is sacred</h2>
+<p>The <strong>most recurring</strong> line in the book. A long conversation reuses the cached prefix each turn; anything that mutates past context voids the cache and doubles the cost. So every part gives way to it:</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">6</span><span class="sc">the System Prompt is <strong>byte-stable</strong> for the whole conversation, the cached prefix stays warm</span></div>
+  <div class="step"><span class="num">15</span><span class="sc">context compression is the <strong>only</strong> exception that rebuilds the prefix (so it fires at 50%, with anti-thrashing)</span></div>
+  <div class="step"><span class="num">18</span><span class="sc">control commands (<span class="mono">/stop</span>/<span class="mono">/approve</span>) <strong>bypass</strong> at the gateway, never polluting history or breaking alternation</span></div>
+  <div class="step"><span class="num">21</span><span class="sc">Cron spins up an <strong>isolated session</strong>, not mirrored into the main conversation, so background automation doesn't disturb the cache</span></div>
+  <div class="step"><span class="num">23</span><span class="sc">skills inject as a <strong>user message</strong> (append-only), never into the system prompt</span></div>
+</div>
+
+<h2>Line 2: self-evolution (cross-session learning)</h2>
+<p>Hermes's signature — it <strong>gets to know you the more you use it</strong>. This line upgrades a one-off chat into a continuously growing partner:</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">9</span><span class="sc">a learning <strong>nudge</strong>: the model is guided to <strong>write reusable solutions into skills</strong></span></div>
+  <div class="step"><span class="num">10</span><span class="sc"><strong>Curator</strong>: a background gardener tracks skill usage, auto-archives stale ones (agent-created only)</span></div>
+  <div class="step"><span class="num">11</span><span class="sc"><strong>Memory</strong>: a MEMORY/USER two-layer + provider, distilling "who you are"</span></div>
+  <div class="step"><span class="num">12</span><span class="sc"><strong>Cross-session search</strong> (FTS5): a new session can dig out relevant slices of old ones</span></div>
+</div>
+
+<h2>Line 3: the narrow waist (thin core, capability at the edges)</h2>
+<p>Every core tool is sent on <strong>every API call</strong>, so each inch of core surface is precious. Hermes makes the core a <strong>narrow waist</strong>, with capability growing at the edges:</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">4</span><span class="sc">the <strong>narrow-waist philosophy</strong>: the core is a thin channel, complexity pushed to both ends</span></div>
+  <div class="step"><span class="num">8</span><span class="sc">the tool system + <strong>Footprint Ladder</strong>: new capability prefers non-core tools</span></div>
+  <div class="step"><span class="num">16</span><span class="sc">terminal <strong>multi-backend</strong> (local/docker/ssh/modal): differences caged in edge subclasses</span></div>
+  <div class="step"><span class="num">17</span><span class="sc">28+ <strong>platform adapters</strong> translate differences into a unified MessageEvent; the core knows only the abstraction</span></div>
+  <div class="step"><span class="num">23</span><span class="sc"><strong>plugins/skills/MCP</strong>: even mainstream platform adapters are edge plugins</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 The A–G constraint matrix · which chapters treat each LLM flaw</div>
+  <div class="collab-sub">A · lost-in-the-middle (mid-context info ignored in long inputs)</div>
+  Introduced (ch.2) → treated by: narrow-waist lean core tools (ch.4/8/23), context compression (ch.15), delegation caging intermediate work in a child context (ch.13).
+  <div class="collab-sub">B · statelessness (the model forgets between calls)</div>
+  Introduced (ch.2) → treated by: externalized state — system-prompt identity (ch.6), memory (ch.11), the profile state directory (ch.20), spawn-per-call session snapshot (ch.16).
+  <div class="collab-sub">C · hallucination / D · instr=data / E · brittle structured output</div>
+  (C/D introduced ch.3, E ch.2) → C: generate-verify split (ch.14), tools fetch real data (ch.8); D: gateway guards (ch.18), defense in depth (ch.24); E: tool schemas + in-place repair (ch.7/8).
+  <div class="collab-sub">F · error accumulation / G · ops</div>
+  (introduced ch.3) → F: review (ch.14), eval (ch.22), compression (ch.15); G: nearly every chapter — gateway (17), Cron (21), Profiles (20), security (24) are all operational infrastructure.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 The meta-design philosophy · the book's ledger of trade-offs</div>
+  Collapse the 7 constraints into one sentence: <strong>a stateless, probabilistic, easily-drowned, instruction-vs-data-blind core + all determinism externalized to code and files</strong>.
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> <span class="badge constraint">B·statelessness</span> <span class="badge constraint">C·hallucination</span> <span class="badge constraint">D·instr=data</span> <span class="badge constraint">E·brittle output</span> <span class="badge constraint">F·error accumulation</span> <span class="badge constraint">G·ops</span></p>
+  <p style="margin:.5rem 0 0">Three sentences to remember Hermes's design DNA: ① <strong>externalize state</strong> — the core has no memory; memory/skills/profile live in external files, the model is a pure function; ② <strong>the context is sacred</strong> — the cached prefix is byte-stable, with compression the one exception; ③ <strong>narrow waist, thick edges</strong> — the core is thin enough to hold in your head, capability all grows at the plugin/skill/MCP edge. Security is the cross-cut: <strong>never let the probabilistic model be the judge</strong>; the trust boundary is nailed to deterministic code.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern (the book's shared enemy): stuffing state into the model, mutating cached context, making every capability a core tool, letting the model judge safety — each crashes straight into one of the A–G constraints.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Glossary · quick reference</div>
+  <ul>
+    <li><strong>A–G constraints</strong>: the LLM's 7 inherent flaws (lost-in-the-middle / statelessness / hallucination / instr=data / brittle structured output / error accumulation / ops); every design in the book treats one.</li>
+    <li><strong>cached prefix</strong>: the byte-stable head of a long conversation reused each turn; mutate it = void it = double the cost. Compression is the only exception (ch.6/15).</li>
+    <li><strong>narrow waist</strong>: thin core, capability at the edges; new capability picks the smallest-footprint rung on the <strong>Footprint Ladder</strong> (ch.4/23).</li>
+    <li><strong>trajectory</strong>: a conversation turned into a JSONL training sample (reasoning + tool calls), for RL/eval (ch.22).</li>
+    <li><strong>leaf / orchestrator</strong>: subagent roles; a leaf is stripped of high-risk tools like delegate/memory (least privilege, ch.13/24).</li>
+    <li><strong>skip_memory / catchup / check_fn</strong>: cron runs no memory to avoid pollution (ch.21) / the half-period window to catch up a missed job (ch.21) / a tool's service gate, absent until its credential is configured (ch.8/23).</li>
+  </ul>
+</div>
+"""
+}

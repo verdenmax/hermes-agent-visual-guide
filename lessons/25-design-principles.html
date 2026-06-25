@@ -3,17 +3,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script>try{var l=localStorage.getItem('havg-lang');if(l==='en'){document.documentElement.dataset.lang='en';document.documentElement.lang='en';}}catch(e){}</script>
-<title>04 · 项目全景地图 · 窄腰 / Project map · the narrow waist · Hermes Agent 设计图解</title>
-<meta name="description" content="第一部分 · 宏观全景｜项目全景地图 · 窄腰 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<title>25 · 设计原则横向收束 / Design principles synthesis · Hermes Agent 设计图解</title>
+<meta name="description" content="第七部分 · 横向专题与收束｜设计原则横向收束 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
 <meta name="theme-color" content="#c2630e">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAzMiAzMic+PHJlY3Qgd2lkdGg9JzMyJyBoZWlnaHQ9JzMyJyByeD0nNycgZmlsbD0nI2M4YTAyYycvPjx0ZXh0IHg9JzE2JyB5PScyMicgZm9udC1mYW1pbHk9J3N5c3RlbS11aSxzYW5zLXNlcmlmJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nODAwJyBmaWxsPScjZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz7imKQ8L3RleHQ+PC9zdmc+">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Hermes Agent 设计图解">
-<meta property="og:title" content="04 · 项目全景地图 · 窄腰 / Project map · the narrow waist · Hermes Agent 设计图解">
-<meta property="og:description" content="第一部分 · 宏观全景｜项目全景地图 · 窄腰 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta property="og:title" content="25 · 设计原则横向收束 / Design principles synthesis · Hermes Agent 设计图解">
+<meta property="og:description" content="第七部分 · 横向专题与收束｜设计原则横向收束 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="04 · 项目全景地图 · 窄腰 / Project map · the narrow waist · Hermes Agent 设计图解">
-<meta name="twitter:description" content="第一部分 · 宏观全景｜项目全景地图 · 窄腰 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="twitter:title" content="25 · 设计原则横向收束 / Design principles synthesis · Hermes Agent 设计图解">
+<meta name="twitter:description" content="第七部分 · 横向专题与收束｜设计原则横向收束 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -328,315 +328,240 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 <div class="topbar">
   <div class="topbar-inner">
     <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
-    <span class="pill"><span class="lang-zh">第一部分 · 宏观全景</span><span class="lang-en">Part 1 · The Big Picture</span></span>
-    <span class="pill">04 / 25</span>
+    <span class="pill"><span class="lang-zh">第七部分 · 横向专题与收束</span><span class="lang-en">Part 7 · Cross-Cutting &amp; Synthesis</span></span>
+    <span class="pill">25 / 25</span>
     <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
   </div>
-  <div class="progress"><span style="width:16%"></span></div>
+  <div class="progress"><span style="width:100%"></span></div>
 </div>
 <div class="wrap">
   <div class="hero">
-    <div class="part"><span class="lang-zh">第一部分 · 宏观全景</span><span class="lang-en">Part 1 · The Big Picture</span></div>
-    <h1><span class="lang-zh">项目全景地图 · 窄腰</span><span class="lang-en">Project map · the narrow waist</span></h1>
+    <div class="part"><span class="lang-zh">第七部分 · 横向专题与收束</span><span class="lang-en">Part 7 · Cross-Cutting &amp; Synthesis</span></div>
+    <h1><span class="lang-zh">设计原则横向收束</span><span class="lang-en">Design principles synthesis</span></h1>
   </div>
   <div class="lang-zh">
-<p class="lead">
-Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cron、kanban……但它有一个清晰的<strong>形状</strong>：
-<strong>窄腰(narrow waist)</strong>。中间是一个<strong>很窄的核心</strong>（一份共享的核心工具 + 一个 AIAgent），
-两端却很宽——<strong>多种前端</strong>在上、<strong>边缘扩展</strong>（技能/插件/MCP）在下。理解了这个形状，
-你就理解了 Hermes 大部分架构决策：<strong>核心能不长就不长，能力尽量长在边缘</strong>。
-</p>
+<p class="lead">读完 24 章,你会发现 Hermes 的每个设计其实都在反复回答<strong>同一个问题</strong>:LLM 有 7 个固有缺陷(A–G),而 agent 要让模型在真实世界里<strong>自主、连续、安全</strong>地干活——每一处工程,都是在治其中某个缺陷。这一章把全书横着收一遍:三条贯穿的<strong>设计线</strong> + 一张 <strong>A–G 约束矩阵</strong> + 一份<strong>术语表</strong>。</p>
 
 <div class="card analogy">
-  <div class="tag">🔌 生活类比</div>
-  想想 <strong>USB</strong>：中间是一个<strong>极窄、极稳定</strong>的标准接口，两端却接着<strong>无数设备</strong>——
-  键盘、硬盘、手机、打印机。正因为“腰”窄而稳，生态才能在两端疯长。Hermes 也是：
-  <strong>腰</strong>（核心工具 + agent loop）保持窄而稳，<strong>两端</strong>（前端 + 扩展）尽情生长。
+  <div class="tag">🔌 类比 · 把星星连成星座</div>
+  前面每一章像一颗<strong>独立的星</strong>(系统提示、记忆、委派、网关……)。但它们不是孤立的——把它们<strong>连起来</strong>,会浮现出几条清晰的<strong>设计线</strong>。看懂这些线,你就从"知道每个零件"升级到"理解这台机器为什么长这样"。面试官真正想听的,正是这些线。
 </div>
 
-<h2>一个 agent core，五种前端</h2>
-<p>所有入口——CLI、网关、TUI、桌面、IDE(ACP)——最终都驱动<strong>同一个</strong> <span class="mono">AIAgent</span>
-（<span class="mono">run_agent.py</span>）。它们只是不同的“壳”，核心推理循环是共享的：</p>
-<table class="t">
-  <tr><th>前端</th><th>入口</th><th>驱动同一个 AIAgent</th></tr>
-  <tr><td>CLI</td><td><span class="mono">cli.py</span> · HermesCLI</td><td>✅</td></tr>
-  <tr><td>网关(Telegram/Discord/…)</td><td><span class="mono">gateway/run.py</span> · GatewayRunner</td><td>✅ 每 session 一个</td></tr>
-  <tr><td>TUI</td><td><span class="mono">tui_gateway/</span> + <span class="mono">ui-tui/</span>(Ink)</td><td>✅</td></tr>
-  <tr><td>桌面 App</td><td><span class="mono">apps/desktop/</span>(Electron)</td><td>✅ 复用 runtime</td></tr>
-  <tr><td>IDE</td><td><span class="mono">acp_adapter/</span>(ACP)</td><td>✅</td></tr>
-</table>
-<p>好处很实在：<strong>修一次核心逻辑，所有前端同时受益</strong>；新功能加进 Ink，桌面 App 里自动出现。</p>
-
-<h2>“腰”：一份共享的核心工具清单</h2>
-<p>窄腰的“腰”，具体就是 <span class="mono">_HERMES_CORE_TOOLS</span>——一份所有平台共享的核心工具清单。
-它的注释一句话点明了设计意图：</p>
-<div class="codefile">
-  <div class="cf-head"><span class="dot"></span><span class="path">toolsets.py</span><span class="ln">29-31</span></div>
-  <pre><span class="cm"># Shared tool list for CLI and all messaging platform toolsets.</span>
-<span class="cm"># Edit this once to update all platforms simultaneously.</span>
-<span class="fn">_HERMES_CORE_TOOLS</span> = [<span class="cm"># web/terminal/file/skills/browser/memory/...</span>]</pre>
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 一句话总纲</div>
+  <strong>无状态、易被淹没、分不清指令与数据的概率模型,要在真实世界里长期自主干活。</strong>Hermes 的全部工程,就是围绕这句话的 7 个隐患(A–G)展开:把状态<strong>外置</strong>、把上下文<strong>守住</strong>、把能力<strong>推到边缘</strong>、把安全<strong>钉进代码</strong>。三条最粗的线:<strong>缓存神圣线、自我进化线、窄腰线</strong>。
 </div>
-<p>为什么核心工具要这么克制？因为<strong>每个核心工具都会出现在每一次 API 调用的工具 schema 里</strong>——
-工具越多，模型选择质量越差(这正是第 3 章 F「工具越多越不准」)。所以新增<strong>核心</strong>工具的门槛极高。</p>
 
-<h2>新能力往哪放：Footprint Ladder</h2>
-<p>Hermes 用一个<strong>阶梯</strong>决定“新能力放哪一层”——<strong>选能正确解决问题的、footprint 最小的那一级</strong>：</p>
+<h2>线一:每个会话的 prompt 缓存神圣不可侵犯</h2>
+<p>这是全书<strong>出现最多</strong>的一条线。长对话每轮复用缓存前缀,任何改动过去上下文的操作都让缓存作废、成本翻倍。于是每个部件都为它让路:</p>
+
 <div class="vflow">
-  <div class="step"><div class="num">1</div><div class="sc"><h4>扩展现有代码</h4><p>零新增表面</p></div></div>
-  <div class="step"><div class="num">2</div><div class="sc"><h4>CLI 命令 + 技能</h4><p>零 model-tool footprint，如 <span class="mono">hermes cron</span></p></div></div>
-  <div class="step"><div class="num">3</div><div class="sc"><h4>服务门控工具(check_fn)</h4><p>仅在前置配置好时出现</p></div></div>
-  <div class="step"><div class="num">4</div><div class="sc"><h4>插件</h4><p>第三方/小众，运行时发现</p></div></div>
-  <div class="step"><div class="num">5</div><div class="sc"><h4>MCP server</h4><p>进 MCP 目录，零核心 schema footprint</p></div></div>
-  <div class="step"><div class="num">6</div><div class="sc"><h4>新核心工具</h4><p>最后手段：基础、人人都用、终端+文件够不到</p></div></div>
+  <div class="step"><span class="num">6</span><span class="sc">System Prompt 整会话<strong>逐字节稳定</strong>,缓存前缀常驻</span></div>
+  <div class="step"><span class="num">15</span><span class="sc">上下文压缩是<strong>唯一</strong>会重建前缀的例外(故默认到 50% 才触发、防抖动)</span></div>
+  <div class="step"><span class="num">18</span><span class="sc">控制命令(<span class="mono">/stop</span>/<span class="mono">/approve</span>)在网关<strong>旁路</strong>,不混进对话历史破坏角色交替</span></div>
+  <div class="step"><span class="num">21</span><span class="sc">Cron 起<strong>独立会话</strong>、不镜像进主对话,后台自动化不搅乱缓存</span></div>
+  <div class="step"><span class="num">23</span><span class="sc">技能注入为 <strong>user message</strong>(append-only),不进 system prompt</span></div>
 </div>
-<p>正确的核心工具长这样：<span class="mono">terminal</span>、<span class="mono">read_file</span>、
-<span class="mono">web_search</span>、<span class="mono">browser_navigate</span>——基础到几乎人人都用。</p>
 
-<h2>边缘如何向中心“注册”</h2>
-<p>能力长在边缘，但要被 agent 用到，得向中心的 <span class="mono">registry</span> 注册。注册入口签名清晰：</p>
-<div class="codefile">
-  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">234-248</span></div>
-  <pre><span class="kw">def</span> <span class="fn">register</span>(self, name, toolset, schema, handler,
-         check_fn=<span class="kw">None</span>, requires_env=<span class="kw">None</span>, is_async=<span class="kw">False</span>,
-         description=<span class="st">""</span>, emoji=<span class="st">""</span>, override=<span class="kw">False</span>):</pre>
+<h2>线二:自我进化(跨会话学习)</h2>
+<p>Hermes 的招牌——它会<strong>越用越懂你</strong>。这条线把"一次性对话"升级成"持续成长的伙伴":</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">9</span><span class="sc">学习<strong>nudge</strong>:模型被引导把可复用的解法<strong>写成技能</strong></span></div>
+  <div class="step"><span class="num">10</span><span class="sc"><strong>Curator</strong>:后台园丁给技能记使用量、自动归档陈旧的(只动 agent 自建的)</span></div>
+  <div class="step"><span class="num">11</span><span class="sc"><strong>记忆</strong>:MEMORY/USER 双层 + provider,把"你是谁"沉淀下来</span></div>
+  <div class="step"><span class="num">12</span><span class="sc"><strong>跨会话搜索</strong>(FTS5):新会话能翻出旧会话的相关片段</span></div>
 </div>
-<p>而“谁依赖谁”由 <span class="mono">registry.py</span> 自己的 docstring 钉死，是一条<strong>防循环依赖</strong>的单向链：</p>
-<div class="codefile">
-  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">7-14</span></div>
-  <pre><span class="cm">Import chain (circular-import safe):</span>
-    tools/registry.py   <span class="cm"># 不 import 任何工具</span>
-           ^
-    tools/*.py          <span class="cm"># import 时 registry.register()</span>
-           ^
-    model_tools.py      <span class="cm"># import registry + 所有工具</span>
-           ^
-    run_agent.py, cli.py, ...</pre>
+
+<h2>线三:窄腰(核心薄,能力在边缘)</h2>
+<p>每个核心工具都在<strong>每次 API 调用</strong>发送,所以核心面的每寸都金贵。Hermes 把核心做成一根<strong>窄腰</strong>,能力全长在边缘:</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">4</span><span class="sc"><strong>窄腰哲学</strong>:核心是窄通道,复杂度往两端推</span></div>
+  <div class="step"><span class="num">8</span><span class="sc">工具系统 + <strong>Footprint Ladder</strong>:新能力优先非核心工具</span></div>
+  <div class="step"><span class="num">16</span><span class="sc">终端<strong>多后端</strong>(local/docker/ssh/modal)差异关进边缘子类</span></div>
+  <div class="step"><span class="num">17</span><span class="sc">28+ <strong>平台适配器</strong>把差异翻译成统一 MessageEvent,核心只认抽象</span></div>
+  <div class="step"><span class="num">23</span><span class="sc"><strong>插件/技能/MCP</strong>:连主流平台适配器都是边缘插件</span></div>
 </div>
 
 <div class="card collab">
-  <div class="tag">🧩 协作机制 · “一处编辑、全平台同步”怎么做到</div>
-  <div class="collab-sub">① 组件清单</div>
-  <strong>_HERMES_CORE_TOOLS</strong>(<span class="mono">toolsets.py:29</span>)= 共享腰；<strong>TOOLSETS</strong> dict
-  (<span class="mono">toolsets.py:89</span>)给每个平台一个 bundle，绝大多数直接 <span class="mono">"tools": _HERMES_CORE_TOOLS</span>；
-  <strong>PLATFORMS</strong>(<span class="mono">hermes_cli/platforms.py:22</span>)按 <span class="mono">hermes-&lt;platform&gt;</span> 约定选 base toolset；
-  <strong>registry</strong>(<span class="mono">tools/registry.py</span>)收集 schema、派发调用；<strong>discover_builtin_tools()</strong>
-  用 AST 扫描 <span class="mono">tools/*.py</span> 自动 import 触发注册。
-  <div class="collab-sub">② 数据流</div>
-  启动：<span class="mono">model_tools</span> import → 触发 <span class="mono">discover_builtin_tools()</span> → 每个工具 <span class="mono">register()</span> 进 registry →
-  平台按 toolset 取自己那份工具 schema。改一处 <span class="mono">_HERMES_CORE_TOOLS</span>，<strong>所有平台同步</strong>。
-  <div class="collab-sub">③ 关键点</div>
-  腰窄、单向依赖、自动发现——三者合起来，让“加能力”几乎总能在<strong>边缘</strong>完成，而不必动核心。
+  <div class="tag">🧩 A–G 约束矩阵 · 每个 LLM 缺陷由哪些章治</div>
+  <div class="collab-sub">A · 中间遗失(长上下文里中间信息被忽略)</div>
+  引入(第 2 章)→ 治:窄腰精简核心工具(第 4/8/23 章)、上下文压缩(第 15 章)、委派把中间过程关进子上下文(第 13 章)。
+  <div class="collab-sub">B · 无状态(模型每次调用都失忆)</div>
+  引入(第 2 章)→ 治:外置状态——system prompt 身份(第 6 章)、记忆(第 11 章)、profile 状态盘(第 20 章)、会话 spawn-per-call 快照(第 16 章)。
+  <div class="collab-sub">C · 幻觉 / D · 指令=数据 / E · 结构化输出脆弱</div>
+  (C/D 第 3 章引入、E 第 2 章引入)→ C 治:生成-验证分离(第 14 章)、工具拿真实数据(第 8 章);D 治:网关守卫(第 18 章)、纵深防御(第 24 章);E 治:工具 schema + 在地修复(第 7/8 章)。
+  <div class="collab-sub">F · 误差累积 / G · 运维</div>
+  (第 3 章引入)→ F 治:审查(第 14 章)、评测(第 22 章)、压缩(第 15 章);G 治:几乎每章——网关(17)、Cron(21)、Profiles(20)、安全(24)都是运维基础设施。
 </div>
 
 <div class="card design">
-  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
-  本章围绕 <strong>窄腰架构(narrow waist)</strong>：<strong>核心是一条窄而稳的腰，能力在两端疯长</strong>。
-  为什么腰要窄？因为核心工具会进<strong>每一次</strong> API 调用——工具越多、选择越差、成本越高。
-  所以有了 <strong>Footprint Ladder</strong>：能在边缘解决的，绝不加进核心。
-  <p style="margin:.5rem 0 0">对应的 LLM 约束：<span class="badge constraint">F·工具越多越不准</span>——窄腰直接压住工具集规模；
-  也间接服务 <span class="badge constraint">B·无状态</span>（统一 core 让状态外置机制只实现一次）。</p>
+  <div class="tag">🎯 元设计哲学 · 全书的取舍总账</div>
+  把 7 条约束收成一句:<strong>无状态、概率性、易被淹没、分不清指令与数据的内核 + 一切确定性都外置到代码与文件</strong>。
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span> <span class="badge constraint">B·无状态</span> <span class="badge constraint">C·幻觉</span> <span class="badge constraint">D·指令=数据</span> <span class="badge constraint">E·结构化脆弱</span> <span class="badge constraint">F·误差累积</span> <span class="badge constraint">G·运维</span></p>
+  <p style="margin:.5rem 0 0">三句话记住 Hermes 的设计基因:① <strong>状态外置</strong>——内核无记忆,记忆/技能/profile 都在外部文件,模型只是个纯函数;② <strong>上下文神圣</strong>——缓存前缀逐字节稳定,只有压缩这唯一例外;③ <strong>窄腰厚边</strong>——核心薄到能放进脑子,能力全长在插件/技能/MCP 的边缘。安全则是横切:<strong>绝不让概率性的模型当裁判</strong>,信任边界一律钉在确定性的代码上。</p>
+  <p style="margin:.5rem 0 0">反模式(全书共同的敌人):把状态塞进模型、改动已缓存的上下文、什么能力都加成核心工具、让模型自己判断安全——每一个都直接撞上某条 A–G 约束。</p>
 </div>
 
 <div class="card key">
-  <div class="tag">📌 本课要点</div>
+  <div class="tag">📌 术语表 · 速查</div>
   <ul>
-    <li><strong>窄腰</strong>：核心窄（<span class="mono">_HERMES_CORE_TOOLS</span> + 一个 AIAgent），能力在边缘。</li>
-    <li><strong>一个 core，五种前端</strong>：CLI/网关/TUI/桌面/ACP 共享同一推理循环，改一次全受益。</li>
-    <li><strong>Footprint Ladder</strong>：扩展代码 → CLI+技能 → 门控工具 → 插件 → MCP → 新核心工具(最后)。</li>
-    <li><strong>单向依赖 + 自动发现</strong>：registry ← tools/*.py ← model_tools ← 入口；改腰一处、全平台同步。</li>
+    <li><strong>A–G 约束</strong>:LLM 7 个固有缺陷(中间遗失/无状态/幻觉/指令=数据/结构化输出脆弱/误差累积/运维);全书每个设计都在治其一。</li>
+    <li><strong>缓存前缀(prefix cache)</strong>:长对话复用的、逐字节稳定的上下文开头;改它=作废=成本翻倍。压缩是唯一例外(第 6/15 章)。</li>
+    <li><strong>窄腰(narrow waist)</strong>:核心薄、能力在边缘;新能力按 <strong>Footprint Ladder</strong> 选最小足迹那一阶(第 4/23 章)。</li>
+    <li><strong>轨迹(trajectory)</strong>:一次对话转成的 JSONL 训练样本(含推理 + 工具调用),供 RL/eval(第 22 章)。</li>
+    <li><strong>leaf / orchestrator</strong>:子代理角色;leaf 被剥离 delegate/memory 等高危工具(最小权限,第 13/24 章)。</li>
+    <li><strong>skip_memory / catchup / check_fn</strong>:cron 不跑记忆免污染(第 21 章)/ 错过任务的半周期补跑窗口(第 21 章)/ 工具的服务门控、没配凭据就不出现(第 8/23 章)。</li>
   </ul>
 </div>
 <div class="selftest">
 <h2>🧪 自测 · 想一想为什么这么设计</h2>
 <div class="quiz">
-  <div class="qn">1. 为什么 Hermes 对“新增核心工具”的门槛设得极高？</div>
+  <div class="qn">1. 把全书 25 章横着收一遍,最粗的三条设计线是什么?</div>
   <ol class="opts">
-    <li>核心工具占磁盘空间</li>
-    <li>核心工具难以测试</li>
-    <li>没有特别原因</li>
-    <li>每个核心工具都会出现在每一次 API 调用的工具 schema 里，工具越多模型选择越差</li>
+    <li>前端 / 后端 / 数据库</li>
+    <li>输入 / 处理 / 输出</li>
+    <li>性能 / 安全 / 界面</li>
+    <li>缓存神圣线、自我进化线、窄腰线</li>
   </ol>
   <details class="accordion">
     <summary>看答案与解析 <span class="hint">点击展开</span></summary>
-    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：D</strong>。核心工具进每次调用，直接放大第 3 章 F「工具越多越不准」与成本，所以窄腰 + Footprint Ladder。</div></div></div>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：D</strong>。三条贯穿全书的设计线:① 缓存神圣(ch6 system prompt 稳定→ch15 压缩唯一例外→ch18 控制命令旁路→ch21 cron 独立会话→ch23 技能 user message);② 自我进化(ch9 nudge→ch10 Curator→ch11 记忆→ch12 跨会话搜索);③ 窄腰(ch4 哲学→ch8 工具 Footprint Ladder→ch16 多后端→ch17 适配器→ch23 插件/MCP)。</div></div></div>
   </details>
 </div>
 <div class="quiz">
-  <div class="qn">2. 按 Footprint Ladder，一个“只在配好凭据时才需要、且需要结构化参数”的能力应优先放哪一级？</div>
+  <div class="qn">2. LLM 的 B·无状态约束(每次调用都失忆),Hermes 主要靠什么治?</div>
   <ol class="opts">
-    <li>改 run_agent.py</li>
-    <li>写进 system prompt</li>
-    <li>服务门控工具(check_fn)</li>
-    <li>新增核心工具</li>
+    <li>换更大的模型</li>
+    <li>不治,接受失忆</li>
+    <li>把整段对话都缓存起来</li>
+    <li>把状态外置到核心之外:system prompt 身份(ch6)、记忆(ch11)、profile 状态盘(ch20)、会话 spawn-per-call 快照(ch16);模型只是个纯函数</li>
   </ol>
   <details class="accordion">
     <summary>看答案与解析 <span class="hint">点击展开</span></summary>
-    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：C</strong>。门控工具仅在前置配置好时出现、平时零 footprint，正好匹配；核心工具是最后手段。</div></div></div>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：D</strong>。B·无状态的对策是「状态外置」:内核本身无记忆,记忆/技能/profile 全在外部文件,模型只是个把上下文映射到输出的纯函数。所以记忆(ch11)、身份(ch6 system prompt)、profile 状态盘(ch20)、会话快照(ch16 spawn-per-call)都是外置状态的不同侧面——这也是 Hermes「自我进化」存在的根本理由。</div></div></div>
   </details>
 </div>
 <div class="card spark">
   <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
   <ul>
-    <li>“同一个 agent core 驱动五种前端”带来什么维护优势？要新增第六种前端（比如语音电话），你会改核心还是加边缘？</li>
+    <li>用一句话概括 Hermes 的设计基因,并解释「状态外置 / 上下文神圣 / 窄腰厚边」这三句各自对抗 LLM 的哪个固有缺陷(A–G)。为什么说「安全是横切的——绝不让概率模型当裁判」?</li>
   </ul>
 </div>
 </div></div>
   <div class="lang-en">
-<p class="lead">
-Hermes is big — CLI, a messaging gateway, 20+ platforms, a TUI, a desktop app, cron, kanban… yet it has a clear
-<strong>shape</strong>: a <strong>narrow waist</strong>. The middle is a <strong>very narrow core</strong> (one shared
-core-tool list + one AIAgent), while both ends are wide — <strong>many front-ends</strong> on top, <strong>edge
-extensions</strong> (skills/plugins/MCP) below. Grasp this shape and you grasp most of Hermes' architecture:
-<strong>grow the core as little as possible; grow capability at the edges</strong>.
-</p>
+<p class="lead">After 24 chapters, you'll see every Hermes design answering <strong>the same question</strong>: an LLM has 7 inherent flaws (A–G), yet an agent must make the model work <strong>autonomously, continuously, and safely</strong> in the real world — every piece of engineering treats one of those flaws. This chapter gathers the whole book horizontally: three running <strong>design lines</strong> + an <strong>A–G constraint matrix</strong> + a <strong>glossary</strong>.</p>
 
 <div class="card analogy">
-  <div class="tag">🔌 Analogy</div>
-  Think of <strong>USB</strong>: the middle is one <strong>extremely narrow, extremely stable</strong> standard, while both
-  ends connect <strong>countless devices</strong> — keyboards, drives, phones, printers. Precisely because the “waist” is
-  narrow and stable, the ecosystem explodes at both ends. Hermes is the same: the <strong>waist</strong> (core tools +
-  agent loop) stays narrow and stable; the <strong>ends</strong> (front-ends + extensions) grow freely.
+  <div class="tag">🔌 Analogy · connecting stars into constellations</div>
+  Each earlier chapter is a <strong>separate star</strong> (system prompt, memory, delegation, gateway…). But they aren't isolated — <strong>connect them</strong> and clear <strong>design lines</strong> emerge. See the lines and you graduate from "knowing each part" to "understanding why this machine is shaped this way." That's exactly what an interviewer wants to hear.
 </div>
 
-<h2>One agent core, five front-ends</h2>
-<p>Every entry point — CLI, gateway, TUI, desktop, IDE (ACP) — ultimately drives the <strong>same</strong>
-<span class="mono">AIAgent</span> (<span class="mono">run_agent.py</span>). They're just different “shells” over a shared
-reasoning loop:</p>
-<table class="t">
-  <tr><th>Front-end</th><th>Entry</th><th>Drives the same AIAgent</th></tr>
-  <tr><td>CLI</td><td><span class="mono">cli.py</span> · HermesCLI</td><td>✅</td></tr>
-  <tr><td>Gateway (Telegram/Discord/…)</td><td><span class="mono">gateway/run.py</span> · GatewayRunner</td><td>✅ one per session</td></tr>
-  <tr><td>TUI</td><td><span class="mono">tui_gateway/</span> + <span class="mono">ui-tui/</span> (Ink)</td><td>✅</td></tr>
-  <tr><td>Desktop app</td><td><span class="mono">apps/desktop/</span> (Electron)</td><td>✅ reuses runtime</td></tr>
-  <tr><td>IDE</td><td><span class="mono">acp_adapter/</span> (ACP)</td><td>✅</td></tr>
-</table>
-<p>The payoff is concrete: <strong>fix the core logic once, every front-end benefits</strong>; add a feature to Ink and it
-shows up in the desktop app automatically.</p>
-
-<h2>The “waist”: one shared core-tool list</h2>
-<p>The “waist” is concretely <span class="mono">_HERMES_CORE_TOOLS</span> — one core-tool list shared by all platforms. Its
-comment states the intent in one line:</p>
-<div class="codefile">
-  <div class="cf-head"><span class="dot"></span><span class="path">toolsets.py</span><span class="ln">29-31</span></div>
-  <pre><span class="cm"># Shared tool list for CLI and all messaging platform toolsets.</span>
-<span class="cm"># Edit this once to update all platforms simultaneously.</span>
-<span class="fn">_HERMES_CORE_TOOLS</span> = [<span class="cm"># web/terminal/file/skills/browser/memory/...</span>]</pre>
+<div class="card macro">
+  <div class="tag">🌍 Macro · the one-sentence thesis</div>
+  <strong>A stateless, easily-drowned, instruction-vs-data-blind probabilistic model must work autonomously, long-term, in the real world.</strong> All of Hermes's engineering revolves around the 7 hazards (A–G) of that sentence: <strong>externalize</strong> state, <strong>guard</strong> the context, <strong>push</strong> capability to the edges, <strong>nail</strong> security into code. The three thickest lines: <strong>the sacred-cache line, the self-evolution line, the narrow-waist line</strong>.
 </div>
-<p>Why so disciplined? Because <strong>every core tool ships in the tool schema of every API call</strong> — more tools,
-worse model selection (exactly ch.3's F “more tools = worse accuracy”). So the bar for a new <strong>core</strong> tool is
-very high.</p>
 
-<h2>Where new capability goes: the Footprint Ladder</h2>
-<p>Hermes uses a <strong>ladder</strong> to decide which rung a new capability lands on — <strong>pick the smallest-footprint
-rung that correctly solves it</strong>:</p>
+<h2>Line 1: per-conversation prompt caching is sacred</h2>
+<p>The <strong>most recurring</strong> line in the book. A long conversation reuses the cached prefix each turn; anything that mutates past context voids the cache and doubles the cost. So every part gives way to it:</p>
+
 <div class="vflow">
-  <div class="step"><div class="num">1</div><div class="sc"><h4>Extend existing code</h4><p>zero new surface</p></div></div>
-  <div class="step"><div class="num">2</div><div class="sc"><h4>CLI command + skill</h4><p>zero model-tool footprint, e.g. <span class="mono">hermes cron</span></p></div></div>
-  <div class="step"><div class="num">3</div><div class="sc"><h4>Service-gated tool (check_fn)</h4><p>appears only when a prerequisite is configured</p></div></div>
-  <div class="step"><div class="num">4</div><div class="sc"><h4>Plugin</h4><p>third-party/niche, discovered at runtime</p></div></div>
-  <div class="step"><div class="num">5</div><div class="sc"><h4>MCP server</h4><p>in the catalog, zero core-schema footprint</p></div></div>
-  <div class="step"><div class="num">6</div><div class="sc"><h4>New core tool</h4><p>last resort: fundamental, used by nearly everyone</p></div></div>
+  <div class="step"><span class="num">6</span><span class="sc">the System Prompt is <strong>byte-stable</strong> for the whole conversation, the cached prefix stays warm</span></div>
+  <div class="step"><span class="num">15</span><span class="sc">context compression is the <strong>only</strong> exception that rebuilds the prefix (so it fires at 50%, with anti-thrashing)</span></div>
+  <div class="step"><span class="num">18</span><span class="sc">control commands (<span class="mono">/stop</span>/<span class="mono">/approve</span>) <strong>bypass</strong> at the gateway, never polluting history or breaking alternation</span></div>
+  <div class="step"><span class="num">21</span><span class="sc">Cron spins up an <strong>isolated session</strong>, not mirrored into the main conversation, so background automation doesn't disturb the cache</span></div>
+  <div class="step"><span class="num">23</span><span class="sc">skills inject as a <strong>user message</strong> (append-only), never into the system prompt</span></div>
 </div>
-<p>Correct core tools look like: <span class="mono">terminal</span>, <span class="mono">read_file</span>,
-<span class="mono">web_search</span>, <span class="mono">browser_navigate</span> — fundamental enough that nearly everyone
-needs them.</p>
 
-<h2>How the edges “register” with the center</h2>
-<p>Capability lives at the edges, but to be usable it must register with the central <span class="mono">registry</span>.
-The entry signature is clean:</p>
-<div class="codefile">
-  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">234-248</span></div>
-  <pre><span class="kw">def</span> <span class="fn">register</span>(self, name, toolset, schema, handler,
-         check_fn=<span class="kw">None</span>, requires_env=<span class="kw">None</span>, is_async=<span class="kw">False</span>,
-         description=<span class="st">""</span>, emoji=<span class="st">""</span>, override=<span class="kw">False</span>):</pre>
+<h2>Line 2: self-evolution (cross-session learning)</h2>
+<p>Hermes's signature — it <strong>gets to know you the more you use it</strong>. This line upgrades a one-off chat into a continuously growing partner:</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">9</span><span class="sc">a learning <strong>nudge</strong>: the model is guided to <strong>write reusable solutions into skills</strong></span></div>
+  <div class="step"><span class="num">10</span><span class="sc"><strong>Curator</strong>: a background gardener tracks skill usage, auto-archives stale ones (agent-created only)</span></div>
+  <div class="step"><span class="num">11</span><span class="sc"><strong>Memory</strong>: a MEMORY/USER two-layer + provider, distilling "who you are"</span></div>
+  <div class="step"><span class="num">12</span><span class="sc"><strong>Cross-session search</strong> (FTS5): a new session can dig out relevant slices of old ones</span></div>
 </div>
-<p>And “who depends on whom” is pinned by <span class="mono">registry.py</span>'s own docstring — a one-way,
-<strong>circular-import-safe</strong> chain:</p>
-<div class="codefile">
-  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">7-14</span></div>
-  <pre><span class="cm">Import chain (circular-import safe):</span>
-    tools/registry.py   <span class="cm"># imports no tools</span>
-           ^
-    tools/*.py          <span class="cm"># registry.register() at import time</span>
-           ^
-    model_tools.py      <span class="cm"># imports registry + all tools</span>
-           ^
-    run_agent.py, cli.py, ...</pre>
+
+<h2>Line 3: the narrow waist (thin core, capability at the edges)</h2>
+<p>Every core tool is sent on <strong>every API call</strong>, so each inch of core surface is precious. Hermes makes the core a <strong>narrow waist</strong>, with capability growing at the edges:</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">4</span><span class="sc">the <strong>narrow-waist philosophy</strong>: the core is a thin channel, complexity pushed to both ends</span></div>
+  <div class="step"><span class="num">8</span><span class="sc">the tool system + <strong>Footprint Ladder</strong>: new capability prefers non-core tools</span></div>
+  <div class="step"><span class="num">16</span><span class="sc">terminal <strong>multi-backend</strong> (local/docker/ssh/modal): differences caged in edge subclasses</span></div>
+  <div class="step"><span class="num">17</span><span class="sc">28+ <strong>platform adapters</strong> translate differences into a unified MessageEvent; the core knows only the abstraction</span></div>
+  <div class="step"><span class="num">23</span><span class="sc"><strong>plugins/skills/MCP</strong>: even mainstream platform adapters are edge plugins</span></div>
 </div>
 
 <div class="card collab">
-  <div class="tag">🧩 Collaboration · how “edit once, all platforms sync” works</div>
-  <div class="collab-sub">① Component roster</div>
-  <strong>_HERMES_CORE_TOOLS</strong> (<span class="mono">toolsets.py:29</span>) = the shared waist; <strong>TOOLSETS</strong>
-  dict (<span class="mono">toolsets.py:89</span>) gives each platform a bundle, most just <span class="mono">"tools":
-  _HERMES_CORE_TOOLS</span>; <strong>PLATFORMS</strong> (<span class="mono">hermes_cli/platforms.py:22</span>) picks a base
-  toolset by the <span class="mono">hermes-&lt;platform&gt;</span> convention; <strong>registry</strong>
-  (<span class="mono">tools/registry.py</span>) collects schemas and dispatches; <strong>discover_builtin_tools()</strong> AST-scans
-  <span class="mono">tools/*.py</span> and imports them to trigger registration.
-  <div class="collab-sub">② Data flow</div>
-  Startup: importing <span class="mono">model_tools</span> → triggers <span class="mono">discover_builtin_tools()</span> → each
-  tool <span class="mono">register()</span>s into the registry → each platform takes its slice of tool schemas. Edit
-  <span class="mono">_HERMES_CORE_TOOLS</span> once and <strong>all platforms sync</strong>.
-  <div class="collab-sub">③ The key point</div>
-  Narrow waist + one-way dependency + auto-discovery — together they make “add capability” almost always doable at the
-  <strong>edges</strong>, without touching the core.
+  <div class="tag">🧩 The A–G constraint matrix · which chapters treat each LLM flaw</div>
+  <div class="collab-sub">A · lost-in-the-middle (mid-context info ignored in long inputs)</div>
+  Introduced (ch.2) → treated by: narrow-waist lean core tools (ch.4/8/23), context compression (ch.15), delegation caging intermediate work in a child context (ch.13).
+  <div class="collab-sub">B · statelessness (the model forgets between calls)</div>
+  Introduced (ch.2) → treated by: externalized state — system-prompt identity (ch.6), memory (ch.11), the profile state directory (ch.20), spawn-per-call session snapshot (ch.16).
+  <div class="collab-sub">C · hallucination / D · instr=data / E · brittle structured output</div>
+  (C/D introduced ch.3, E ch.2) → C: generate-verify split (ch.14), tools fetch real data (ch.8); D: gateway guards (ch.18), defense in depth (ch.24); E: tool schemas + in-place repair (ch.7/8).
+  <div class="collab-sub">F · error accumulation / G · ops</div>
+  (introduced ch.3) → F: review (ch.14), eval (ch.22), compression (ch.15); G: nearly every chapter — gateway (17), Cron (21), Profiles (20), security (24) are all operational infrastructure.
 </div>
 
 <div class="card design">
-  <div class="tag">🎯 Design tradeoff · what this chapter is about</div>
-  This chapter is about the <strong>narrow waist</strong>: <strong>the core is a narrow, stable waist; capability grows at
-  both ends</strong>. Why narrow? Because core tools ship on <strong>every</strong> API call — more tools, worse selection,
-  higher cost. Hence the <strong>Footprint Ladder</strong>: if it can be solved at the edge, never add it to the core.
-  <p style="margin:.5rem 0 0">The matching LLM constraint: <span class="badge constraint">F·tool-overload</span> — the narrow
-  waist directly caps tool-set size; it also indirectly serves <span class="badge constraint">B·stateless</span> (one core
-  means the state-externalization machinery is implemented once).</p>
+  <div class="tag">🎯 The meta-design philosophy · the book's ledger of trade-offs</div>
+  Collapse the 7 constraints into one sentence: <strong>a stateless, probabilistic, easily-drowned, instruction-vs-data-blind core + all determinism externalized to code and files</strong>.
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> <span class="badge constraint">B·statelessness</span> <span class="badge constraint">C·hallucination</span> <span class="badge constraint">D·instr=data</span> <span class="badge constraint">E·brittle output</span> <span class="badge constraint">F·error accumulation</span> <span class="badge constraint">G·ops</span></p>
+  <p style="margin:.5rem 0 0">Three sentences to remember Hermes's design DNA: ① <strong>externalize state</strong> — the core has no memory; memory/skills/profile live in external files, the model is a pure function; ② <strong>the context is sacred</strong> — the cached prefix is byte-stable, with compression the one exception; ③ <strong>narrow waist, thick edges</strong> — the core is thin enough to hold in your head, capability all grows at the plugin/skill/MCP edge. Security is the cross-cut: <strong>never let the probabilistic model be the judge</strong>; the trust boundary is nailed to deterministic code.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern (the book's shared enemy): stuffing state into the model, mutating cached context, making every capability a core tool, letting the model judge safety — each crashes straight into one of the A–G constraints.</p>
 </div>
 
 <div class="card key">
-  <div class="tag">📌 Key points</div>
+  <div class="tag">📌 Glossary · quick reference</div>
   <ul>
-    <li><strong>Narrow waist</strong>: narrow core (<span class="mono">_HERMES_CORE_TOOLS</span> + one AIAgent), capability at the edges.</li>
-    <li><strong>One core, five front-ends</strong>: CLI/gateway/TUI/desktop/ACP share one reasoning loop — fix once, all benefit.</li>
-    <li><strong>Footprint Ladder</strong>: extend code → CLI+skill → gated tool → plugin → MCP → new core tool (last).</li>
-    <li><strong>One-way deps + auto-discovery</strong>: registry ← tools/*.py ← model_tools ← entries; edit the waist once, all platforms sync.</li>
+    <li><strong>A–G constraints</strong>: the LLM's 7 inherent flaws (lost-in-the-middle / statelessness / hallucination / instr=data / brittle structured output / error accumulation / ops); every design in the book treats one.</li>
+    <li><strong>cached prefix</strong>: the byte-stable head of a long conversation reused each turn; mutate it = void it = double the cost. Compression is the only exception (ch.6/15).</li>
+    <li><strong>narrow waist</strong>: thin core, capability at the edges; new capability picks the smallest-footprint rung on the <strong>Footprint Ladder</strong> (ch.4/23).</li>
+    <li><strong>trajectory</strong>: a conversation turned into a JSONL training sample (reasoning + tool calls), for RL/eval (ch.22).</li>
+    <li><strong>leaf / orchestrator</strong>: subagent roles; a leaf is stripped of high-risk tools like delegate/memory (least privilege, ch.13/24).</li>
+    <li><strong>skip_memory / catchup / check_fn</strong>: cron runs no memory to avoid pollution (ch.21) / the half-period window to catch up a missed job (ch.21) / a tool's service gate, absent until its credential is configured (ch.8/23).</li>
   </ul>
 </div>
 <div class="selftest">
 <h2>🧪 Self-test - think about the design</h2>
 <div class="quiz">
-  <div class="qn">1. Why is the bar for adding a new core tool so high in Hermes?</div>
+  <div class="qn">1. Gathering all 25 chapters horizontally, what are the three thickest design lines?</div>
   <ol class="opts">
-    <li>Core tools take disk space</li>
-    <li>Core tools are hard to test</li>
-    <li>No particular reason</li>
-    <li>Every core tool ships in the tool schema of every API call; more tools means worse model selection</li>
+    <li>Frontend / backend / database</li>
+    <li>Input / processing / output</li>
+    <li>Performance / security / UI</li>
+    <li>The sacred-cache line, the self-evolution line, the narrow-waist line</li>
   </ol>
   <details class="accordion">
     <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
-    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. Core tools ride every call, amplifying ch.3's F “more tools = worse accuracy” and cost — hence the narrow waist + Footprint Ladder.</div></div></div>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. Three lines running through the book: the sacred cache (ch6 stable system prompt -> ch15 compression as the only exception -> ch18 control-command bypass -> ch21 cron isolated session -> ch23 skill user-message); self-evolution (ch9 nudge -> ch10 Curator -> ch11 memory -> ch12 cross-session search); the narrow waist (ch4 philosophy -> ch8 tool Footprint Ladder -> ch16 multi-backend -> ch17 adapters -> ch23 plugins/MCP).</div></div></div>
   </details>
 </div>
 <div class="quiz">
-  <div class="qn">2. By the Footprint Ladder, a capability only needed when a credential is configured AND needing structured params should go on which rung first?</div>
+  <div class="qn">2. The LLM's B·statelessness constraint (it forgets between calls) — how does Hermes mainly treat it?</div>
   <ol class="opts">
-    <li>Edit run_agent.py</li>
-    <li>Put it in the system prompt</li>
-    <li>A service-gated tool (check_fn)</li>
-    <li>A new core tool</li>
+    <li>Use a bigger model</li>
+    <li>Don't treat it, accept the amnesia</li>
+    <li>Cache the whole conversation</li>
+    <li>Externalize state outside the core: system-prompt identity (ch6), memory (ch11), the profile state directory (ch20), spawn-per-call session snapshot (ch16); the model is just a pure function</li>
   </ol>
   <details class="accordion">
     <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
-    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. A gated tool appears only when the prerequisite is set, zero footprint otherwise — a perfect match; a core tool is the last resort.</div></div></div>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. The countermeasure for B·statelessness is 'externalize state': the core itself has no memory; memory/skills/profile all live in external files, and the model is just a pure function mapping context to output. So memory (ch11), identity (ch6 system prompt), the profile store (ch20), and session snapshots (ch16 spawn-per-call) are facets of externalized state — the very reason Hermes's 'self-evolution' exists.</div></div></div>
   </details>
 </div>
 <div class="card spark">
   <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
   <ul>
-    <li>What maintenance win comes from “one agent core drives five front-ends”? To add a sixth (say voice calls), would you change the core or add an edge?</li>
+    <li>Summarize Hermes's design DNA in one sentence, and explain which inherent LLM flaw (A–G) each of 'externalize state / sacred context / narrow waist, thick edges' fights. Why is 'security the cross-cut — never let the probabilistic model be the judge'?</li>
   </ul>
 </div>
 </div></div>
-  <div class="footnav"><a class="prev" href="03-llm-constraints-autonomy.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">你在和什么打交道（下）</span><span class="lang-en">What you're dealing with (II)</span></div></a><a class="next" href="05-conversation-lifecycle.html"><div class="dir"><span class="lang-zh">下一课 →</span><span class="lang-en">Next →</span></div><div class="ttl"><span class="lang-zh">一次对话的生命周期</span><span class="lang-en">Lifecycle of one conversation</span></div></a></div>
+  <div class="footnav"><a class="prev" href="24-security.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">安全与威胁模型</span><span class="lang-en">Security &amp; threat model</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
 </div>
 <script>
 function havgSetLang(l){

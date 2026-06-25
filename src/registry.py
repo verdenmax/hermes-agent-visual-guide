@@ -37,4 +37,5 @@ CONTENT = {
     "22-eval-batch-trajectory.html": part6.LESSON_22,
     "23-plugins-skills-mcp.html": part6.LESSON_23,
     "24-security.html": part7.LESSON_24,
+    "25-design-principles.html": part7.LESSON_25,
 }
