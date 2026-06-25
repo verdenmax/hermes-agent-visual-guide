@@ -58,6 +58,8 @@ PAGES = [
      "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
     ("06-system-prompt-caching.html", "System Prompt 与缓存", "System prompt & caching",
      "第二部分 · Agent 核心", "Part 2 · The Agent Core"),
+    ("07-message-flow-providers.html", "消息流与 provider 适配", "Message flow & providers",
+     "第二部分 · Agent 核心", "Part 2 · The Agent Core"),
 ]
 
 

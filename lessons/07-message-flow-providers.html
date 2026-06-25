@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var l=localStorage.getItem('havg-lang');if(l==='en'){document.documentElement.dataset.lang='en';document.documentElement.lang='en';}}catch(e){}</script>
+<title>07 · 消息流与 provider 适配 / Message flow &amp; providers · Hermes Agent 设计图解</title>
+<meta name="description" content="第二部分 · Agent 核心｜消息流与 provider 适配 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="theme-color" content="#c2630e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAzMiAzMic+PHJlY3Qgd2lkdGg9JzMyJyBoZWlnaHQ9JzMyJyByeD0nNycgZmlsbD0nI2M4YTAyYycvPjx0ZXh0IHg9JzE2JyB5PScyMicgZm9udC1mYW1pbHk9J3N5c3RlbS11aSxzYW5zLXNlcmlmJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nODAwJyBmaWxsPScjZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz7imKQ8L3RleHQ+PC9zdmc+">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Hermes Agent 设计图解">
+<meta property="og:title" content="07 · 消息流与 provider 适配 / Message flow &amp; providers · Hermes Agent 设计图解">
+<meta property="og:description" content="第二部分 · Agent 核心｜消息流与 provider 适配 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="07 · 消息流与 provider 适配 / Message flow &amp; providers · Hermes Agent 设计图解">
+<meta name="twitter:description" content="第二部分 · Agent 核心｜消息流与 provider 适配 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --ink: #1d2129;
+  --muted: #5b6470; --faint: #8a939f; --line: #e1e5ea;
+  --accent: #c8a02c; --accent-soft: #faf1d6; --accent-ink: #8a6d12;
+  --blue: #2563eb; --blue-soft: #e7efff; --amber: #b4690e; --amber-soft: #fdf1dd;
+  --purple: #7c3aed; --purple-soft: #f0e9ff; --red: #d23f3f; --red-soft: #fbe6e6;
+  --code-bg: #0f172a; --code-ink: #e2e8f0; --code-line: #1e293b;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232c; --ink: #e6edf3;
+    --muted: #9aa6b2; --faint: #6e7a86; --line: #2a323c;
+    --accent: #e3c05a; --accent-soft: #2e2510; --accent-ink: #f0d488;
+    --blue: #6ea8fe; --blue-soft: #16243f; --amber: #e0a44a; --amber-soft: #33270f;
+    --purple: #b794f6; --purple-soft: #271a40; --red: #f08080; --red-soft: #3a1a1a;
+    --code-bg: #0a0f1a; --code-ink: #d8e2f0; --code-line: #14202f;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+html { scroll-behavior: smooth; overflow-x: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+code, .mono { font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; overflow-wrap: break-word; }
+
+/* ---- top progress bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 50; background: var(--panel);
+  border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
+}
+.topbar-inner {
+  max-width: 960px; margin: 0 auto; padding: .7rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.topbar .home { font-size: .82rem; color: var(--muted); font-weight: 600; display:flex; gap:.5rem; align-items:center; }
+.topbar .home b { color: var(--accent); }
+.topbar .pill { font-size: .72rem; color: var(--muted); background: var(--panel-2);
+  padding: .2rem .6rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.progress { height: 3px; background: var(--panel-2); }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--blue)); }
+
+.wrap { max-width: 820px; margin: 0 auto; padding: 2.4rem 1.25rem 5rem; }
+
+/* ---- hero ---- */
+.hero { margin-bottom: 2rem; }
+.hero .part { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: .55rem; }
+.hero h1 { font-size: 2.05rem; line-height: 1.2; letter-spacing: -.01em; font-weight: 750; }
+.hero .lead { margin-top: .9rem; font-size: 1.06rem; color: var(--muted); }
+
+h2 { font-size: 1.32rem; margin: 2.4rem 0 .9rem; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: .55rem; }
+h2::before { content: ""; width: 4px; height: 1.05em; background: var(--accent); border-radius: 3px; display: inline-block; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+p { margin: .7rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .3rem 0; }
+strong { color: var(--ink); font-weight: 680; }
+.inline { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: .08em .4em; font-size: .9em; color: var(--accent-ink); }
+
+/* ---- callout cards ---- */
+.card { border-radius: var(--radius); padding: 1.05rem 1.2rem; margin: 1.2rem 0;
+  border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.card .tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.card.macro { border-left: 4px solid var(--blue); }
+.card.macro .tag { color: var(--blue); }
+.card.detail { border-left: 4px solid var(--purple); }
+.card.detail .tag { color: var(--purple); }
+.card.analogy { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+.card.analogy .tag { color: var(--amber); }
+.card.key { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.key .tag { color: var(--accent-ink); }
+.card.warn { border-left: 4px solid var(--red); background: var(--red-soft); }
+.card.warn .tag { color: var(--red); }
+.card.spark { border-left: 4px solid #e0a000;
+  background: linear-gradient(100deg, rgba(224,160,0,.12), transparent 70%); }
+.card.spark .tag { color: #c98a00; }
+@media (prefers-color-scheme: dark) { .card.spark .tag { color: #f0c050; } }
+
+/* ---- code file callout ---- */
+.codefile { margin: 1.2rem 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  box-shadow: var(--shadow); }
+.codefile .cf-head { display: flex; align-items: center; gap: .55rem; padding: .5rem .85rem;
+  background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: .8rem; }
+.codefile .cf-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink:0; }
+.codefile .cf-head .path { font-family: ui-monospace, monospace; color: var(--ink); font-weight: 600; }
+.codefile .cf-head .ln { margin-left: auto; color: var(--faint); font-size: .72rem; }
+.codefile pre { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem;
+  overflow-x: auto; font-size: .82rem; line-height: 1.6; }
+.codefile pre .cm { color: #7d8aa3; }
+.codefile pre .kw { color: #c792ea; }
+.codefile pre .fn { color: #82aaff; }
+.codefile pre .st { color: #c3e88d; }
+.codefile pre .nb { color: #f78c6c; }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem; border-radius: 12px;
+  overflow-x: auto; font-size: .83rem; line-height: 1.6; margin: 1.1rem 0; box-shadow: var(--shadow); }
+pre.code .cm { color: #7d8aa3; } pre.code .kw { color: #c792ea; }
+pre.code .fn { color: #82aaff; } pre.code .st { color: #c3e88d; } pre.code .nb { color: #f78c6c; }
+
+/* ---- collapsible accordion (details/summary) ---- */
+.accordion { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  margin: .7rem 0; box-shadow: var(--shadow); overflow: hidden; }
+.accordion > summary { cursor: pointer; padding: .85rem 1.1rem; font-weight: 650; font-size: .96rem;
+  list-style: none; display: flex; align-items: center; gap: .6rem; user-select: none; }
+.accordion > summary::-webkit-details-marker { display: none; }
+.accordion > summary::after { content: "▶"; font-size: .68rem; color: var(--accent);
+  margin-left: auto; transition: transform .15s ease; }
+.accordion[open] > summary::after { transform: rotate(90deg); }
+.accordion > summary:hover { background: var(--panel-2); }
+.accordion[open] > summary { border-bottom: 1px solid var(--line); }
+.accordion .badge-num { background: var(--accent-soft); color: var(--accent-ink);
+  width: 1.6rem; height: 1.6rem; border-radius: 7px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: .82rem; font-weight: 700; flex-shrink: 0; }
+.accordion .hint { font-size: .72rem; color: var(--faint); font-weight: 400; }
+.acc-body { padding: .9rem 1.1rem 1.1rem; }
+.acc-intro { color: var(--muted); font-size: .9rem; margin: .2rem 0 .4rem; }
+.qa { margin: 1rem 0; }
+.qa:first-child { margin-top: .3rem; }
+.qa .q { font-weight: 680; font-size: .9rem; display: flex; gap: .45rem; align-items: center; margin-bottom: .3rem; }
+.qa .a { color: var(--muted); font-size: .9rem; }
+.qa .a strong { color: var(--ink); }
+.qa pre.code { margin: .5rem 0 0; font-size: .78rem; }
+
+/* ---- flow diagram ---- */
+.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 1.3rem 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.2rem 1rem; box-shadow: var(--shadow); }
+.flow .node { flex: 1 1 0; min-width: 110px; text-align: center; padding: .7rem .5rem;
+  border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.flow .node .nt { font-weight: 700; font-size: .92rem; }
+.flow .node .nd { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+.flow .node.hl { background: var(--accent-soft); border-color: var(--accent); }
+.flow .arrow { align-self: center; color: var(--faint); font-size: 1.3rem; padding: 0 .35rem; }
+
+/* vertical flow */
+.vflow { margin: 1.3rem 0; }
+.vflow .step { display: flex; gap: .9rem; position: relative; padding-bottom: 1.1rem; }
+.vflow .step:not(:last-child)::before { content:""; position:absolute; left: 15px; top: 34px; bottom: -2px;
+  width: 2px; background: var(--line); }
+.vflow .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; z-index:1; }
+.vflow .sc h4 { margin: .25rem 0 .2rem; font-size: 1rem; }
+.vflow .sc p { margin: .15rem 0; font-size: .92rem; color: var(--muted); }
+.vflow .sc .mono { font-size: .8rem; color: var(--accent-ink); }
+
+/* layered architecture */
+.layers { margin: 1.3rem 0; display: flex; flex-direction: column; gap: .55rem; }
+.layer { border-radius: 12px; padding: .85rem 1.1rem; border: 1px solid var(--line); background: var(--panel);
+  box-shadow: var(--shadow); }
+.layer .lh { display: flex; align-items: center; gap: .6rem; }
+.layer .lh .badge { font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; }
+.layer .lh .name { font-weight: 700; font-family: ui-monospace, monospace; }
+.layer .ld { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
+.layer.l-core { border-left: 4px solid var(--accent); } .layer.l-core .badge { background: var(--accent-soft); color: var(--accent-ink); }
+.layer.l-main { border-left: 4px solid var(--blue); } .layer.l-main .badge { background: var(--blue-soft); color: var(--blue); }
+.layer.l-part { border-left: 4px solid var(--purple); } .layer.l-part .badge { background: var(--purple-soft); color: var(--purple); }
+.layer.l-app { border-left: 4px solid var(--amber); } .layer.l-app .badge { background: var(--amber-soft); color: var(--amber); }
+
+/* two-column compare */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0; }
+@media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+.col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; box-shadow: var(--shadow); min-width: 0; }
+.col h4 { margin: 0 0 .4rem; font-size: .95rem; }
+
+table.t { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .9rem;
+  background: var(--panel); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+table.t th, table.t td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--line); }
+table.t th { background: var(--panel-2); font-size: .8rem; letter-spacing: .02em; }
+table.t tr:last-child td { border-bottom: none; }
+table.t td.mono, table.t td .mono { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--accent-ink); }
+@media (max-width: 640px) {
+  /* Wide multi-column tables: scroll within their own box instead of
+     forcing page-level horizontal overflow (which clipped right columns). */
+  table.t { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.t th, table.t td { padding: .5rem .6rem; }
+}
+.selftest { margin: 2.2rem 0 0; border-top: 2px dashed var(--line); padding-top: 1.2rem; }
+.selftest > h2 { margin-top: .2rem; }
+.quiz { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+  border-radius: 12px; padding: .9rem 1.1rem; margin: 1rem 0; box-shadow: var(--shadow); }
+.quiz .qn { font-weight: 650; }
+.quiz ol.opts { list-style: upper-alpha; margin: .55rem 0 .6rem 1.5rem; padding: 0; }
+.quiz ol.opts li { margin: .3rem 0; padding-left: .15rem; }
+.quiz details.accordion { margin: .5rem 0 0; }
+.selftest code { font-family: ui-monospace, monospace; font-size: .9em; color: var(--accent-ink);
+  background: var(--accent-soft); padding: 0 .28em; border-radius: 4px; }
+
+/* footer nav */
+.footnav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem;
+  padding-top: 1.4rem; border-top: 1px solid var(--line); }
+.footnav a { flex: 1; padding: .85rem 1.1rem; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow); transition: .15s; }
+.footnav a:hover { border-color: var(--accent); transform: translateY(-1px); }
+.footnav a.next { text-align: right; }
+.footnav .dir { font-size: .72rem; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.footnav .ttl { font-weight: 700; color: var(--ink); margin-top: .15rem; }
+.footnav a.disabled { opacity: .35; pointer-events: none; }
+
+/* index page */
+.toc { display: grid; gap: .7rem; margin-top: 1.6rem; }
+.toc-part { font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--accent); margin: 1.4rem 0 .2rem; }
+.toc a { display: flex; align-items: center; gap: .9rem; padding: .85rem 1.05rem; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); transition: .15s; }
+.toc a:hover { border-color: var(--accent); transform: translateX(3px); }
+.toc .n { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+.toc .tt { font-weight: 650; color: var(--ink); }
+.toc .ts { font-size: .8rem; color: var(--muted); margin-left: auto; text-align: right; }
+.toc-search { position: relative; margin: 1.6rem 0 -.4rem; }
+.toc-search input { width: 100%; box-sizing: border-box; padding: .75rem 2.8rem .75rem 1rem;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font-size: .98rem; box-shadow: var(--shadow); }
+.toc-search input:focus { outline: none; border-color: var(--accent); }
+.toc-search .qcount { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  color: var(--faint); font-size: .8rem; pointer-events: none; }
+.toc a.hide, .toc .toc-part.hide { display: none; }
+.toc-empty { display: none; color: var(--muted); padding: 1rem; text-align: center; }
+.toc-empty.show { display: block; }
+.hero.index h1 { font-size: 2.3rem; }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:1rem; font-size:.8rem; color:var(--muted); }
+.legend span { display:flex; align-items:center; gap:.4rem; }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+.pdf-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1.1rem;
+  background:var(--accent); color:#fff; border-radius:10px; font-size:.9rem; font-weight:650;
+  box-shadow:var(--shadow); transition:.15s; }
+.pdf-btn:hover { background:var(--accent-ink); transform:translateY(-1px); }
+
+/* ---- bilingual language switch ----
+   Contract: <html> must carry data-lang="zh" (default) or "en".
+   page()/index_page() hard-code data-lang="zh"; LANG_BOOT may switch to "en". */
+html[data-lang="en"] .lang-zh { display: none !important; }
+html[data-lang="zh"] .lang-en { display: none !important; }
+.langtoggle { font-size:.72rem; font-weight:700; color:var(--accent-ink);
+  background:var(--accent-soft); border:1px solid var(--accent); border-radius:999px;
+  padding:.22rem .7rem; cursor:pointer; line-height:1.4; white-space:nowrap; }
+.langtoggle:hover { background:var(--accent); color:#fff; }
+
+/* ---- schematic: cell strips (token sequences / quant blocks / KV columns) ---- */
+.cellgroup { margin: 1.2rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.cellgroup .cg-cap { font-size: .82rem; color: var(--muted); margin-bottom: .55rem; }
+.cellgroup .cg-cap b { color: var(--ink); }
+.cells { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.cells + .cells { margin-top: .5rem; }
+.cell { min-width: 2.1rem; padding: .38rem .5rem; text-align: center; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: .78rem;
+  font-family: ui-monospace, monospace; white-space: nowrap; }
+.cell.scale { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); font-weight: 700; }
+.cell.hl    { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cell.q     { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.cell.dim   { opacity: .45; }
+.cells .lab { font-size: .76rem; color: var(--faint); padding: 0 .35rem; }
+.cells .sep { color: var(--faint); padding: 0 .1rem; }
+
+/* ---- schematic: timeline lanes (prefill vs decode, step-by-step) ---- */
+.timeline { margin: 1.2rem 0; display: flex; flex-direction: column; gap: .5rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.timeline .lane { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.timeline .lane-label { min-width: 6rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.timeline .tslot { padding: .4rem .6rem; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--line); font-size: .78rem; text-align: center; font-family: ui-monospace, monospace; }
+.timeline .tslot.span { flex: 1; min-width: 8rem; background: var(--blue-soft); border-color: var(--blue);
+  color: var(--blue); font-weight: 700; }
+.timeline .tslot.now { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+/* ---- worked-example trace: one concrete input, stepped through ---- */
+.trace { margin: 1.3rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.trace .tcap { font-size: .82rem; color: var(--muted); margin-bottom: .7rem; }
+.trace .tcap b { color: var(--accent-ink); }
+.trace .stations { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.trace .stn { flex: 1 1 0; min-width: 116px; border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem; background: var(--bg); }
+.trace .stn h5 { margin: 0 0 .45rem; font-size: .8rem; color: var(--ink); }
+.trace .cellrow { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.trace .vc { min-width: 2.1rem; padding: .32rem .45rem; text-align: center; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); font: 600 .76rem ui-monospace, monospace; white-space: nowrap; }
+.trace .vc.hot  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.trace .vc.blue { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.trace .vc.dim  { opacity: .42; }
+.trace .tlab { font-size: .68rem; color: var(--faint); margin-top: .35rem; }
+.trace .op { align-self: center; color: var(--accent); font: 700 .72rem ui-monospace, monospace;
+  padding: 0 .5rem; text-align: center; white-space: nowrap; }
+.trace svg { max-width: 100%; height: auto; display: block; margin: .3rem auto; }
+@media (max-width: 640px) { .trace .stations { flex-direction: column; } .trace .op { padding: .3rem 0; } }
+/* 🧩 collaboration-mechanism card */
+.card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
+.card.collab .tag { color: var(--blue); }
+.card.collab .collab-sub { font-weight:700; font-size:.82rem; margin:.85rem 0 .3rem; color:var(--ink); }
+/* 🎯 design-tradeoff card */
+.card.design { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.design .tag { color: var(--accent-ink); }
+/* A-G constraint back-reference badge */
+.badge.constraint { display:inline-block; font-size:.7rem; font-weight:700;
+  padding:.1rem .45rem; border-radius:999px; background:var(--purple-soft);
+  color:var(--purple); border:1px solid var(--purple); margin:0 .15rem; white-space:nowrap; }
+</style>
+</head><body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
+    <span class="pill"><span class="lang-zh">第二部分 · Agent 核心</span><span class="lang-en">Part 2 · The Agent Core</span></span>
+    <span class="pill">07 / 07</span>
+    <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
+  </div>
+  <div class="progress"><span style="width:100%"></span></div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="part"><span class="lang-zh">第二部分 · Agent 核心</span><span class="lang-en">Part 2 · The Agent Core</span></div>
+    <h1><span class="lang-zh">消息流与 provider 适配</span><span class="lang-en">Message flow &amp; providers</span></h1>
+  </div>
+  <div class="lang-zh">
+<p class="lead">
+Hermes 同时支持 Anthropic、OpenAI Codex、Gemini、AWS Bedrock、以及二十多家 OpenAI 兼容后端。可它的<strong>核心对话循环</strong>从头到尾只认识<strong>一种</strong>消息格式——OpenAI 风格的 <span class="mono">messages</span>。本章讲清这套「<strong>统一抽象</strong>」是怎么做到的：一张 transport 注册表按 <span class="mono">api_mode</span> 分派，四个 adapter 把统一格式翻译成各家方言，reasoning 跨轮原样回传，外加一条贯穿始终的不变量——<strong>严格角色交替</strong>。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 同声传译 + 万能转接头</div>
+  把核心循环想成一位<strong>只说一种语言</strong>的指挥官。面对来自世界各地的将领（provider），他不学二十几门外语，而是雇了一组<strong>同声传译</strong>（adapter）：指挥官永远用「普通话」（OpenAI messages）下令，传译当场翻成对方的方言（Anthropic blocks / Codex responses / Gemini parts / Bedrock converse）；对方的回话再被翻回普通话。<strong>转接头</strong>（transport 注册表）则负责「这位将领该派哪位传译」——查 <span class="mono">api_mode</span>，取对应 transport。加一个新国家，只要再雇一位传译、登记一个转接头，<strong>指挥官一个字都不用改</strong>。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 一套 messages，多家后端</div>
+  核心循环（第 5 章）始终在一份 OpenAI 风格的 <span class="mono">messages</span> 上工作：<span class="mono">{"role": "system/user/assistant/tool", ...}</span>。所有 provider 差异——鉴权、字段名、reasoning 形态、tool schema 方言——都被<strong>挡在 transport + adapter 这一层</strong>，绝不渗进核心。出站时 <span class="mono">build_api_kwargs</span> 按 <span class="mono">api_mode</span> 选一个 transport 把统一 messages 翻成各家请求；入站时 <span class="mono">normalize_response</span> 再把各家响应<strong>归一</strong>回同一种 assistant 消息（含 reasoning）。这正是第 4 章「窄腰」哲学的一个具体落点：<strong>核心薄、边缘厚</strong>。
+</div>
+
+<h2>分派的起点：transport 注册表</h2>
+<p>每一种 <span class="mono">api_mode</span> 对应一个 transport 类。注册表用「<strong>懒发现</strong>」装载——第一次取的时候才扫描并导入所有 transport 模块，之后命中缓存：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/transports/__init__.py</span><span class="ln">21-46 · 节选</span></div>
+  <pre><span class="kw">def</span> <span class="fn">register_transport</span>(api_mode, transport_cls):
+    <span class="cm"># 四个 transport 模块在文件尾各自调用它登记自己</span>
+    _REGISTRY[api_mode] = transport_cls
+
+<span class="kw">def</span> <span class="fn">get_transport</span>(api_mode):
+    <span class="kw">global</span> _discovered
+    <span class="kw">if</span> <span class="kw">not</span> _discovered:
+        _discover_transports()              <span class="cm"># 懒发现：首次才导入所有 transport</span>
+    cls = _REGISTRY.get(api_mode)
+    <span class="kw">if</span> cls <span class="kw">is</span> <span class="kw">None</span>:
+        _discover_transports()              <span class="cm"># miss 也重扫，容忍乱序导入</span>
+        cls = _REGISTRY.get(api_mode)
+    <span class="kw">if</span> cls <span class="kw">is</span> <span class="kw">None</span>:
+        <span class="kw">return</span> <span class="kw">None</span>                        <span class="cm"># 允许调用方回退到旧路径</span>
+    <span class="kw">return</span> cls()</pre>
+</div>
+<p>四个 transport——<span class="mono">anthropic_messages</span> / <span class="mono">codex_responses</span> / <span class="mono">chat_completions</span> / <span class="mono">bedrock_converse</span>——在各自模块尾部调用 <span class="mono">register_transport(...)</span> 把自己挂进 <span class="mono">_REGISTRY</span>。注意 <span class="mono">get_transport</span> 在 miss 时<strong>会再扫一次</strong>：因为测试或乱序导入可能让注册表只装了一半，「未命中就重新发现」保证合法 api_mode 永远取得到。取不到才返回 <span class="mono">None</span>，让调用方优雅回退——这是为<strong>渐进迁移</strong>留的口子。</p>
+<p>这里有一个值得注意的<strong>不对称</strong>：transport 有四种（含 bedrock），但 Gemini <strong>不在其中</strong>。因为 Gemini 走的是<strong>客户端层替换</strong>——当 base_url 指向原生 Gemini 时，<span class="mono">GeminiNativeClient</span> 直接<strong>顶替底层 OpenAI client</strong>（<span class="mono">agent_runtime_helpers.py</span>），而它的 <span class="mono">api_mode</span> <strong>仍是 chat_completions</strong>。所以严格说，翻译层是「四个 transport + 一次客户端替换」，adapter 名单（anthropic / codex_responses / gemini_native / bedrock）与 transport 名单并不完全重合——但这一切对核心循环依旧<strong>透明</strong>。</p>
+
+<h2>出站分派：build_api_kwargs 按 api_mode 选路</h2>
+<p>真正把统一 messages 变成「某一家的请求参数」的，是 <span class="mono">build_api_kwargs</span>。它是一组按 <span class="mono">api_mode</span> 的硬分支，每一支取对应 transport、调它的 <span class="mono">build_kwargs</span>：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/chat_completion_helpers.py</span><span class="ln">555-663 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">build_api_kwargs</span>(agent, api_messages):
+    <span class="kw">if</span> agent.api_mode == <span class="st">"anthropic_messages"</span>:
+        _t = agent._get_transport()                  <span class="cm"># 内部走 get_transport + 缓存</span>
+        msgs = agent._prepare_anthropic_messages_for_api(api_messages)
+        <span class="kw">return</span> _t.build_kwargs(model=..., messages=msgs, tools=..., ...)
+
+    <span class="kw">if</span> agent.api_mode == <span class="st">"bedrock_converse"</span>:        <span class="cm"># 绕过 OpenAI client，直连 boto3</span>
+        <span class="kw">return</span> agent._get_transport().build_kwargs(model=..., messages=api_messages, ...)
+
+    <span class="kw">if</span> agent.api_mode == <span class="st">"codex_responses"</span>:          <span class="cm"># /responses 端点，含 xAI/GitHub 分流</span>
+        <span class="kw">return</span> agent._get_transport().build_kwargs(...)
+
+    ...                                              <span class="cm"># else: 默认 chat_completions（最常见）</span></pre>
+</div>
+<p>读这段要抓住一点：<strong>核心循环不知道「Anthropic 长什么样」</strong>。它只调用 <span class="mono">build_api_kwargs</span>，由后者按 <span class="mono">api_mode</span> 把活儿派给对应 transport / adapter。Bedrock 那一支甚至<strong>完全绕过 OpenAI client</strong>，由 adapter 直接做 boto3 调用——但这对核心是透明的。每加一个后端，只是在这里多一个 <span class="mono">if</span> 分支 + 一个 adapter，<strong>循环本体一行不动</strong>。</p>
+
+<h2>跨轮的连续性：reasoning 的三处存储</h2>
+<p>带「思考」（reasoning / thinking）的模型有个棘手要求：这一轮的推理，<strong>下一轮要原样带回去</strong>，否则部分 provider 直接 HTTP 400。Hermes 把 reasoning 拆成<strong>三个字段</strong>分别处置：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/chat_completion_helpers.py</span><span class="ln">885-953 · 简化</span></div>
+  <pre>msg = {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: _san_content,
+       <span class="st">"reasoning"</span>: reasoning_text, ...}      <span class="cm"># ① reasoning：内部存的思考文本</span>
+
+<span class="cm"># ② reasoning_content：thinking 模式必须回传，缺失则补一个空格防 400</span>
+<span class="kw">elif</span> assistant_tool_calls <span class="kw">and</span> agent._needs_thinking_reasoning_pad():
+    msg[<span class="st">"reasoning_content"</span>] = reasoning_text <span class="kw">or</span> <span class="st">" "</span>
+
+<span class="cm"># ③ reasoning_details：原样不变透传，维持跨轮推理连续性</span>
+<span class="kw">if</span> assistant_message.reasoning_details:
+    <span class="cm"># Pass reasoning_details back unmodified so providers can</span>
+    <span class="cm"># maintain reasoning continuity across turns.</span>
+    msg[<span class="st">"reasoning_details"</span>] = preserved      <span class="cm"># 含 signature/encrypted 等不透明字段</span></pre>
+</div>
+<p>三个字段各司其职：<span class="mono">reasoning</span> 是内部留存的思考文本；<span class="mono">reasoning_content</span> 是 DeepSeek-v4 / Kimi 等 thinking 模型<strong>硬性要求</strong>回传的字段——一旦缺失，重放历史就会撞上 <span class="inline">"The reasoning_content in the thinking mode must be passed back to the API"</span> 的 400，所以哪怕没捕获到文本，也要补一个<strong>空格</strong>占位（既满足非空校验，又不伪造推理内容）；<span class="mono">reasoning_details</span> 则<strong>原样不动</strong>地透传——注释写得很直白：<span class="inline">Pass reasoning_details back unmodified so providers ... can maintain reasoning continuity across turns</span>。里面的 <span class="mono">signature</span> / <span class="mono">encrypted_content</span> 等不透明字段，<strong>改一个字节都会让推理链断裂</strong>。这正对应一条 LLM 约束 <span class="badge constraint">G·推理token不持久</span>——模型自己记不住上一轮怎么想的，只能靠我们把推理痕迹<strong>原样搬回</strong>可见上下文。</p>
+
+<h2>出站到入站：一条完整的数据流</h2>
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">统一 messages（OpenAI 风格，核心循环唯一认得的格式）</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">repair_message_sequence_with_cursor —— 每次 API 调用前修复严格角色交替</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">build_api_kwargs 按 api_mode 取 transport</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">adapter 翻译成各家方言（Anthropic blocks / Codex input / Gemini parts / Bedrock converse）</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">provider API 返回响应</span></div>
+  <div class="step"><span class="num">6</span><span class="sc">normalize_response 归一回统一 assistant 消息（含 reasoning 三字段）</span></div>
+  <div class="step"><span class="num">7</span><span class="sc">append 进 messages —— 回到核心循环，进入下一轮</span></div>
+</div>
+<p>第 2 步的<strong>角色交替修复</strong>是整条链的隐形守门员。Provider 普遍要求消息<strong>严格交替</strong>（不能两条同 role 连续、不能有孤儿 tool 消息），违反就返回空响应、触发重试。<span class="mono">repair_message_sequence_with_cursor</span> 在<strong>每次 API 调用前</strong>跑一遍：删掉没有配对的孤儿 tool 消息、合并连续的 user 消息。它在<strong>发送前直接就地修整</strong> live messages（<span class="mono">messages[:] = merged</span>，持久化 / SessionDB 都会看到修整结果），只做<strong>最小外科式</strong>整理、<strong>绝不激进重建上下文</strong>——避免无谓改写历史击穿缓存（第 6 章）。</p>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「一套 messages 跑遍所有后端」</div>
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章五件：<strong>transport 注册表</strong>（<span class="mono">register/get_transport</span>）登记+分派、<strong>四个 adapter</strong>（anthropic / codex_responses / gemini_native / bedrock）翻译、<strong>build_api_kwargs</strong> 出站构造、<strong>conversation_loop 入站归一</strong>（normalize_response）、<strong>repair_message_sequence_with_cursor</strong> 修复交替。跨章节配合：严格角色交替不变量<strong>服务 prompt 缓存</strong>（第 6 章——历史字节稳定，缓存才不破）；reasoning 三字段把推理痕迹<strong>落进可见上下文</strong>对抗「推理 token 不持久」（第 3 章 G）；「加新 provider 不改核心循环」正是<strong>窄腰哲学</strong>的体现（第 4 章）。
+  <div class="collab-sub">② 数据流时序</div>
+  统一 messages → repair 修复交替 → build_api_kwargs 按 api_mode 选 transport → adapter 翻成各家方言 → provider API → normalize_response 归一回统一 assistant 消息（含 reasoning）→ append → 下一轮。出站「翻出去」、入站「翻回来」，核心循环全程只见统一格式。
+  <div class="collab-sub">③ 关键点</div>
+  核心只认<strong>一种</strong> messages 格式；所有 provider 差异——鉴权、字段名、reasoning 形态、tool schema 方言——被 transport / adapter <strong>整层吸收</strong>。于是「支持一个新后端」退化成「写一个 adapter + 登记一个 transport」，<strong>核心对话循环零改动</strong>。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线：<strong>统一抽象 + 严格角色交替不变量</strong>——一套 messages，多家后端；并在每次 API 调用前修复交替。它治三条 LLM 固有约束：
+  <p style="margin:.5rem 0 0"><span class="badge constraint">E·结构化输出脆弱</span>——function calling / tool schema 统一成 OpenAI 格式，由 adapter 各自翻成方言（xAI 还要现场剥掉它不认的 schema 关键字），把「结构化输出对方言敏感」这件脆弱事关进边缘层；
+  <span class="badge constraint">G·推理token不持久</span>——<span class="mono">reasoning_details</span> 原样跨轮 replay，让模型「接着上轮想」；
+  <span class="badge constraint">D·提示脆弱</span>——统一格式把 provider 差异<strong>隔离</strong>，核心 prompt 不必为每家后端写一套。反模式：把某家 provider 的特殊字段、特殊鉴权<strong>泄漏进核心循环</strong>——那等于让指挥官去学方言，每加一家就要改一次核心。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>统一 messages</strong>：核心循环只认 OpenAI 风格 <span class="mono">messages</span>，provider 差异全被 transport + adapter 吸收。</li>
+    <li><strong>transport 注册表</strong>：<span class="mono">register/get_transport</span> 懒发现，按 <span class="mono">api_mode</span> 分派；加后端只需登记 transport + 写 adapter。</li>
+    <li><strong>build_api_kwargs</strong>：按 <span class="mono">api_mode</span> 四分支出站构造；Bedrock 直连 boto3、Codex 走 /responses，核心循环不感知。</li>
+    <li><strong>reasoning 三处存储</strong>：<span class="mono">reasoning</span> 内部留存、<span class="mono">reasoning_content</span> thinking 回传（缺失 pad 空格防 400）、<span class="mono">reasoning_details</span> 原样跨轮透传（约束 G）。</li>
+    <li><strong>角色交替修复</strong>：每次 API 调用前 <span class="mono">repair_message_sequence_with_cursor</span> 删孤儿 tool、合并连续 user；就地最小修整、不激进重建上下文（守缓存）。</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. 给 Hermes 接入一个全新的 provider（比如某个新推理后端），需要改核心对话循环吗？</div>
+  <ol class="opts">
+    <li>要，每个 provider 一套核心循环</li>
+    <li>不用——写一个 adapter + 登记一个 transport 即可，核心循环零改动</li>
+    <li>要，循环里得加针对该 provider 的特殊处理</li>
+    <li>要，得重写 messages 格式</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。核心循环只认统一的 OpenAI 风格 messages；provider 差异被 transport + adapter 整层吸收。加后端＝写 adapter + register_transport，build_api_kwargs 多一个分支，循环本体一行不动（窄腰）。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. 为什么 reasoning_details 要原样不变地跨轮透传回去？</div>
+  <ol class="opts">
+    <li>为了排序工具调用</li>
+    <li>为了压缩 token</li>
+    <li>维持跨轮推理连续性——里面有 signature/encrypted 等不透明字段，改一个字节就断链/触发 400</li>
+    <li>随便存存，没影响</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：C</strong>。模型自己记不住上一轮怎么想的（约束 G·推理 token 不持久），只能靠把 reasoning_details 原样搬回可见上下文维持连续性；其中的 signature/encrypted_content 必须逐字保留，否则 provider 直接 400。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>角色交替修复（repair_message_sequence）在什么时候跑、为什么必须就地修整 live messages 而不是重建整段上下文？这与第 6 章的缓存纪律是怎样呼应的？</li>
+  </ul>
+</div>
+</div></div>
+  <div class="lang-en">
+<p class="lead">
+Hermes speaks to Anthropic, OpenAI Codex, Gemini, AWS Bedrock, and twenty-odd OpenAI-compatible backends. Yet its <strong>core conversation loop</strong> knows just <strong>one</strong> message format end to end — OpenAI-style <span class="mono">messages</span>. This chapter shows how that <strong>unified abstraction</strong> works: a transport registry dispatches by <span class="mono">api_mode</span>, four adapters translate the unified format into each backend's dialect, reasoning is replayed verbatim across turns, plus one invariant that runs through it all — <strong>strict role alternation</strong>.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · simultaneous interpreters + a universal adapter</div>
+  Picture the core loop as a commander who speaks <strong>only one language</strong>. Facing generals from all over the world (providers), he doesn't learn twenty tongues — he hires a team of <strong>simultaneous interpreters</strong> (adapters): the commander always issues orders in "standard speech" (OpenAI messages), and the interpreter translates on the spot into each dialect (Anthropic blocks / Codex responses / Gemini parts / Bedrock converse); replies are translated back. The <strong>universal adapter</strong> (the transport registry) decides "which interpreter for this general" — look up <span class="mono">api_mode</span>, fetch the matching transport. Add a new country and you just hire one interpreter and register one adapter — <strong>the commander changes not a single word</strong>.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · one set of messages, many backends</div>
+  The core loop (ch.5) always works on one OpenAI-style <span class="mono">messages</span> list: <span class="mono">{"role": "system/user/assistant/tool", ...}</span>. Every provider difference — auth, field names, reasoning shape, tool-schema dialect — is <strong>held at the transport + adapter layer</strong> and never seeps into the core. Outbound, <span class="mono">build_api_kwargs</span> picks a transport by <span class="mono">api_mode</span> to translate the unified messages into each backend's request; inbound, <span class="mono">normalize_response</span> <strong>normalizes</strong> each backend's reply back into the same assistant message (reasoning included). This is one concrete landing spot for the ch.4 "narrow waist": <strong>thin core, thick edges</strong>.
+</div>
+
+<h2>Where dispatch begins: the transport registry</h2>
+<p>Each <span class="mono">api_mode</span> maps to a transport class. The registry loads via <strong>lazy discovery</strong> — it scans and imports all transport modules only on first fetch, then hits the cache:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/transports/__init__.py</span><span class="ln">21-46 · excerpt</span></div>
+  <pre><span class="kw">def</span> <span class="fn">register_transport</span>(api_mode, transport_cls):
+    <span class="cm"># the four transport modules each call this at file end to register</span>
+    _REGISTRY[api_mode] = transport_cls
+
+<span class="kw">def</span> <span class="fn">get_transport</span>(api_mode):
+    <span class="kw">global</span> _discovered
+    <span class="kw">if</span> <span class="kw">not</span> _discovered:
+        _discover_transports()              <span class="cm"># lazy: import all transports on first use</span>
+    cls = _REGISTRY.get(api_mode)
+    <span class="kw">if</span> cls <span class="kw">is</span> <span class="kw">None</span>:
+        _discover_transports()              <span class="cm"># re-scan on miss; tolerate out-of-order imports</span>
+        cls = _REGISTRY.get(api_mode)
+    <span class="kw">if</span> cls <span class="kw">is</span> <span class="kw">None</span>:
+        <span class="kw">return</span> <span class="kw">None</span>                        <span class="cm"># let callers fall back to the legacy path</span>
+    <span class="kw">return</span> cls()</pre>
+</div>
+<p>The four transports — <span class="mono">anthropic_messages</span> / <span class="mono">codex_responses</span> / <span class="mono">chat_completions</span> / <span class="mono">bedrock_converse</span> — call <span class="mono">register_transport(...)</span> at the bottom of their modules to hook themselves into <span class="mono">_REGISTRY</span>. Note that <span class="mono">get_transport</span> <strong>re-scans on a miss</strong>: tests or out-of-order imports may leave the registry half-populated, so "discover again if not found" guarantees a valid api_mode is always resolvable. Only then does it return <span class="mono">None</span>, letting the caller fall back gracefully — a hook left for <strong>gradual migration</strong>.</p>
+<p>One <strong>asymmetry</strong> is worth noting: there are four transports (including bedrock), but Gemini is <strong>not</strong> among them. Gemini uses <strong>client-layer substitution</strong> — when the base_url points at native Gemini, <span class="mono">GeminiNativeClient</span> directly <strong>replaces the underlying OpenAI client</strong> (<span class="mono">agent_runtime_helpers.py</span>), while its <span class="mono">api_mode</span> <strong>stays chat_completions</strong>. So strictly, the translation layer is 'four transports + one client swap', and the adapter list (anthropic / codex_responses / gemini_native / bedrock) doesn't fully overlap the transport list — yet all of this stays <strong>transparent</strong> to the core loop.</p>
+
+<h2>Outbound dispatch: build_api_kwargs routes by api_mode</h2>
+<p>What actually turns unified messages into "one backend's request params" is <span class="mono">build_api_kwargs</span>. It is a set of hard branches keyed on <span class="mono">api_mode</span>, each fetching the right transport and calling its <span class="mono">build_kwargs</span>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/chat_completion_helpers.py</span><span class="ln">555-663 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">build_api_kwargs</span>(agent, api_messages):
+    <span class="kw">if</span> agent.api_mode == <span class="st">"anthropic_messages"</span>:
+        _t = agent._get_transport()                  <span class="cm"># wraps get_transport + caching</span>
+        msgs = agent._prepare_anthropic_messages_for_api(api_messages)
+        <span class="kw">return</span> _t.build_kwargs(model=..., messages=msgs, tools=..., ...)
+
+    <span class="kw">if</span> agent.api_mode == <span class="st">"bedrock_converse"</span>:        <span class="cm"># bypass OpenAI client, talk boto3 directly</span>
+        <span class="kw">return</span> agent._get_transport().build_kwargs(model=..., messages=api_messages, ...)
+
+    <span class="kw">if</span> agent.api_mode == <span class="st">"codex_responses"</span>:          <span class="cm"># /responses endpoint, with xAI/GitHub routing</span>
+        <span class="kw">return</span> agent._get_transport().build_kwargs(...)
+
+    ...                                              <span class="cm"># else: default chat_completions (most common)</span></pre>
+</div>
+<p>The thing to grasp: <strong>the core loop has no idea what "Anthropic looks like."</strong> It only calls <span class="mono">build_api_kwargs</span>, which routes the work to the matching transport / adapter by <span class="mono">api_mode</span>. The Bedrock branch even <strong>bypasses the OpenAI client entirely</strong>, with the adapter making boto3 calls directly — yet that's transparent to the core. Each new backend is just one more <span class="mono">if</span> branch + an adapter here, with <strong>not a line changed in the loop itself</strong>.</p>
+
+<h2>Continuity across turns: reasoning's three stores</h2>
+<p>"Thinking" (reasoning) models bring a tricky demand: this turn's reasoning must be <strong>handed back verbatim next turn</strong>, or some providers return HTTP 400 outright. Hermes splits reasoning into <strong>three fields</strong>, each handled differently:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/chat_completion_helpers.py</span><span class="ln">885-953 · simplified</span></div>
+  <pre>msg = {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: _san_content,
+       <span class="st">"reasoning"</span>: reasoning_text, ...}      <span class="cm"># ① reasoning: the internal thought text</span>
+
+<span class="cm"># ② reasoning_content: thinking mode must replay it; pad a space if missing</span>
+<span class="kw">elif</span> assistant_tool_calls <span class="kw">and</span> agent._needs_thinking_reasoning_pad():
+    msg[<span class="st">"reasoning_content"</span>] = reasoning_text <span class="kw">or</span> <span class="st">" "</span>
+
+<span class="cm"># ③ reasoning_details: passed back unmodified to keep reasoning continuous</span>
+<span class="kw">if</span> assistant_message.reasoning_details:
+    <span class="cm"># Pass reasoning_details back unmodified so providers can</span>
+    <span class="cm"># maintain reasoning continuity across turns.</span>
+    msg[<span class="st">"reasoning_details"</span>] = preserved      <span class="cm"># carries signature/encrypted opaque fields</span></pre>
+</div>
+<p>The three fields each do their job: <span class="mono">reasoning</span> is the internally kept thought text; <span class="mono">reasoning_content</span> is the field that DeepSeek-v4 / Kimi-style thinking models <strong>strictly require</strong> on replay — miss it and the next turn hits a 400, <span class="inline">"The reasoning_content in the thinking mode must be passed back to the API"</span>, so even with no captured text Hermes pads a single <strong>space</strong> (satisfying the non-empty check without fabricating reasoning); <span class="mono">reasoning_details</span> is passed through <strong>unchanged</strong> — the comment says it plainly: <span class="inline">Pass reasoning_details back unmodified so providers ... can maintain reasoning continuity across turns</span>. Its opaque <span class="mono">signature</span> / <span class="mono">encrypted_content</span> fields would <strong>break the reasoning chain if a single byte changed</strong>. This maps to the LLM constraint <span class="badge constraint">G·reasoning tokens not persisted</span> — the model can't remember how it reasoned last turn, so we must carry the reasoning trace <strong>verbatim</strong> back into visible context.</p>
+
+<h2>Outbound to inbound: one complete data flow</h2>
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">unified messages (OpenAI style — the only format the core loop knows)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">repair_message_sequence_with_cursor — fix strict role alternation before every API call</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">build_api_kwargs fetches a transport by api_mode</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">adapter translates into each dialect (Anthropic blocks / Codex input / Gemini parts / Bedrock converse)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">provider API returns a response</span></div>
+  <div class="step"><span class="num">6</span><span class="sc">normalize_response normalizes back to a unified assistant message (with reasoning's 3 fields)</span></div>
+  <div class="step"><span class="num">7</span><span class="sc">append into messages — back to the core loop, on to the next turn</span></div>
+</div>
+<p>Step 2's <strong>role-alternation repair</strong> is the invisible gatekeeper of the whole chain. Providers broadly require messages to <strong>strictly alternate</strong> (no two same-role in a row, no orphan tool messages); violate it and you get an empty response and a retry. <span class="mono">repair_message_sequence_with_cursor</span> runs <strong>before every API call</strong>: it drops unpaired orphan tool messages and merges consecutive user messages. It tidies the <strong>live messages in place</strong> right before sending (<span class="mono">messages[:] = merged</span>, so persistence / SessionDB see the repair), doing only <strong>minimal surgical</strong> cleanup and <strong>never aggressively rebuilding context</strong> — avoiding needless history rewrites that would shatter the cache (ch.6).</p>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh to run "one set of messages across all backends"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  This chapter's five: the <strong>transport registry</strong> (<span class="mono">register/get_transport</span>) registers + dispatches, the <strong>four adapters</strong> (anthropic / codex_responses / gemini_native / bedrock) translate, <strong>build_api_kwargs</strong> builds outbound, <strong>conversation_loop's inbound normalize</strong> (normalize_response), and <strong>repair_message_sequence_with_cursor</strong> fixes alternation. Cross-chapter teamwork: the strict-alternation invariant <strong>serves prompt caching</strong> (ch.6 — history stays byte-stable, so the cache holds); reasoning's three fields land the reasoning trace <strong>into visible context</strong> to fight "reasoning tokens not persisted" (ch.3 G); "add a provider without touching the loop" embodies the <strong>narrow-waist philosophy</strong> (ch.4).
+  <div class="collab-sub">② Data-flow timing</div>
+  unified messages → repair fixes alternation → build_api_kwargs picks a transport by api_mode → adapter translates into each dialect → provider API → normalize_response normalizes back to a unified assistant message (with reasoning) → append → next turn. Outbound "translate out," inbound "translate back," and the core loop only ever sees the unified format.
+  <div class="collab-sub">③ The key point</div>
+  The core knows just <strong>one</strong> message format; every provider difference — auth, field names, reasoning shape, tool-schema dialect — is <strong>absorbed whole</strong> by the transport / adapter layer. So "support a new backend" collapses to "write an adapter + register a transport," with <strong>zero change to the core conversation loop</strong>.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>a unified abstraction + the strict role-alternation invariant</strong> — one set of messages, many backends; with alternation repaired before every API call. It treats three inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">E·brittle structured output</span> — function calling / tool schemas unify into OpenAI format, with each adapter translating into a dialect (xAI even strips schema keywords it rejects on the spot), caging the "structured output is dialect-sensitive" fragility in the edge layer;
+  <span class="badge constraint">G·reasoning tokens not persisted</span> — <span class="mono">reasoning_details</span> replays verbatim across turns so the model can "keep thinking from last turn";
+  <span class="badge constraint">D·prompt brittleness</span> — the unified format <strong>isolates</strong> provider differences so the core prompt needn't be rewritten per backend. The anti-pattern: <strong>leaking</strong> one provider's special fields or auth <strong>into the core loop</strong> — that's making the commander learn dialects, rewriting the core for every backend added.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Unified messages</strong>: the core loop knows only OpenAI-style <span class="mono">messages</span>; provider differences are absorbed by transport + adapter.</li>
+    <li><strong>Transport registry</strong>: <span class="mono">register/get_transport</span> lazy-discovers and dispatches by <span class="mono">api_mode</span>; a new backend needs only a registered transport + an adapter.</li>
+    <li><strong>build_api_kwargs</strong>: four branches build outbound by <span class="mono">api_mode</span>; Bedrock talks boto3 directly, Codex uses /responses, all invisible to the loop.</li>
+    <li><strong>Reasoning's three stores</strong>: <span class="mono">reasoning</span> kept internally, <span class="mono">reasoning_content</span> replayed in thinking mode (pad a space if missing to avoid 400), <span class="mono">reasoning_details</span> passed back verbatim across turns (constraint G).</li>
+    <li><strong>Alternation repair</strong>: before every API call <span class="mono">repair_message_sequence_with_cursor</span> drops orphan tool messages and merges consecutive user messages; it repairs in place with minimal surgery and never aggressively rebuilds context (guarding the cache).</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. To add a brand-new provider (say a new inference backend) to Hermes, must you change the core conversation loop?</div>
+  <ol class="opts">
+    <li>Yes, one core loop per provider</li>
+    <li>No — write an adapter + register a transport; the core loop changes nothing</li>
+    <li>Yes, the loop needs provider-specific handling</li>
+    <li>Yes, you must rewrite the messages format</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. The core loop knows only unified OpenAI-style messages; provider differences are absorbed by transport + adapter. A new backend = an adapter + register_transport + one branch in build_api_kwargs, the loop untouched (narrow waist).</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. Why is reasoning_details passed back across turns completely unmodified?</div>
+  <ol class="opts">
+    <li>To sort tool calls</li>
+    <li>To compress tokens</li>
+    <li>To maintain reasoning continuity — it holds opaque signature/encrypted fields; changing one byte breaks the chain / triggers a 400</li>
+    <li>It is stored casually, no impact</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. The model can't remember last turn's reasoning (constraint G); continuity relies on carrying reasoning_details back verbatim. Its signature/encrypted_content must be preserved exactly or the provider returns a 400.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>When does role-alternation repair (repair_message_sequence) run, and why must it tidy the live messages in place rather than rebuild the whole context? How does that echo ch.6's caching discipline?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="footnav"><a class="prev" href="06-system-prompt-caching.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">System Prompt 与缓存</span><span class="lang-en">System prompt &amp; caching</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
+</div>
+<script>
+function havgSetLang(l){
+  l=(l==='en')?'en':'zh';
+  var d=document.documentElement;
+  d.dataset.lang=l; d.lang=(l==='en'?'en':'zh-CN');
+  try{localStorage.setItem('havg-lang',l);}catch(e){}
+}
+function havgToggleLang(){
+  havgSetLang(document.documentElement.dataset.lang==='en'?'zh':'en');
+}
+</script>
+</body></html>

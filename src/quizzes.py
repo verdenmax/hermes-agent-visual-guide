@@ -245,6 +245,40 @@ QUIZZES = {
              "en": "Why does context-injection scanning use the restrained 'context' scope rather than the aggressive strict scope? How is that a trade-off between constraint D (instructions=data) and not killing legitimate project docs?"},
         ],
     },
+    "07-message-flow-providers.html": {
+        "mcq": [
+            {
+                "q": {"zh": "给 Hermes 接入一个全新的 provider（比如某个新推理后端），需要改核心对话循环吗？",
+                      "en": "To add a brand-new provider (say a new inference backend) to Hermes, must you change the core conversation loop?"},
+                "opts": [
+                    {"zh": "要，循环里得加针对该 provider 的特殊处理", "en": "Yes, the loop needs provider-specific handling"},
+                    {"zh": "不用——写一个 adapter + 登记一个 transport 即可，核心循环零改动", "en": "No — write an adapter + register a transport; the core loop changes nothing"},
+                    {"zh": "要，得重写 messages 格式", "en": "Yes, you must rewrite the messages format"},
+                    {"zh": "要，每个 provider 一套核心循环", "en": "Yes, one core loop per provider"},
+                ],
+                "answer": 1,
+                "why": {"zh": "核心循环只认统一的 OpenAI 风格 messages；provider 差异被 transport + adapter 整层吸收。加后端＝写 adapter + register_transport，build_api_kwargs 多一个分支，循环本体一行不动（窄腰）。",
+                        "en": "The core loop knows only unified OpenAI-style messages; provider differences are absorbed by transport + adapter. A new backend = an adapter + register_transport + one branch in build_api_kwargs, the loop untouched (narrow waist)."},
+            },
+            {
+                "q": {"zh": "为什么 reasoning_details 要原样不变地跨轮透传回去？",
+                      "en": "Why is reasoning_details passed back across turns completely unmodified?"},
+                "opts": [
+                    {"zh": "为了压缩 token", "en": "To compress tokens"},
+                    {"zh": "维持跨轮推理连续性——里面有 signature/encrypted 等不透明字段，改一个字节就断链/触发 400", "en": "To maintain reasoning continuity — it holds opaque signature/encrypted fields; changing one byte breaks the chain / triggers a 400"},
+                    {"zh": "为了排序工具调用", "en": "To sort tool calls"},
+                    {"zh": "随便存存，没影响", "en": "It is stored casually, no impact"},
+                ],
+                "answer": 1,
+                "why": {"zh": "模型自己记不住上一轮怎么想的（约束 G·推理 token 不持久），只能靠把 reasoning_details 原样搬回可见上下文维持连续性；其中的 signature/encrypted_content 必须逐字保留，否则 provider 直接 400。",
+                        "en": "The model can't remember last turn's reasoning (constraint G); continuity relies on carrying reasoning_details back verbatim. Its signature/encrypted_content must be preserved exactly or the provider returns a 400."},
+            },
+        ],
+        "open": [
+            {"zh": "角色交替修复（repair_message_sequence）在什么时候跑、为什么必须就地修整 live messages 而不是重建整段上下文？这与第 6 章的缓存纪律是怎样呼应的？",
+             "en": "When does role-alternation repair (repair_message_sequence) run, and why must it tidy the live messages in place rather than rebuild the whole context? How does that echo ch.6's caching discipline?"},
+        ],
+    },
 }
 
 

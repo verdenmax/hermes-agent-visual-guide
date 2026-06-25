@@ -357,3 +357,248 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
 </div>
 """,
 }
+
+LESSON_07 = {
+    "zh": r"""
+<p class="lead">
+Hermes 同时支持 Anthropic、OpenAI Codex、Gemini、AWS Bedrock、以及二十多家 OpenAI 兼容后端。可它的<strong>核心对话循环</strong>从头到尾只认识<strong>一种</strong>消息格式——OpenAI 风格的 <span class="mono">messages</span>。本章讲清这套「<strong>统一抽象</strong>」是怎么做到的：一张 transport 注册表按 <span class="mono">api_mode</span> 分派，四个 adapter 把统一格式翻译成各家方言，reasoning 跨轮原样回传，外加一条贯穿始终的不变量——<strong>严格角色交替</strong>。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 同声传译 + 万能转接头</div>
+  把核心循环想成一位<strong>只说一种语言</strong>的指挥官。面对来自世界各地的将领（provider），他不学二十几门外语，而是雇了一组<strong>同声传译</strong>（adapter）：指挥官永远用「普通话」（OpenAI messages）下令，传译当场翻成对方的方言（Anthropic blocks / Codex responses / Gemini parts / Bedrock converse）；对方的回话再被翻回普通话。<strong>转接头</strong>（transport 注册表）则负责「这位将领该派哪位传译」——查 <span class="mono">api_mode</span>，取对应 transport。加一个新国家，只要再雇一位传译、登记一个转接头，<strong>指挥官一个字都不用改</strong>。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 一套 messages，多家后端</div>
+  核心循环（第 5 章）始终在一份 OpenAI 风格的 <span class="mono">messages</span> 上工作：<span class="mono">{"role": "system/user/assistant/tool", ...}</span>。所有 provider 差异——鉴权、字段名、reasoning 形态、tool schema 方言——都被<strong>挡在 transport + adapter 这一层</strong>，绝不渗进核心。出站时 <span class="mono">build_api_kwargs</span> 按 <span class="mono">api_mode</span> 选一个 transport 把统一 messages 翻成各家请求；入站时 <span class="mono">normalize_response</span> 再把各家响应<strong>归一</strong>回同一种 assistant 消息（含 reasoning）。这正是第 4 章「窄腰」哲学的一个具体落点：<strong>核心薄、边缘厚</strong>。
+</div>
+
+<h2>分派的起点：transport 注册表</h2>
+<p>每一种 <span class="mono">api_mode</span> 对应一个 transport 类。注册表用「<strong>懒发现</strong>」装载——第一次取的时候才扫描并导入所有 transport 模块，之后命中缓存：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/transports/__init__.py</span><span class="ln">21-46 · 节选</span></div>
+  <pre><span class="kw">def</span> <span class="fn">register_transport</span>(api_mode, transport_cls):
+    <span class="cm"># 四个 transport 模块在文件尾各自调用它登记自己</span>
+    _REGISTRY[api_mode] = transport_cls
+
+<span class="kw">def</span> <span class="fn">get_transport</span>(api_mode):
+    <span class="kw">global</span> _discovered
+    <span class="kw">if</span> <span class="kw">not</span> _discovered:
+        _discover_transports()              <span class="cm"># 懒发现：首次才导入所有 transport</span>
+    cls = _REGISTRY.get(api_mode)
+    <span class="kw">if</span> cls <span class="kw">is</span> <span class="kw">None</span>:
+        _discover_transports()              <span class="cm"># miss 也重扫，容忍乱序导入</span>
+        cls = _REGISTRY.get(api_mode)
+    <span class="kw">if</span> cls <span class="kw">is</span> <span class="kw">None</span>:
+        <span class="kw">return</span> <span class="kw">None</span>                        <span class="cm"># 允许调用方回退到旧路径</span>
+    <span class="kw">return</span> cls()</pre>
+</div>
+<p>四个 transport——<span class="mono">anthropic_messages</span> / <span class="mono">codex_responses</span> / <span class="mono">chat_completions</span> / <span class="mono">bedrock_converse</span>——在各自模块尾部调用 <span class="mono">register_transport(...)</span> 把自己挂进 <span class="mono">_REGISTRY</span>。注意 <span class="mono">get_transport</span> 在 miss 时<strong>会再扫一次</strong>：因为测试或乱序导入可能让注册表只装了一半，「未命中就重新发现」保证合法 api_mode 永远取得到。取不到才返回 <span class="mono">None</span>，让调用方优雅回退——这是为<strong>渐进迁移</strong>留的口子。</p>
+<p>这里有一个值得注意的<strong>不对称</strong>：transport 有四种（含 bedrock），但 Gemini <strong>不在其中</strong>。因为 Gemini 走的是<strong>客户端层替换</strong>——当 base_url 指向原生 Gemini 时，<span class="mono">GeminiNativeClient</span> 直接<strong>顶替底层 OpenAI client</strong>（<span class="mono">agent_runtime_helpers.py</span>），而它的 <span class="mono">api_mode</span> <strong>仍是 chat_completions</strong>。所以严格说，翻译层是「四个 transport + 一次客户端替换」，adapter 名单（anthropic / codex_responses / gemini_native / bedrock）与 transport 名单并不完全重合——但这一切对核心循环依旧<strong>透明</strong>。</p>
+
+<h2>出站分派：build_api_kwargs 按 api_mode 选路</h2>
+<p>真正把统一 messages 变成「某一家的请求参数」的，是 <span class="mono">build_api_kwargs</span>。它是一组按 <span class="mono">api_mode</span> 的硬分支，每一支取对应 transport、调它的 <span class="mono">build_kwargs</span>：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/chat_completion_helpers.py</span><span class="ln">555-663 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">build_api_kwargs</span>(agent, api_messages):
+    <span class="kw">if</span> agent.api_mode == <span class="st">"anthropic_messages"</span>:
+        _t = agent._get_transport()                  <span class="cm"># 内部走 get_transport + 缓存</span>
+        msgs = agent._prepare_anthropic_messages_for_api(api_messages)
+        <span class="kw">return</span> _t.build_kwargs(model=..., messages=msgs, tools=..., ...)
+
+    <span class="kw">if</span> agent.api_mode == <span class="st">"bedrock_converse"</span>:        <span class="cm"># 绕过 OpenAI client，直连 boto3</span>
+        <span class="kw">return</span> agent._get_transport().build_kwargs(model=..., messages=api_messages, ...)
+
+    <span class="kw">if</span> agent.api_mode == <span class="st">"codex_responses"</span>:          <span class="cm"># /responses 端点，含 xAI/GitHub 分流</span>
+        <span class="kw">return</span> agent._get_transport().build_kwargs(...)
+
+    ...                                              <span class="cm"># else: 默认 chat_completions（最常见）</span></pre>
+</div>
+<p>读这段要抓住一点：<strong>核心循环不知道「Anthropic 长什么样」</strong>。它只调用 <span class="mono">build_api_kwargs</span>，由后者按 <span class="mono">api_mode</span> 把活儿派给对应 transport / adapter。Bedrock 那一支甚至<strong>完全绕过 OpenAI client</strong>，由 adapter 直接做 boto3 调用——但这对核心是透明的。每加一个后端，只是在这里多一个 <span class="mono">if</span> 分支 + 一个 adapter，<strong>循环本体一行不动</strong>。</p>
+
+<h2>跨轮的连续性：reasoning 的三处存储</h2>
+<p>带「思考」（reasoning / thinking）的模型有个棘手要求：这一轮的推理，<strong>下一轮要原样带回去</strong>，否则部分 provider 直接 HTTP 400。Hermes 把 reasoning 拆成<strong>三个字段</strong>分别处置：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/chat_completion_helpers.py</span><span class="ln">885-953 · 简化</span></div>
+  <pre>msg = {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: _san_content,
+       <span class="st">"reasoning"</span>: reasoning_text, ...}      <span class="cm"># ① reasoning：内部存的思考文本</span>
+
+<span class="cm"># ② reasoning_content：thinking 模式必须回传，缺失则补一个空格防 400</span>
+<span class="kw">elif</span> assistant_tool_calls <span class="kw">and</span> agent._needs_thinking_reasoning_pad():
+    msg[<span class="st">"reasoning_content"</span>] = reasoning_text <span class="kw">or</span> <span class="st">" "</span>
+
+<span class="cm"># ③ reasoning_details：原样不变透传，维持跨轮推理连续性</span>
+<span class="kw">if</span> assistant_message.reasoning_details:
+    <span class="cm"># Pass reasoning_details back unmodified so providers can</span>
+    <span class="cm"># maintain reasoning continuity across turns.</span>
+    msg[<span class="st">"reasoning_details"</span>] = preserved      <span class="cm"># 含 signature/encrypted 等不透明字段</span></pre>
+</div>
+<p>三个字段各司其职：<span class="mono">reasoning</span> 是内部留存的思考文本；<span class="mono">reasoning_content</span> 是 DeepSeek-v4 / Kimi 等 thinking 模型<strong>硬性要求</strong>回传的字段——一旦缺失，重放历史就会撞上 <span class="inline">"The reasoning_content in the thinking mode must be passed back to the API"</span> 的 400，所以哪怕没捕获到文本，也要补一个<strong>空格</strong>占位（既满足非空校验，又不伪造推理内容）；<span class="mono">reasoning_details</span> 则<strong>原样不动</strong>地透传——注释写得很直白：<span class="inline">Pass reasoning_details back unmodified so providers ... can maintain reasoning continuity across turns</span>。里面的 <span class="mono">signature</span> / <span class="mono">encrypted_content</span> 等不透明字段，<strong>改一个字节都会让推理链断裂</strong>。这正对应一条 LLM 约束 <span class="badge constraint">G·推理token不持久</span>——模型自己记不住上一轮怎么想的，只能靠我们把推理痕迹<strong>原样搬回</strong>可见上下文。</p>
+
+<h2>出站到入站：一条完整的数据流</h2>
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">统一 messages（OpenAI 风格，核心循环唯一认得的格式）</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">repair_message_sequence_with_cursor —— 每次 API 调用前修复严格角色交替</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">build_api_kwargs 按 api_mode 取 transport</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">adapter 翻译成各家方言（Anthropic blocks / Codex input / Gemini parts / Bedrock converse）</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">provider API 返回响应</span></div>
+  <div class="step"><span class="num">6</span><span class="sc">normalize_response 归一回统一 assistant 消息（含 reasoning 三字段）</span></div>
+  <div class="step"><span class="num">7</span><span class="sc">append 进 messages —— 回到核心循环，进入下一轮</span></div>
+</div>
+<p>第 2 步的<strong>角色交替修复</strong>是整条链的隐形守门员。Provider 普遍要求消息<strong>严格交替</strong>（不能两条同 role 连续、不能有孤儿 tool 消息），违反就返回空响应、触发重试。<span class="mono">repair_message_sequence_with_cursor</span> 在<strong>每次 API 调用前</strong>跑一遍：删掉没有配对的孤儿 tool 消息、合并连续的 user 消息。它在<strong>发送前直接就地修整</strong> live messages（<span class="mono">messages[:] = merged</span>，持久化 / SessionDB 都会看到修整结果），只做<strong>最小外科式</strong>整理、<strong>绝不激进重建上下文</strong>——避免无谓改写历史击穿缓存（第 6 章）。</p>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「一套 messages 跑遍所有后端」</div>
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章五件：<strong>transport 注册表</strong>（<span class="mono">register/get_transport</span>）登记+分派、<strong>四个 adapter</strong>（anthropic / codex_responses / gemini_native / bedrock）翻译、<strong>build_api_kwargs</strong> 出站构造、<strong>conversation_loop 入站归一</strong>（normalize_response）、<strong>repair_message_sequence_with_cursor</strong> 修复交替。跨章节配合：严格角色交替不变量<strong>服务 prompt 缓存</strong>（第 6 章——历史字节稳定，缓存才不破）；reasoning 三字段把推理痕迹<strong>落进可见上下文</strong>对抗「推理 token 不持久」（第 3 章 G）；「加新 provider 不改核心循环」正是<strong>窄腰哲学</strong>的体现（第 4 章）。
+  <div class="collab-sub">② 数据流时序</div>
+  统一 messages → repair 修复交替 → build_api_kwargs 按 api_mode 选 transport → adapter 翻成各家方言 → provider API → normalize_response 归一回统一 assistant 消息（含 reasoning）→ append → 下一轮。出站「翻出去」、入站「翻回来」，核心循环全程只见统一格式。
+  <div class="collab-sub">③ 关键点</div>
+  核心只认<strong>一种</strong> messages 格式；所有 provider 差异——鉴权、字段名、reasoning 形态、tool schema 方言——被 transport / adapter <strong>整层吸收</strong>。于是「支持一个新后端」退化成「写一个 adapter + 登记一个 transport」，<strong>核心对话循环零改动</strong>。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线：<strong>统一抽象 + 严格角色交替不变量</strong>——一套 messages，多家后端；并在每次 API 调用前修复交替。它治三条 LLM 固有约束：
+  <p style="margin:.5rem 0 0"><span class="badge constraint">E·结构化输出脆弱</span>——function calling / tool schema 统一成 OpenAI 格式，由 adapter 各自翻成方言（xAI 还要现场剥掉它不认的 schema 关键字），把「结构化输出对方言敏感」这件脆弱事关进边缘层；
+  <span class="badge constraint">G·推理token不持久</span>——<span class="mono">reasoning_details</span> 原样跨轮 replay，让模型「接着上轮想」；
+  <span class="badge constraint">D·提示脆弱</span>——统一格式把 provider 差异<strong>隔离</strong>，核心 prompt 不必为每家后端写一套。反模式：把某家 provider 的特殊字段、特殊鉴权<strong>泄漏进核心循环</strong>——那等于让指挥官去学方言，每加一家就要改一次核心。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>统一 messages</strong>：核心循环只认 OpenAI 风格 <span class="mono">messages</span>，provider 差异全被 transport + adapter 吸收。</li>
+    <li><strong>transport 注册表</strong>：<span class="mono">register/get_transport</span> 懒发现，按 <span class="mono">api_mode</span> 分派；加后端只需登记 transport + 写 adapter。</li>
+    <li><strong>build_api_kwargs</strong>：按 <span class="mono">api_mode</span> 四分支出站构造；Bedrock 直连 boto3、Codex 走 /responses，核心循环不感知。</li>
+    <li><strong>reasoning 三处存储</strong>：<span class="mono">reasoning</span> 内部留存、<span class="mono">reasoning_content</span> thinking 回传（缺失 pad 空格防 400）、<span class="mono">reasoning_details</span> 原样跨轮透传（约束 G）。</li>
+    <li><strong>角色交替修复</strong>：每次 API 调用前 <span class="mono">repair_message_sequence_with_cursor</span> 删孤儿 tool、合并连续 user；就地最小修整、不激进重建上下文（守缓存）。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">
+Hermes speaks to Anthropic, OpenAI Codex, Gemini, AWS Bedrock, and twenty-odd OpenAI-compatible backends. Yet its <strong>core conversation loop</strong> knows just <strong>one</strong> message format end to end — OpenAI-style <span class="mono">messages</span>. This chapter shows how that <strong>unified abstraction</strong> works: a transport registry dispatches by <span class="mono">api_mode</span>, four adapters translate the unified format into each backend's dialect, reasoning is replayed verbatim across turns, plus one invariant that runs through it all — <strong>strict role alternation</strong>.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · simultaneous interpreters + a universal adapter</div>
+  Picture the core loop as a commander who speaks <strong>only one language</strong>. Facing generals from all over the world (providers), he doesn't learn twenty tongues — he hires a team of <strong>simultaneous interpreters</strong> (adapters): the commander always issues orders in "standard speech" (OpenAI messages), and the interpreter translates on the spot into each dialect (Anthropic blocks / Codex responses / Gemini parts / Bedrock converse); replies are translated back. The <strong>universal adapter</strong> (the transport registry) decides "which interpreter for this general" — look up <span class="mono">api_mode</span>, fetch the matching transport. Add a new country and you just hire one interpreter and register one adapter — <strong>the commander changes not a single word</strong>.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · one set of messages, many backends</div>
+  The core loop (ch.5) always works on one OpenAI-style <span class="mono">messages</span> list: <span class="mono">{"role": "system/user/assistant/tool", ...}</span>. Every provider difference — auth, field names, reasoning shape, tool-schema dialect — is <strong>held at the transport + adapter layer</strong> and never seeps into the core. Outbound, <span class="mono">build_api_kwargs</span> picks a transport by <span class="mono">api_mode</span> to translate the unified messages into each backend's request; inbound, <span class="mono">normalize_response</span> <strong>normalizes</strong> each backend's reply back into the same assistant message (reasoning included). This is one concrete landing spot for the ch.4 "narrow waist": <strong>thin core, thick edges</strong>.
+</div>
+
+<h2>Where dispatch begins: the transport registry</h2>
+<p>Each <span class="mono">api_mode</span> maps to a transport class. The registry loads via <strong>lazy discovery</strong> — it scans and imports all transport modules only on first fetch, then hits the cache:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/transports/__init__.py</span><span class="ln">21-46 · excerpt</span></div>
+  <pre><span class="kw">def</span> <span class="fn">register_transport</span>(api_mode, transport_cls):
+    <span class="cm"># the four transport modules each call this at file end to register</span>
+    _REGISTRY[api_mode] = transport_cls
+
+<span class="kw">def</span> <span class="fn">get_transport</span>(api_mode):
+    <span class="kw">global</span> _discovered
+    <span class="kw">if</span> <span class="kw">not</span> _discovered:
+        _discover_transports()              <span class="cm"># lazy: import all transports on first use</span>
+    cls = _REGISTRY.get(api_mode)
+    <span class="kw">if</span> cls <span class="kw">is</span> <span class="kw">None</span>:
+        _discover_transports()              <span class="cm"># re-scan on miss; tolerate out-of-order imports</span>
+        cls = _REGISTRY.get(api_mode)
+    <span class="kw">if</span> cls <span class="kw">is</span> <span class="kw">None</span>:
+        <span class="kw">return</span> <span class="kw">None</span>                        <span class="cm"># let callers fall back to the legacy path</span>
+    <span class="kw">return</span> cls()</pre>
+</div>
+<p>The four transports — <span class="mono">anthropic_messages</span> / <span class="mono">codex_responses</span> / <span class="mono">chat_completions</span> / <span class="mono">bedrock_converse</span> — call <span class="mono">register_transport(...)</span> at the bottom of their modules to hook themselves into <span class="mono">_REGISTRY</span>. Note that <span class="mono">get_transport</span> <strong>re-scans on a miss</strong>: tests or out-of-order imports may leave the registry half-populated, so "discover again if not found" guarantees a valid api_mode is always resolvable. Only then does it return <span class="mono">None</span>, letting the caller fall back gracefully — a hook left for <strong>gradual migration</strong>.</p>
+<p>One <strong>asymmetry</strong> is worth noting: there are four transports (including bedrock), but Gemini is <strong>not</strong> among them. Gemini uses <strong>client-layer substitution</strong> — when the base_url points at native Gemini, <span class="mono">GeminiNativeClient</span> directly <strong>replaces the underlying OpenAI client</strong> (<span class="mono">agent_runtime_helpers.py</span>), while its <span class="mono">api_mode</span> <strong>stays chat_completions</strong>. So strictly, the translation layer is 'four transports + one client swap', and the adapter list (anthropic / codex_responses / gemini_native / bedrock) doesn't fully overlap the transport list — yet all of this stays <strong>transparent</strong> to the core loop.</p>
+
+<h2>Outbound dispatch: build_api_kwargs routes by api_mode</h2>
+<p>What actually turns unified messages into "one backend's request params" is <span class="mono">build_api_kwargs</span>. It is a set of hard branches keyed on <span class="mono">api_mode</span>, each fetching the right transport and calling its <span class="mono">build_kwargs</span>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/chat_completion_helpers.py</span><span class="ln">555-663 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">build_api_kwargs</span>(agent, api_messages):
+    <span class="kw">if</span> agent.api_mode == <span class="st">"anthropic_messages"</span>:
+        _t = agent._get_transport()                  <span class="cm"># wraps get_transport + caching</span>
+        msgs = agent._prepare_anthropic_messages_for_api(api_messages)
+        <span class="kw">return</span> _t.build_kwargs(model=..., messages=msgs, tools=..., ...)
+
+    <span class="kw">if</span> agent.api_mode == <span class="st">"bedrock_converse"</span>:        <span class="cm"># bypass OpenAI client, talk boto3 directly</span>
+        <span class="kw">return</span> agent._get_transport().build_kwargs(model=..., messages=api_messages, ...)
+
+    <span class="kw">if</span> agent.api_mode == <span class="st">"codex_responses"</span>:          <span class="cm"># /responses endpoint, with xAI/GitHub routing</span>
+        <span class="kw">return</span> agent._get_transport().build_kwargs(...)
+
+    ...                                              <span class="cm"># else: default chat_completions (most common)</span></pre>
+</div>
+<p>The thing to grasp: <strong>the core loop has no idea what "Anthropic looks like."</strong> It only calls <span class="mono">build_api_kwargs</span>, which routes the work to the matching transport / adapter by <span class="mono">api_mode</span>. The Bedrock branch even <strong>bypasses the OpenAI client entirely</strong>, with the adapter making boto3 calls directly — yet that's transparent to the core. Each new backend is just one more <span class="mono">if</span> branch + an adapter here, with <strong>not a line changed in the loop itself</strong>.</p>
+
+<h2>Continuity across turns: reasoning's three stores</h2>
+<p>"Thinking" (reasoning) models bring a tricky demand: this turn's reasoning must be <strong>handed back verbatim next turn</strong>, or some providers return HTTP 400 outright. Hermes splits reasoning into <strong>three fields</strong>, each handled differently:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/chat_completion_helpers.py</span><span class="ln">885-953 · simplified</span></div>
+  <pre>msg = {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: _san_content,
+       <span class="st">"reasoning"</span>: reasoning_text, ...}      <span class="cm"># ① reasoning: the internal thought text</span>
+
+<span class="cm"># ② reasoning_content: thinking mode must replay it; pad a space if missing</span>
+<span class="kw">elif</span> assistant_tool_calls <span class="kw">and</span> agent._needs_thinking_reasoning_pad():
+    msg[<span class="st">"reasoning_content"</span>] = reasoning_text <span class="kw">or</span> <span class="st">" "</span>
+
+<span class="cm"># ③ reasoning_details: passed back unmodified to keep reasoning continuous</span>
+<span class="kw">if</span> assistant_message.reasoning_details:
+    <span class="cm"># Pass reasoning_details back unmodified so providers can</span>
+    <span class="cm"># maintain reasoning continuity across turns.</span>
+    msg[<span class="st">"reasoning_details"</span>] = preserved      <span class="cm"># carries signature/encrypted opaque fields</span></pre>
+</div>
+<p>The three fields each do their job: <span class="mono">reasoning</span> is the internally kept thought text; <span class="mono">reasoning_content</span> is the field that DeepSeek-v4 / Kimi-style thinking models <strong>strictly require</strong> on replay — miss it and the next turn hits a 400, <span class="inline">"The reasoning_content in the thinking mode must be passed back to the API"</span>, so even with no captured text Hermes pads a single <strong>space</strong> (satisfying the non-empty check without fabricating reasoning); <span class="mono">reasoning_details</span> is passed through <strong>unchanged</strong> — the comment says it plainly: <span class="inline">Pass reasoning_details back unmodified so providers ... can maintain reasoning continuity across turns</span>. Its opaque <span class="mono">signature</span> / <span class="mono">encrypted_content</span> fields would <strong>break the reasoning chain if a single byte changed</strong>. This maps to the LLM constraint <span class="badge constraint">G·reasoning tokens not persisted</span> — the model can't remember how it reasoned last turn, so we must carry the reasoning trace <strong>verbatim</strong> back into visible context.</p>
+
+<h2>Outbound to inbound: one complete data flow</h2>
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">unified messages (OpenAI style — the only format the core loop knows)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">repair_message_sequence_with_cursor — fix strict role alternation before every API call</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">build_api_kwargs fetches a transport by api_mode</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">adapter translates into each dialect (Anthropic blocks / Codex input / Gemini parts / Bedrock converse)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">provider API returns a response</span></div>
+  <div class="step"><span class="num">6</span><span class="sc">normalize_response normalizes back to a unified assistant message (with reasoning's 3 fields)</span></div>
+  <div class="step"><span class="num">7</span><span class="sc">append into messages — back to the core loop, on to the next turn</span></div>
+</div>
+<p>Step 2's <strong>role-alternation repair</strong> is the invisible gatekeeper of the whole chain. Providers broadly require messages to <strong>strictly alternate</strong> (no two same-role in a row, no orphan tool messages); violate it and you get an empty response and a retry. <span class="mono">repair_message_sequence_with_cursor</span> runs <strong>before every API call</strong>: it drops unpaired orphan tool messages and merges consecutive user messages. It tidies the <strong>live messages in place</strong> right before sending (<span class="mono">messages[:] = merged</span>, so persistence / SessionDB see the repair), doing only <strong>minimal surgical</strong> cleanup and <strong>never aggressively rebuilding context</strong> — avoiding needless history rewrites that would shatter the cache (ch.6).</p>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh to run "one set of messages across all backends"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  This chapter's five: the <strong>transport registry</strong> (<span class="mono">register/get_transport</span>) registers + dispatches, the <strong>four adapters</strong> (anthropic / codex_responses / gemini_native / bedrock) translate, <strong>build_api_kwargs</strong> builds outbound, <strong>conversation_loop's inbound normalize</strong> (normalize_response), and <strong>repair_message_sequence_with_cursor</strong> fixes alternation. Cross-chapter teamwork: the strict-alternation invariant <strong>serves prompt caching</strong> (ch.6 — history stays byte-stable, so the cache holds); reasoning's three fields land the reasoning trace <strong>into visible context</strong> to fight "reasoning tokens not persisted" (ch.3 G); "add a provider without touching the loop" embodies the <strong>narrow-waist philosophy</strong> (ch.4).
+  <div class="collab-sub">② Data-flow timing</div>
+  unified messages → repair fixes alternation → build_api_kwargs picks a transport by api_mode → adapter translates into each dialect → provider API → normalize_response normalizes back to a unified assistant message (with reasoning) → append → next turn. Outbound "translate out," inbound "translate back," and the core loop only ever sees the unified format.
+  <div class="collab-sub">③ The key point</div>
+  The core knows just <strong>one</strong> message format; every provider difference — auth, field names, reasoning shape, tool-schema dialect — is <strong>absorbed whole</strong> by the transport / adapter layer. So "support a new backend" collapses to "write an adapter + register a transport," with <strong>zero change to the core conversation loop</strong>.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>a unified abstraction + the strict role-alternation invariant</strong> — one set of messages, many backends; with alternation repaired before every API call. It treats three inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">E·brittle structured output</span> — function calling / tool schemas unify into OpenAI format, with each adapter translating into a dialect (xAI even strips schema keywords it rejects on the spot), caging the "structured output is dialect-sensitive" fragility in the edge layer;
+  <span class="badge constraint">G·reasoning tokens not persisted</span> — <span class="mono">reasoning_details</span> replays verbatim across turns so the model can "keep thinking from last turn";
+  <span class="badge constraint">D·prompt brittleness</span> — the unified format <strong>isolates</strong> provider differences so the core prompt needn't be rewritten per backend. The anti-pattern: <strong>leaking</strong> one provider's special fields or auth <strong>into the core loop</strong> — that's making the commander learn dialects, rewriting the core for every backend added.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Unified messages</strong>: the core loop knows only OpenAI-style <span class="mono">messages</span>; provider differences are absorbed by transport + adapter.</li>
+    <li><strong>Transport registry</strong>: <span class="mono">register/get_transport</span> lazy-discovers and dispatches by <span class="mono">api_mode</span>; a new backend needs only a registered transport + an adapter.</li>
+    <li><strong>build_api_kwargs</strong>: four branches build outbound by <span class="mono">api_mode</span>; Bedrock talks boto3 directly, Codex uses /responses, all invisible to the loop.</li>
+    <li><strong>Reasoning's three stores</strong>: <span class="mono">reasoning</span> kept internally, <span class="mono">reasoning_content</span> replayed in thinking mode (pad a space if missing to avoid 400), <span class="mono">reasoning_details</span> passed back verbatim across turns (constraint G).</li>
+    <li><strong>Alternation repair</strong>: before every API call <span class="mono">repair_message_sequence_with_cursor</span> drops orphan tool messages and merges consecutive user messages; it repairs in place with minimal surgery and never aggressively rebuilds context (guarding the cache).</li>
+  </ul>
+</div>
+""",
+}

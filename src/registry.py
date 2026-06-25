@@ -14,4 +14,5 @@ CONTENT = {
     "04-project-map-narrow-waist.html": part1.LESSON_04,
     "05-conversation-lifecycle.html": part1.LESSON_05,
     "06-system-prompt-caching.html": part2.LESSON_06,
+    "07-message-flow-providers.html": part2.LESSON_07,
 }
