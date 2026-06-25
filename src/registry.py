@@ -9,6 +9,7 @@ import part2
 import part3
 import part4
 import part5
+import part6
 
 CONTENT = {
     "01-what-is-hermes.html": part1.LESSON_01,
@@ -31,4 +32,5 @@ CONTENT = {
     "18-gateway-guards.html": part5.LESSON_18,
     "19-tui-desktop.html": part5.LESSON_19,
     "20-config-profiles.html": part5.LESSON_20,
+    "21-cron-kanban.html": part6.LESSON_21,
 }

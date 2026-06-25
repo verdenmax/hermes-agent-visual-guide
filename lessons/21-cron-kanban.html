@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var l=localStorage.getItem('havg-lang');if(l==='en'){document.documentElement.dataset.lang='en';document.documentElement.lang='en';}}catch(e){}</script>
+<title>21 · Cron 与 Kanban / Cron &amp; Kanban · Hermes Agent 设计图解</title>
+<meta name="description" content="第六部分 · 自动化与研究｜Cron 与 Kanban · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="theme-color" content="#c2630e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAzMiAzMic+PHJlY3Qgd2lkdGg9JzMyJyBoZWlnaHQ9JzMyJyByeD0nNycgZmlsbD0nI2M4YTAyYycvPjx0ZXh0IHg9JzE2JyB5PScyMicgZm9udC1mYW1pbHk9J3N5c3RlbS11aSxzYW5zLXNlcmlmJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nODAwJyBmaWxsPScjZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz7imKQ8L3RleHQ+PC9zdmc+">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Hermes Agent 设计图解">
+<meta property="og:title" content="21 · Cron 与 Kanban / Cron &amp; Kanban · Hermes Agent 设计图解">
+<meta property="og:description" content="第六部分 · 自动化与研究｜Cron 与 Kanban · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="21 · Cron 与 Kanban / Cron &amp; Kanban · Hermes Agent 设计图解">
+<meta name="twitter:description" content="第六部分 · 自动化与研究｜Cron 与 Kanban · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --ink: #1d2129;
+  --muted: #5b6470; --faint: #8a939f; --line: #e1e5ea;
+  --accent: #c8a02c; --accent-soft: #faf1d6; --accent-ink: #8a6d12;
+  --blue: #2563eb; --blue-soft: #e7efff; --amber: #b4690e; --amber-soft: #fdf1dd;
+  --purple: #7c3aed; --purple-soft: #f0e9ff; --red: #d23f3f; --red-soft: #fbe6e6;
+  --code-bg: #0f172a; --code-ink: #e2e8f0; --code-line: #1e293b;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232c; --ink: #e6edf3;
+    --muted: #9aa6b2; --faint: #6e7a86; --line: #2a323c;
+    --accent: #e3c05a; --accent-soft: #2e2510; --accent-ink: #f0d488;
+    --blue: #6ea8fe; --blue-soft: #16243f; --amber: #e0a44a; --amber-soft: #33270f;
+    --purple: #b794f6; --purple-soft: #271a40; --red: #f08080; --red-soft: #3a1a1a;
+    --code-bg: #0a0f1a; --code-ink: #d8e2f0; --code-line: #14202f;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+html { scroll-behavior: smooth; overflow-x: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+code, .mono { font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; overflow-wrap: break-word; }
+
+/* ---- top progress bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 50; background: var(--panel);
+  border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
+}
+.topbar-inner {
+  max-width: 960px; margin: 0 auto; padding: .7rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.topbar .home { font-size: .82rem; color: var(--muted); font-weight: 600; display:flex; gap:.5rem; align-items:center; }
+.topbar .home b { color: var(--accent); }
+.topbar .pill { font-size: .72rem; color: var(--muted); background: var(--panel-2);
+  padding: .2rem .6rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.progress { height: 3px; background: var(--panel-2); }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--blue)); }
+
+.wrap { max-width: 820px; margin: 0 auto; padding: 2.4rem 1.25rem 5rem; }
+
+/* ---- hero ---- */
+.hero { margin-bottom: 2rem; }
+.hero .part { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: .55rem; }
+.hero h1 { font-size: 2.05rem; line-height: 1.2; letter-spacing: -.01em; font-weight: 750; }
+.hero .lead { margin-top: .9rem; font-size: 1.06rem; color: var(--muted); }
+
+h2 { font-size: 1.32rem; margin: 2.4rem 0 .9rem; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: .55rem; }
+h2::before { content: ""; width: 4px; height: 1.05em; background: var(--accent); border-radius: 3px; display: inline-block; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+p { margin: .7rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .3rem 0; }
+strong { color: var(--ink); font-weight: 680; }
+.inline { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: .08em .4em; font-size: .9em; color: var(--accent-ink); }
+
+/* ---- callout cards ---- */
+.card { border-radius: var(--radius); padding: 1.05rem 1.2rem; margin: 1.2rem 0;
+  border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.card .tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.card.macro { border-left: 4px solid var(--blue); }
+.card.macro .tag { color: var(--blue); }
+.card.detail { border-left: 4px solid var(--purple); }
+.card.detail .tag { color: var(--purple); }
+.card.analogy { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+.card.analogy .tag { color: var(--amber); }
+.card.key { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.key .tag { color: var(--accent-ink); }
+.card.warn { border-left: 4px solid var(--red); background: var(--red-soft); }
+.card.warn .tag { color: var(--red); }
+.card.spark { border-left: 4px solid #e0a000;
+  background: linear-gradient(100deg, rgba(224,160,0,.12), transparent 70%); }
+.card.spark .tag { color: #c98a00; }
+@media (prefers-color-scheme: dark) { .card.spark .tag { color: #f0c050; } }
+
+/* ---- code file callout ---- */
+.codefile { margin: 1.2rem 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  box-shadow: var(--shadow); }
+.codefile .cf-head { display: flex; align-items: center; gap: .55rem; padding: .5rem .85rem;
+  background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: .8rem; }
+.codefile .cf-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink:0; }
+.codefile .cf-head .path { font-family: ui-monospace, monospace; color: var(--ink); font-weight: 600; }
+.codefile .cf-head .ln { margin-left: auto; color: var(--faint); font-size: .72rem; }
+.codefile pre { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem;
+  overflow-x: auto; font-size: .82rem; line-height: 1.6; }
+.codefile pre .cm { color: #7d8aa3; }
+.codefile pre .kw { color: #c792ea; }
+.codefile pre .fn { color: #82aaff; }
+.codefile pre .st { color: #c3e88d; }
+.codefile pre .nb { color: #f78c6c; }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem; border-radius: 12px;
+  overflow-x: auto; font-size: .83rem; line-height: 1.6; margin: 1.1rem 0; box-shadow: var(--shadow); }
+pre.code .cm { color: #7d8aa3; } pre.code .kw { color: #c792ea; }
+pre.code .fn { color: #82aaff; } pre.code .st { color: #c3e88d; } pre.code .nb { color: #f78c6c; }
+
+/* ---- collapsible accordion (details/summary) ---- */
+.accordion { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  margin: .7rem 0; box-shadow: var(--shadow); overflow: hidden; }
+.accordion > summary { cursor: pointer; padding: .85rem 1.1rem; font-weight: 650; font-size: .96rem;
+  list-style: none; display: flex; align-items: center; gap: .6rem; user-select: none; }
+.accordion > summary::-webkit-details-marker { display: none; }
+.accordion > summary::after { content: "▶"; font-size: .68rem; color: var(--accent);
+  margin-left: auto; transition: transform .15s ease; }
+.accordion[open] > summary::after { transform: rotate(90deg); }
+.accordion > summary:hover { background: var(--panel-2); }
+.accordion[open] > summary { border-bottom: 1px solid var(--line); }
+.accordion .badge-num { background: var(--accent-soft); color: var(--accent-ink);
+  width: 1.6rem; height: 1.6rem; border-radius: 7px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: .82rem; font-weight: 700; flex-shrink: 0; }
+.accordion .hint { font-size: .72rem; color: var(--faint); font-weight: 400; }
+.acc-body { padding: .9rem 1.1rem 1.1rem; }
+.acc-intro { color: var(--muted); font-size: .9rem; margin: .2rem 0 .4rem; }
+.qa { margin: 1rem 0; }
+.qa:first-child { margin-top: .3rem; }
+.qa .q { font-weight: 680; font-size: .9rem; display: flex; gap: .45rem; align-items: center; margin-bottom: .3rem; }
+.qa .a { color: var(--muted); font-size: .9rem; }
+.qa .a strong { color: var(--ink); }
+.qa pre.code { margin: .5rem 0 0; font-size: .78rem; }
+
+/* ---- flow diagram ---- */
+.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 1.3rem 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.2rem 1rem; box-shadow: var(--shadow); }
+.flow .node { flex: 1 1 0; min-width: 110px; text-align: center; padding: .7rem .5rem;
+  border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.flow .node .nt { font-weight: 700; font-size: .92rem; }
+.flow .node .nd { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+.flow .node.hl { background: var(--accent-soft); border-color: var(--accent); }
+.flow .arrow { align-self: center; color: var(--faint); font-size: 1.3rem; padding: 0 .35rem; }
+
+/* vertical flow */
+.vflow { margin: 1.3rem 0; }
+.vflow .step { display: flex; gap: .9rem; position: relative; padding-bottom: 1.1rem; }
+.vflow .step:not(:last-child)::before { content:""; position:absolute; left: 15px; top: 34px; bottom: -2px;
+  width: 2px; background: var(--line); }
+.vflow .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; z-index:1; }
+.vflow .sc h4 { margin: .25rem 0 .2rem; font-size: 1rem; }
+.vflow .sc p { margin: .15rem 0; font-size: .92rem; color: var(--muted); }
+.vflow .sc .mono { font-size: .8rem; color: var(--accent-ink); }
+
+/* layered architecture */
+.layers { margin: 1.3rem 0; display: flex; flex-direction: column; gap: .55rem; }
+.layer { border-radius: 12px; padding: .85rem 1.1rem; border: 1px solid var(--line); background: var(--panel);
+  box-shadow: var(--shadow); }
+.layer .lh { display: flex; align-items: center; gap: .6rem; }
+.layer .lh .badge { font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; }
+.layer .lh .name { font-weight: 700; font-family: ui-monospace, monospace; }
+.layer .ld { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
+.layer.l-core { border-left: 4px solid var(--accent); } .layer.l-core .badge { background: var(--accent-soft); color: var(--accent-ink); }
+.layer.l-main { border-left: 4px solid var(--blue); } .layer.l-main .badge { background: var(--blue-soft); color: var(--blue); }
+.layer.l-part { border-left: 4px solid var(--purple); } .layer.l-part .badge { background: var(--purple-soft); color: var(--purple); }
+.layer.l-app { border-left: 4px solid var(--amber); } .layer.l-app .badge { background: var(--amber-soft); color: var(--amber); }
+
+/* two-column compare */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0; }
+@media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+.col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; box-shadow: var(--shadow); min-width: 0; }
+.col h4 { margin: 0 0 .4rem; font-size: .95rem; }
+
+table.t { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .9rem;
+  background: var(--panel); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+table.t th, table.t td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--line); }
+table.t th { background: var(--panel-2); font-size: .8rem; letter-spacing: .02em; }
+table.t tr:last-child td { border-bottom: none; }
+table.t td.mono, table.t td .mono { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--accent-ink); }
+@media (max-width: 640px) {
+  /* Wide multi-column tables: scroll within their own box instead of
+     forcing page-level horizontal overflow (which clipped right columns). */
+  table.t { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.t th, table.t td { padding: .5rem .6rem; }
+}
+.selftest { margin: 2.2rem 0 0; border-top: 2px dashed var(--line); padding-top: 1.2rem; }
+.selftest > h2 { margin-top: .2rem; }
+.quiz { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+  border-radius: 12px; padding: .9rem 1.1rem; margin: 1rem 0; box-shadow: var(--shadow); }
+.quiz .qn { font-weight: 650; }
+.quiz ol.opts { list-style: upper-alpha; margin: .55rem 0 .6rem 1.5rem; padding: 0; }
+.quiz ol.opts li { margin: .3rem 0; padding-left: .15rem; }
+.quiz details.accordion { margin: .5rem 0 0; }
+.selftest code { font-family: ui-monospace, monospace; font-size: .9em; color: var(--accent-ink);
+  background: var(--accent-soft); padding: 0 .28em; border-radius: 4px; }
+
+/* footer nav */
+.footnav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem;
+  padding-top: 1.4rem; border-top: 1px solid var(--line); }
+.footnav a { flex: 1; padding: .85rem 1.1rem; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow); transition: .15s; }
+.footnav a:hover { border-color: var(--accent); transform: translateY(-1px); }
+.footnav a.next { text-align: right; }
+.footnav .dir { font-size: .72rem; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.footnav .ttl { font-weight: 700; color: var(--ink); margin-top: .15rem; }
+.footnav a.disabled { opacity: .35; pointer-events: none; }
+
+/* index page */
+.toc { display: grid; gap: .7rem; margin-top: 1.6rem; }
+.toc-part { font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--accent); margin: 1.4rem 0 .2rem; }
+.toc a { display: flex; align-items: center; gap: .9rem; padding: .85rem 1.05rem; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); transition: .15s; }
+.toc a:hover { border-color: var(--accent); transform: translateX(3px); }
+.toc .n { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+.toc .tt { font-weight: 650; color: var(--ink); }
+.toc .ts { font-size: .8rem; color: var(--muted); margin-left: auto; text-align: right; }
+.toc-search { position: relative; margin: 1.6rem 0 -.4rem; }
+.toc-search input { width: 100%; box-sizing: border-box; padding: .75rem 2.8rem .75rem 1rem;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font-size: .98rem; box-shadow: var(--shadow); }
+.toc-search input:focus { outline: none; border-color: var(--accent); }
+.toc-search .qcount { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  color: var(--faint); font-size: .8rem; pointer-events: none; }
+.toc a.hide, .toc .toc-part.hide { display: none; }
+.toc-empty { display: none; color: var(--muted); padding: 1rem; text-align: center; }
+.toc-empty.show { display: block; }
+.hero.index h1 { font-size: 2.3rem; }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:1rem; font-size:.8rem; color:var(--muted); }
+.legend span { display:flex; align-items:center; gap:.4rem; }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+.pdf-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1.1rem;
+  background:var(--accent); color:#fff; border-radius:10px; font-size:.9rem; font-weight:650;
+  box-shadow:var(--shadow); transition:.15s; }
+.pdf-btn:hover { background:var(--accent-ink); transform:translateY(-1px); }
+
+/* ---- bilingual language switch ----
+   Contract: <html> must carry data-lang="zh" (default) or "en".
+   page()/index_page() hard-code data-lang="zh"; LANG_BOOT may switch to "en". */
+html[data-lang="en"] .lang-zh { display: none !important; }
+html[data-lang="zh"] .lang-en { display: none !important; }
+.langtoggle { font-size:.72rem; font-weight:700; color:var(--accent-ink);
+  background:var(--accent-soft); border:1px solid var(--accent); border-radius:999px;
+  padding:.22rem .7rem; cursor:pointer; line-height:1.4; white-space:nowrap; }
+.langtoggle:hover { background:var(--accent); color:#fff; }
+
+/* ---- schematic: cell strips (token sequences / quant blocks / KV columns) ---- */
+.cellgroup { margin: 1.2rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.cellgroup .cg-cap { font-size: .82rem; color: var(--muted); margin-bottom: .55rem; }
+.cellgroup .cg-cap b { color: var(--ink); }
+.cells { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.cells + .cells { margin-top: .5rem; }
+.cell { min-width: 2.1rem; padding: .38rem .5rem; text-align: center; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: .78rem;
+  font-family: ui-monospace, monospace; white-space: nowrap; }
+.cell.scale { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); font-weight: 700; }
+.cell.hl    { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cell.q     { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.cell.dim   { opacity: .45; }
+.cells .lab { font-size: .76rem; color: var(--faint); padding: 0 .35rem; }
+.cells .sep { color: var(--faint); padding: 0 .1rem; }
+
+/* ---- schematic: timeline lanes (prefill vs decode, step-by-step) ---- */
+.timeline { margin: 1.2rem 0; display: flex; flex-direction: column; gap: .5rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.timeline .lane { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.timeline .lane-label { min-width: 6rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.timeline .tslot { padding: .4rem .6rem; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--line); font-size: .78rem; text-align: center; font-family: ui-monospace, monospace; }
+.timeline .tslot.span { flex: 1; min-width: 8rem; background: var(--blue-soft); border-color: var(--blue);
+  color: var(--blue); font-weight: 700; }
+.timeline .tslot.now { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+/* ---- worked-example trace: one concrete input, stepped through ---- */
+.trace { margin: 1.3rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.trace .tcap { font-size: .82rem; color: var(--muted); margin-bottom: .7rem; }
+.trace .tcap b { color: var(--accent-ink); }
+.trace .stations { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.trace .stn { flex: 1 1 0; min-width: 116px; border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem; background: var(--bg); }
+.trace .stn h5 { margin: 0 0 .45rem; font-size: .8rem; color: var(--ink); }
+.trace .cellrow { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.trace .vc { min-width: 2.1rem; padding: .32rem .45rem; text-align: center; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); font: 600 .76rem ui-monospace, monospace; white-space: nowrap; }
+.trace .vc.hot  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.trace .vc.blue { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.trace .vc.dim  { opacity: .42; }
+.trace .tlab { font-size: .68rem; color: var(--faint); margin-top: .35rem; }
+.trace .op { align-self: center; color: var(--accent); font: 700 .72rem ui-monospace, monospace;
+  padding: 0 .5rem; text-align: center; white-space: nowrap; }
+.trace svg { max-width: 100%; height: auto; display: block; margin: .3rem auto; }
+@media (max-width: 640px) { .trace .stations { flex-direction: column; } .trace .op { padding: .3rem 0; } }
+/* 🧩 collaboration-mechanism card */
+.card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
+.card.collab .tag { color: var(--blue); }
+.card.collab .collab-sub { font-weight:700; font-size:.82rem; margin:.85rem 0 .3rem; color:var(--ink); }
+/* 🎯 design-tradeoff card */
+.card.design { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.design .tag { color: var(--accent-ink); }
+/* A-G constraint back-reference badge */
+.badge.constraint { display:inline-block; font-size:.7rem; font-weight:700;
+  padding:.1rem .45rem; border-radius:999px; background:var(--purple-soft);
+  color:var(--purple); border:1px solid var(--purple); margin:0 .15rem; white-space:nowrap; }
+</style>
+</head><body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
+    <span class="pill"><span class="lang-zh">第六部分 · 自动化与研究</span><span class="lang-en">Part 6 · Automation &amp; Research</span></span>
+    <span class="pill">21 / 21</span>
+    <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
+  </div>
+  <div class="progress"><span style="width:100%"></span></div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="part"><span class="lang-zh">第六部分 · 自动化与研究</span><span class="lang-en">Part 6 · Automation &amp; Research</span></div>
+    <h1><span class="lang-zh">Cron 与 Kanban</span><span class="lang-en">Cron &amp; Kanban</span></h1>
+  </div>
+  <div class="lang-zh">
+<p class="lead">你让 Hermes「每天早 9 点把今天的会议汇总发我」。它得在后台<strong>定时</strong>醒来、跑完、投递——但这件事绝不能<strong>污染你正在进行的对话</strong>:不能把自动任务塞进聊天历史、不能把它记进你的「个人记忆」、更不能因为某个 job 跑飞了就卡死整个调度器。这就是 cron 的设计重心:<strong>后台自动化,但不破缓存、不污染</strong>。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 公司的自动化助理</div>
+  你雇了个助理(cron)做定时杂活:每天剪报、每周备份。他在<strong>独立的工位</strong>(独立会话)干活,干完把结果<strong>放你桌上</strong>(投递),但<strong>不会插进你正在开的会</strong>(不混进主对话),也<strong>不会把这些杂活写进你的人事档案</strong>(skip_memory)。万一他某个活卡住了,有个<strong>不活动闹钟</strong>(默认空转 10 分钟没动静就中断)把他叫停,不耽误下一件。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 调度 + 独立会话 + 安全阀</div>
+  cron 由 <span class="mono">tick</span> 循环驱动(文件锁防重复),按 <span class="mono">parse_schedule</span> 解析的时刻扫到期任务。每个任务起一个<strong>独立的 cron 会话</strong>(<span class="mono">platform="cron"</span>、<span class="mono">skip_memory=True</span>),跑完把结果<strong>带框投递</strong>、<strong>不镜像进主对话</strong>。再加不活动超时(默认 600s)、半周期 catchup 窗口——安全地后台自动化。kanban 则是配套的多 agent 工作队列,workers 用零足迹工具集领活。
+</div>
+
+<h2>调度格式:四种写法</h2>
+<p>agent 或用户都能排期,<span class="mono">parse_schedule</span> 把字符串解析成结构:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">cron/jobs.py</span><span class="ln">304-377 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">parse_schedule</span>(schedule):
+    <span class="cm">&quot;&quot;&quot;Parse schedule string into structured format.&quot;&quot;&quot;</span>
+    <span class="cm"># "30m"/"2h" → 一次性;"every 2h" → 周期;"0 9 * * *" → cron;ISO → 定时</span>
+    <span class="kw">if</span> schedule.lower().startswith(<span class="st">"every "</span>):
+        <span class="kw">return</span> {<span class="st">"kind"</span>: <span class="st">"interval"</span>, <span class="st">"minutes"</span>: parse_duration(...)}
+    parts = schedule.split()
+    <span class="kw">if</span> len(parts) &gt;= 5 <span class="kw">and</span> all(re.match(<span class="st">r"^[\d\*\-,/]+$"</span>, p) <span class="kw">for</span> p <span class="kw">in</span> parts[:5]):
+        croniter(schedule)                  <span class="cm"># 校验 5 段 cron 表达式</span>
+        <span class="kw">return</span> {<span class="st">"kind"</span>: <span class="st">"cron"</span>, <span class="st">"expr"</span>: schedule}
+    <span class="kw">if</span> <span class="st">"T"</span> <span class="kw">in</span> schedule:                  <span class="cm"># ISO 时间戳 → 一次性</span>
+        <span class="kw">return</span> {<span class="st">"kind"</span>: <span class="st">"once"</span>, <span class="st">"run_at"</span>: ...}</pre>
+</div>
+<p>四种写法覆盖几乎所有需求:<span class="mono">"30m"</span>(30 分钟后一次)、<span class="mono">"every 2h"</span>(每 2 小时)、<span class="mono">"0 9 * * *"</span>(标准 cron,每天 9 点)、<span class="mono">"2026-02-03T14:00"</span>(指定时刻一次)。解析成 <span class="mono">once</span>/<span class="mono">interval</span>/<span class="mono">cron</span> 三类,调度器据此算下次触发。</p>
+
+<h2>独立会话:不污染主对话(★缓存线)</h2>
+<p>关键一步——cron 任务<strong>不</strong>在你的主会话里跑,而是起一个独立的 agent:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">cron/scheduler.py</span><span class="ln">2050-2081 · 节选</span></div>
+  <pre><span class="cm"># cron 起一个独立的 AIAgent 会话(不是主对话)</span>
+agent = AIAgent(
+    quiet_mode=<span class="kw">True</span>,
+    load_soul_identity=<span class="kw">True</span>,            <span class="cm"># 仍读 SOUL.md 身份</span>
+    skip_memory=<span class="kw">True</span>,                   <span class="cm"># Cron system prompts would corrupt user representations</span>
+    platform=<span class="st">"cron"</span>,
+    session_id=_cron_session_id,            <span class="cm"># 独立 session,不混进 gateway</span>
+)</pre>
+</div>
+<p>两个设计守住缓存线:① <span class="mono">skip_memory=True</span>——cron 的系统提示若进了 memory,会<strong>污染对用户的画像</strong>(注释原话),所以 cron 默认不跑记忆;② <strong>独立 <span class="mono">session_id</span> + <span class="mono">platform="cron"</span></strong>——结果带 header/footer 框单独投递,<strong>不镜像进 gateway 主会话</strong>。于是主对话的严格<strong>角色交替</strong>(第 7 章)不被后台任务搅乱,被缓存的前缀(第 6 章)纹丝不动。后台自动化与主对话<strong>井水不犯河水</strong>。</p>
+
+<h2>安全阀:catchup 与不活动超时</h2>
+<p>定时系统怕两件事:错过了拼命补跑、跑飞了卡死。cron 各有一个阀:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">cron/jobs.py</span><span class="ln">475-490 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_compute_grace_seconds</span>(schedule):
+    <span class="cm">&quot;&quot;&quot;Half the schedule period, clamped between 120s and 2 hours.&quot;&quot;&quot;</span>
+    MIN_GRACE, MAX_GRACE = 120, 7200        <span class="cm"># 2 小时</span>
+    <span class="kw">if</span> schedule[<span class="st">"kind"</span>] == <span class="st">"interval"</span>:
+        period = schedule[<span class="st">"minutes"</span>] * 60
+        <span class="kw">return</span> max(MIN_GRACE, min(period // 2, MAX_GRACE))</pre>
+</div>
+<p><strong>catchup 窗口 = 半个周期</strong>(clamp 在 120 秒到 2 小时):错过得不久就补跑一次,错过太久就<strong>快进</strong>、不堆积补跑(免得开机时把积压的几十次一股脑全跑了)。另一头,cron 会话用<strong>不活动超时</strong>兜底:默认空转 <strong>600 秒(10 分钟)</strong>无动静(无工具调用、无流式 token)就 <span class="mono">agent.interrupt("Cron job timed out (inactivity)")</span> 中断(<span class="mono">HERMES_CRON_TIMEOUT</span> 可调;<strong>活跃干活时可跑数小时</strong>)。这样失控空转的 agent <strong>独占不了</strong>调度器,而正常长任务不会被误杀。再加 <span class="mono">.tick.lock</span> 文件锁,多个进程也不会重复 tick。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><span class="mono">tick</span> 循环(<span class="mono">.tick.lock</span> 文件锁防重复)扫描到期任务</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">按 <span class="mono">parse_schedule</span> 的结构算下次触发;过了 catchup 窗口就快进</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">起独立 cron 会话:<span class="mono">platform="cron"</span> + <span class="mono">skip_memory=True</span> + 独立 <span class="mono">session_id</span></span></div>
+  <div class="step"><span class="num">4</span><span class="sc">AIAgent 跑(不活动超时兜底,默认空转 600s 无动静才中断)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">结果带 header/footer 框投递,<strong>不镜像进 gateway 主会话</strong></span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「不破缓存的后台自动化」</div>
+  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
+  本章核心:<strong>parse_schedule</strong>(调度格式)、<strong>tick</strong>(循环+文件锁)、<strong>cron 独立会话</strong>(skip_memory)、<strong>_compute_grace_seconds</strong>(catchup)。跨章节配合:cron 起的是一个 <strong>AIAgent 核心循环</strong>(第 7 章),只是 <span class="mono">skip_memory</span> 让<strong>记忆</strong>(第 11 章)不跑;独立会话不镜像进主对话=维持角色交替<strong>不破缓存</strong>(第 6 章);<span class="mono">cronjob</span> 与 <span class="mono">kanban</span> 是<strong>工具</strong>(第 8 章),让 agent 自己排期、领多 agent 队列的活;不活动超时的中断与委派的<strong>中断级联</strong>(第 13 章)同源。
+  <div class="collab-sub">② 数据流时序</div>
+  <span class="mono">tick</span>(<span class="mono">.tick.lock</span>) → 到期任务 → catchup 判定(<span class="mono">grace=period//2</span>) → 独立 cron 会话(<span class="mono">skip_memory</span>/<span class="mono">platform=cron</span>) → AIAgent 跑(不活动超时 600s) → header/footer 框投递(不进主会话)。
+  <div class="collab-sub">③ 关键点</div>
+  后台自动化<strong>绝不污染主对话</strong>:cron 投递不镜像进 gateway session(角色交替不变)、<span class="mono">skip_memory</span>(不污染用户画像)、独立 <span class="mono">session_id</span>。文件锁防重复 tick;半周期 catchup 防积压补跑;不活动超时(默认 600s)防失控空转独占。kanban 则把「多 agent 协作」也收进零足迹工具集。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>独立会话 + skip_memory + 不镜像主对话 = 后台自动化既不破缓存、也不污染</strong>。它主要治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——定时任务、批量、多 agent 队列是真实运维刚需,但要<strong>安全</strong>:不活动超时(默认 600s,可调)防失控空转 agent 独占调度器、<span class="mono">.tick.lock</span> 防多进程重复 tick、半周期 catchup 防积压补跑雪崩。把「自动化」做成可控的基础设施。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——cron 会话是<strong>独立</strong>的,不依赖、也不污染主会话的状态盘。它<strong>不镜像进 gateway session</strong>,所以主对话的角色交替/缓存前缀完全不受后台任务影响——这正是「缓存神圣」在自动化层的落地。</p>
+  <p style="margin:.5rem 0 0">反模式:把 cron 结果<strong>直接灌进主会话历史</strong>——会破坏严格角色交替、击穿缓存前缀,还会让自动任务<strong>污染用户记忆画像</strong>。Hermes 用「独立会话 + skip_memory + 带框投递」从根上避开。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>四种调度</strong>:<span class="mono">parse_schedule</span> 认 duration(<span class="mono">30m</span>)、every(<span class="mono">every 2h</span>)、cron(<span class="mono">0 9 * * *</span>)、ISO 时间戳,归为 once/interval/cron。</li>
+    <li><strong>独立会话(★缓存线)</strong>:cron 任务起独立 <span class="mono">session_id</span> + <span class="mono">platform="cron"</span>,结果带框投递、<strong>不镜像进主对话</strong>,角色交替(第 7 章)/缓存(第 6 章)不受扰。</li>
+    <li><strong>skip_memory</strong>:cron 默认不跑记忆,免得自动任务<strong>污染用户画像</strong>(第 11 章)。</li>
+    <li><strong>安全阀</strong>:不活动超时(默认 600s、可调,活跃时可跑数小时)防失控空转;<span class="mono">.tick.lock</span> 防重复 tick;半周期 catchup(120s–2h)防积压补跑。</li>
+    <li><strong>kanban</strong>:多 agent 工作队列,worker 用零足迹 <span class="mono">kanban_*</span> 工具集(第 8 章)领活、回报。</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. cron 定时任务为什么不在你的主对话会话里跑,而起一个独立会话?</div>
+  <ol class="opts">
+    <li>因为 cron 不支持主会话</li>
+    <li>为了不污染主对话:独立会话+不镜像进 gateway session 维持角色交替不破缓存,且 skip_memory 免把自动任务记进用户画像</li>
+    <li>随机决定</li>
+    <li>为了跑得更快</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。cron 起独立 session_id + platform=cron,结果带 header/footer 框投递、不镜像进 gateway 主会话——主对话的严格角色交替/被缓存的前缀不受后台任务搅扰(缓存神圣)。再加 skip_memory=True,自动任务也不会污染对用户的记忆画像。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. cron 怎么防一个跑飞、空转卡住的 job 永久独占调度器?</div>
+  <ol class="opts">
+    <li>没有保护,只能等它自己结束</li>
+    <li>限制每天 job 数量</li>
+    <li>每 3 分钟无条件杀掉</li>
+    <li>不活动超时:默认空转 600s 无动静(无工具调用/无 stream token)就 agent.interrupt 中断(可调,活跃干活时可跑数小时)+ .tick.lock 防重复 tick</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：D</strong>。注意不是墙钟硬中断:cron 用的是「不活动超时」——默认空转 600 秒(10 分钟)无任何活动才 agent.interrupt('Cron job timed out (inactivity)'),HERMES_CRON_TIMEOUT 可调;正常长任务只要在活跃调用工具就能跑数小时、不会被误杀。.tick.lock 文件锁则防多进程重复 tick。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>cron 的「独立会话 + skip_memory + 不镜像主对话」三件套,怎样体现了全书「每个会话的 prompt 缓存神圣不可侵犯」这条主线?为什么把 cron 结果直接灌进主会话历史是反模式?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="lang-en">
+<p class="lead">You tell Hermes "every day at 9am, send me today's meeting digest." It must wake on a <strong>schedule</strong> in the background, run, and deliver — but this must never <strong>pollute the conversation you're having</strong>: don't stuff the automated task into chat history, don't write it into your "personal memory," and certainly don't let one runaway job freeze the whole scheduler. That's cron's design focus: <strong>background automation that breaks neither the cache nor anything else</strong>.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · the office automation assistant</div>
+  You hire an assistant (cron) for scheduled chores: a daily clipping, a weekly backup. They work at a <strong>separate desk</strong> (an isolated session), put results <strong>on your desk</strong> when done (delivery), but <strong>never barge into the meeting you're in</strong> (no mixing into the main conversation), and <strong>never write these chores into your HR file</strong> (skip_memory). If a chore hangs, an <strong>inactivity alarm</strong> (interrupts after ~10 min of no activity by default) stops them so the next one isn't delayed.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · scheduling + isolated session + safety valves</div>
+  Cron is driven by a <span class="mono">tick</span> loop (a file lock prevents duplicates), scanning due jobs by the times <span class="mono">parse_schedule</span> resolves. Each job spins up an <strong>isolated cron session</strong> (<span class="mono">platform="cron"</span>, <span class="mono">skip_memory=True</span>), and when done <strong>delivers framed results</strong> that are <strong>not mirrored into the main conversation</strong>. Add an inactivity timeout (default 600s) and a half-period catchup window — safe background automation. Kanban is the companion multi-agent work queue, where workers claim tasks via a zero-footprint toolset.
+</div>
+
+<h2>Schedule formats: four ways</h2>
+<p>Agents or users can both schedule; <span class="mono">parse_schedule</span> turns a string into structure:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">cron/jobs.py</span><span class="ln">304-377 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">parse_schedule</span>(schedule):
+    <span class="cm">&quot;&quot;&quot;Parse schedule string into structured format.&quot;&quot;&quot;</span>
+    <span class="cm"># "30m"/"2h" → once; "every 2h" → recurring; "0 9 * * *" → cron; ISO → at time</span>
+    <span class="kw">if</span> schedule.lower().startswith(<span class="st">"every "</span>):
+        <span class="kw">return</span> {<span class="st">"kind"</span>: <span class="st">"interval"</span>, <span class="st">"minutes"</span>: parse_duration(...)}
+    parts = schedule.split()
+    <span class="kw">if</span> len(parts) &gt;= 5 <span class="kw">and</span> all(re.match(<span class="st">r"^[\d\*\-,/]+$"</span>, p) <span class="kw">for</span> p <span class="kw">in</span> parts[:5]):
+        croniter(schedule)                  <span class="cm"># validate the 5-field cron expr</span>
+        <span class="kw">return</span> {<span class="st">"kind"</span>: <span class="st">"cron"</span>, <span class="st">"expr"</span>: schedule}
+    <span class="kw">if</span> <span class="st">"T"</span> <span class="kw">in</span> schedule:                  <span class="cm"># ISO timestamp → once</span>
+        <span class="kw">return</span> {<span class="st">"kind"</span>: <span class="st">"once"</span>, <span class="st">"run_at"</span>: ...}</pre>
+</div>
+<p>Four forms cover nearly every need: <span class="mono">"30m"</span> (once in 30 min), <span class="mono">"every 2h"</span> (every 2 hours), <span class="mono">"0 9 * * *"</span> (standard cron, daily 9am), <span class="mono">"2026-02-03T14:00"</span> (once at a timestamp). Parsed into <span class="mono">once</span>/<span class="mono">interval</span>/<span class="mono">cron</span>, from which the scheduler computes the next fire.</p>
+
+<h2>Isolated session: don't pollute the main conversation (★ the cache line)</h2>
+<p>The key step — a cron job does <strong>not</strong> run in your main session; it spins up a separate agent:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">cron/scheduler.py</span><span class="ln">2050-2081 · excerpt</span></div>
+  <pre><span class="cm"># cron spins up an isolated AIAgent session (not the main conversation)</span>
+agent = AIAgent(
+    quiet_mode=<span class="kw">True</span>,
+    load_soul_identity=<span class="kw">True</span>,            <span class="cm"># still reads SOUL.md identity</span>
+    skip_memory=<span class="kw">True</span>,                   <span class="cm"># Cron system prompts would corrupt user representations</span>
+    platform=<span class="st">"cron"</span>,
+    session_id=_cron_session_id,            <span class="cm"># isolated session, not mixed into gateway</span>
+)</pre>
+</div>
+<p>Two designs guard the cache line: ① <span class="mono">skip_memory=True</span> — if cron's system prompts entered memory they'd <strong>corrupt the user representation</strong> (the comment's own words), so cron runs no memory by default; ② <strong>an isolated <span class="mono">session_id</span> + <span class="mono">platform="cron"</span></strong> — results are delivered framed, <strong>not mirrored into the gateway main session</strong>. So the main conversation's strict <strong>role alternation</strong> (ch.7) isn't disturbed by background jobs, and the cached prefix (ch.6) stays untouched. Background automation and the main conversation <strong>never cross streams</strong>.</p>
+
+<h2>Safety valves: catchup and the inactivity timeout</h2>
+<p>Schedulers fear two things: frantically catching up after a miss, and freezing on a runaway. Cron has a valve for each:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">cron/jobs.py</span><span class="ln">475-490 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_compute_grace_seconds</span>(schedule):
+    <span class="cm">&quot;&quot;&quot;Half the schedule period, clamped between 120s and 2 hours.&quot;&quot;&quot;</span>
+    MIN_GRACE, MAX_GRACE = 120, 7200        <span class="cm"># 2 hours</span>
+    <span class="kw">if</span> schedule[<span class="st">"kind"</span>] == <span class="st">"interval"</span>:
+        period = schedule[<span class="st">"minutes"</span>] * 60
+        <span class="kw">return</span> max(MIN_GRACE, min(period // 2, MAX_GRACE))</pre>
+</div>
+<p><strong>The catchup window = half the period</strong> (clamped 120s to 2h): miss it by a little and it runs once to catch up; miss it by a lot and it <strong>fast-forwards</strong> instead of piling up catch-up runs (so booting up won't fire dozens of backlogged runs at once). On the other end, a cron session is backstopped by an <strong>inactivity timeout</strong>: by default, after <strong>600 seconds (10 min)</strong> of no activity (no tool call, no stream token) it fires <span class="mono">agent.interrupt("Cron job timed out (inactivity)")</span> (tunable via <span class="mono">HERMES_CRON_TIMEOUT</span>; <strong>an actively-working job can run for hours</strong>). So a runaway idle agent <strong>can't monopolize</strong> the scheduler, while a legitimate long job isn't killed. Plus a <span class="mono">.tick.lock</span> file lock means multiple processes won't double-tick.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><span class="mono">tick</span> loop (<span class="mono">.tick.lock</span> file lock prevents duplicates) scans due jobs</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">compute next fire from the <span class="mono">parse_schedule</span> structure; past the catchup window → fast-forward</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">spin up an isolated cron session: <span class="mono">platform="cron"</span> + <span class="mono">skip_memory=True</span> + isolated <span class="mono">session_id</span></span></div>
+  <div class="step"><span class="num">4</span><span class="sc">AIAgent runs (inactivity-timeout backstop, kills only after ~600s idle by default)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">framed result delivered, <strong>not mirrored into the gateway main session</strong></span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "cache-safe background automation"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>parse_schedule</strong> (schedule formats), <strong>tick</strong> (loop + file lock), <strong>the isolated cron session</strong> (skip_memory), <strong>_compute_grace_seconds</strong> (catchup). Cross-chapter teamwork: cron spins up an <strong>AIAgent core loop</strong> (ch.7), just with <span class="mono">skip_memory</span> so <strong>memory</strong> (ch.11) doesn't run; the isolated session isn't mirrored into the main conversation, preserving role alternation = <strong>cache intact</strong> (ch.6); <span class="mono">cronjob</span> and <span class="mono">kanban</span> are <strong>tools</strong> (ch.8) so the agent schedules its own jobs and claims work off a multi-agent queue; the inactivity-timeout interrupt shares roots with delegation's <strong>interrupt cascade</strong> (ch.13).
+  <div class="collab-sub">② Data-flow timing</div>
+  <span class="mono">tick</span> (<span class="mono">.tick.lock</span>) → due jobs → catchup check (<span class="mono">grace=period//2</span>) → isolated cron session (<span class="mono">skip_memory</span>/<span class="mono">platform=cron</span>) → AIAgent runs (inactivity timeout, 600s) → framed delivery (not into the main session).
+  <div class="collab-sub">③ The key point</div>
+  Background automation <strong>never pollutes the main conversation</strong>: cron delivery isn't mirrored into the gateway session (role alternation unchanged), <span class="mono">skip_memory</span> (no user-representation pollution), an isolated <span class="mono">session_id</span>. The file lock prevents duplicate ticks; half-period catchup prevents backlog floods; the inactivity timeout prevents runaway idle monopoly. Kanban then folds "multi-agent collaboration" into a zero-footprint toolset too.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>isolated session + skip_memory + not mirrored into the main conversation = background automation that breaks neither cache nor anything else</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — scheduled jobs, batches, and multi-agent queues are real operational needs, but they must be <strong>safe</strong>: an inactivity timeout (default 600s, tunable) stops a runaway idle agent from monopolizing the scheduler, <span class="mono">.tick.lock</span> stops multi-process double-ticks, half-period catchup stops backlog-flood avalanches. Automation built as controllable infrastructure.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·statelessness</span> — a cron session is <strong>isolated</strong>; it neither depends on nor pollutes the main session's state store. It is <strong>not mirrored into the gateway session</strong>, so the main conversation's role alternation / cached prefix are wholly unaffected by background jobs — this is "caching is sacred" realized at the automation layer.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern: <strong>pouring cron results straight into the main session history</strong> — it breaks strict role alternation, shatters the cached prefix, and lets automated tasks <strong>pollute the user's memory representation</strong>. Hermes dodges all of it at the root with "isolated session + skip_memory + framed delivery."</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Four schedule formats</strong>: <span class="mono">parse_schedule</span> reads duration (<span class="mono">30m</span>), every (<span class="mono">every 2h</span>), cron (<span class="mono">0 9 * * *</span>), ISO timestamp, grouped into once/interval/cron.</li>
+    <li><strong>Isolated session (★ cache line)</strong>: a cron job spins up an isolated <span class="mono">session_id</span> + <span class="mono">platform="cron"</span>, delivers framed, <strong>not mirrored into the main conversation</strong>, so role alternation (ch.7) / caching (ch.6) are undisturbed.</li>
+    <li><strong>skip_memory</strong>: cron runs no memory by default, lest automated tasks <strong>pollute the user representation</strong> (ch.11).</li>
+    <li><strong>Safety valves</strong>: an inactivity timeout (default 600s, tunable; active jobs can run for hours) prevents runaway idle monopoly; <span class="mono">.tick.lock</span> prevents duplicate ticks; half-period catchup (120s–2h) prevents backlog floods.</li>
+    <li><strong>Kanban</strong>: a multi-agent work queue; workers claim and report via the zero-footprint <span class="mono">kanban_*</span> toolset (ch.8).</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Why does a cron job not run in your main conversation session but spin up an isolated one?</div>
+  <ol class="opts">
+    <li>Because cron can't use the main session</li>
+    <li>To avoid polluting the main conversation: an isolated session + not mirrored into the gateway session keeps role alternation and the cache intact, and skip_memory keeps automated tasks out of the user representation</li>
+    <li>Random</li>
+    <li>To run faster</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. cron uses an isolated session_id + platform=cron; results are delivered framed and not mirrored into the gateway main session — the main conversation's strict role alternation / cached prefix are undisturbed by background jobs (caching is sacred). Plus skip_memory=True keeps automated tasks from polluting the user's memory representation.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. How does cron stop a runaway, idle-stuck job from monopolizing the scheduler forever?</div>
+  <ol class="opts">
+    <li>No protection; just wait for it to finish</li>
+    <li>Cap the number of jobs per day</li>
+    <li>Kill unconditionally every 3 minutes</li>
+    <li>An inactivity timeout: after ~600s of no activity (no tool call/no stream token) it fires agent.interrupt (tunable; active jobs run for hours) + .tick.lock prevents duplicate ticks</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. Note it's not a wall-clock hard interrupt: cron uses an 'inactivity timeout' — only after 600s (10 min) of no activity does it agent.interrupt('Cron job timed out (inactivity)'), tunable via HERMES_CRON_TIMEOUT; a legit long job actively calling tools runs for hours and isn't killed. The .tick.lock file lock prevents multi-process double-ticks.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>How does cron's trio of 'isolated session + skip_memory + not mirrored into the main conversation' embody the book's throughline that 'per-conversation prompt caching is sacred'? Why is pouring cron results straight into the main session history an anti-pattern?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="footnav"><a class="prev" href="20-config-profiles.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">配置与 Profiles</span><span class="lang-en">Config &amp; Profiles</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
+</div>
+<script>
+function havgSetLang(l){
+  l=(l==='en')?'en':'zh';
+  var d=document.documentElement;
+  d.dataset.lang=l; d.lang=(l==='en'?'en':'zh-CN');
+  try{localStorage.setItem('havg-lang',l);}catch(e){}
+}
+function havgToggleLang(){
+  havgSetLang(document.documentElement.dataset.lang==='en'?'zh':'en');
+}
+</script>
+</body></html>

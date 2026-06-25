@@ -721,6 +721,40 @@ QUIZZES = {
              "en": "Should a 'default working directory for messaging' go in .env or config.yaml? Why does Hermes insist on splitting behavioral config (timeouts/flags/paths) from credentials (API keys/tokens) into two layers? What does each buy for profile isolation and security?"},
         ],
     },
+    "21-cron-kanban.html": {
+        "mcq": [
+            {
+                "q": {"zh": "cron 定时任务为什么不在你的主对话会话里跑,而起一个独立会话?",
+                      "en": "Why does a cron job not run in your main conversation session but spin up an isolated one?"},
+                "opts": [
+                    {"zh": "为了跑得更快", "en": "To run faster"},
+                    {"zh": "为了不污染主对话:独立会话+不镜像进 gateway session 维持角色交替不破缓存,且 skip_memory 免把自动任务记进用户画像", "en": "To avoid polluting the main conversation: an isolated session + not mirrored into the gateway session keeps role alternation and the cache intact, and skip_memory keeps automated tasks out of the user representation"},
+                    {"zh": "因为 cron 不支持主会话", "en": "Because cron can't use the main session"},
+                    {"zh": "随机决定", "en": "Random"},
+                ],
+                "answer": 1,
+                "why": {"zh": "cron 起独立 session_id + platform=cron,结果带 header/footer 框投递、不镜像进 gateway 主会话——主对话的严格角色交替/被缓存的前缀不受后台任务搅扰(缓存神圣)。再加 skip_memory=True,自动任务也不会污染对用户的记忆画像。",
+                        "en": "cron uses an isolated session_id + platform=cron; results are delivered framed and not mirrored into the gateway main session — the main conversation's strict role alternation / cached prefix are undisturbed by background jobs (caching is sacred). Plus skip_memory=True keeps automated tasks from polluting the user's memory representation."},
+            },
+            {
+                "q": {"zh": "cron 怎么防一个跑飞、空转卡住的 job 永久独占调度器?",
+                      "en": "How does cron stop a runaway, idle-stuck job from monopolizing the scheduler forever?"},
+                "opts": [
+                    {"zh": "没有保护,只能等它自己结束", "en": "No protection; just wait for it to finish"},
+                    {"zh": "不活动超时:默认空转 600s 无动静(无工具调用/无 stream token)就 agent.interrupt 中断(可调,活跃干活时可跑数小时)+ .tick.lock 防重复 tick", "en": "An inactivity timeout: after ~600s of no activity (no tool call/no stream token) it fires agent.interrupt (tunable; active jobs run for hours) + .tick.lock prevents duplicate ticks"},
+                    {"zh": "每 3 分钟无条件杀掉", "en": "Kill unconditionally every 3 minutes"},
+                    {"zh": "限制每天 job 数量", "en": "Cap the number of jobs per day"},
+                ],
+                "answer": 1,
+                "why": {"zh": "注意不是墙钟硬中断:cron 用的是「不活动超时」——默认空转 600 秒(10 分钟)无任何活动才 agent.interrupt('Cron job timed out (inactivity)'),HERMES_CRON_TIMEOUT 可调;正常长任务只要在活跃调用工具就能跑数小时、不会被误杀。.tick.lock 文件锁则防多进程重复 tick。",
+                        "en": "Note it's not a wall-clock hard interrupt: cron uses an 'inactivity timeout' — only after 600s (10 min) of no activity does it agent.interrupt('Cron job timed out (inactivity)'), tunable via HERMES_CRON_TIMEOUT; a legit long job actively calling tools runs for hours and isn't killed. The .tick.lock file lock prevents multi-process double-ticks."},
+            },
+        ],
+        "open": [
+            {"zh": "cron 的「独立会话 + skip_memory + 不镜像主对话」三件套,怎样体现了全书「每个会话的 prompt 缓存神圣不可侵犯」这条主线?为什么把 cron 结果直接灌进主会话历史是反模式?",
+             "en": "How does cron's trio of 'isolated session + skip_memory + not mirrored into the main conversation' embody the book's throughline that 'per-conversation prompt caching is sacred'? Why is pouring cron results straight into the main session history an anti-pattern?"},
+        ],
+    },
 }
 
 

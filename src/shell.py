@@ -86,6 +86,8 @@ PAGES = [
      "第五部分 · 多端与网关", "Part 5 · Surfaces & Gateway"),
     ("20-config-profiles.html", "配置与 Profiles", "Config & Profiles",
      "第五部分 · 多端与网关", "Part 5 · Surfaces & Gateway"),
+    ("21-cron-kanban.html", "Cron 与 Kanban", "Cron & Kanban",
+     "第六部分 · 自动化与研究", "Part 6 · Automation & Research"),
 ]
 
 
