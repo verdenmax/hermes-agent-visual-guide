@@ -76,6 +76,8 @@ PAGES = [
      "第四部分 · 规模化与隔离", "Part 4 · Scaling & Isolation"),
     ("15-context-compression.html", "上下文压缩", "Context compression",
      "第四部分 · 规模化与隔离", "Part 4 · Scaling & Isolation"),
+    ("16-terminal-backends.html", "终端后端", "Terminal backends",
+     "第四部分 · 规模化与隔离", "Part 4 · Scaling & Isolation"),
 ]
 
 

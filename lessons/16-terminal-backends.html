@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var l=localStorage.getItem('havg-lang');if(l==='en'){document.documentElement.dataset.lang='en';document.documentElement.lang='en';}}catch(e){}</script>
+<title>16 · 终端后端 / Terminal backends · Hermes Agent 设计图解</title>
+<meta name="description" content="第四部分 · 规模化与隔离｜终端后端 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="theme-color" content="#c2630e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAzMiAzMic+PHJlY3Qgd2lkdGg9JzMyJyBoZWlnaHQ9JzMyJyByeD0nNycgZmlsbD0nI2M4YTAyYycvPjx0ZXh0IHg9JzE2JyB5PScyMicgZm9udC1mYW1pbHk9J3N5c3RlbS11aSxzYW5zLXNlcmlmJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nODAwJyBmaWxsPScjZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz7imKQ8L3RleHQ+PC9zdmc+">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Hermes Agent 设计图解">
+<meta property="og:title" content="16 · 终端后端 / Terminal backends · Hermes Agent 设计图解">
+<meta property="og:description" content="第四部分 · 规模化与隔离｜终端后端 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="16 · 终端后端 / Terminal backends · Hermes Agent 设计图解">
+<meta name="twitter:description" content="第四部分 · 规模化与隔离｜终端后端 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --ink: #1d2129;
+  --muted: #5b6470; --faint: #8a939f; --line: #e1e5ea;
+  --accent: #c8a02c; --accent-soft: #faf1d6; --accent-ink: #8a6d12;
+  --blue: #2563eb; --blue-soft: #e7efff; --amber: #b4690e; --amber-soft: #fdf1dd;
+  --purple: #7c3aed; --purple-soft: #f0e9ff; --red: #d23f3f; --red-soft: #fbe6e6;
+  --code-bg: #0f172a; --code-ink: #e2e8f0; --code-line: #1e293b;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232c; --ink: #e6edf3;
+    --muted: #9aa6b2; --faint: #6e7a86; --line: #2a323c;
+    --accent: #e3c05a; --accent-soft: #2e2510; --accent-ink: #f0d488;
+    --blue: #6ea8fe; --blue-soft: #16243f; --amber: #e0a44a; --amber-soft: #33270f;
+    --purple: #b794f6; --purple-soft: #271a40; --red: #f08080; --red-soft: #3a1a1a;
+    --code-bg: #0a0f1a; --code-ink: #d8e2f0; --code-line: #14202f;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+html { scroll-behavior: smooth; overflow-x: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+code, .mono { font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; overflow-wrap: break-word; }
+
+/* ---- top progress bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 50; background: var(--panel);
+  border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
+}
+.topbar-inner {
+  max-width: 960px; margin: 0 auto; padding: .7rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.topbar .home { font-size: .82rem; color: var(--muted); font-weight: 600; display:flex; gap:.5rem; align-items:center; }
+.topbar .home b { color: var(--accent); }
+.topbar .pill { font-size: .72rem; color: var(--muted); background: var(--panel-2);
+  padding: .2rem .6rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.progress { height: 3px; background: var(--panel-2); }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--blue)); }
+
+.wrap { max-width: 820px; margin: 0 auto; padding: 2.4rem 1.25rem 5rem; }
+
+/* ---- hero ---- */
+.hero { margin-bottom: 2rem; }
+.hero .part { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: .55rem; }
+.hero h1 { font-size: 2.05rem; line-height: 1.2; letter-spacing: -.01em; font-weight: 750; }
+.hero .lead { margin-top: .9rem; font-size: 1.06rem; color: var(--muted); }
+
+h2 { font-size: 1.32rem; margin: 2.4rem 0 .9rem; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: .55rem; }
+h2::before { content: ""; width: 4px; height: 1.05em; background: var(--accent); border-radius: 3px; display: inline-block; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+p { margin: .7rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .3rem 0; }
+strong { color: var(--ink); font-weight: 680; }
+.inline { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: .08em .4em; font-size: .9em; color: var(--accent-ink); }
+
+/* ---- callout cards ---- */
+.card { border-radius: var(--radius); padding: 1.05rem 1.2rem; margin: 1.2rem 0;
+  border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.card .tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.card.macro { border-left: 4px solid var(--blue); }
+.card.macro .tag { color: var(--blue); }
+.card.detail { border-left: 4px solid var(--purple); }
+.card.detail .tag { color: var(--purple); }
+.card.analogy { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+.card.analogy .tag { color: var(--amber); }
+.card.key { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.key .tag { color: var(--accent-ink); }
+.card.warn { border-left: 4px solid var(--red); background: var(--red-soft); }
+.card.warn .tag { color: var(--red); }
+.card.spark { border-left: 4px solid #e0a000;
+  background: linear-gradient(100deg, rgba(224,160,0,.12), transparent 70%); }
+.card.spark .tag { color: #c98a00; }
+@media (prefers-color-scheme: dark) { .card.spark .tag { color: #f0c050; } }
+
+/* ---- code file callout ---- */
+.codefile { margin: 1.2rem 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  box-shadow: var(--shadow); }
+.codefile .cf-head { display: flex; align-items: center; gap: .55rem; padding: .5rem .85rem;
+  background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: .8rem; }
+.codefile .cf-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink:0; }
+.codefile .cf-head .path { font-family: ui-monospace, monospace; color: var(--ink); font-weight: 600; }
+.codefile .cf-head .ln { margin-left: auto; color: var(--faint); font-size: .72rem; }
+.codefile pre { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem;
+  overflow-x: auto; font-size: .82rem; line-height: 1.6; }
+.codefile pre .cm { color: #7d8aa3; }
+.codefile pre .kw { color: #c792ea; }
+.codefile pre .fn { color: #82aaff; }
+.codefile pre .st { color: #c3e88d; }
+.codefile pre .nb { color: #f78c6c; }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem; border-radius: 12px;
+  overflow-x: auto; font-size: .83rem; line-height: 1.6; margin: 1.1rem 0; box-shadow: var(--shadow); }
+pre.code .cm { color: #7d8aa3; } pre.code .kw { color: #c792ea; }
+pre.code .fn { color: #82aaff; } pre.code .st { color: #c3e88d; } pre.code .nb { color: #f78c6c; }
+
+/* ---- collapsible accordion (details/summary) ---- */
+.accordion { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  margin: .7rem 0; box-shadow: var(--shadow); overflow: hidden; }
+.accordion > summary { cursor: pointer; padding: .85rem 1.1rem; font-weight: 650; font-size: .96rem;
+  list-style: none; display: flex; align-items: center; gap: .6rem; user-select: none; }
+.accordion > summary::-webkit-details-marker { display: none; }
+.accordion > summary::after { content: "▶"; font-size: .68rem; color: var(--accent);
+  margin-left: auto; transition: transform .15s ease; }
+.accordion[open] > summary::after { transform: rotate(90deg); }
+.accordion > summary:hover { background: var(--panel-2); }
+.accordion[open] > summary { border-bottom: 1px solid var(--line); }
+.accordion .badge-num { background: var(--accent-soft); color: var(--accent-ink);
+  width: 1.6rem; height: 1.6rem; border-radius: 7px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: .82rem; font-weight: 700; flex-shrink: 0; }
+.accordion .hint { font-size: .72rem; color: var(--faint); font-weight: 400; }
+.acc-body { padding: .9rem 1.1rem 1.1rem; }
+.acc-intro { color: var(--muted); font-size: .9rem; margin: .2rem 0 .4rem; }
+.qa { margin: 1rem 0; }
+.qa:first-child { margin-top: .3rem; }
+.qa .q { font-weight: 680; font-size: .9rem; display: flex; gap: .45rem; align-items: center; margin-bottom: .3rem; }
+.qa .a { color: var(--muted); font-size: .9rem; }
+.qa .a strong { color: var(--ink); }
+.qa pre.code { margin: .5rem 0 0; font-size: .78rem; }
+
+/* ---- flow diagram ---- */
+.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 1.3rem 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.2rem 1rem; box-shadow: var(--shadow); }
+.flow .node { flex: 1 1 0; min-width: 110px; text-align: center; padding: .7rem .5rem;
+  border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.flow .node .nt { font-weight: 700; font-size: .92rem; }
+.flow .node .nd { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+.flow .node.hl { background: var(--accent-soft); border-color: var(--accent); }
+.flow .arrow { align-self: center; color: var(--faint); font-size: 1.3rem; padding: 0 .35rem; }
+
+/* vertical flow */
+.vflow { margin: 1.3rem 0; }
+.vflow .step { display: flex; gap: .9rem; position: relative; padding-bottom: 1.1rem; }
+.vflow .step:not(:last-child)::before { content:""; position:absolute; left: 15px; top: 34px; bottom: -2px;
+  width: 2px; background: var(--line); }
+.vflow .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; z-index:1; }
+.vflow .sc h4 { margin: .25rem 0 .2rem; font-size: 1rem; }
+.vflow .sc p { margin: .15rem 0; font-size: .92rem; color: var(--muted); }
+.vflow .sc .mono { font-size: .8rem; color: var(--accent-ink); }
+
+/* layered architecture */
+.layers { margin: 1.3rem 0; display: flex; flex-direction: column; gap: .55rem; }
+.layer { border-radius: 12px; padding: .85rem 1.1rem; border: 1px solid var(--line); background: var(--panel);
+  box-shadow: var(--shadow); }
+.layer .lh { display: flex; align-items: center; gap: .6rem; }
+.layer .lh .badge { font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; }
+.layer .lh .name { font-weight: 700; font-family: ui-monospace, monospace; }
+.layer .ld { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
+.layer.l-core { border-left: 4px solid var(--accent); } .layer.l-core .badge { background: var(--accent-soft); color: var(--accent-ink); }
+.layer.l-main { border-left: 4px solid var(--blue); } .layer.l-main .badge { background: var(--blue-soft); color: var(--blue); }
+.layer.l-part { border-left: 4px solid var(--purple); } .layer.l-part .badge { background: var(--purple-soft); color: var(--purple); }
+.layer.l-app { border-left: 4px solid var(--amber); } .layer.l-app .badge { background: var(--amber-soft); color: var(--amber); }
+
+/* two-column compare */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0; }
+@media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+.col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; box-shadow: var(--shadow); min-width: 0; }
+.col h4 { margin: 0 0 .4rem; font-size: .95rem; }
+
+table.t { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .9rem;
+  background: var(--panel); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+table.t th, table.t td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--line); }
+table.t th { background: var(--panel-2); font-size: .8rem; letter-spacing: .02em; }
+table.t tr:last-child td { border-bottom: none; }
+table.t td.mono, table.t td .mono { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--accent-ink); }
+@media (max-width: 640px) {
+  /* Wide multi-column tables: scroll within their own box instead of
+     forcing page-level horizontal overflow (which clipped right columns). */
+  table.t { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.t th, table.t td { padding: .5rem .6rem; }
+}
+.selftest { margin: 2.2rem 0 0; border-top: 2px dashed var(--line); padding-top: 1.2rem; }
+.selftest > h2 { margin-top: .2rem; }
+.quiz { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+  border-radius: 12px; padding: .9rem 1.1rem; margin: 1rem 0; box-shadow: var(--shadow); }
+.quiz .qn { font-weight: 650; }
+.quiz ol.opts { list-style: upper-alpha; margin: .55rem 0 .6rem 1.5rem; padding: 0; }
+.quiz ol.opts li { margin: .3rem 0; padding-left: .15rem; }
+.quiz details.accordion { margin: .5rem 0 0; }
+.selftest code { font-family: ui-monospace, monospace; font-size: .9em; color: var(--accent-ink);
+  background: var(--accent-soft); padding: 0 .28em; border-radius: 4px; }
+
+/* footer nav */
+.footnav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem;
+  padding-top: 1.4rem; border-top: 1px solid var(--line); }
+.footnav a { flex: 1; padding: .85rem 1.1rem; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow); transition: .15s; }
+.footnav a:hover { border-color: var(--accent); transform: translateY(-1px); }
+.footnav a.next { text-align: right; }
+.footnav .dir { font-size: .72rem; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.footnav .ttl { font-weight: 700; color: var(--ink); margin-top: .15rem; }
+.footnav a.disabled { opacity: .35; pointer-events: none; }
+
+/* index page */
+.toc { display: grid; gap: .7rem; margin-top: 1.6rem; }
+.toc-part { font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--accent); margin: 1.4rem 0 .2rem; }
+.toc a { display: flex; align-items: center; gap: .9rem; padding: .85rem 1.05rem; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); transition: .15s; }
+.toc a:hover { border-color: var(--accent); transform: translateX(3px); }
+.toc .n { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+.toc .tt { font-weight: 650; color: var(--ink); }
+.toc .ts { font-size: .8rem; color: var(--muted); margin-left: auto; text-align: right; }
+.toc-search { position: relative; margin: 1.6rem 0 -.4rem; }
+.toc-search input { width: 100%; box-sizing: border-box; padding: .75rem 2.8rem .75rem 1rem;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font-size: .98rem; box-shadow: var(--shadow); }
+.toc-search input:focus { outline: none; border-color: var(--accent); }
+.toc-search .qcount { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  color: var(--faint); font-size: .8rem; pointer-events: none; }
+.toc a.hide, .toc .toc-part.hide { display: none; }
+.toc-empty { display: none; color: var(--muted); padding: 1rem; text-align: center; }
+.toc-empty.show { display: block; }
+.hero.index h1 { font-size: 2.3rem; }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:1rem; font-size:.8rem; color:var(--muted); }
+.legend span { display:flex; align-items:center; gap:.4rem; }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+.pdf-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1.1rem;
+  background:var(--accent); color:#fff; border-radius:10px; font-size:.9rem; font-weight:650;
+  box-shadow:var(--shadow); transition:.15s; }
+.pdf-btn:hover { background:var(--accent-ink); transform:translateY(-1px); }
+
+/* ---- bilingual language switch ----
+   Contract: <html> must carry data-lang="zh" (default) or "en".
+   page()/index_page() hard-code data-lang="zh"; LANG_BOOT may switch to "en". */
+html[data-lang="en"] .lang-zh { display: none !important; }
+html[data-lang="zh"] .lang-en { display: none !important; }
+.langtoggle { font-size:.72rem; font-weight:700; color:var(--accent-ink);
+  background:var(--accent-soft); border:1px solid var(--accent); border-radius:999px;
+  padding:.22rem .7rem; cursor:pointer; line-height:1.4; white-space:nowrap; }
+.langtoggle:hover { background:var(--accent); color:#fff; }
+
+/* ---- schematic: cell strips (token sequences / quant blocks / KV columns) ---- */
+.cellgroup { margin: 1.2rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.cellgroup .cg-cap { font-size: .82rem; color: var(--muted); margin-bottom: .55rem; }
+.cellgroup .cg-cap b { color: var(--ink); }
+.cells { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.cells + .cells { margin-top: .5rem; }
+.cell { min-width: 2.1rem; padding: .38rem .5rem; text-align: center; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: .78rem;
+  font-family: ui-monospace, monospace; white-space: nowrap; }
+.cell.scale { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); font-weight: 700; }
+.cell.hl    { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cell.q     { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.cell.dim   { opacity: .45; }
+.cells .lab { font-size: .76rem; color: var(--faint); padding: 0 .35rem; }
+.cells .sep { color: var(--faint); padding: 0 .1rem; }
+
+/* ---- schematic: timeline lanes (prefill vs decode, step-by-step) ---- */
+.timeline { margin: 1.2rem 0; display: flex; flex-direction: column; gap: .5rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.timeline .lane { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.timeline .lane-label { min-width: 6rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.timeline .tslot { padding: .4rem .6rem; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--line); font-size: .78rem; text-align: center; font-family: ui-monospace, monospace; }
+.timeline .tslot.span { flex: 1; min-width: 8rem; background: var(--blue-soft); border-color: var(--blue);
+  color: var(--blue); font-weight: 700; }
+.timeline .tslot.now { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+/* ---- worked-example trace: one concrete input, stepped through ---- */
+.trace { margin: 1.3rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.trace .tcap { font-size: .82rem; color: var(--muted); margin-bottom: .7rem; }
+.trace .tcap b { color: var(--accent-ink); }
+.trace .stations { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.trace .stn { flex: 1 1 0; min-width: 116px; border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem; background: var(--bg); }
+.trace .stn h5 { margin: 0 0 .45rem; font-size: .8rem; color: var(--ink); }
+.trace .cellrow { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.trace .vc { min-width: 2.1rem; padding: .32rem .45rem; text-align: center; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); font: 600 .76rem ui-monospace, monospace; white-space: nowrap; }
+.trace .vc.hot  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.trace .vc.blue { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.trace .vc.dim  { opacity: .42; }
+.trace .tlab { font-size: .68rem; color: var(--faint); margin-top: .35rem; }
+.trace .op { align-self: center; color: var(--accent); font: 700 .72rem ui-monospace, monospace;
+  padding: 0 .5rem; text-align: center; white-space: nowrap; }
+.trace svg { max-width: 100%; height: auto; display: block; margin: .3rem auto; }
+@media (max-width: 640px) { .trace .stations { flex-direction: column; } .trace .op { padding: .3rem 0; } }
+/* 🧩 collaboration-mechanism card */
+.card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
+.card.collab .tag { color: var(--blue); }
+.card.collab .collab-sub { font-weight:700; font-size:.82rem; margin:.85rem 0 .3rem; color:var(--ink); }
+/* 🎯 design-tradeoff card */
+.card.design { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.design .tag { color: var(--accent-ink); }
+/* A-G constraint back-reference badge */
+.badge.constraint { display:inline-block; font-size:.7rem; font-weight:700;
+  padding:.1rem .45rem; border-radius:999px; background:var(--purple-soft);
+  color:var(--purple); border:1px solid var(--purple); margin:0 .15rem; white-space:nowrap; }
+</style>
+</head><body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
+    <span class="pill"><span class="lang-zh">第四部分 · 规模化与隔离</span><span class="lang-en">Part 4 · Scaling &amp; Isolation</span></span>
+    <span class="pill">16 / 16</span>
+    <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
+  </div>
+  <div class="progress"><span style="width:100%"></span></div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="part"><span class="lang-zh">第四部分 · 规模化与隔离</span><span class="lang-en">Part 4 · Scaling &amp; Isolation</span></div>
+    <h1><span class="lang-zh">终端后端</span><span class="lang-en">Terminal backends</span></h1>
+  </div>
+  <div class="lang-zh">
+<p class="lead">
+Agent 要「动手」就得跑命令——但跑在<strong>哪里</strong>？你本地的机器、一个 Docker 容器、一台远程服务器、还是 Modal 这样的 <strong>serverless</strong> 平台？Hermes 的答案是：<strong>同一个 terminal 工具，背后是可插拔的多种后端</strong>。模型永远只调一个 <span class="mono">terminal</span>，至于命令落到 local / docker / ssh / modal / singularity / daytona 哪个环境，由一层<strong>统一抽象</strong>透明分派。这让同一个 agent <strong>跑遍各种环境</strong>，也让 serverless 后端能<strong>按需启动、用完释放</strong>省钱。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 万能遥控器</div>
+  一个<strong>万能遥控器</strong>，按钮永远是「开 / 关 / 音量」（统一接口），但背后能控电视、空调、音响（多种后端）。你<strong>不需要</strong>为每台设备学一套按钮——遥控器内部把「音量+」翻译成各设备的红外码。Hermes 的 terminal 就是这个万能遥控器：模型永远按「跑这条命令」，<span class="mono">BaseEnvironment</span> 这层抽象把它翻译成 local 的 subprocess、docker 的 exec、ssh 的远程命令、modal 的 serverless 调用。换设备只换后端，<strong>遥控器的按钮一个不变</strong>。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 统一抽象,后端差异在边缘</div>
+  六种执行后端——<strong>local / docker / ssh / singularity / modal / daytona</strong>——共享<strong>同一个接口</strong> <span class="mono">BaseEnvironment</span>(ABC)。每个后端只需实现 <span class="mono">_run_bash()</span> 和 <span class="mono">cleanup()</span> 两个抽象方法；统一的 <span class="mono">execute()</span>(会话快照、CWD 跟踪、中断、超时)由<strong>基类提供</strong>，所有后端复用。一个工厂 <span class="mono">_create_environment</span> 按 <span class="mono">TERMINAL_ENV</span> 配置挑后端。这正是窄腰(第 4 章)在执行层的体现:<strong>核心只认一个 terminal 工具</strong>,六种环境的差异全被关进边缘的 <span class="mono">BaseEnvironment</span> 子类——加一个新后端,核心一行不动。
+</div>
+
+<h2>统一接口:BaseEnvironment ABC</h2>
+<p>所有后端的「共同契约」是一个抽象基类——子类只填两个洞，其余流程基类全包了:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/environments/base.py</span><span class="ln">288-345 · 节选</span></div>
+  <pre><span class="kw">class</span> <span class="fn">BaseEnvironment</span>(ABC):
+    <span class="cm">&quot;&quot;&quot;Common interface and unified execution flow for all Hermes backends.</span>
+<span class="cm">    Subclasses implement _run_bash() and cleanup(). The base class</span>
+<span class="cm">    provides execute() with session snapshot sourcing, CWD tracking,</span>
+<span class="cm">    interrupt handling, and timeout enforcement.&quot;&quot;&quot;</span>
+
+    <span class="kw">def</span> <span class="fn">_run_bash</span>(self, cmd_string, ...) -&gt; ProcessHandle:
+        <span class="cm"># 子类必须实现:在各自后端里 spawn 一个 bash 进程</span>
+        <span class="kw">raise</span> NotImplementedError
+
+    <span class="nd">@abstractmethod</span>
+    <span class="kw">def</span> <span class="fn">cleanup</span>(self):
+        <span class="cm"># 释放后端资源(容器/实例/连接)</span>
+        ...</pre>
+</div>
+<p>注意分工:<strong>子类只实现 <span class="mono">_run_bash()</span>(怎么 spawn 进程)和 <span class="mono">cleanup()</span>(怎么释放资源)</strong>;而 <span class="mono">execute()</span>——会话快照恢复、CWD 跟踪、中断处理、超时强制——这些<strong>跨后端通用的流程</strong>由基类<strong>统一提供</strong>,六个后端复用同一套。于是 docker 后端只关心「怎么在容器里跑 bash」,ssh 后端只关心「怎么在远程跑」,通用的会话状态管理它们<strong>都不用重写</strong>。</p>
+
+<p>那么「会话快照」到底是什么?以 local 后端为例,设计很巧:<strong>每次 <span class="mono">execute()</span> 都重新 spawn 一个全新的 bash 进程</strong>(spawn-per-call),命令跑完进程即退。可这样一来,上一条命令 <span class="mono">export</span> 的环境变量、<span class="mono">cd</span> 切换的目录,下一条岂不全丢?基类的「会话快照」正为此:<strong>每条命令结束后把环境变量快照进文件、当前工作目录也写进文件;下一条命令开跑前先回读、source 回来</strong>。于是一串无状态的短命 bash 进程,被串成一个「有记忆」的会话——这正是<strong>约束 B(无状态)</strong>在 shell 执行层的对策:底层进程无状态,靠外部文件快照重建连续性。</p>
+
+<h2>工厂:按 TERMINAL_ENV 挑后端</h2>
+<p>选哪个后端,由一个工厂函数按配置分派——这是「换设备只换后端」的开关:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/terminal_tool.py</span><span class="ln">569 / 1225-1372 · 简化</span></div>
+  <pre><span class="cm"># 默认 local;TERMINAL_ENV 配置切换后端</span>
+terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st">"local"</span>).strip().lower() <span class="kw">or</span> <span class="st">"local"</span>
+
+<span class="kw">def</span> <span class="fn">_create_environment</span>(env_type, image, cwd, timeout, ...):
+    <span class="kw">if</span> env_type == <span class="st">"local"</span>:
+        <span class="kw">return</span> _LocalEnvironment(cwd=cwd, timeout=timeout)
+    <span class="kw">elif</span> env_type == <span class="st">"docker"</span>:
+        <span class="kw">return</span> _DockerEnvironment(...)
+    <span class="kw">elif</span> env_type == <span class="st">"modal"</span>:
+        <span class="kw">return</span> _ModalEnvironment(...)        <span class="cm"># serverless:按需启动,用完释放</span>
+    <span class="kw">elif</span> env_type == <span class="st">"ssh"</span>:
+        <span class="kw">return</span> _SSHEnvironment(...)
+    ...                                       <span class="cm"># singularity / daytona</span></pre>
+</div>
+<p><span class="mono">TERMINAL_ENV</span> 默认 <span class="mono">local</span>(本地 subprocess + 进程组隔离),改一个配置就切到 docker(容器隔离)、ssh(远程执行)、modal(serverless)。每个 <span class="mono">_XxxEnvironment</span> 都是 <span class="mono">BaseEnvironment</span> 的子类。工厂是唯一的「分派点」——模型和核心循环<strong>完全不知道</strong>命令落到了哪个环境。换环境=改 <span class="mono">TERMINAL_ENV</span>,不改任何调用代码。</p>
+<p>这六个后端各自是 <span class="mono">tools/environments/</span> 下一个独立文件里的类——加一个新后端，只需新增一个文件 + 工厂里加一支 <span class="mono">elif</span>：</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/terminal_tool.py</span><span class="ln">825-831 · 节选</span></div>
+  <pre><span class="cm"># Environment classes now live in tools/environments/</span>
+<span class="kw">from</span> tools.environments.local <span class="kw">import</span> LocalEnvironment
+<span class="kw">from</span> tools.environments.docker <span class="kw">import</span> DockerEnvironment
+<span class="kw">from</span> tools.environments.ssh <span class="kw">import</span> SSHEnvironment
+<span class="kw">from</span> tools.environments.modal <span class="kw">import</span> ModalEnvironment
+<span class="kw">from</span> tools.environments.singularity <span class="kw">import</span> SingularityEnvironment
+<span class="kw">from</span> tools.environments.managed_modal <span class="kw">import</span> ManagedModalEnvironment</pre>
+</div>
+<p style="font-size:.92em;opacity:.85">注:这份顶层 import 与「六个后端」并非一一对应——<span class="mono">daytona</span> 走<strong>惰性导入</strong>(只在被选中时才在工厂分支内 <span class="mono">import</span>),而 <span class="mono">managed_modal</span> 是 modal 的 <strong>Nous 托管模式</strong>(由 <span class="mono">terminal.modal_mode</span> 选),并非独立的 <span class="mono">TERMINAL_ENV</span> 取值。六个 env_type 始终是 local/docker/ssh/singularity/modal/daytona。</p>
+
+<h2>serverless 省钱 + 后台进程</h2>
+<p>多后端不只是「能移植」,还能<strong>省钱</strong>。<span class="mono">modal</span> 这类 <strong>serverless</strong> 后端<strong>按需启动</strong>容器、命令跑完就<strong>释放</strong>——你不必常驻一台云服务器,只为偶尔跑几条命令付全天的钱。另外,terminal 支持 <span class="mono">background=True, notify_on_complete=True</span>:长命令在后台跑,gateway 的 watcher 检测到进程完成时<strong>触发一个新 turn</strong>把结果带回——这条「后台完成→新 turn」的路径(和第 13 章委派的完成队列同理)维持了严格角色交替、不破缓存。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">模型调统一的 <span class="mono">terminal</span> 工具(只管「跑这条命令」)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">工厂 <span class="mono">_create_environment</span> 按 <span class="mono">TERMINAL_ENV</span> 挑后端(local/docker/ssh/modal/...)</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">对应 <span class="mono">BaseEnvironment</span> 子类的 <span class="mono">execute()</span>(基类统一:快照/CWD/中断/超时)→ 子类 <span class="mono">_run_bash()</span> 在该后端 spawn 进程</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">返回统一的 <span class="mono">ProcessHandle</span>——核心循环不感知后端差异</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">serverless 用完 <span class="mono">cleanup()</span> 释放资源;background+notify_on_complete 则后台跑、完成时作新 turn</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「环境可移植」</div>
+  <div class="collab-sub">① 组件清单（★本章核心,其余跨章节配合）</div>
+  本章核心:<strong>BaseEnvironment ABC</strong>(统一接口 + execute() 通用流程)、<strong>六个后端子类</strong>(各实现 _run_bash/cleanup)、<strong>_create_environment 工厂</strong>(按 TERMINAL_ENV 分派)。跨章节配合:<span class="mono">terminal</span> 是一个核心<strong>工具</strong>(第 8 章),六种后端差异全被关进边缘子类——这正是<strong>窄腰</strong>(第 4 章:核心薄、后端在边缘);子代理委派时拿到<strong>独立的 terminal session</strong>(第 13 章上下文隔离);background+notify_on_complete 的「后台完成→新 turn」与委派完成队列同理(第 13 章),维持严格角色交替不破缓存。
+  <div class="collab-sub">② 数据流时序</div>
+  模型调 terminal → 工厂按 TERMINAL_ENV 选后端 → BaseEnvironment 子类 execute()(基类统一会话快照/CWD/中断/超时)→ 子类 _run_bash() 在该后端 spawn → 返回统一 ProcessHandle → cleanup() 释放(serverless 用完即放)。
+  <div class="collab-sub">③ 关键点</div>
+  「同一个 agent 跑遍各种环境」靠的是<strong>统一抽象 + 工厂分派</strong>:核心只认一个 terminal 工具与一个 BaseEnvironment 接口,六种环境(本地/容器/远程/serverless)的全部差异<strong>沉到边缘的子类</strong>。加新后端=写一个 BaseEnvironment 子类 + 工厂加一支,核心零改动。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>统一 terminal 抽象 + 多后端 = 环境可移植 + serverless 省钱;后端差异在边缘(窄腰)</strong>。它主要治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——真实 agent 要在各种环境里干活:本地开发、容器隔离、远程服务器、serverless 弹性。统一的 <span class="mono">BaseEnvironment</span> 抽象让<strong>同一个 agent 无改动地跑遍它们</strong>,serverless 后端还能<strong>按需启停省钱</strong>;会话快照/CWD/超时等运维细节由基类统一兜底。它也是<strong>窄腰</strong>(第 4 章)的体现:核心只认一个 terminal,环境差异在边缘演化。反模式:为每种环境在核心里写一套 if-else 执行逻辑——那会让核心随后端数量膨胀,违背「核心薄、边缘厚」。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——底层 bash 进程是无状态的(spawn-per-call,每条命令一个新进程),基类的<strong>会话快照</strong>(环境变量 + CWD 经文件快照/回读)把它们串成连续会话。无状态的执行底座靠外部快照重建记忆——与全书反复出现的「无状态内核 + 外部状态」一脉相承。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>统一抽象</strong>:六后端(local/docker/ssh/singularity/modal/daytona)共享 <span class="mono">BaseEnvironment</span> ABC;子类只实现 <span class="mono">_run_bash()</span> + <span class="mono">cleanup()</span>,通用 <span class="mono">execute()</span> 由基类提供。</li>
+    <li><strong>工厂分派</strong>:<span class="mono">_create_environment</span> 按 <span class="mono">TERMINAL_ENV</span>(默认 local)挑后端;换环境只改配置,核心零改动。</li>
+    <li><strong>环境可移植</strong>:同一 agent 无改动跑遍本地/容器/远程/serverless——窄腰(第 4 章)在执行层的落地。</li>
+    <li><strong>serverless 省钱</strong>:modal 等后端按需启动、用完 <span class="mono">cleanup()</span> 释放,不为偶发命令常驻付费。</li>
+    <li><strong>后台进程</strong>:<span class="mono">background=True, notify_on_complete=True</span> 后台跑,完成时作新 turn(同委派完成队列,第 13 章),不破缓存。</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. 要给 Hermes 加一个新的执行后端（比如某个新 serverless 平台），需要改核心 agent 循环吗？</div>
+  <ol class="opts">
+    <li>要，得改 system prompt</li>
+    <li>不用——写一个 BaseEnvironment 子类（实现 _run_bash/cleanup）+ 工厂里加一支 elif，核心零改动</li>
+    <li>要，得重新训练模型</li>
+    <li>要，得改核心循环和每个工具</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。六后端共享 BaseEnvironment ABC，差异全关进边缘子类；工厂按 TERMINAL_ENV 分派。加后端=新增一个子类 + 工厂加一支 elif，模型和核心循环完全不感知命令落到哪个环境——这是窄腰（核心薄、后端在边缘）。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. local 后端每次 execute() 都 spawn 一个全新的 bash 进程、跑完即退。上一条命令 cd 进的目录、export 的变量，下一条为什么没丢？</div>
+  <ol class="opts">
+    <li>模型把目录记在 context 里</li>
+    <li>bash 进程其实常驻不退</li>
+    <li>每条命令开一条新 SSH 连接</li>
+    <li>基类的「会话快照」把环境变量和 CWD 存进文件，下条命令开跑前回读 source 回来——无状态进程被串成有记忆的会话</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：D</strong>。spawn-per-call（每命令一个新进程）+ 会话快照（env 快照进文件、CWD 文件回读）= 把一串无状态短命 bash 进程串成连续会话。这正是约束 B（无状态）在 shell 执行层的对策：底层无状态，靠外部文件快照重建连续性。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>modal 这类 serverless 后端是怎么「省钱」的（结合按需启动与 cleanup 释放）？又为什么这些后端差异要「沉到边缘子类」、而不在核心里为每种环境写一套 if-else？</li>
+  </ul>
+</div>
+</div></div>
+  <div class="lang-en">
+<p class="lead">
+For an agent to "act" it must run commands — but <strong>where</strong>? Your local machine, a Docker container, a remote server, or a <strong>serverless</strong> platform like Modal? Hermes's answer: <strong>one terminal tool, backed by pluggable backends</strong>. The model always calls a single <span class="mono">terminal</span>; whether a command lands on local / docker / ssh / modal / singularity / daytona is dispatched transparently by a <strong>unified abstraction</strong>. This lets one agent <strong>run across all environments</strong>, and lets serverless backends <strong>spin up on demand and release when done</strong> to save money.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · a universal remote</div>
+  A <strong>universal remote</strong>'s buttons are always "on / off / volume" (unified interface), but it can drive a TV, an AC, a speaker (multiple backends). You <strong>don't</strong> learn a new button layout per device — the remote internally translates "volume+" into each device's IR code. Hermes's terminal is that universal remote: the model always presses "run this command," and the <span class="mono">BaseEnvironment</span> abstraction translates it into local's subprocess, docker's exec, ssh's remote command, modal's serverless call. Swap the device by swapping the backend — <strong>the remote's buttons don't change at all</strong>.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · a unified abstraction, backend differences at the edges</div>
+  Six execution backends — <strong>local / docker / ssh / singularity / modal / daytona</strong> — share <strong>one interface</strong>, <span class="mono">BaseEnvironment</span> (ABC). Each backend implements just two abstract methods, <span class="mono">_run_bash()</span> and <span class="mono">cleanup()</span>; the unified <span class="mono">execute()</span> (session snapshot, CWD tracking, interrupt, timeout) is <strong>provided by the base class</strong> and reused by all. A factory, <span class="mono">_create_environment</span>, picks the backend by the <span class="mono">TERMINAL_ENV</span> config. This is the narrow waist (ch.4) at the execution layer: <strong>the core knows only one terminal tool</strong>, and the differences of six environments are all caged in edge <span class="mono">BaseEnvironment</span> subclasses — add a new backend, and the core doesn't change a line.
+</div>
+
+<h2>The unified interface: the BaseEnvironment ABC</h2>
+<p>All backends' "common contract" is an abstract base class — subclasses fill just two holes, the base class handles the rest:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/environments/base.py</span><span class="ln">288-345 · excerpt</span></div>
+  <pre><span class="kw">class</span> <span class="fn">BaseEnvironment</span>(ABC):
+    <span class="cm">&quot;&quot;&quot;Common interface and unified execution flow for all Hermes backends.</span>
+<span class="cm">    Subclasses implement _run_bash() and cleanup(). The base class</span>
+<span class="cm">    provides execute() with session snapshot sourcing, CWD tracking,</span>
+<span class="cm">    interrupt handling, and timeout enforcement.&quot;&quot;&quot;</span>
+
+    <span class="kw">def</span> <span class="fn">_run_bash</span>(self, cmd_string, ...) -&gt; ProcessHandle:
+        <span class="cm"># subclass must implement: spawn a bash process in its own backend</span>
+        <span class="kw">raise</span> NotImplementedError
+
+    <span class="nd">@abstractmethod</span>
+    <span class="kw">def</span> <span class="fn">cleanup</span>(self):
+        <span class="cm"># release backend resources (container/instance/connection)</span>
+        ...</pre>
+</div>
+<p>Note the division: <strong>subclasses implement only <span class="mono">_run_bash()</span> (how to spawn a process) and <span class="mono">cleanup()</span> (how to release resources)</strong>; while <span class="mono">execute()</span> — session snapshot restoration, CWD tracking, interrupt handling, timeout enforcement — these <strong>cross-backend common flows</strong> are <strong>provided uniformly by the base class</strong>, reused by all six backends. So the docker backend cares only about "how to run bash in a container," the ssh backend only about "how to run remotely," and neither <strong>rewrites</strong> the common session-state management.</p>
+
+<p>So what exactly is that "session snapshot"? Take the local backend — the design is elegant: <strong>every <span class="mono">execute()</span> spawns a brand-new bash process</strong> (spawn-per-call) that exits the moment the command finishes. But then wouldn't the env vars <span class="mono">export</span>ed by the previous command, and the directory it <span class="mono">cd</span>'d into, be lost for the next one? The base class's "session snapshot" is exactly for this: <strong>after each command it snapshots env vars into a file and writes the current working directory to a file too; before the next command runs, it reads them back and sources them in</strong>. So a string of stateless, short-lived bash processes is woven into a session "with memory" — precisely the countermeasure for <strong>constraint B (statelessness)</strong> at the shell-execution layer: the underlying processes are stateless, and continuity is rebuilt from external file snapshots.</p>
+
+<h2>The factory: pick the backend by TERMINAL_ENV</h2>
+<p>Which backend is chosen is dispatched by a factory function from config — the switch for "swap the device by swapping the backend":</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/terminal_tool.py</span><span class="ln">569 / 1225-1372 · simplified</span></div>
+  <pre><span class="cm"># default local; TERMINAL_ENV switches the backend</span>
+terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st">"local"</span>).strip().lower() <span class="kw">or</span> <span class="st">"local"</span>
+
+<span class="kw">def</span> <span class="fn">_create_environment</span>(env_type, image, cwd, timeout, ...):
+    <span class="kw">if</span> env_type == <span class="st">"local"</span>:
+        <span class="kw">return</span> _LocalEnvironment(cwd=cwd, timeout=timeout)
+    <span class="kw">elif</span> env_type == <span class="st">"docker"</span>:
+        <span class="kw">return</span> _DockerEnvironment(...)
+    <span class="kw">elif</span> env_type == <span class="st">"modal"</span>:
+        <span class="kw">return</span> _ModalEnvironment(...)        <span class="cm"># serverless: spin up on demand, release when done</span>
+    <span class="kw">elif</span> env_type == <span class="st">"ssh"</span>:
+        <span class="kw">return</span> _SSHEnvironment(...)
+    ...                                       <span class="cm"># singularity / daytona</span></pre>
+</div>
+<p><span class="mono">TERMINAL_ENV</span> defaults to <span class="mono">local</span> (local subprocess + process-group isolation); change one config to switch to docker (container isolation), ssh (remote), modal (serverless). Each <span class="mono">_XxxEnvironment</span> is a subclass of <span class="mono">BaseEnvironment</span>. The factory is the single "dispatch point" — the model and the core loop have <strong>no idea</strong> which environment a command landed on. Switch environments = change <span class="mono">TERMINAL_ENV</span>, change no calling code.</p>
+<p>Each of these six backends is a class in its own file under <span class="mono">tools/environments/</span> — adding a new backend just needs a new file + one <span class="mono">elif</span> in the factory:</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/terminal_tool.py</span><span class="ln">825-831 · excerpt</span></div>
+  <pre><span class="cm"># Environment classes now live in tools/environments/</span>
+<span class="kw">from</span> tools.environments.local <span class="kw">import</span> LocalEnvironment
+<span class="kw">from</span> tools.environments.docker <span class="kw">import</span> DockerEnvironment
+<span class="kw">from</span> tools.environments.ssh <span class="kw">import</span> SSHEnvironment
+<span class="kw">from</span> tools.environments.modal <span class="kw">import</span> ModalEnvironment
+<span class="kw">from</span> tools.environments.singularity <span class="kw">import</span> SingularityEnvironment
+<span class="kw">from</span> tools.environments.managed_modal <span class="kw">import</span> ManagedModalEnvironment</pre>
+</div>
+<p style="font-size:.92em;opacity:.85">Note: this top-level import list is <strong>not</strong> one-to-one with the "six backends" — <span class="mono">daytona</span> is <strong>lazily imported</strong> (only <span class="mono">import</span>ed inside its factory branch when selected), and <span class="mono">managed_modal</span> is modal's <strong>Nous-managed mode</strong> (chosen via <span class="mono">terminal.modal_mode</span>), not a standalone <span class="mono">TERMINAL_ENV</span> value. The six env types are always local/docker/ssh/singularity/modal/daytona.</p>
+
+<h2>serverless savings + background processes</h2>
+<p>Multiple backends aren't just "portable" — they also <strong>save money</strong>. Serverless backends like <span class="mono">modal</span> <strong>spin up</strong> a container on demand and <strong>release</strong> it when the command finishes — you needn't keep a cloud server running around the clock just to run a few commands occasionally. Also, the terminal supports <span class="mono">background=True, notify_on_complete=True</span>: a long command runs in the background, and when the gateway's watcher detects the process finished it <strong>triggers a new turn</strong> to bring the result back — this "background done → new turn" path (same idea as ch.13's delegation completion queue) keeps strict role alternation and doesn't break the cache.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">the model calls the unified <span class="mono">terminal</span> tool (just "run this command")</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">the factory <span class="mono">_create_environment</span> picks the backend by <span class="mono">TERMINAL_ENV</span> (local/docker/ssh/modal/...)</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">the matching <span class="mono">BaseEnvironment</span> subclass's <span class="mono">execute()</span> (base: snapshot/CWD/interrupt/timeout) → subclass <span class="mono">_run_bash()</span> spawns a process in that backend</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">returns a unified <span class="mono">ProcessHandle</span> — the core loop is unaware of backend differences</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">serverless <span class="mono">cleanup()</span> releases resources when done; background+notify_on_complete runs in the background, surfacing as a new turn on completion</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "environment portability"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: the <strong>BaseEnvironment ABC</strong> (unified interface + execute() common flow), the <strong>six backend subclasses</strong> (each implements _run_bash/cleanup), the <strong>_create_environment factory</strong> (dispatch by TERMINAL_ENV). Cross-chapter teamwork: <span class="mono">terminal</span> is one core <strong>tool</strong> (ch.8), and six backends' differences are all caged in edge subclasses — exactly the <strong>narrow waist</strong> (ch.4: thin core, backends at the edges); a delegated subagent gets its own <strong>independent terminal session</strong> (ch.13 context isolation); background+notify_on_complete's "background done → new turn" works like the delegation completion queue (ch.13), keeping strict alternation and the cache.
+  <div class="collab-sub">② Data-flow timing</div>
+  the model calls terminal → the factory picks the backend by TERMINAL_ENV → the BaseEnvironment subclass's execute() (base-unified session snapshot/CWD/interrupt/timeout) → the subclass's _run_bash() spawns in that backend → returns a unified ProcessHandle → cleanup() releases (serverless frees when done).
+  <div class="collab-sub">③ The key point</div>
+  "One agent runs across all environments" rests on a <strong>unified abstraction + factory dispatch</strong>: the core knows only one terminal tool and one BaseEnvironment interface, and all the differences of six environments (local/container/remote/serverless) <strong>sink to edge subclasses</strong>. Add a new backend = write a BaseEnvironment subclass + one factory branch, with zero change to the core.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>a unified terminal abstraction + multiple backends = environment portability + serverless savings; backend differences at the edges (narrow waist)</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — a real agent must work in all kinds of environments: local dev, container isolation, remote servers, serverless elasticity. The unified <span class="mono">BaseEnvironment</span> abstraction lets <strong>one agent run across them unchanged</strong>, and serverless backends can <strong>start/stop on demand to save money</strong>; ops details like session snapshot/CWD/timeout are handled uniformly by the base class. It's also the <strong>narrow waist</strong> (ch.4): the core knows only one terminal, and environment differences evolve at the edges. The anti-pattern: writing per-environment if-else execution logic in the core — that bloats the core with each backend added, against "thin core, thick edges."</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·statelessness</span> — the underlying bash processes are stateless (spawn-per-call, a new process per command); the base class's <strong>session snapshot</strong> (env vars + CWD via file snapshot/read-back) strings them into a continuous session. A stateless execution substrate rebuilds memory from external snapshots — of a piece with the book's recurring "stateless core + external state."</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Unified abstraction</strong>: six backends (local/docker/ssh/singularity/modal/daytona) share the <span class="mono">BaseEnvironment</span> ABC; subclasses implement only <span class="mono">_run_bash()</span> + <span class="mono">cleanup()</span>, the common <span class="mono">execute()</span> is provided by the base class.</li>
+    <li><strong>Factory dispatch</strong>: <span class="mono">_create_environment</span> picks the backend by <span class="mono">TERMINAL_ENV</span> (default local); switch environments by config only, zero core change.</li>
+    <li><strong>Environment portability</strong>: one agent runs across local/container/remote/serverless unchanged — the narrow waist (ch.4) at the execution layer.</li>
+    <li><strong>serverless savings</strong>: backends like modal start on demand and <span class="mono">cleanup()</span> when done, not paying to keep a server running for occasional commands.</li>
+    <li><strong>Background processes</strong>: <span class="mono">background=True, notify_on_complete=True</span> runs in the background and surfaces as a new turn on completion (like the delegation completion queue, ch.13), not breaking the cache.</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. To add a new execution backend to Hermes (say some new serverless platform), do you need to change the core agent loop?</div>
+  <ol class="opts">
+    <li>Yes, you must change the system prompt</li>
+    <li>No — write a BaseEnvironment subclass (implement _run_bash/cleanup) + one elif in the factory; the core is untouched</li>
+    <li>Yes, you must retrain the model</li>
+    <li>Yes, you must change the core loop and every tool</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. The six backends share the BaseEnvironment ABC; differences are caged in edge subclasses, and the factory dispatches by TERMINAL_ENV. Adding a backend = one subclass + one elif; the model and core loop never sense which environment ran the command — the narrow waist (thin core, backends at the edges).</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. The local backend spawns a brand-new bash process on every execute() and it exits when done. Why aren't the directory a previous command cd'd into and the vars it exported lost for the next one?</div>
+  <ol class="opts">
+    <li>The model remembers the directory in context</li>
+    <li>The bash process actually stays resident</li>
+    <li>Each command opens a new SSH connection</li>
+    <li>The base class 'session snapshot' saves env vars and CWD into files; the next command reads them back and sources them in — stateless processes strung into a session with memory</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. spawn-per-call (a new process per command) + session snapshot (env snapshotted to a file, CWD read back from a file) = a string of stateless short-lived bash processes woven into a continuous session. This is the countermeasure for constraint B (statelessness) at the shell layer: stateless underneath, continuity rebuilt from external file snapshots.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>How do serverless backends like modal 'save money' (tie it to on-demand start + cleanup release)? And why should these backend differences 'sink to edge subclasses' rather than living as per-environment if-else in the core?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="footnav"><a class="prev" href="15-context-compression.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">上下文压缩</span><span class="lang-en">Context compression</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
+</div>
+<script>
+function havgSetLang(l){
+  l=(l==='en')?'en':'zh';
+  var d=document.documentElement;
+  d.dataset.lang=l; d.lang=(l==='en'?'en':'zh-CN');
+  try{localStorage.setItem('havg-lang',l);}catch(e){}
+}
+function havgToggleLang(){
+  havgSetLang(document.documentElement.dataset.lang==='en'?'zh':'en');
+}
+</script>
+</body></html>

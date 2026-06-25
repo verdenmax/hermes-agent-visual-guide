@@ -619,3 +619,229 @@ agent._cached_system_prompt = new_system_prompt      <span class="cm"># write ba
 </div>
 """,
 }
+
+
+LESSON_16 = {
+    "zh": r"""
+<p class="lead">
+Agent 要「动手」就得跑命令——但跑在<strong>哪里</strong>？你本地的机器、一个 Docker 容器、一台远程服务器、还是 Modal 这样的 <strong>serverless</strong> 平台？Hermes 的答案是：<strong>同一个 terminal 工具，背后是可插拔的多种后端</strong>。模型永远只调一个 <span class="mono">terminal</span>，至于命令落到 local / docker / ssh / modal / singularity / daytona 哪个环境，由一层<strong>统一抽象</strong>透明分派。这让同一个 agent <strong>跑遍各种环境</strong>，也让 serverless 后端能<strong>按需启动、用完释放</strong>省钱。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 万能遥控器</div>
+  一个<strong>万能遥控器</strong>，按钮永远是「开 / 关 / 音量」（统一接口），但背后能控电视、空调、音响（多种后端）。你<strong>不需要</strong>为每台设备学一套按钮——遥控器内部把「音量+」翻译成各设备的红外码。Hermes 的 terminal 就是这个万能遥控器：模型永远按「跑这条命令」，<span class="mono">BaseEnvironment</span> 这层抽象把它翻译成 local 的 subprocess、docker 的 exec、ssh 的远程命令、modal 的 serverless 调用。换设备只换后端，<strong>遥控器的按钮一个不变</strong>。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 统一抽象,后端差异在边缘</div>
+  六种执行后端——<strong>local / docker / ssh / singularity / modal / daytona</strong>——共享<strong>同一个接口</strong> <span class="mono">BaseEnvironment</span>(ABC)。每个后端只需实现 <span class="mono">_run_bash()</span> 和 <span class="mono">cleanup()</span> 两个抽象方法；统一的 <span class="mono">execute()</span>(会话快照、CWD 跟踪、中断、超时)由<strong>基类提供</strong>，所有后端复用。一个工厂 <span class="mono">_create_environment</span> 按 <span class="mono">TERMINAL_ENV</span> 配置挑后端。这正是窄腰(第 4 章)在执行层的体现:<strong>核心只认一个 terminal 工具</strong>,六种环境的差异全被关进边缘的 <span class="mono">BaseEnvironment</span> 子类——加一个新后端,核心一行不动。
+</div>
+
+<h2>统一接口:BaseEnvironment ABC</h2>
+<p>所有后端的「共同契约」是一个抽象基类——子类只填两个洞，其余流程基类全包了:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/environments/base.py</span><span class="ln">288-345 · 节选</span></div>
+  <pre><span class="kw">class</span> <span class="fn">BaseEnvironment</span>(ABC):
+    <span class="cm">&quot;&quot;&quot;Common interface and unified execution flow for all Hermes backends.</span>
+<span class="cm">    Subclasses implement _run_bash() and cleanup(). The base class</span>
+<span class="cm">    provides execute() with session snapshot sourcing, CWD tracking,</span>
+<span class="cm">    interrupt handling, and timeout enforcement.&quot;&quot;&quot;</span>
+
+    <span class="kw">def</span> <span class="fn">_run_bash</span>(self, cmd_string, ...) -&gt; ProcessHandle:
+        <span class="cm"># 子类必须实现:在各自后端里 spawn 一个 bash 进程</span>
+        <span class="kw">raise</span> NotImplementedError
+
+    <span class="nd">@abstractmethod</span>
+    <span class="kw">def</span> <span class="fn">cleanup</span>(self):
+        <span class="cm"># 释放后端资源(容器/实例/连接)</span>
+        ...</pre>
+</div>
+<p>注意分工:<strong>子类只实现 <span class="mono">_run_bash()</span>(怎么 spawn 进程)和 <span class="mono">cleanup()</span>(怎么释放资源)</strong>;而 <span class="mono">execute()</span>——会话快照恢复、CWD 跟踪、中断处理、超时强制——这些<strong>跨后端通用的流程</strong>由基类<strong>统一提供</strong>,六个后端复用同一套。于是 docker 后端只关心「怎么在容器里跑 bash」,ssh 后端只关心「怎么在远程跑」,通用的会话状态管理它们<strong>都不用重写</strong>。</p>
+
+<p>那么「会话快照」到底是什么?以 local 后端为例,设计很巧:<strong>每次 <span class="mono">execute()</span> 都重新 spawn 一个全新的 bash 进程</strong>(spawn-per-call),命令跑完进程即退。可这样一来,上一条命令 <span class="mono">export</span> 的环境变量、<span class="mono">cd</span> 切换的目录,下一条岂不全丢?基类的「会话快照」正为此:<strong>每条命令结束后把环境变量快照进文件、当前工作目录也写进文件;下一条命令开跑前先回读、source 回来</strong>。于是一串无状态的短命 bash 进程,被串成一个「有记忆」的会话——这正是<strong>约束 B(无状态)</strong>在 shell 执行层的对策:底层进程无状态,靠外部文件快照重建连续性。</p>
+
+<h2>工厂:按 TERMINAL_ENV 挑后端</h2>
+<p>选哪个后端,由一个工厂函数按配置分派——这是「换设备只换后端」的开关:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/terminal_tool.py</span><span class="ln">569 / 1225-1372 · 简化</span></div>
+  <pre><span class="cm"># 默认 local;TERMINAL_ENV 配置切换后端</span>
+terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st">"local"</span>).strip().lower() <span class="kw">or</span> <span class="st">"local"</span>
+
+<span class="kw">def</span> <span class="fn">_create_environment</span>(env_type, image, cwd, timeout, ...):
+    <span class="kw">if</span> env_type == <span class="st">"local"</span>:
+        <span class="kw">return</span> _LocalEnvironment(cwd=cwd, timeout=timeout)
+    <span class="kw">elif</span> env_type == <span class="st">"docker"</span>:
+        <span class="kw">return</span> _DockerEnvironment(...)
+    <span class="kw">elif</span> env_type == <span class="st">"modal"</span>:
+        <span class="kw">return</span> _ModalEnvironment(...)        <span class="cm"># serverless:按需启动,用完释放</span>
+    <span class="kw">elif</span> env_type == <span class="st">"ssh"</span>:
+        <span class="kw">return</span> _SSHEnvironment(...)
+    ...                                       <span class="cm"># singularity / daytona</span></pre>
+</div>
+<p><span class="mono">TERMINAL_ENV</span> 默认 <span class="mono">local</span>(本地 subprocess + 进程组隔离),改一个配置就切到 docker(容器隔离)、ssh(远程执行)、modal(serverless)。每个 <span class="mono">_XxxEnvironment</span> 都是 <span class="mono">BaseEnvironment</span> 的子类。工厂是唯一的「分派点」——模型和核心循环<strong>完全不知道</strong>命令落到了哪个环境。换环境=改 <span class="mono">TERMINAL_ENV</span>,不改任何调用代码。</p>
+<p>这六个后端各自是 <span class="mono">tools/environments/</span> 下一个独立文件里的类——加一个新后端，只需新增一个文件 + 工厂里加一支 <span class="mono">elif</span>：</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/terminal_tool.py</span><span class="ln">825-831 · 节选</span></div>
+  <pre><span class="cm"># Environment classes now live in tools/environments/</span>
+<span class="kw">from</span> tools.environments.local <span class="kw">import</span> LocalEnvironment
+<span class="kw">from</span> tools.environments.docker <span class="kw">import</span> DockerEnvironment
+<span class="kw">from</span> tools.environments.ssh <span class="kw">import</span> SSHEnvironment
+<span class="kw">from</span> tools.environments.modal <span class="kw">import</span> ModalEnvironment
+<span class="kw">from</span> tools.environments.singularity <span class="kw">import</span> SingularityEnvironment
+<span class="kw">from</span> tools.environments.managed_modal <span class="kw">import</span> ManagedModalEnvironment</pre>
+</div>
+<p style="font-size:.92em;opacity:.85">注:这份顶层 import 与「六个后端」并非一一对应——<span class="mono">daytona</span> 走<strong>惰性导入</strong>(只在被选中时才在工厂分支内 <span class="mono">import</span>),而 <span class="mono">managed_modal</span> 是 modal 的 <strong>Nous 托管模式</strong>(由 <span class="mono">terminal.modal_mode</span> 选),并非独立的 <span class="mono">TERMINAL_ENV</span> 取值。六个 env_type 始终是 local/docker/ssh/singularity/modal/daytona。</p>
+
+<h2>serverless 省钱 + 后台进程</h2>
+<p>多后端不只是「能移植」,还能<strong>省钱</strong>。<span class="mono">modal</span> 这类 <strong>serverless</strong> 后端<strong>按需启动</strong>容器、命令跑完就<strong>释放</strong>——你不必常驻一台云服务器,只为偶尔跑几条命令付全天的钱。另外,terminal 支持 <span class="mono">background=True, notify_on_complete=True</span>:长命令在后台跑,gateway 的 watcher 检测到进程完成时<strong>触发一个新 turn</strong>把结果带回——这条「后台完成→新 turn」的路径(和第 13 章委派的完成队列同理)维持了严格角色交替、不破缓存。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">模型调统一的 <span class="mono">terminal</span> 工具(只管「跑这条命令」)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">工厂 <span class="mono">_create_environment</span> 按 <span class="mono">TERMINAL_ENV</span> 挑后端(local/docker/ssh/modal/...)</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">对应 <span class="mono">BaseEnvironment</span> 子类的 <span class="mono">execute()</span>(基类统一:快照/CWD/中断/超时)→ 子类 <span class="mono">_run_bash()</span> 在该后端 spawn 进程</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">返回统一的 <span class="mono">ProcessHandle</span>——核心循环不感知后端差异</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">serverless 用完 <span class="mono">cleanup()</span> 释放资源;background+notify_on_complete 则后台跑、完成时作新 turn</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「环境可移植」</div>
+  <div class="collab-sub">① 组件清单（★本章核心,其余跨章节配合）</div>
+  本章核心:<strong>BaseEnvironment ABC</strong>(统一接口 + execute() 通用流程)、<strong>六个后端子类</strong>(各实现 _run_bash/cleanup)、<strong>_create_environment 工厂</strong>(按 TERMINAL_ENV 分派)。跨章节配合:<span class="mono">terminal</span> 是一个核心<strong>工具</strong>(第 8 章),六种后端差异全被关进边缘子类——这正是<strong>窄腰</strong>(第 4 章:核心薄、后端在边缘);子代理委派时拿到<strong>独立的 terminal session</strong>(第 13 章上下文隔离);background+notify_on_complete 的「后台完成→新 turn」与委派完成队列同理(第 13 章),维持严格角色交替不破缓存。
+  <div class="collab-sub">② 数据流时序</div>
+  模型调 terminal → 工厂按 TERMINAL_ENV 选后端 → BaseEnvironment 子类 execute()(基类统一会话快照/CWD/中断/超时)→ 子类 _run_bash() 在该后端 spawn → 返回统一 ProcessHandle → cleanup() 释放(serverless 用完即放)。
+  <div class="collab-sub">③ 关键点</div>
+  「同一个 agent 跑遍各种环境」靠的是<strong>统一抽象 + 工厂分派</strong>:核心只认一个 terminal 工具与一个 BaseEnvironment 接口,六种环境(本地/容器/远程/serverless)的全部差异<strong>沉到边缘的子类</strong>。加新后端=写一个 BaseEnvironment 子类 + 工厂加一支,核心零改动。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>统一 terminal 抽象 + 多后端 = 环境可移植 + serverless 省钱;后端差异在边缘(窄腰)</strong>。它主要治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——真实 agent 要在各种环境里干活:本地开发、容器隔离、远程服务器、serverless 弹性。统一的 <span class="mono">BaseEnvironment</span> 抽象让<strong>同一个 agent 无改动地跑遍它们</strong>,serverless 后端还能<strong>按需启停省钱</strong>;会话快照/CWD/超时等运维细节由基类统一兜底。它也是<strong>窄腰</strong>(第 4 章)的体现:核心只认一个 terminal,环境差异在边缘演化。反模式:为每种环境在核心里写一套 if-else 执行逻辑——那会让核心随后端数量膨胀,违背「核心薄、边缘厚」。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——底层 bash 进程是无状态的(spawn-per-call,每条命令一个新进程),基类的<strong>会话快照</strong>(环境变量 + CWD 经文件快照/回读)把它们串成连续会话。无状态的执行底座靠外部快照重建记忆——与全书反复出现的「无状态内核 + 外部状态」一脉相承。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>统一抽象</strong>:六后端(local/docker/ssh/singularity/modal/daytona)共享 <span class="mono">BaseEnvironment</span> ABC;子类只实现 <span class="mono">_run_bash()</span> + <span class="mono">cleanup()</span>,通用 <span class="mono">execute()</span> 由基类提供。</li>
+    <li><strong>工厂分派</strong>:<span class="mono">_create_environment</span> 按 <span class="mono">TERMINAL_ENV</span>(默认 local)挑后端;换环境只改配置,核心零改动。</li>
+    <li><strong>环境可移植</strong>:同一 agent 无改动跑遍本地/容器/远程/serverless——窄腰(第 4 章)在执行层的落地。</li>
+    <li><strong>serverless 省钱</strong>:modal 等后端按需启动、用完 <span class="mono">cleanup()</span> 释放,不为偶发命令常驻付费。</li>
+    <li><strong>后台进程</strong>:<span class="mono">background=True, notify_on_complete=True</span> 后台跑,完成时作新 turn(同委派完成队列,第 13 章),不破缓存。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">
+For an agent to "act" it must run commands — but <strong>where</strong>? Your local machine, a Docker container, a remote server, or a <strong>serverless</strong> platform like Modal? Hermes's answer: <strong>one terminal tool, backed by pluggable backends</strong>. The model always calls a single <span class="mono">terminal</span>; whether a command lands on local / docker / ssh / modal / singularity / daytona is dispatched transparently by a <strong>unified abstraction</strong>. This lets one agent <strong>run across all environments</strong>, and lets serverless backends <strong>spin up on demand and release when done</strong> to save money.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · a universal remote</div>
+  A <strong>universal remote</strong>'s buttons are always "on / off / volume" (unified interface), but it can drive a TV, an AC, a speaker (multiple backends). You <strong>don't</strong> learn a new button layout per device — the remote internally translates "volume+" into each device's IR code. Hermes's terminal is that universal remote: the model always presses "run this command," and the <span class="mono">BaseEnvironment</span> abstraction translates it into local's subprocess, docker's exec, ssh's remote command, modal's serverless call. Swap the device by swapping the backend — <strong>the remote's buttons don't change at all</strong>.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · a unified abstraction, backend differences at the edges</div>
+  Six execution backends — <strong>local / docker / ssh / singularity / modal / daytona</strong> — share <strong>one interface</strong>, <span class="mono">BaseEnvironment</span> (ABC). Each backend implements just two abstract methods, <span class="mono">_run_bash()</span> and <span class="mono">cleanup()</span>; the unified <span class="mono">execute()</span> (session snapshot, CWD tracking, interrupt, timeout) is <strong>provided by the base class</strong> and reused by all. A factory, <span class="mono">_create_environment</span>, picks the backend by the <span class="mono">TERMINAL_ENV</span> config. This is the narrow waist (ch.4) at the execution layer: <strong>the core knows only one terminal tool</strong>, and the differences of six environments are all caged in edge <span class="mono">BaseEnvironment</span> subclasses — add a new backend, and the core doesn't change a line.
+</div>
+
+<h2>The unified interface: the BaseEnvironment ABC</h2>
+<p>All backends' "common contract" is an abstract base class — subclasses fill just two holes, the base class handles the rest:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/environments/base.py</span><span class="ln">288-345 · excerpt</span></div>
+  <pre><span class="kw">class</span> <span class="fn">BaseEnvironment</span>(ABC):
+    <span class="cm">&quot;&quot;&quot;Common interface and unified execution flow for all Hermes backends.</span>
+<span class="cm">    Subclasses implement _run_bash() and cleanup(). The base class</span>
+<span class="cm">    provides execute() with session snapshot sourcing, CWD tracking,</span>
+<span class="cm">    interrupt handling, and timeout enforcement.&quot;&quot;&quot;</span>
+
+    <span class="kw">def</span> <span class="fn">_run_bash</span>(self, cmd_string, ...) -&gt; ProcessHandle:
+        <span class="cm"># subclass must implement: spawn a bash process in its own backend</span>
+        <span class="kw">raise</span> NotImplementedError
+
+    <span class="nd">@abstractmethod</span>
+    <span class="kw">def</span> <span class="fn">cleanup</span>(self):
+        <span class="cm"># release backend resources (container/instance/connection)</span>
+        ...</pre>
+</div>
+<p>Note the division: <strong>subclasses implement only <span class="mono">_run_bash()</span> (how to spawn a process) and <span class="mono">cleanup()</span> (how to release resources)</strong>; while <span class="mono">execute()</span> — session snapshot restoration, CWD tracking, interrupt handling, timeout enforcement — these <strong>cross-backend common flows</strong> are <strong>provided uniformly by the base class</strong>, reused by all six backends. So the docker backend cares only about "how to run bash in a container," the ssh backend only about "how to run remotely," and neither <strong>rewrites</strong> the common session-state management.</p>
+
+<p>So what exactly is that "session snapshot"? Take the local backend — the design is elegant: <strong>every <span class="mono">execute()</span> spawns a brand-new bash process</strong> (spawn-per-call) that exits the moment the command finishes. But then wouldn't the env vars <span class="mono">export</span>ed by the previous command, and the directory it <span class="mono">cd</span>'d into, be lost for the next one? The base class's "session snapshot" is exactly for this: <strong>after each command it snapshots env vars into a file and writes the current working directory to a file too; before the next command runs, it reads them back and sources them in</strong>. So a string of stateless, short-lived bash processes is woven into a session "with memory" — precisely the countermeasure for <strong>constraint B (statelessness)</strong> at the shell-execution layer: the underlying processes are stateless, and continuity is rebuilt from external file snapshots.</p>
+
+<h2>The factory: pick the backend by TERMINAL_ENV</h2>
+<p>Which backend is chosen is dispatched by a factory function from config — the switch for "swap the device by swapping the backend":</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/terminal_tool.py</span><span class="ln">569 / 1225-1372 · simplified</span></div>
+  <pre><span class="cm"># default local; TERMINAL_ENV switches the backend</span>
+terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st">"local"</span>).strip().lower() <span class="kw">or</span> <span class="st">"local"</span>
+
+<span class="kw">def</span> <span class="fn">_create_environment</span>(env_type, image, cwd, timeout, ...):
+    <span class="kw">if</span> env_type == <span class="st">"local"</span>:
+        <span class="kw">return</span> _LocalEnvironment(cwd=cwd, timeout=timeout)
+    <span class="kw">elif</span> env_type == <span class="st">"docker"</span>:
+        <span class="kw">return</span> _DockerEnvironment(...)
+    <span class="kw">elif</span> env_type == <span class="st">"modal"</span>:
+        <span class="kw">return</span> _ModalEnvironment(...)        <span class="cm"># serverless: spin up on demand, release when done</span>
+    <span class="kw">elif</span> env_type == <span class="st">"ssh"</span>:
+        <span class="kw">return</span> _SSHEnvironment(...)
+    ...                                       <span class="cm"># singularity / daytona</span></pre>
+</div>
+<p><span class="mono">TERMINAL_ENV</span> defaults to <span class="mono">local</span> (local subprocess + process-group isolation); change one config to switch to docker (container isolation), ssh (remote), modal (serverless). Each <span class="mono">_XxxEnvironment</span> is a subclass of <span class="mono">BaseEnvironment</span>. The factory is the single "dispatch point" — the model and the core loop have <strong>no idea</strong> which environment a command landed on. Switch environments = change <span class="mono">TERMINAL_ENV</span>, change no calling code.</p>
+<p>Each of these six backends is a class in its own file under <span class="mono">tools/environments/</span> — adding a new backend just needs a new file + one <span class="mono">elif</span> in the factory:</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/terminal_tool.py</span><span class="ln">825-831 · excerpt</span></div>
+  <pre><span class="cm"># Environment classes now live in tools/environments/</span>
+<span class="kw">from</span> tools.environments.local <span class="kw">import</span> LocalEnvironment
+<span class="kw">from</span> tools.environments.docker <span class="kw">import</span> DockerEnvironment
+<span class="kw">from</span> tools.environments.ssh <span class="kw">import</span> SSHEnvironment
+<span class="kw">from</span> tools.environments.modal <span class="kw">import</span> ModalEnvironment
+<span class="kw">from</span> tools.environments.singularity <span class="kw">import</span> SingularityEnvironment
+<span class="kw">from</span> tools.environments.managed_modal <span class="kw">import</span> ManagedModalEnvironment</pre>
+</div>
+<p style="font-size:.92em;opacity:.85">Note: this top-level import list is <strong>not</strong> one-to-one with the "six backends" — <span class="mono">daytona</span> is <strong>lazily imported</strong> (only <span class="mono">import</span>ed inside its factory branch when selected), and <span class="mono">managed_modal</span> is modal's <strong>Nous-managed mode</strong> (chosen via <span class="mono">terminal.modal_mode</span>), not a standalone <span class="mono">TERMINAL_ENV</span> value. The six env types are always local/docker/ssh/singularity/modal/daytona.</p>
+
+<h2>serverless savings + background processes</h2>
+<p>Multiple backends aren't just "portable" — they also <strong>save money</strong>. Serverless backends like <span class="mono">modal</span> <strong>spin up</strong> a container on demand and <strong>release</strong> it when the command finishes — you needn't keep a cloud server running around the clock just to run a few commands occasionally. Also, the terminal supports <span class="mono">background=True, notify_on_complete=True</span>: a long command runs in the background, and when the gateway's watcher detects the process finished it <strong>triggers a new turn</strong> to bring the result back — this "background done → new turn" path (same idea as ch.13's delegation completion queue) keeps strict role alternation and doesn't break the cache.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">the model calls the unified <span class="mono">terminal</span> tool (just "run this command")</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">the factory <span class="mono">_create_environment</span> picks the backend by <span class="mono">TERMINAL_ENV</span> (local/docker/ssh/modal/...)</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">the matching <span class="mono">BaseEnvironment</span> subclass's <span class="mono">execute()</span> (base: snapshot/CWD/interrupt/timeout) → subclass <span class="mono">_run_bash()</span> spawns a process in that backend</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">returns a unified <span class="mono">ProcessHandle</span> — the core loop is unaware of backend differences</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">serverless <span class="mono">cleanup()</span> releases resources when done; background+notify_on_complete runs in the background, surfacing as a new turn on completion</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "environment portability"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: the <strong>BaseEnvironment ABC</strong> (unified interface + execute() common flow), the <strong>six backend subclasses</strong> (each implements _run_bash/cleanup), the <strong>_create_environment factory</strong> (dispatch by TERMINAL_ENV). Cross-chapter teamwork: <span class="mono">terminal</span> is one core <strong>tool</strong> (ch.8), and six backends' differences are all caged in edge subclasses — exactly the <strong>narrow waist</strong> (ch.4: thin core, backends at the edges); a delegated subagent gets its own <strong>independent terminal session</strong> (ch.13 context isolation); background+notify_on_complete's "background done → new turn" works like the delegation completion queue (ch.13), keeping strict alternation and the cache.
+  <div class="collab-sub">② Data-flow timing</div>
+  the model calls terminal → the factory picks the backend by TERMINAL_ENV → the BaseEnvironment subclass's execute() (base-unified session snapshot/CWD/interrupt/timeout) → the subclass's _run_bash() spawns in that backend → returns a unified ProcessHandle → cleanup() releases (serverless frees when done).
+  <div class="collab-sub">③ The key point</div>
+  "One agent runs across all environments" rests on a <strong>unified abstraction + factory dispatch</strong>: the core knows only one terminal tool and one BaseEnvironment interface, and all the differences of six environments (local/container/remote/serverless) <strong>sink to edge subclasses</strong>. Add a new backend = write a BaseEnvironment subclass + one factory branch, with zero change to the core.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>a unified terminal abstraction + multiple backends = environment portability + serverless savings; backend differences at the edges (narrow waist)</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — a real agent must work in all kinds of environments: local dev, container isolation, remote servers, serverless elasticity. The unified <span class="mono">BaseEnvironment</span> abstraction lets <strong>one agent run across them unchanged</strong>, and serverless backends can <strong>start/stop on demand to save money</strong>; ops details like session snapshot/CWD/timeout are handled uniformly by the base class. It's also the <strong>narrow waist</strong> (ch.4): the core knows only one terminal, and environment differences evolve at the edges. The anti-pattern: writing per-environment if-else execution logic in the core — that bloats the core with each backend added, against "thin core, thick edges."</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·statelessness</span> — the underlying bash processes are stateless (spawn-per-call, a new process per command); the base class's <strong>session snapshot</strong> (env vars + CWD via file snapshot/read-back) strings them into a continuous session. A stateless execution substrate rebuilds memory from external snapshots — of a piece with the book's recurring "stateless core + external state."</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Unified abstraction</strong>: six backends (local/docker/ssh/singularity/modal/daytona) share the <span class="mono">BaseEnvironment</span> ABC; subclasses implement only <span class="mono">_run_bash()</span> + <span class="mono">cleanup()</span>, the common <span class="mono">execute()</span> is provided by the base class.</li>
+    <li><strong>Factory dispatch</strong>: <span class="mono">_create_environment</span> picks the backend by <span class="mono">TERMINAL_ENV</span> (default local); switch environments by config only, zero core change.</li>
+    <li><strong>Environment portability</strong>: one agent runs across local/container/remote/serverless unchanged — the narrow waist (ch.4) at the execution layer.</li>
+    <li><strong>serverless savings</strong>: backends like modal start on demand and <span class="mono">cleanup()</span> when done, not paying to keep a server running for occasional commands.</li>
+    <li><strong>Background processes</strong>: <span class="mono">background=True, notify_on_complete=True</span> runs in the background and surfaces as a new turn on completion (like the delegation completion queue, ch.13), not breaking the cache.</li>
+  </ul>
+</div>
+""",
+}

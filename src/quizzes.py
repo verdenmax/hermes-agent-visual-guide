@@ -551,6 +551,40 @@ QUIZZES = {
              "en": "Compression (make room) and ch.13 delegation (isolate) both fight 'limited context,' but one rewrites the history prefix (breaks the cache) while the other locks intermediate work in a child context (doesn't break the parent cache). Why must compression accept the 'void the cache' cost while delegation avoids it?"},
         ],
     },
+    "16-terminal-backends.html": {
+        "mcq": [
+            {
+                "q": {"zh": "要给 Hermes 加一个新的执行后端（比如某个新 serverless 平台），需要改核心 agent 循环吗？",
+                      "en": "To add a new execution backend to Hermes (say some new serverless platform), do you need to change the core agent loop?"},
+                "opts": [
+                    {"zh": "要，得改核心循环和每个工具", "en": "Yes, you must change the core loop and every tool"},
+                    {"zh": "不用——写一个 BaseEnvironment 子类（实现 _run_bash/cleanup）+ 工厂里加一支 elif，核心零改动", "en": "No — write a BaseEnvironment subclass (implement _run_bash/cleanup) + one elif in the factory; the core is untouched"},
+                    {"zh": "要，得重新训练模型", "en": "Yes, you must retrain the model"},
+                    {"zh": "要，得改 system prompt", "en": "Yes, you must change the system prompt"},
+                ],
+                "answer": 1,
+                "why": {"zh": "六后端共享 BaseEnvironment ABC，差异全关进边缘子类；工厂按 TERMINAL_ENV 分派。加后端=新增一个子类 + 工厂加一支 elif，模型和核心循环完全不感知命令落到哪个环境——这是窄腰（核心薄、后端在边缘）。",
+                        "en": "The six backends share the BaseEnvironment ABC; differences are caged in edge subclasses, and the factory dispatches by TERMINAL_ENV. Adding a backend = one subclass + one elif; the model and core loop never sense which environment ran the command — the narrow waist (thin core, backends at the edges)."},
+            },
+            {
+                "q": {"zh": "local 后端每次 execute() 都 spawn 一个全新的 bash 进程、跑完即退。上一条命令 cd 进的目录、export 的变量，下一条为什么没丢？",
+                      "en": "The local backend spawns a brand-new bash process on every execute() and it exits when done. Why aren't the directory a previous command cd'd into and the vars it exported lost for the next one?"},
+                "opts": [
+                    {"zh": "bash 进程其实常驻不退", "en": "The bash process actually stays resident"},
+                    {"zh": "基类的「会话快照」把环境变量和 CWD 存进文件，下条命令开跑前回读 source 回来——无状态进程被串成有记忆的会话", "en": "The base class 'session snapshot' saves env vars and CWD into files; the next command reads them back and sources them in — stateless processes strung into a session with memory"},
+                    {"zh": "模型把目录记在 context 里", "en": "The model remembers the directory in context"},
+                    {"zh": "每条命令开一条新 SSH 连接", "en": "Each command opens a new SSH connection"},
+                ],
+                "answer": 1,
+                "why": {"zh": "spawn-per-call（每命令一个新进程）+ 会话快照（env 快照进文件、CWD 文件回读）= 把一串无状态短命 bash 进程串成连续会话。这正是约束 B（无状态）在 shell 执行层的对策：底层无状态，靠外部文件快照重建连续性。",
+                        "en": "spawn-per-call (a new process per command) + session snapshot (env snapshotted to a file, CWD read back from a file) = a string of stateless short-lived bash processes woven into a continuous session. This is the countermeasure for constraint B (statelessness) at the shell layer: stateless underneath, continuity rebuilt from external file snapshots."},
+            },
+        ],
+        "open": [
+            {"zh": "modal 这类 serverless 后端是怎么「省钱」的（结合按需启动与 cleanup 释放）？又为什么这些后端差异要「沉到边缘子类」、而不在核心里为每种环境写一套 if-else？",
+             "en": "How do serverless backends like modal 'save money' (tie it to on-demand start + cleanup release)? And why should these backend differences 'sink to edge subclasses' rather than living as per-environment if-else in the core?"},
+        ],
+    },
 }
 
 

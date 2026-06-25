@@ -25,4 +25,5 @@ CONTENT = {
     "13-delegation.html": part4.LESSON_13,
     "14-review-verification.html": part4.LESSON_14,
     "15-context-compression.html": part4.LESSON_15,
+    "16-terminal-backends.html": part4.LESSON_16,
 }
