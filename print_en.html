@@ -348,6 +348,16 @@ details[open] > summary { list-style: none; }
   <li>Delegation & subagents</li>
   <li>Review & verification</li>
   <li>Context compression</li>
+  <li>Terminal backends</li>
+  <li>Gateway & platform adapters</li>
+  <li>Gateway message guards</li>
+  <li>TUI & desktop</li>
+  <li>Config & Profiles</li>
+  <li>Cron & Kanban</li>
+  <li>Eval, batch & trajectory</li>
+  <li>Plugins, skills & MCP</li>
+  <li>Security & threat model</li>
+  <li>Design principles synthesis</li>
 </ol></div>
 <section class="lesson-print">
 <h1>What is Hermes</h1>
@@ -2734,6 +2744,1410 @@ agent._cached_system_prompt = new_system_prompt      <span class="cm"># write ba
   <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
   <ul>
     <li>Compression (make room) and ch.13 delegation (isolate) both fight 'limited context,' but one rewrites the history prefix (breaks the cache) while the other locks intermediate work in a child context (doesn't break the parent cache). Why must compression accept the 'void the cache' cost while delegation avoids it?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Terminal backends</h1>
+
+<p class="lead">
+For an agent to "act" it must run commands — but <strong>where</strong>? Your local machine, a Docker container, a remote server, or a <strong>serverless</strong> platform like Modal? Hermes's answer: <strong>one terminal tool, backed by pluggable backends</strong>. The model always calls a single <span class="mono">terminal</span>; whether a command lands on local / docker / ssh / modal / singularity / daytona is dispatched transparently by a <strong>unified abstraction</strong>. This lets one agent <strong>run across all environments</strong>, and lets serverless backends <strong>spin up on demand and release when done</strong> to save money.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · a universal remote</div>
+  A <strong>universal remote</strong>'s buttons are always "on / off / volume" (unified interface), but it can drive a TV, an AC, a speaker (multiple backends). You <strong>don't</strong> learn a new button layout per device — the remote internally translates "volume+" into each device's IR code. Hermes's terminal is that universal remote: the model always presses "run this command," and the <span class="mono">BaseEnvironment</span> abstraction translates it into local's subprocess, docker's exec, ssh's remote command, modal's serverless call. Swap the device by swapping the backend — <strong>the remote's buttons don't change at all</strong>.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · a unified abstraction, backend differences at the edges</div>
+  Six execution backends — <strong>local / docker / ssh / singularity / modal / daytona</strong> — share <strong>one interface</strong>, <span class="mono">BaseEnvironment</span> (ABC). Each backend implements just two abstract methods, <span class="mono">_run_bash()</span> and <span class="mono">cleanup()</span>; the unified <span class="mono">execute()</span> (session snapshot, CWD tracking, interrupt, timeout) is <strong>provided by the base class</strong> and reused by all. A factory, <span class="mono">_create_environment</span>, picks the backend by the <span class="mono">TERMINAL_ENV</span> config. This is the narrow waist (ch.4) at the execution layer: <strong>the core knows only one terminal tool</strong>, and the differences of six environments are all caged in edge <span class="mono">BaseEnvironment</span> subclasses — add a new backend, and the core doesn't change a line.
+</div>
+
+<h2>The unified interface: the BaseEnvironment ABC</h2>
+<p>All backends' "common contract" is an abstract base class — subclasses fill just two holes, the base class handles the rest:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/environments/base.py</span><span class="ln">288-345 · excerpt</span></div>
+  <pre><span class="kw">class</span> <span class="fn">BaseEnvironment</span>(ABC):
+    <span class="cm">&quot;&quot;&quot;Common interface and unified execution flow for all Hermes backends.</span>
+<span class="cm">    Subclasses implement _run_bash() and cleanup(). The base class</span>
+<span class="cm">    provides execute() with session snapshot sourcing, CWD tracking,</span>
+<span class="cm">    interrupt handling, and timeout enforcement.&quot;&quot;&quot;</span>
+
+    <span class="kw">def</span> <span class="fn">_run_bash</span>(self, cmd_string, ...) -&gt; ProcessHandle:
+        <span class="cm"># subclass must implement: spawn a bash process in its own backend</span>
+        <span class="kw">raise</span> NotImplementedError
+
+    <span class="nd">@abstractmethod</span>
+    <span class="kw">def</span> <span class="fn">cleanup</span>(self):
+        <span class="cm"># release backend resources (container/instance/connection)</span>
+        ...</pre>
+</div>
+<p>Note the division: <strong>subclasses implement only <span class="mono">_run_bash()</span> (how to spawn a process) and <span class="mono">cleanup()</span> (how to release resources)</strong>; while <span class="mono">execute()</span> — session snapshot restoration, CWD tracking, interrupt handling, timeout enforcement — these <strong>cross-backend common flows</strong> are <strong>provided uniformly by the base class</strong>, reused by all six backends. So the docker backend cares only about "how to run bash in a container," the ssh backend only about "how to run remotely," and neither <strong>rewrites</strong> the common session-state management.</p>
+
+<p>So what exactly is that "session snapshot"? Take the local backend — the design is elegant: <strong>every <span class="mono">execute()</span> spawns a brand-new bash process</strong> (spawn-per-call) that exits the moment the command finishes. But then wouldn't the env vars <span class="mono">export</span>ed by the previous command, and the directory it <span class="mono">cd</span>'d into, be lost for the next one? The base class's "session snapshot" is exactly for this: <strong>after each command it snapshots env vars into a file and writes the current working directory to a file too; before the next command runs, it reads them back and sources them in</strong>. So a string of stateless, short-lived bash processes is woven into a session "with memory" — precisely the countermeasure for <strong>constraint B (statelessness)</strong> at the shell-execution layer: the underlying processes are stateless, and continuity is rebuilt from external file snapshots.</p>
+
+<h2>The factory: pick the backend by TERMINAL_ENV</h2>
+<p>Which backend is chosen is dispatched by a factory function from config — the switch for "swap the device by swapping the backend":</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/terminal_tool.py</span><span class="ln">569 / 1225-1372 · simplified</span></div>
+  <pre><span class="cm"># default local; TERMINAL_ENV switches the backend</span>
+terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st">"local"</span>).strip().lower() <span class="kw">or</span> <span class="st">"local"</span>
+
+<span class="kw">def</span> <span class="fn">_create_environment</span>(env_type, image, cwd, timeout, ...):
+    <span class="kw">if</span> env_type == <span class="st">"local"</span>:
+        <span class="kw">return</span> _LocalEnvironment(cwd=cwd, timeout=timeout)
+    <span class="kw">elif</span> env_type == <span class="st">"docker"</span>:
+        <span class="kw">return</span> _DockerEnvironment(...)
+    <span class="kw">elif</span> env_type == <span class="st">"modal"</span>:
+        <span class="kw">return</span> _ModalEnvironment(...)        <span class="cm"># serverless: spin up on demand, release when done</span>
+    <span class="kw">elif</span> env_type == <span class="st">"ssh"</span>:
+        <span class="kw">return</span> _SSHEnvironment(...)
+    ...                                       <span class="cm"># singularity / daytona</span></pre>
+</div>
+<p><span class="mono">TERMINAL_ENV</span> defaults to <span class="mono">local</span> (local subprocess + process-group isolation); change one config to switch to docker (container isolation), ssh (remote), modal (serverless). Each <span class="mono">_XxxEnvironment</span> is a subclass of <span class="mono">BaseEnvironment</span>. The factory is the single "dispatch point" — the model and the core loop have <strong>no idea</strong> which environment a command landed on. Switch environments = change <span class="mono">TERMINAL_ENV</span>, change no calling code.</p>
+<p>Each of these six backends is a class in its own file under <span class="mono">tools/environments/</span> — adding a new backend just needs a new file + one <span class="mono">elif</span> in the factory:</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/terminal_tool.py</span><span class="ln">825-831 · excerpt</span></div>
+  <pre><span class="cm"># Environment classes now live in tools/environments/</span>
+<span class="kw">from</span> tools.environments.local <span class="kw">import</span> LocalEnvironment
+<span class="kw">from</span> tools.environments.docker <span class="kw">import</span> DockerEnvironment
+<span class="kw">from</span> tools.environments.ssh <span class="kw">import</span> SSHEnvironment
+<span class="kw">from</span> tools.environments.modal <span class="kw">import</span> ModalEnvironment
+<span class="kw">from</span> tools.environments.singularity <span class="kw">import</span> SingularityEnvironment
+<span class="kw">from</span> tools.environments.managed_modal <span class="kw">import</span> ManagedModalEnvironment</pre>
+</div>
+<p style="font-size:.92em;opacity:.85">Note: this top-level import list is <strong>not</strong> one-to-one with the "six backends" — <span class="mono">daytona</span> is <strong>lazily imported</strong> (only <span class="mono">import</span>ed inside its factory branch when selected), and <span class="mono">managed_modal</span> is modal's <strong>Nous-managed mode</strong> (chosen via <span class="mono">terminal.modal_mode</span>), not a standalone <span class="mono">TERMINAL_ENV</span> value. The six env types are always local/docker/ssh/singularity/modal/daytona.</p>
+
+<h2>serverless savings + background processes</h2>
+<p>Multiple backends aren't just "portable" — they also <strong>save money</strong>. Serverless backends like <span class="mono">modal</span> <strong>spin up</strong> a container on demand and <strong>release</strong> it when the command finishes — you needn't keep a cloud server running around the clock just to run a few commands occasionally. Also, the terminal supports <span class="mono">background=True, notify_on_complete=True</span>: a long command runs in the background, and when the gateway's watcher detects the process finished it <strong>triggers a new turn</strong> to bring the result back — this "background done → new turn" path (same idea as ch.13's delegation completion queue) keeps strict role alternation and doesn't break the cache.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">the model calls the unified <span class="mono">terminal</span> tool (just "run this command")</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">the factory <span class="mono">_create_environment</span> picks the backend by <span class="mono">TERMINAL_ENV</span> (local/docker/ssh/modal/...)</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">the matching <span class="mono">BaseEnvironment</span> subclass's <span class="mono">execute()</span> (base: snapshot/CWD/interrupt/timeout) → subclass <span class="mono">_run_bash()</span> spawns a process in that backend</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">returns a unified <span class="mono">ProcessHandle</span> — the core loop is unaware of backend differences</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">serverless <span class="mono">cleanup()</span> releases resources when done; background+notify_on_complete runs in the background, surfacing as a new turn on completion</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "environment portability"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: the <strong>BaseEnvironment ABC</strong> (unified interface + execute() common flow), the <strong>six backend subclasses</strong> (each implements _run_bash/cleanup), the <strong>_create_environment factory</strong> (dispatch by TERMINAL_ENV). Cross-chapter teamwork: <span class="mono">terminal</span> is one core <strong>tool</strong> (ch.8), and six backends' differences are all caged in edge subclasses — exactly the <strong>narrow waist</strong> (ch.4: thin core, backends at the edges); a delegated subagent gets its own <strong>independent terminal session</strong> (ch.13 context isolation); background+notify_on_complete's "background done → new turn" works like the delegation completion queue (ch.13), keeping strict alternation and the cache.
+  <div class="collab-sub">② Data-flow timing</div>
+  the model calls terminal → the factory picks the backend by TERMINAL_ENV → the BaseEnvironment subclass's execute() (base-unified session snapshot/CWD/interrupt/timeout) → the subclass's _run_bash() spawns in that backend → returns a unified ProcessHandle → cleanup() releases (serverless frees when done).
+  <div class="collab-sub">③ The key point</div>
+  "One agent runs across all environments" rests on a <strong>unified abstraction + factory dispatch</strong>: the core knows only one terminal tool and one BaseEnvironment interface, and all the differences of six environments (local/container/remote/serverless) <strong>sink to edge subclasses</strong>. Add a new backend = write a BaseEnvironment subclass + one factory branch, with zero change to the core.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>a unified terminal abstraction + multiple backends = environment portability + serverless savings; backend differences at the edges (narrow waist)</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — a real agent must work in all kinds of environments: local dev, container isolation, remote servers, serverless elasticity. The unified <span class="mono">BaseEnvironment</span> abstraction lets <strong>one agent run across them unchanged</strong>, and serverless backends can <strong>start/stop on demand to save money</strong>; ops details like session snapshot/CWD/timeout are handled uniformly by the base class. It's also the <strong>narrow waist</strong> (ch.4): the core knows only one terminal, and environment differences evolve at the edges. The anti-pattern: writing per-environment if-else execution logic in the core — that bloats the core with each backend added, against "thin core, thick edges."</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·statelessness</span> — the underlying bash processes are stateless (spawn-per-call, a new process per command); the base class's <strong>session snapshot</strong> (env vars + CWD via file snapshot/read-back) strings them into a continuous session. A stateless execution substrate rebuilds memory from external snapshots — of a piece with the book's recurring "stateless core + external state."</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Unified abstraction</strong>: six backends (local/docker/ssh/singularity/modal/daytona) share the <span class="mono">BaseEnvironment</span> ABC; subclasses implement only <span class="mono">_run_bash()</span> + <span class="mono">cleanup()</span>, the common <span class="mono">execute()</span> is provided by the base class.</li>
+    <li><strong>Factory dispatch</strong>: <span class="mono">_create_environment</span> picks the backend by <span class="mono">TERMINAL_ENV</span> (default local); switch environments by config only, zero core change.</li>
+    <li><strong>Environment portability</strong>: one agent runs across local/container/remote/serverless unchanged — the narrow waist (ch.4) at the execution layer.</li>
+    <li><strong>serverless savings</strong>: backends like modal start on demand and <span class="mono">cleanup()</span> when done, not paying to keep a server running for occasional commands.</li>
+    <li><strong>Background processes</strong>: <span class="mono">background=True, notify_on_complete=True</span> runs in the background and surfaces as a new turn on completion (like the delegation completion queue, ch.13), not breaking the cache.</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. To add a new execution backend to Hermes (say some new serverless platform), do you need to change the core agent loop?</div>
+  <ol class="opts">
+    <li>Yes, you must change the system prompt</li>
+    <li>No — write a BaseEnvironment subclass (implement _run_bash/cleanup) + one elif in the factory; the core is untouched</li>
+    <li>Yes, you must retrain the model</li>
+    <li>Yes, you must change the core loop and every tool</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. The six backends share the BaseEnvironment ABC; differences are caged in edge subclasses, and the factory dispatches by TERMINAL_ENV. Adding a backend = one subclass + one elif; the model and core loop never sense which environment ran the command — the narrow waist (thin core, backends at the edges).</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. The local backend spawns a brand-new bash process on every execute() and it exits when done. Why aren't the directory a previous command cd'd into and the vars it exported lost for the next one?</div>
+  <ol class="opts">
+    <li>The model remembers the directory in context</li>
+    <li>The bash process actually stays resident</li>
+    <li>Each command opens a new SSH connection</li>
+    <li>The base class 'session snapshot' saves env vars and CWD into files; the next command reads them back and sources them in — stateless processes strung into a session with memory</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. spawn-per-call (a new process per command) + session snapshot (env snapshotted to a file, CWD read back from a file) = a string of stateless short-lived bash processes woven into a continuous session. This is the countermeasure for constraint B (statelessness) at the shell layer: stateless underneath, continuity rebuilt from external file snapshots.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>How do serverless backends like modal 'save money' (tie it to on-demand start + cleanup release)? And why should these backend differences 'sink to edge subclasses' rather than living as per-environment if-else in the core?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Gateway & platform adapters</h1>
+
+<p class="lead">A single Hermes process can send and receive across Telegram, Discord, Slack, Matrix, Feishu, WeChat… twenty-plus platforms at once. How? The core knows only <strong>one</strong> kind of message — each platform gets a "translator" (adapter) that turns its motley protocol into one unified event, and the core gateway's <strong>main path barely touches any specific platform</strong>.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · UN simultaneous interpretation</div>
+  Delegates speak different languages (Telegram's Update, Discord's Gateway events, a line of IRC text…), but the floor runs in <strong>one working language</strong>. Each language gets an interpreter (adapter) who renders it into the working language and translates resolutions back. The chair (the core gateway) <strong>only needs to understand the working language</strong>, never the two dozen native tongues.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · unified abstraction, platform differences at the edges</div>
+  The core defines two unified abstractions: <strong>MessageEvent</strong> (a normalized "one message") and <strong>BasePlatformAdapter</strong> (the adapter contract). Some 28+ platforms each write an adapter subclass that translates native messages into MessageEvent for the core, and translates the core's reply back to the platform format. All differences sink to the edges; <strong>the core stays platform-agnostic</strong>.
+</div>
+
+<h2>The unified message: MessageEvent</h2>
+<p>No matter which platform a message comes from, it is normalized into the same data structure before entering the core:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">1599-1632 · excerpt</span></div>
+  <pre><span class="nd">@dataclass</span>
+<span class="kw">class</span> <span class="fn">MessageEvent</span>:
+    <span class="cm">&quot;&quot;&quot;Incoming message from a platform.</span>
+<span class="cm">    Normalized representation that all adapters produce.&quot;&quot;&quot;</span>
+    text: str                              <span class="cm"># message body</span>
+    message_type: MessageType = MessageType.TEXT
+    source: SessionSource = None           <span class="cm"># who/which session (for routing)</span>
+    raw_message: Any = None                <span class="cm"># original platform object (kept)</span>
+    media_urls: List[str] = field(default_factory=list)
+    reply_to_message_id: Optional[str] = None</pre>
+</div>
+<p>The punch line is that docstring: <strong>"Normalized representation that all adapters produce."</strong> Telegram's rich text, Discord's embeds, IRC's plain text — all get squashed into the same <span class="mono">MessageEvent</span> before reaching the core. The core's agent loop (ch.7) <strong>has only ever seen MessageEvent, and never knows any platform's native format</strong>. The <span class="mono">source</span> field carries the session identity, and the core routes the message to the right session by it (each session independent = constraint B).</p>
+
+<h2>The adapter contract: BasePlatformAdapter</h2>
+<p>What a "translator" must do is frozen into an abstract base class; each platform subclass fills only the platform-specific holes:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">2082-2620 · excerpt</span></div>
+  <pre><span class="kw">class</span> <span class="fn">BasePlatformAdapter</span>(ABC):
+    <span class="cm">&quot;&quot;&quot;Base class for platform adapters.</span>
+<span class="cm">    Subclasses implement platform-specific logic for:</span>
+<span class="cm">    - Connecting and authenticating</span>
+<span class="cm">    - Receiving messages</span>
+<span class="cm">    - Sending messages/responses</span>
+<span class="cm">    - Handling media&quot;&quot;&quot;</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="kw">async def</span> <span class="fn">connect</span>(self) -&gt; bool:
+        <span class="cm"># connect to the platform, start receiving</span>
+        ...
+
+    <span class="nd">@abstractmethod</span>
+    <span class="kw">async def</span> <span class="fn">send</span>(self, chat_id, content, reply_to=None):
+        <span class="cm"># translate the core's reply back to the platform format</span>
+        ...</pre>
+</div>
+<p><span class="mono">connect()</span> / <span class="mono">disconnect()</span> / <span class="mono">send()</span> are abstract methods every adapter <strong>must</strong> implement (plus <span class="mono">get_chat_info</span>) — the core contract surface between core and platform. At startup the gateway <span class="mono">connect()</span>s every enabled adapter, then <strong>uniformly</strong> waits for them to produce MessageEvents, caring not at all whether the underlying transport is long-polling, a WebSocket, or an IRC socket.</p>
+
+<h2>A real translator: IRCAdapter</h2>
+<p>See how the IRC adapter turns a line of IRC text into a unified event — the shared pattern of all 28+ adapters:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">plugins/platforms/irc/adapter.py</span><span class="ln">482-510 / 281-283 · excerpt</span></div>
+  <pre><span class="kw">class</span> <span class="fn">IRCAdapter</span>(BasePlatformAdapter):
+
+    <span class="kw">async def</span> <span class="fn">_dispatch_message</span>(self, text, chat_id, ...):
+        <span class="cm">&quot;&quot;&quot;Build a MessageEvent and hand it to the base class handler.&quot;&quot;&quot;</span>
+        source = self.build_source(chat_id=chat_id, ...)
+        event = MessageEvent(              <span class="cm"># IRC native → unified event</span>
+            text=text,
+            message_type=MessageType.TEXT,
+            source=source,
+        )
+        <span class="kw">await</span> self.handle_message(event)   <span class="cm"># hand to the base unified entry</span>
+
+    <span class="kw">async def</span> <span class="fn">send_typing</span>(self, chat_id, metadata=None):
+        <span class="cm">&quot;&quot;&quot;IRC has no typing indicator — no-op.&quot;&quot;&quot;</span>
+        <span class="kw">pass</span>                               <span class="cm"># a capability the platform lacks, absorbed at the edge</span></pre>
+</div>
+<p>Two details capture the whole design: (1) <span class="mono">_dispatch_message</span> wraps the IRC text into a <span class="mono">MessageEvent</span> and calls <span class="mono">handle_message</span> — <strong>once translated, it hands off to the base unified entry</strong>, and the core handles all downstream routing/queuing/approval; (2) <span class="mono">send_typing</span> is a <strong>no-op</strong>: IRC has no "typing" indicator, and this capability gap is <strong>quietly absorbed inside the edge adapter</strong>, so the core never knows, and need never know, that some platform lacks it.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">a platform-native event arrives (Telegram Update / Discord event / IRC text line)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">the adapter calls <span class="mono">build_source()</span> + builds a <span class="mono">MessageEvent</span> (normalize)</span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><span class="mono">handle_message(event)</span> hands to the base unified entry</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">routed to the right session by <span class="mono">source</span> / session_key</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">the agent processes → <span class="mono">send()</span> translates the reply back to the platform format</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "one process across many platforms"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>MessageEvent</strong> (normalized message), <strong>BasePlatformAdapter</strong> (adapter contract), <strong>handle_message</strong> (base unified entry), <strong>session_key routing</strong>. Cross-chapter teamwork: the vast majority of adapters are <strong>edge plugins</strong> under <span class="mono">plugins/platforms/</span> (ch.23 plugins/skills/MCP), and the core gateway knows only the abstraction — exactly the <strong>narrow waist</strong> (ch.4); incoming messages first pass <strong>two guards</strong> (ch.18) before the agent; the unified MessageEvent ultimately feeds the <strong>agent core loop</strong> (ch.7 message flow); each platform's bot credential uses a <strong>token lock</strong> to stop two profiles from grabbing the same token (ch.20 Profiles).
+  <div class="collab-sub">② Data-flow timing</div>
+  platform-native event → adapter <span class="mono">build_source()</span> + <span class="mono">MessageEvent(...)</span> → <span class="mono">handle_message()</span> → routed to a session by session_key → two guards (ch.18) → agent loop → <span class="mono">send()</span> translates back to the platform format.
+  <div class="collab-sub">③ The key point</div>
+  "One process serving 28+ platforms" rests on <strong>two unified abstractions + edge translation</strong>: the core knows only <span class="mono">MessageEvent</span> and <span class="mono">BasePlatformAdapter</span>, and every platform's protocol/capability/format difference (down to "is there a typing indicator") sinks to edge adapters. Adding a new platform = write a <span class="mono">plugins/platforms/&lt;name&gt;/adapter.py</span> subclass, with no change to the core gateway's <strong>main path</strong>.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>a unified message abstraction + edge translation by adapters = one process across 28+ platforms; platform differences at the edges (narrow waist)</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — a personal agent must be reachable anywhere: Telegram on your phone, Slack at your desk, WeChat in a group. The unified abstraction lets <strong>one core serve every platform</strong>, operating one process instead of twenty; adding a platform doesn't touch the core.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·statelessness</span> — the core holds no global session state; it routes <strong>each message to an independent session</strong> by the <span class="mono">source</span> / session_key on the MessageEvent. In one process, Telegram's Alice and Discord's Bob never cross wires, distinguished purely by the routing key.</p>
+  <p style="margin:.5rem 0 0">It's also the ultimate expression of the <strong>narrow waist</strong> (ch.4): even the adapters for mainstream platforms like Telegram/Discord/Slack are <strong>edge plugins</strong>, and the core gateway interacts mainly through the BasePlatformAdapter abstraction. (To be honest, <span class="mono">base.py</span> still keeps a few platform special-cases — e.g. Telegram DM-topic reply anchors, Feishu threads — but those are legacy corners, not the main-path architecture.) The anti-pattern: piling each platform's whole logic into the core as <span class="mono">if platform == ...</span> branches — that bloats the core explosively with each platform.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Two unified abstractions</strong>: <span class="mono">MessageEvent</span> (normalized message, "all adapters produce it") + <span class="mono">BasePlatformAdapter</span> (connect/disconnect/send contract).</li>
+    <li><strong>Adapter = translator</strong>: turn native messages into MessageEvent for <span class="mono">handle_message</span>, and the core reply back to the platform format; capability gaps (e.g. IRC has no typing) are absorbed as edge no-ops.</li>
+    <li><strong>One process, 28+ platforms</strong>: the core gateway's main path has no platform branches; mainstream platforms (telegram/discord/slack/matrix…) are <span class="mono">plugins/platforms/</span> edge plugins, a few built into <span class="mono">gateway/platforms/</span>, but all implement the same BasePlatformAdapter.</li>
+    <li><strong>Session routing</strong>: the core holds no global state, splitting messages into independent sessions by <span class="mono">source</span> / session_key (constraint B).</li>
+    <li><strong>Add a platform, zero core change</strong>: just write a BasePlatformAdapter subclass — the narrow waist (ch.4) at the ingress layer.</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. To onboard a brand-new chat platform to Hermes, do you change the core gateway's message loop?</div>
+  <ol class="opts">
+    <li>Yes, retrain the model</li>
+    <li>Yes, add a branch of that platform's logic in the core</li>
+    <li>No — write a BasePlatformAdapter subclass under plugins/platforms/ that translates native messages into a unified MessageEvent</li>
+    <li>Yes, change every tool</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. The core knows only two abstractions, MessageEvent + BasePlatformAdapter; platform differences sink to edge adapters (mostly plugins/platforms/). Adding a platform = one subclass. Honestly the core main path is untouched — base.py keeps a few legacy platform special-cases (e.g. Telegram topic anchors), but that is not the main-path architecture.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. Telegram's rich text, Discord's embeds, IRC's plain text — what form do they take before entering the core agent loop?</div>
+  <ol class="opts">
+    <li>All converted to Markdown</li>
+    <li>Each keeps its native platform format</li>
+    <li>All converted to a JSON string</li>
+    <li>All normalized by adapters into the same MessageEvent; the core never knows any platform's native format</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. MessageEvent's docstring says it plainly: 'Normalized representation that all adapters produce.' The core agent loop has only ever seen MessageEvent.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>IRC has no 'typing' indicator, so IRCAdapter's send_typing is a no-op. Why should such capability gaps be 'absorbed' inside the edge adapter rather than reported up so the core decides what each platform supports?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Gateway message guards</h1>
+
+<p class="lead">When the agent is busy on a long task and the user sends another message — what now? By default it <strong>queues</strong>, waiting for the agent to finish. But a few commands must never queue: <span class="mono">/stop</span> (interrupt), <span class="mono">/approve</span> (the agent is blocked waiting for it). If they queue, they either <strong>leak as conversation text and get discarded</strong>, or <strong>deadlock outright</strong>. Hence the gateway's "two guards + control-command bypass."</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · the ER triage desk</div>
+  Ordinary patients check in and queue (messages into <span class="mono">_pending_messages</span>), waiting to be called. But "cardiac arrest" (<span class="mono">/stop</span>) must <strong>jump the queue</strong> straight to resuscitation; and "the lab result the attending is waiting on" (<span class="mono">/approve</span>), if it also queues, leaves the doctor <strong>waiting forever, stuck</strong>. The triage desk must recognize these "must-not-queue" cases and let them through.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · two sequential guards, control commands bypass</div>
+  While the agent runs, a message passes <strong>two sequential guards</strong>: ① the adapter layer (queue if busy), ② the gateway runner layer (dispatch slash commands). Ordinary chat queues dutifully; but <strong>any resolvable slash command must bypass both and dispatch inline</strong> — otherwise it gets discarded as conversation text (empty response) or deadlocks.
+</div>
+
+<h2>Guard one: the adapter-layer busy state</h2>
+<p>Each adapter keeps three maps to track "is this session busy right now":</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">2154-2162 · excerpt</span></div>
+  <pre><span class="cm"># _active_sessions stores each session's interrupt Event; _session_tasks</span>
+<span class="cm"># maps a session to the Task processing it, so /stop /new /reset can cancel</span>
+<span class="cm"># the right task and release the guard deterministically. Without it, an old</span>
+<span class="cm"># task's finally could delete a newer task's guard, leaving stale busy state.</span>
+self._active_sessions: Dict[str, asyncio.Event] = {}
+self._pending_messages: Dict[str, MessageEvent] = {}
+self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
+</div>
+<p>If this key is in <span class="mono">_active_sessions</span>, the session is <strong>running an agent</strong>. A new ordinary message then gets stuffed into <span class="mono">_pending_messages</span> to queue, fed in after the current turn ends. <span class="mono">_session_tasks</span> records "who is processing this session," so <span class="mono">/stop</span> can cancel exactly that task without deleting someone else's guard.</p>
+
+<h2>Bypass: control commands must not queue</h2>
+<p>When a session is busy, first check whether this message is a command that should bypass:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">4262-4298 · simplified</span></div>
+  <pre><span class="kw">if</span> session_key <span class="kw">in</span> self._active_sessions:
+    cmd = event.get_command()
+    <span class="kw">from</span> hermes_cli.commands <span class="kw">import</span> should_bypass_active_session
+
+    <span class="kw">if</span> should_bypass_active_session(cmd):
+        <span class="kw">if</span> cmd <span class="kw">in</span> {<span class="st">"stop"</span>, <span class="st">"new"</span>, <span class="st">"reset"</span>}:
+            <span class="cm"># cancel the in-flight task + serialized handoff</span>
+            <span class="kw">await</span> self._dispatch_active_session_command(event, session_key, cmd)
+            <span class="kw">return</span>
+        <span class="cm"># /approve /deny /status /background /restart: dispatch inline</span>
+        <span class="cm"># Do NOT use _process_message_background — it manages session</span>
+        <span class="cm"># lifecycle and its cleanup races with the running task (PR #4926)</span>
+        ...</pre>
+</div>
+<p>Two classes: <span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> must <strong>cancel the in-flight task</strong> (via a dedicated handoff that serializes "cancel + respond + drain queue"); <span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> and friends don't cancel the task and just need <strong>inline dispatch</strong>. The comment flags a trap: <strong>never go through <span class="mono">_process_message_background</span></strong> — it manages session lifecycle, and its cleanup races with the running task.</p>
+
+<h2>Why queueing breaks things: the zero-char response</h2>
+<p>The bypass predicate's docstring spells out the consequence:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/commands.py</span><span class="ln">379-399 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">should_bypass_active_session</span>(command_name):
+    <span class="cm">&quot;&quot;&quot;Return True for any resolvable slash command.</span>
+<span class="cm">    Queueing is always wrong for a recognized slash command</span>
+<span class="cm">    because the safety net in gateway.run discards any command</span>
+<span class="cm">    text that reaches the pending queue — a mid-run /model would</span>
+<span class="cm">    silently interrupt the agent AND get discarded, a zero-char</span>
+<span class="cm">    response.&quot;&quot;&quot;</span>
+    <span class="kw">return</span> resolve_command(command_name) <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span> <span class="kw">if</span> command_name <span class="kw">else</span> <span class="kw">False</span></pre>
+</div>
+<p>The logic is hard: the gateway runner has a safety net that <strong>discards any command text that slips into the pending queue</strong>. So a <span class="mono">/model</span> sent mid-run, if queued, would "<strong>silently interrupt the agent AND get discarded</strong>," and the user gets an <strong>empty response</strong>. Conclusion: any resolvable slash command bypasses and dispatches immediately, never queues. This is exactly the danger the <strong>cache line</strong> guards against: once a control command leaks into conversation history as user text, it could put two user messages back to back, breaking strict role alternation (the invariant from ch.7) and thereby disturbing the cached prefix (ch.6). Bypass routes control commands onto a <strong>control channel</strong>, keeping them out of history entirely — cutting the danger off at the source.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">a message arrives — is <span class="mono">session_key</span> in <span class="mono">_active_sessions</span>? (is the session busy?)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">not busy → process normally; busy → take <span class="mono">cmd = get_command()</span></span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><span class="mono">should_bypass_active_session(cmd)</span>? not a command → queue in <span class="mono">_pending_messages</span></span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><span class="mono">/stop /new /reset</span> → cancel in-flight task + handoff; <span class="mono">/approve</span> etc. → inline dispatch</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">bypass both guards, not via <span class="mono">_process_message_background</span> (avoid session-lifecycle races)</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "concurrency-safe + cache-preserving"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>_active_sessions</strong> (busy state), <strong>_pending_messages</strong> (queue), <strong>_session_tasks</strong> (session→task), <strong>should_bypass_active_session</strong> (bypass predicate), <strong>the second runner guard</strong> (GATEWAY_KNOWN_COMMANDS dispatch). Cross-chapter teamwork: a message is first normalized by the adapter into a <strong>MessageEvent</strong> (ch.17) before reaching the guards; bypass keeps control commands out of conversation history, preserving strict role alternation = <strong>cache intact</strong> (ch.6); a <span class="mono">/stop</span> interrupt <strong>cascades to subagents</strong> (ch.13 delegation); <span class="mono">/approve</span> is the <strong>human-in-the-loop approval</strong> for dangerous operations (ch.24 security).
+  <div class="collab-sub">② Data-flow timing</div>
+  MessageEvent → guard one (<span class="mono">session_key in _active_sessions</span>?) → <span class="mono">get_command()</span> + <span class="mono">should_bypass</span> → bypass (<span class="mono">/stop</span> cancels task / <span class="mono">/approve</span> inline dispatch) or queue (<span class="mono">_pending_messages</span>) → guard two (runner dispatches by <span class="mono">canonical</span>).
+  <div class="collab-sub">③ The key point</div>
+  Both guards <strong>must</strong> let control commands through; queueing a control command = discarded by the safety net (empty response) or deadlock (<span class="mono">/approve</span> never arrives); the bypass must use <strong>inline dispatch</strong>, not <span class="mono">_process_message_background</span>, which manages session lifecycle and whose cleanup races the running task.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>two guards intercept messages + control commands bypass = concurrency-safe + cache-preserving</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">D·instr=data</span> — the model can't tell "this is an instruction to the system" from "this is conversation content." The gateway doesn't rely on the model to judge; it uses <strong>explicit <span class="mono">get_command()</span> parsing + a bypass channel</strong> to pull <strong>instructions</strong> like <span class="mono">/stop</span> <span class="mono">/approve</span> out of the message stream onto a control channel, never feeding them to the model as conversation <strong>data</strong>. This is D's engineering countermeasure at the gateway layer.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — concurrent messages, session lifecycle, interrupts, approvals are all operational complexity. Two guards + bypass + an owner-task map make "who can jump the queue, who should wait, how to cancel" deterministic and race-free.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern: queueing all messages alike — <span class="mono">/approve</span> deadlocks (the agent blocks waiting for approval while the approval waits in the queue for the agent), <span class="mono">/stop</span> is lost, and a mid-run <span class="mono">/model</span> becomes an empty response.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Two guards</strong>: the adapter layer (busy → queue in <span class="mono">_pending_messages</span>) + the gateway runner layer (slash-command dispatch). Control commands must <strong>bypass both</strong>.</li>
+    <li><strong>Two bypass classes</strong>: <span class="mono">/stop /new /reset</span> cancel the in-flight task; <span class="mono">/approve /deny /status</span> etc. dispatch inline (no cancel).</li>
+    <li><strong>Queue = trouble</strong>: a queued control command gets <strong>discarded</strong> by the safety net (zero-char response) or <strong>deadlocks</strong> (<span class="mono">/approve</span>).</li>
+    <li><strong>Cache intact</strong>: control commands ride a control channel, never mixing into conversation history, preserving strict role alternation (ch.6).</li>
+    <li><strong>Dodge the race</strong>: bypass uses inline dispatch, <strong>not</strong> <span class="mono">_process_message_background</span> (which races session-lifecycle cleanup).</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. The agent is mid-run on a long task and the user sends a /model command. Why can't it just queue like an ordinary message?</div>
+  <ol class="opts">
+    <li>The gateway runner's safety net discards queued command text — a queued /model 'interrupts the agent AND gets discarded,' a zero-char response; and a queued /approve would deadlock</li>
+    <li>Queueing is actually safer</li>
+    <li>The command is too long for the queue</li>
+    <li>Random</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. should_bypass_active_session's docstring nails it: command text reaching the pending queue is discarded by gateway.run's safety net, a zero-char response; /approve /deny is worse — the agent blocks on Event.wait for approval while the approval waits in the queue for the agent, a deadlock. So any resolvable slash command bypasses and dispatches immediately.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. While the agent runs, how many guards must a /stop cross to actually interrupt it?</div>
+  <ol class="opts">
+    <li>Four</li>
+    <li>Two — (1) the adapter layer (busy → queue in _pending_messages), (2) the gateway runner layer (slash dispatch); control commands must bypass both and dispatch inline</li>
+    <li>One</li>
+    <li>Zero, straight to the agent</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. Two sequential guards: the adapter layer queues messages into _pending_messages when the session is busy; the gateway runner dispatches slash commands by canonical name. AGENTS.md is explicit: control/approval commands must bypass BOTH and dispatch inline, else they leak as user text or deadlock.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>When bypassing a control command, the code deliberately dispatches inline rather than via _process_message_background. Why? And how does the discipline of 'control commands never enter conversation history' echo the book's throughline that 'per-conversation prompt caching is sacred'?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>TUI & desktop</h1>
+
+<p class="lead">Type <span class="mono">hermes --tui</span> and you see a slick terminal UI. It's really <strong>two processes</strong>: a Node (Ink/React) one paints the screen, a Python (tui_gateway) one runs the agent, and they talk over <strong>newline-delimited JSON-RPC</strong> on stdio. Better still: the web dashboard's chat page <strong>isn't a rewrite</strong> — it pipes the same <span class="mono">hermes --tui</span> into the browser through a PTY.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · a theatre's backstage and stage</div>
+  Backstage (Python) runs the actors, the script, the cues; the stage (Ink) runs the lights, the set, presenting the play to the audience. The two coordinate via a <strong>prompter line</strong> (JSON-RPC over stdio): the stage calls "the audience submitted a line" (<span class="mono">prompt.submit</span>), backstage feeds the actor's lines back word by word (<span class="mono">message.delta</span>). A different venue (the browser)? <strong>Don't re-stage the play</strong> — just project the whole performance (<span class="mono">hermes --tui</span>) onto it.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · one core, many frontends</div>
+  <strong>TypeScript owns the screen, Python owns sessions/tools/model calls</strong>, with a layer of newline-delimited JSON-RPC between them. The same Python backend (the AIAgent core) serves the Ink terminal UI, the PTY embedded in the browser, and the Electron desktop app. Frontends are volatile and iterate fast; the core is stable. Each uses its own ecosystem without dragging the other down.
+</div>
+
+<h2>JSON-RPC: the one bridge between front and back</h2>
+<p>On the Python side, a tiny decorator registers a function as a "remotely callable method," then a single dispatcher routes calls:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tui_gateway/server.py</span><span class="ln">959-995 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">method</span>(name):
+    <span class="kw">def</span> <span class="fn">dec</span>(fn):
+        _methods[name] = fn          <span class="cm"># register into the global method table</span>
+        <span class="kw">return</span> fn
+    <span class="kw">return</span> dec
+
+<span class="kw">def</span> <span class="fn">handle_request</span>(req):
+    rid, m, params = _normalize_request(req)   <span class="cm"># validate + unpack</span>
+    fn = _methods.get(m)
+    <span class="kw">if</span> <span class="kw">not</span> fn:
+        <span class="kw">return</span> _err(rid, -32601, <span class="st">f"unknown method: {m}"</span>)
+    <span class="kw">return</span> fn(rid, params)            <span class="cm"># dispatch to the registered handler</span></pre>
+</div>
+<p>Any capability the frontend can call just hangs a <span class="mono">@method("name")</span> on a function. <span class="mono">handle_request</span> receives one JSON-RPC frame, validates it, looks up the method by name, and dispatches. Errors ride the standard JSON-RPC error envelope (<span class="mono">-32601 unknown method</span>) — the frontend always gets a structured <span class="mono">result</span> or <span class="mono">error</span>, never has to parse free text.</p>
+
+<h2>Streaming back: one token, one event</h2>
+<p>After the user submits, the agent's reply must <strong>display as it's generated</strong>. The server actively pushes <span class="mono">event</span> frames:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tui_gateway/server.py</span><span class="ln">6828 / 887-891 / 7228 · excerpt</span></div>
+  <pre><span class="nd">@method</span>(<span class="st">"prompt.submit"</span>)       <span class="cm"># the frontend submits a message</span>
+<span class="kw">def</span> <span class="fn">_</span>(rid, params):
+    sid, text = params.get(<span class="st">"session_id"</span>), params.get(<span class="st">"text"</span>)
+    <span class="kw">if</span> session.get(<span class="st">"running"</span>):
+        <span class="kw">return</span> _err(rid, 4009, <span class="st">"session busy"</span>)
+    ...
+
+<span class="kw">def</span> <span class="fn">_emit</span>(event, sid, payload=None):
+    params = {<span class="st">"type"</span>: event, <span class="st">"session_id"</span>: sid, <span class="st">"payload"</span>: payload}
+    write_json({<span class="st">"jsonrpc"</span>: <span class="st">"2.0"</span>, <span class="st">"method"</span>: <span class="st">"event"</span>, <span class="st">"params"</span>: params})
+
+<span class="kw">def</span> <span class="fn">_stream</span>(delta):                            <span class="cm"># passed to AIAgent as stream_callback</span>
+    _emit(<span class="st">"message.delta"</span>, sid, {<span class="st">"text"</span>: delta})   <span class="cm"># push one frame per streamed chunk</span></pre>
+</div>
+<p>Request/response is only half; the other half is the <strong>server→frontend event stream</strong>. Every chunk (delta) the agent emits, Python <span class="mono">_emit("message.delta")</span> pushes a frame, and Ink appends it to the transcript — that's the "characters popping out" you see. The same event mechanism also pushes <span class="mono">tool.start/progress/complete</span>, approval requests, and more.</p>
+
+<h2>The dashboard: don't rewrite, embed</h2>
+<p>The web dashboard's "chat" page doesn't re-implement the transcript/composer in React; it bridges the whole <span class="mono">hermes --tui</span> into the browser via a PTY:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/web_server.py</span><span class="ln">11505-11625 · simplified</span></div>
+  <pre><span class="nd">@app.websocket</span>(<span class="st">"/api/pty"</span>)
+<span class="kw">async def</span> <span class="fn">pty_ws</span>(ws):
+    bridge = PtyBridge.spawn(argv, cwd=cwd, env=env)  <span class="cm"># spawn the same hermes --tui</span>
+
+    <span class="kw">async def</span> <span class="fn">pump_pty_to_ws</span>():        <span class="cm"># PTY → browser</span>
+        <span class="kw">while</span> <span class="kw">True</span>:
+            chunk = <span class="kw">await</span> loop.run_in_executor(<span class="kw">None</span>, bridge.read, ...)
+            <span class="kw">if</span> chunk <span class="kw">is</span> <span class="kw">None</span>: <span class="kw">return</span>      <span class="cm"># EOF</span>
+            <span class="kw">await</span> ws.send_bytes(chunk)
+
+    <span class="kw">while</span> <span class="kw">True</span>:                        <span class="cm"># browser → PTY</span>
+        msg = <span class="kw">await</span> ws.receive()
+        raw = msg.get(<span class="st">"bytes"</span>)
+        match = _RESIZE_RE.match(raw)       <span class="cm"># resize escape intercepted locally</span>
+        ...                                 <span class="cm"># otherwise written straight to the PTY</span></pre>
+</div>
+<p>The browser side is xterm.js; the server <span class="mono">spawn</span>s the <strong>exact same</strong> <span class="mono">hermes --tui</span> as the CLI, forwarding bytes <strong>verbatim</strong> in both directions: PTY output → <span class="mono">ws.send_bytes</span> → xterm.js renders; keystrokes → PTY. Only sizing escapes like <span class="mono">\x1b[RESIZE:...]</span> are intercepted server-side and applied with <span class="mono">TIOCSWINSZ</span>. (The PTY bridge is itself a narrow waist: POSIX uses <span class="mono">pty_bridge</span> (fcntl/termios), Windows uses <span class="mono">win_pty_bridge</span> (ConPTY), but <span class="mono">spawn/read/write/resize/close</span> is one shared interface, so the <span class="mono">/api/pty</span> handler needs no platform branches.) <strong>Any new feature you add to Ink shows up in the dashboard automatically.</strong></p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">user types in the Ink UI → frontend sends a <span class="mono">prompt.submit</span> JSON-RPC frame</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">Python <span class="mono">handle_request</span> looks up the <span class="mono">_methods</span> table, dispatches to the handler</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">the handler runs AIAgent (ch.7 core loop), <span class="mono">_emit("message.delta")</span> token by token</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">Ink receives the event stream, appends to the transcript (character by character)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">dashboard: xterm.js ⟷ <span class="mono">/api/pty</span> WebSocket ⟷ PtyBridge ⟷ the same <span class="mono">hermes --tui</span></span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "one core, many frontends"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: the <strong>method decorator</strong> (RPC registration), <strong>handle_request</strong> (dispatch), <strong>_emit/write_json</strong> (event push), <strong>PtyBridge</strong> (the PTY bridge). Cross-chapter teamwork: behind the JSON-RPC runs the <strong>AIAgent core loop</strong> (ch.7) — the TUI is just one of its frontends; <span class="mono">prompt.submit</span>'s busy check is the same idea as the <strong>gateway guards</strong> (ch.18, rejecting new input mid-run); the dashboard <strong>embeds and reuses</strong> the same hermes --tui = no rewrite = the <strong>narrow waist</strong> (ch.4); the Electron desktop app is <strong>another JSON-RPC frontend</strong> (same tui_gateway backend, its own composer).
+  <div class="collab-sub">② Data-flow timing</div>
+  Ink input → JSON-RPC <span class="mono">prompt.submit</span> → <span class="mono">handle_request</span> dispatch → AIAgent runs → <span class="mono">_emit("message.delta")</span> streaming → Ink renders. Dashboard bypass: xterm.js ⟷ WS <span class="mono">/api/pty</span> ⟷ <span class="mono">PtyBridge.spawn</span> ⟷ <span class="mono">hermes --tui</span> child (verbatim byte forwarding).
+  <div class="collab-sub">③ The key point</div>
+  One agent core (Python) + many frontends (Ink TUI / browser PTY / Electron desktop) decoupled by <strong>stdio JSON-RPC</strong>; the dashboard <strong>embeds</strong> the same hermes --tui rather than rewriting it; frontends are volatile, the core is stable, each iterating independently. Add a feature to Ink, the dashboard inherits it.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>one agent core + JSON-RPC-decoupled frontends + embed-and-reuse = consistent across surfaces, no reinventing the wheel (narrow waist)</strong>. It mainly treats one inherent LLM constraint:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — the same agent must appear on the CLI, the TUI, the gateway, the desktop app, and the web dashboard. Tucking the agent core into a Python backend exposed via a stable JSON-RPC envelope lets each frontend <strong>evolve in its own stack independently</strong> (Ink in React, desktop in Electron, dashboard in xterm.js) while the core is maintained once. A crashing Node frontend won't take down the Python agent, and vice versa — <strong>process isolation</strong> is operational robustness too.</p>
+  <p style="margin:.5rem 0 0">It's also the <strong>narrow waist</strong> (ch.4): the chat experience (transcript/input/PTY terminal) is implemented <strong>once</strong> in Ink, and the dashboard reuses it by embedding via PTY. The anti-pattern: <strong>rewriting</strong> the transcript and composer in React for the browser — two implementations doomed to drift, fix one forget the other. AGENTS.md makes this a hard rule: "Do not re-implement the primary chat experience in React."</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Two-process model</strong>: Node (Ink paints the screen) ⟷ stdio JSON-RPC ⟷ Python (tui_gateway runs AIAgent). TS owns the screen, Python owns sessions/tools/model.</li>
+    <li><strong>JSON-RPC bridge</strong>: <span class="mono">@method("name")</span> registers, <span class="mono">handle_request</span> dispatches, standard result/error envelope; the frontend gets structured data, not free text.</li>
+    <li><strong>Streaming events</strong>: <span class="mono">_emit("message.delta")</span> pushes token by token, Ink appends to the transcript (character by character); tool.start/complete use the same mechanism.</li>
+    <li><strong>Dashboard embed</strong>: the <span class="mono">/api/pty</span> WebSocket pipes the same <span class="mono">hermes --tui</span> into xterm.js via a PTY, forwarding bytes both ways, intercepting resize escapes locally.</li>
+    <li><strong>Narrow-waist reuse</strong>: the chat surface is built once (Ink), the dashboard inherits it by embedding; <strong>no</strong> React rewrite — add a feature to Ink, the dashboard has it (ch.4).</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. When you run hermes --tui, how many processes are behind it and how do they talk?</div>
+  <ol class="opts">
+    <li>Two processes: Node (Ink paints the screen) + Python (tui_gateway runs AIAgent), talking over newline-delimited JSON-RPC on stdio</li>
+    <li>Two processes, but talking over HTTP REST</li>
+    <li>One process, all in Python</li>
+    <li>Three processes</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. TypeScript owns the screen (Ink/React renders transcript/input), Python owns sessions/tools/model (AIAgent), with newline-delimited JSON-RPC over stdio between them. Frontends are volatile, the core stable, each iterating in its own ecosystem.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. The web dashboard's 'chat' page — did it rewrite the transcript/composer in React, or something else?</div>
+  <ol class="opts">
+    <li>Embedded — it pipes the same hermes --tui into the browser's xterm.js via a PTY, forwarding bytes verbatim both ways; add a feature to Ink and the dashboard has it</li>
+    <li>Polls screenshots</li>
+    <li>Rewrote it in React</li>
+    <li>Wraps a web version in an iframe</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. AGENTS.md makes it a hard rule: 'Do not re-implement the primary chat experience in React.' The dashboard pipes the same hermes --tui into xterm.js via the /api/pty WebSocket; the chat surface is built once in Ink and reused by embedding — the narrow waist.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Why does Hermes tuck the agent core into a Python backend exposed via a stable JSON-RPC envelope, rather than each surface (CLI/TUI/desktop/dashboard) writing its own agent logic? How does this relate to the 'narrow waist' and multi-surface ops (constraint G)?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Config & Profiles</h1>
+
+<p class="lead">On one machine you want two fully independent Hermes instances: a "work" one and a "personal" one, each with its own API keys, memory, sessions, skills, gateway — never crossing wires. That's a <strong>profile</strong>. All its magic boils down to one sentence: <strong>before any module is imported, set one environment variable, <span class="mono">HERMES_HOME</span>, first</strong>.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · branches of a hotel chain</div>
+  One management system (the Hermes code) runs many branches (profiles). Each branch has <strong>its own keys, ledgers, rooms</strong> (its own <span class="mono">HERMES_HOME</span> directory). The moment you walk in, the front desk confirms "which branch are you" (<span class="mono">_apply_profile_override</span> sets <span class="mono">HERMES_HOME</span> first), and from then on <strong>everything</strong> you do automatically uses that branch's resources — no charging the wrong ledger, no grabbing the wrong key.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · one env var decides everything</div>
+  Switching profiles does <strong>one thing</strong>: at the <strong>module top level</strong> of <span class="mono">main.py</span>, before any other import, set <span class="mono">HERMES_HOME</span> to <span class="mono">~/.hermes/profiles/&lt;name&gt;</span>. After that, the codebase's single path entry point <span class="mono">get_hermes_home()</span> automatically points there, and config/keys/memory/sessions/skills are <strong>fully isolated</strong>. Config itself splits in two layers: behavioral settings go in <span class="mono">config.yaml</span>, secrets in <span class="mono">.env</span>.
+</div>
+
+<h2>Win the race: set HERMES_HOME before imports</h2>
+<p>The key is timing — it must happen <strong>before</strong> any module caches a path:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/main.py</span><span class="ln">336-508 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_apply_profile_override</span>() -&gt; <span class="kw">None</span>:
+    <span class="cm">&quot;&quot;&quot;Pre-parse --profile/-p and set HERMES_HOME before imports.&quot;&quot;&quot;</span>
+    profile_name = ...                       <span class="cm"># parse -p / --profile from argv</span>
+    <span class="kw">if</span> profile_name <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span>:
+        hermes_home = resolve_profile_env(profile_name)   <span class="cm"># → ~/.hermes/profiles/coder</span>
+        os.environ[<span class="st">"HERMES_HOME"</span>] = hermes_home          <span class="cm"># set the env var first</span>
+        <span class="cm"># then strip the -p flag from argv so argparse won't choke</span>
+
+_apply_profile_override()   <span class="cm"># module-level: runs before the other imports</span></pre>
+</div>
+<p>Notice that last line, <span class="mono">_apply_profile_override()</span>, is a <strong>module-level call</strong> — it runs at the top of <span class="mono">main.py</span>, <strong>earlier than</strong> importing the persistence modules like <span class="mono">config</span> and <span class="mono">env_loader</span> that read/cache <span class="mono">HERMES_HOME</span>. By the time those modules read <span class="mono">HERMES_HOME</span> at load time, it already points at the profile's directory. One env var redirects the whole dependency tree to the right instance.</p>
+
+<h2>Single source of truth: every path asks it</h2>
+<p>The codebase must not hardcode <span class="mono">~/.hermes</span>; everything goes through this one function:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_constants.py</span><span class="ln">54-109 · excerpt</span></div>
+  <pre><span class="kw">def</span> <span class="fn">get_hermes_home</span>() -&gt; Path:
+    <span class="cm">&quot;&quot;&quot;Reads HERMES_HOME env var, falls back to the platform-native default.</span>
+<span class="cm">    This is the single source of truth — all other copies should import this.&quot;&quot;&quot;</span>
+    override = get_hermes_home_override()    <span class="cm"># ContextVar-level override (concurrency)</span>
+    <span class="kw">if</span> override:
+        <span class="kw">return</span> Path(override)
+    val = os.environ.get(<span class="st">"HERMES_HOME"</span>, <span class="st">""</span>).strip()
+    <span class="kw">if</span> val:
+        <span class="kw">return</span> Path(val)                     <span class="cm"># ← exactly what the profile set</span>
+    <span class="kw">return</span> _get_platform_default_hermes_home()   <span class="cm"># default ~/.hermes</span></pre>
+</div>
+<p><strong>"single source of truth — all other copies should import this"</strong>: all 30+ places in the codebase that persist state don't splice <span class="mono">~/.hermes</span> themselves — they call <span class="mono">get_hermes_home()</span>. So once a profile sets <span class="mono">HERMES_HOME</span> up front, the session store, memory, skills, gateway logs… <strong>all automatically</strong> land in the profile directory. Conversely, any one hardcoded <span class="mono">Path.home()/".hermes"</span> would <strong>pierce the isolation</strong> (PR #3575 fixed 5 such bugs in one go).</p>
+
+<h2>Config layering: behavior in yaml, secrets in env</h2>
+<p>Profiles isolate "where to store"; "what to store" splits cleanly in two:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/config.py</span><span class="ln">883 / 2860 / 2885 · simplified</span></div>
+  <pre><span class="cm"># config.yaml — all behavioral settings (timeouts/thresholds/flags/display)</span>
+DEFAULT_CONFIG = {
+    <span class="st">"_config_version"</span>: 30,
+    <span class="st">"model"</span>: {...}, <span class="st">"agent"</span>: {...}, <span class="st">"terminal"</span>: {...},
+    <span class="st">"compression"</span>: {...}, <span class="st">"memory"</span>: {...}, <span class="st">"gateway"</span>: {...},
+}
+
+<span class="cm"># .env — credentials/secrets (secret entries password:True, masked in setup)</span>
+OPTIONAL_ENV_VARS = {
+    <span class="st">"OPENROUTER_API_KEY"</span>: {<span class="st">"password"</span>: <span class="kw">True</span>, <span class="st">"category"</span>: <span class="st">"provider"</span>},
+    <span class="st">"TELEGRAM_BOT_TOKEN"</span>: {<span class="st">"password"</span>: <span class="kw">True</span>, <span class="st">"category"</span>: <span class="st">"messaging"</span>},
+}</pre>
+</div>
+<p>The design intent is clear: <strong><span class="mono">.env</span> is mainly for credentials</strong> (secret entries marked <span class="mono">password: True</span> and masked in the setup wizard; <span class="mono">OPTIONAL_ENV_VARS</span> also holds a few <span class="mono">password: False</span> non-secret connection entries like base URLs and proxies); while timeouts, thresholds, feature flags, display prefs — those <strong>behavioral settings all go in <span class="mono">config.yaml</span></strong>. So "set a working directory for messaging" must never go in <span class="mono">.env</span> (the deprecated <span class="mono">MESSAGING_CWD</span> is the cautionary tale) but in <span class="mono">terminal.cwd</span>. This line keeps credentials in a separately protectable, separately gitignored file.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><span class="mono">hermes -p coder ...</span> starts</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><span class="mono">main.py</span> top-level <span class="mono">_apply_profile_override()</span> parses <span class="mono">-p coder</span></span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><span class="mono">os.environ["HERMES_HOME"] = ~/.hermes/profiles/coder</span> (before business imports)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">other modules load, each calls <span class="mono">get_hermes_home()</span> and reads the coder dir</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">config / .env / memory / sessions / skills / gateway logs all land in the coder instance, fully isolated from default</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "fully isolated multi-instance"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>_apply_profile_override</strong> (set env before imports), <strong>get_hermes_home</strong> (single source of truth), <strong>DEFAULT_CONFIG / OPTIONAL_ENV_VARS</strong> (config layering). Cross-chapter teamwork: <span class="mono">HERMES_HOME</span> decides which profile holds <strong>memory</strong> (ch.11), <strong>skills</strong> (ch.9), the <strong>Curator</strong> (ch.10), the session store, and gateway logs; each platform adapter uses a <strong>token lock</strong> so two profiles can't grab the same bot credential (ch.17); profiles are <strong>independent islands</strong> — isolation is the design, so there's no live cross-profile config inheritance.
+  <div class="collab-sub">② Data-flow timing</div>
+  <span class="mono">-p coder</span> → <span class="mono">_apply_profile_override()</span> (module top level, before imports) → <span class="mono">HERMES_HOME=profiles/coder</span> → the import chain unfolds → 30+ module-level <span class="mono">get_hermes_home()</span> calls cache the path as coder → that process honors the coder instance throughout.
+  <div class="collab-sub">③ The key point</div>
+  All of profile isolation = "set one env var before imports" + "every path goes through the single <span class="mono">get_hermes_home()</span> entry." Any hardcoded <span class="mono">~/.hermes</span> pierces the isolation; stuffing non-secret config into <span class="mono">.env</span> is the other bad smell (it belongs in <span class="mono">config.yaml</span>).
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>set HERMES_HOME before imports + a single source of truth for paths = fully isolated instances; then layer config (secrets apart)</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — one person runs work / personal / per-client agent instances at once, and their keys, memory, sessions, gateways must never mix. One env var switches the whole state directory, so operationally "spin up a new instance" = "make a new directory," clean and simple; <span class="mono">display_hermes_home()</span> also makes every user-facing message show the correct profile path.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·statelessness</span> — the core code holds <strong>no</strong> global "which instance am I" state; it derives everything from the one external <span class="mono">HERMES_HOME</span> var plus the one <span class="mono">get_hermes_home()</span> entry. A stateless core plus one external variable to rule them all — the book's recurring motif.</p>
+  <p style="margin:.5rem 0 0">Anti-patterns: ① hardcoding <span class="mono">Path.home()/".hermes"</span> in code — ignores the profile and writes to the wrong instance (PR #3575 fixed 5); ② stuffing <strong>non-secret behavioral</strong> config like timeouts/flags into <span class="mono">.env</span> — pollutes the ".env for credentials, behavioral settings in config.yaml" boundary.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>One env var</strong>: a profile = setting <span class="mono">HERMES_HOME</span> to <span class="mono">~/.hermes/profiles/&lt;name&gt;</span> before any import; <span class="mono">_apply_profile_override()</span> is a module-level call that runs first.</li>
+    <li><strong>Single source of truth</strong>: the whole codebase calls <span class="mono">get_hermes_home()</span> to read <span class="mono">HERMES_HOME</span>; <strong>never</strong> hardcode <span class="mono">~/.hermes</span> (or you pierce isolation, PR #3575).</li>
+    <li><strong>Config layering</strong>: behavioral settings (timeouts/thresholds/flags) go in <span class="mono">config.yaml</span> (<span class="mono">DEFAULT_CONFIG</span>); credentials in <span class="mono">.env</span> (<span class="mono">OPTIONAL_ENV_VARS</span>, secret entries marked <span class="mono">password: True</span>).</li>
+    <li><strong>Full isolation</strong>: each profile's config / secrets / memory / sessions / skills / gateway are independent; profiles are independent islands, no live config inheritance.</li>
+    <li><strong>User-facing paths</strong>: print/log with <span class="mono">display_hermes_home()</span> (default shows <span class="mono">~/.hermes</span>, a profile shows <span class="mono">~/.hermes/profiles/coder</span>).</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Hermes profile isolation (work/personal each with its own keys/memory/sessions) — how is it implemented?</div>
+  <ol class="opts">
+    <li>Before any business module is imported, _apply_profile_override() sets HERMES_HOME to the profile dir first; then every get_hermes_home() points there automatically</li>
+    <li>Each profile runs its own Docker container</li>
+    <li>Assign each profile a port</li>
+    <li>Change the database schema</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. _apply_profile_override() is a module-level call at the top of main.py, setting HERMES_HOME before persistence modules like config/env_loader are imported; get_hermes_home() reads it as the single source of truth, so config/keys/memory/sessions/skills/gateway-logs all land in the profile dir, fully isolated.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. In Hermes code, what's the right way to get the current hermes home directory?</div>
+  <ol class="opts">
+    <li>Call get_hermes_home(), the single source of truth; never hardcode ~/.hermes (or you pierce profile isolation)</li>
+    <li>Hardcode /root/.hermes</li>
+    <li>Read the env var and splice the path yourself</li>
+    <li>Hardcode Path.home() / '.hermes'</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. get_hermes_home() is the codebase's single path entry (reads HERMES_HOME). Any hardcoded Path.home()/'.hermes' ignores the active profile and writes to the wrong instance — the root cause of the 5 bugs PR#3575 fixed in one go.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Should a 'default working directory for messaging' go in .env or config.yaml? Why does Hermes insist on splitting behavioral config (timeouts/flags/paths) from credentials (API keys/tokens) into two layers? What does each buy for profile isolation and security?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Cron & Kanban</h1>
+
+<p class="lead">You tell Hermes "every day at 9am, send me today's meeting digest." It must wake on a <strong>schedule</strong> in the background, run, and deliver — but this must never <strong>pollute the conversation you're having</strong>: don't stuff the automated task into chat history, don't write it into your "personal memory," and certainly don't let one runaway job freeze the whole scheduler. That's cron's design focus: <strong>background automation that breaks neither the cache nor anything else</strong>.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · the office automation assistant</div>
+  You hire an assistant (cron) for scheduled chores: a daily clipping, a weekly backup. They work at a <strong>separate desk</strong> (an isolated session), put results <strong>on your desk</strong> when done (delivery), but <strong>never barge into the meeting you're in</strong> (no mixing into the main conversation), and <strong>never write these chores into your HR file</strong> (skip_memory). If a chore hangs, an <strong>inactivity alarm</strong> (interrupts after ~10 min of no activity by default) stops them so the next one isn't delayed.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · scheduling + isolated session + safety valves</div>
+  Cron is driven by a <span class="mono">tick</span> loop (a file lock prevents duplicates), scanning due jobs by the times <span class="mono">parse_schedule</span> resolves. Each job spins up an <strong>isolated cron session</strong> (<span class="mono">platform="cron"</span>, <span class="mono">skip_memory=True</span>), and when done <strong>delivers framed results</strong> that are <strong>not mirrored into the main conversation</strong>. Add an inactivity timeout (default 600s) and a half-period catchup window — safe background automation. Kanban is the companion multi-agent work queue, where workers claim tasks via a zero-footprint toolset.
+</div>
+
+<h2>Schedule formats: four ways</h2>
+<p>Agents or users can both schedule; <span class="mono">parse_schedule</span> turns a string into structure:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">cron/jobs.py</span><span class="ln">304-377 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">parse_schedule</span>(schedule):
+    <span class="cm">&quot;&quot;&quot;Parse schedule string into structured format.&quot;&quot;&quot;</span>
+    <span class="cm"># "30m"/"2h" → once; "every 2h" → recurring; "0 9 * * *" → cron; ISO → at time</span>
+    <span class="kw">if</span> schedule.lower().startswith(<span class="st">"every "</span>):
+        <span class="kw">return</span> {<span class="st">"kind"</span>: <span class="st">"interval"</span>, <span class="st">"minutes"</span>: parse_duration(...)}
+    parts = schedule.split()
+    <span class="kw">if</span> len(parts) &gt;= 5 <span class="kw">and</span> all(re.match(<span class="st">r"^[\d\*\-,/]+$"</span>, p) <span class="kw">for</span> p <span class="kw">in</span> parts[:5]):
+        croniter(schedule)                  <span class="cm"># validate the 5-field cron expr</span>
+        <span class="kw">return</span> {<span class="st">"kind"</span>: <span class="st">"cron"</span>, <span class="st">"expr"</span>: schedule}
+    <span class="kw">if</span> <span class="st">"T"</span> <span class="kw">in</span> schedule:                  <span class="cm"># ISO timestamp → once</span>
+        <span class="kw">return</span> {<span class="st">"kind"</span>: <span class="st">"once"</span>, <span class="st">"run_at"</span>: ...}</pre>
+</div>
+<p>Four forms cover nearly every need: <span class="mono">"30m"</span> (once in 30 min), <span class="mono">"every 2h"</span> (every 2 hours), <span class="mono">"0 9 * * *"</span> (standard cron, daily 9am), <span class="mono">"2026-02-03T14:00"</span> (once at a timestamp). Parsed into <span class="mono">once</span>/<span class="mono">interval</span>/<span class="mono">cron</span>, from which the scheduler computes the next fire.</p>
+
+<h2>Isolated session: don't pollute the main conversation (★ the cache line)</h2>
+<p>The key step — a cron job does <strong>not</strong> run in your main session; it spins up a separate agent:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">cron/scheduler.py</span><span class="ln">2050-2081 · excerpt</span></div>
+  <pre><span class="cm"># cron spins up an isolated AIAgent session (not the main conversation)</span>
+agent = AIAgent(
+    quiet_mode=<span class="kw">True</span>,
+    load_soul_identity=<span class="kw">True</span>,            <span class="cm"># still reads SOUL.md identity</span>
+    skip_memory=<span class="kw">True</span>,                   <span class="cm"># Cron system prompts would corrupt user representations</span>
+    platform=<span class="st">"cron"</span>,
+    session_id=_cron_session_id,            <span class="cm"># isolated session, not mixed into gateway</span>
+)</pre>
+</div>
+<p>Two designs guard the cache line: ① <span class="mono">skip_memory=True</span> — if cron's system prompts entered memory they'd <strong>corrupt the user representation</strong> (the comment's own words), so cron runs no memory by default; ② <strong>an isolated <span class="mono">session_id</span> + <span class="mono">platform="cron"</span></strong> — results are delivered framed, <strong>not mirrored into the gateway main session</strong>. So the main conversation's strict <strong>role alternation</strong> (ch.7) isn't disturbed by background jobs, and the cached prefix (ch.6) stays untouched. Background automation and the main conversation <strong>never cross streams</strong>.</p>
+
+<h2>Safety valves: catchup and the inactivity timeout</h2>
+<p>Schedulers fear two things: frantically catching up after a miss, and freezing on a runaway. Cron has a valve for each:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">cron/jobs.py</span><span class="ln">475-490 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_compute_grace_seconds</span>(schedule):
+    <span class="cm">&quot;&quot;&quot;Half the schedule period, clamped between 120s and 2 hours.&quot;&quot;&quot;</span>
+    MIN_GRACE, MAX_GRACE = 120, 7200        <span class="cm"># 2 hours</span>
+    <span class="kw">if</span> schedule[<span class="st">"kind"</span>] == <span class="st">"interval"</span>:
+        period = schedule[<span class="st">"minutes"</span>] * 60
+        <span class="kw">return</span> max(MIN_GRACE, min(period // 2, MAX_GRACE))</pre>
+</div>
+<p><strong>The catchup window = half the period</strong> (clamped 120s to 2h): miss it by a little and it runs once to catch up; miss it by a lot and it <strong>fast-forwards</strong> instead of piling up catch-up runs (so booting up won't fire dozens of backlogged runs at once). On the other end, a cron session is backstopped by an <strong>inactivity timeout</strong>: by default, after <strong>600 seconds (10 min)</strong> of no activity (no tool call, no stream token) it fires <span class="mono">agent.interrupt("Cron job timed out (inactivity)")</span> (tunable via <span class="mono">HERMES_CRON_TIMEOUT</span>; <strong>an actively-working job can run for hours</strong>). So a runaway idle agent <strong>can't monopolize</strong> the scheduler, while a legitimate long job isn't killed. Plus a <span class="mono">.tick.lock</span> file lock means multiple processes won't double-tick.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><span class="mono">tick</span> loop (<span class="mono">.tick.lock</span> file lock prevents duplicates) scans due jobs</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">compute next fire from the <span class="mono">parse_schedule</span> structure; past the catchup window → fast-forward</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">spin up an isolated cron session: <span class="mono">platform="cron"</span> + <span class="mono">skip_memory=True</span> + isolated <span class="mono">session_id</span></span></div>
+  <div class="step"><span class="num">4</span><span class="sc">AIAgent runs (inactivity-timeout backstop, kills only after ~600s idle by default)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">framed result delivered, <strong>not mirrored into the gateway main session</strong></span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "cache-safe background automation"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>parse_schedule</strong> (schedule formats), <strong>tick</strong> (loop + file lock), <strong>the isolated cron session</strong> (skip_memory), <strong>_compute_grace_seconds</strong> (catchup). Cross-chapter teamwork: cron spins up an <strong>AIAgent core loop</strong> (ch.7), just with <span class="mono">skip_memory</span> so <strong>memory</strong> (ch.11) doesn't run; the isolated session isn't mirrored into the main conversation, preserving role alternation = <strong>cache intact</strong> (ch.6); <span class="mono">cronjob</span> and <span class="mono">kanban</span> are <strong>tools</strong> (ch.8) so the agent schedules its own jobs and claims work off a multi-agent queue; the inactivity-timeout interrupt shares roots with delegation's <strong>interrupt cascade</strong> (ch.13).
+  <div class="collab-sub">② Data-flow timing</div>
+  <span class="mono">tick</span> (<span class="mono">.tick.lock</span>) → due jobs → catchup check (<span class="mono">grace=period//2</span>) → isolated cron session (<span class="mono">skip_memory</span>/<span class="mono">platform=cron</span>) → AIAgent runs (inactivity timeout, 600s) → framed delivery (not into the main session).
+  <div class="collab-sub">③ The key point</div>
+  Background automation <strong>never pollutes the main conversation</strong>: cron delivery isn't mirrored into the gateway session (role alternation unchanged), <span class="mono">skip_memory</span> (no user-representation pollution), an isolated <span class="mono">session_id</span>. The file lock prevents duplicate ticks; half-period catchup prevents backlog floods; the inactivity timeout prevents runaway idle monopoly. Kanban then folds "multi-agent collaboration" into a zero-footprint toolset too.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>isolated session + skip_memory + not mirrored into the main conversation = background automation that breaks neither cache nor anything else</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — scheduled jobs, batches, and multi-agent queues are real operational needs, but they must be <strong>safe</strong>: an inactivity timeout (default 600s, tunable) stops a runaway idle agent from monopolizing the scheduler, <span class="mono">.tick.lock</span> stops multi-process double-ticks, half-period catchup stops backlog-flood avalanches. Automation built as controllable infrastructure.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·statelessness</span> — a cron session is <strong>isolated</strong>; it neither depends on nor pollutes the main session's state store. It is <strong>not mirrored into the gateway session</strong>, so the main conversation's role alternation / cached prefix are wholly unaffected by background jobs — this is "caching is sacred" realized at the automation layer.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern: <strong>pouring cron results straight into the main session history</strong> — it breaks strict role alternation, shatters the cached prefix, and lets automated tasks <strong>pollute the user's memory representation</strong>. Hermes dodges all of it at the root with "isolated session + skip_memory + framed delivery."</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Four schedule formats</strong>: <span class="mono">parse_schedule</span> reads duration (<span class="mono">30m</span>), every (<span class="mono">every 2h</span>), cron (<span class="mono">0 9 * * *</span>), ISO timestamp, grouped into once/interval/cron.</li>
+    <li><strong>Isolated session (★ cache line)</strong>: a cron job spins up an isolated <span class="mono">session_id</span> + <span class="mono">platform="cron"</span>, delivers framed, <strong>not mirrored into the main conversation</strong>, so role alternation (ch.7) / caching (ch.6) are undisturbed.</li>
+    <li><strong>skip_memory</strong>: cron runs no memory by default, lest automated tasks <strong>pollute the user representation</strong> (ch.11).</li>
+    <li><strong>Safety valves</strong>: an inactivity timeout (default 600s, tunable; active jobs can run for hours) prevents runaway idle monopoly; <span class="mono">.tick.lock</span> prevents duplicate ticks; half-period catchup (120s–2h) prevents backlog floods.</li>
+    <li><strong>Kanban</strong>: a multi-agent work queue; workers claim and report via the zero-footprint <span class="mono">kanban_*</span> toolset (ch.8).</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Why does a cron job not run in your main conversation session but spin up an isolated one?</div>
+  <ol class="opts">
+    <li>Because cron can't use the main session</li>
+    <li>To avoid polluting the main conversation: an isolated session + not mirrored into the gateway session keeps role alternation and the cache intact, and skip_memory keeps automated tasks out of the user representation</li>
+    <li>Random</li>
+    <li>To run faster</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. cron uses an isolated session_id + platform=cron; results are delivered framed and not mirrored into the gateway main session — the main conversation's strict role alternation / cached prefix are undisturbed by background jobs (caching is sacred). Plus skip_memory=True keeps automated tasks from polluting the user's memory representation.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. How does cron stop a runaway, idle-stuck job from monopolizing the scheduler forever?</div>
+  <ol class="opts">
+    <li>No protection; just wait for it to finish</li>
+    <li>Cap the number of jobs per day</li>
+    <li>Kill unconditionally every 3 minutes</li>
+    <li>An inactivity timeout: after ~600s of no activity (no tool call/no stream token) it fires agent.interrupt (tunable; active jobs run for hours) + .tick.lock prevents duplicate ticks</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. Note it's not a wall-clock hard interrupt: cron uses an 'inactivity timeout' — only after 600s (10 min) of no activity does it agent.interrupt('Cron job timed out (inactivity)'), tunable via HERMES_CRON_TIMEOUT; a legit long job actively calling tools runs for hours and isn't killed. The .tick.lock file lock prevents multi-process double-ticks.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>How does cron's trio of 'isolated session + skip_memory + not mirrored into the main conversation' embody the book's throughline that 'per-conversation prompt caching is sacred'? Why is pouring cron results straight into the main session history an anti-pattern?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Eval, batch & trajectory</h1>
+
+<p class="lead">Hermes isn't just a product — it's Nous Research's <strong>research tool</strong>: it must batch-run thousands of prompts, persist each conversation's <strong>full trajectory</strong> (reasoning, tool calls) as training data, and — in a world where models change weekly — write tests that <strong>don't break every day</strong>. This chapter covers three related things: batching, trajectories, and the testing philosophy.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · the factory QC line</div>
+  Feed raw material (prompts) onto <strong>parallel production lines</strong> (batch workers); each product records its <strong>full process</strong> (the trajectory: every reasoning step + every tool call). Before shipping, <strong>QC</strong>: rejects (e.g. zero reasoning throughout) are discarded, never entering the stock (the training set). And QC checks "<strong>does it meet spec</strong>" (invariants), not "<strong>is it identical to the last batch</strong>" (a snapshot) — because the recipe is meant to evolve.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · a data pipeline + drift-proof tests</div>
+  <strong>Batch</strong>: multiple workers run AIAgent in parallel, each prompt independent. <strong>Trajectory</strong>: turn a conversation into a JSONL training sample carrying <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>, and <strong>filter low quality</strong> (drop zero-reasoning samples). <strong>Eval</strong>: tests lock <strong>behavioral invariants</strong>, not data snapshots — model catalogs and config versions change daily; lock a snapshot and CI goes red daily.
+</div>
+
+<h2>Batch: parallel workers + trajectory persistence</h2>
+<p>Batching splits prompts; each worker QCs and persists as soon as one finishes:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">batch_runner.py</span><span class="ln">400-487 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_process_batch_worker</span>(args):
+    <span class="cm">&quot;&quot;&quot;Worker function to process a single batch of prompts.&quot;&quot;&quot;</span>
+    batch_num, batch_data, output_dir, completed, config = args
+    ...
+    <span class="kw">if</span> result[<span class="st">"success"</span>] <span class="kw">and</span> result[<span class="st">"trajectory"</span>]:
+        <span class="kw">if</span> <span class="kw">not</span> reasoning.get(<span class="st">"has_any_reasoning"</span>, <span class="kw">True</span>):
+            <span class="kw">continue</span>                       <span class="cm"># discard samples with zero reasoning</span>
+        trajectory_entry = {
+            <span class="st">"conversations"</span>: result[<span class="st">"trajectory"</span>],
+            <span class="st">"metadata"</span>: result[<span class="st">"metadata"</span>],
+            <span class="st">"tool_stats"</span>: tool_stats,        <span class="cm"># {tool: {count,success,failure}}</span>
+        }
+        f.write(json.dumps(trajectory_entry, ensure_ascii=<span class="kw">False</span>) + <span class="st">"\n"</span>)  <span class="cm"># append JSONL</span></pre>
+</div>
+<p>Three points: ① <strong>parallel</strong> — workers each run their own prompt, independent (stateless, constraint B at work again); ② <strong>quality filter</strong> — <span class="mono">continue</span> to drop when <span class="mono">has_any_reasoning</span> is false, the training set takes only samples with reasoning; ③ <strong>JSONL append</strong> — one sample per line with metadata like <span class="mono">tool_stats</span>, the standard RL/SFT training format.</p>
+
+<h2>Trajectory: one conversation becomes one training sample</h2>
+<p>A single run can save a trajectory too, gated by one switch:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">run_agent.py</span><span class="ln">1716-1729 · excerpt</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_save_trajectory</span>(self, messages, user_query, completed):
+    <span class="cm">&quot;&quot;&quot;Save conversation trajectory to JSONL file.&quot;&quot;&quot;</span>
+    <span class="kw">if</span> <span class="kw">not</span> self.save_trajectories:    <span class="cm"># switch: off by default</span>
+        <span class="kw">return</span>
+    trajectory = self._convert_to_trajectory_format(messages, user_query, completed)
+    _save_trajectory_to_file(trajectory, self.model, completed)</pre>
+</div>
+<p><span class="mono">save_trajectories</span> is off by default (production chats leave no trace), turned on for research. <span class="mono">_convert_to_trajectory_format</span> turns the internal <span class="mono">messages</span> (system/user/assistant/tool roles + reasoning) into the training trajectory format, written to JSONL (successful samples into <span class="mono">trajectory_samples.jsonl</span>, failed ones into <span class="mono">failed_trajectories.jsonl</span>; <span class="mono">model</span> recorded as per-sample metadata). <strong>The same agent core both serves real conversations and produces research data</strong> — the two-for-one of a "research tool."</p>
+
+<h2>Eval: lock invariants, not snapshots</h2>
+<p>The easiest testing trap in a research project — freezing "current data" into assertions. Models change weekly, so such tests break daily:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">AGENTS.md · testing rule (project discipline)</span><span class="ln">Don't write change-detector tests</span></div>
+  <pre><span class="cm"># ❌ change-detector: breaks whenever data changes (catalog changes every release)</span>
+<span class="kw">assert</span> <span class="st">"gemini-2.5-pro"</span> <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"gemini"</span>]
+<span class="kw">assert</span> DEFAULT_CONFIG[<span class="st">"_config_version"</span>] == 21
+
+<span class="cm"># ✅ behavior contract / invariant: lock the RELATION, not the snapshot</span>
+<span class="kw">assert</span> <span class="st">"gemini"</span> <span class="kw">in</span> _PROVIDER_MODELS
+<span class="kw">assert</span> len(_PROVIDER_MODELS[<span class="st">"gemini"</span>]) &gt;= 1
+<span class="kw">assert</span> raw[<span class="st">"_config_version"</span>] == DEFAULT_CONFIG[<span class="st">"_config_version"</span>]
+<span class="kw">for</span> m <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"huggingface"</span>]:
+    <span class="kw">assert</span> m.lower() <span class="kw">in</span> DEFAULT_CONTEXT_LENGTHS_LOWER</pre>
+</div>
+<p>The rule in one line: <strong>if a test reads like a snapshot of current data, delete it; if it reads like a contract about how two pieces of data must relate, keep it.</strong> "the gemini catalog must contain gemini-2.5-pro" is a snapshot (wrong on the next release); "the gemini catalog has at least one model," "every model has a context length" are <strong>invariants</strong> — unbroken however the data updates. This makes tests <strong>drift-proof</strong> against model/data churn, so routine updates no longer redden CI daily.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">a batch of prompts is split and handed to several <span class="mono">_process_batch_worker</span> in parallel</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">each worker runs AIAgent independently (ch.7 core loop), producing a trajectory</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">quality filter: zero-reasoning samples are <span class="mono">continue</span>-dropped</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><span class="mono">trajectory_entry</span> (conversations + tool_stats + metadata) written as one JSONL line</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">eval/regression use <strong>invariant</strong> assertions (not snapshots), drift-proof</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "research data pipeline + drift-proof eval"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>_process_batch_worker</strong> (parallel batch), <strong>_save_trajectory</strong> (trajectory persistence), <strong>trajectory_entry</strong> (JSONL schema), <strong>invariant tests</strong> (eval philosophy). Cross-chapter teamwork: batching runs the <strong>AIAgent core loop</strong> (ch.7), and the reasoning stored in trajectories comes from there; <span class="mono">tool_stats</span> counts <strong>tool</strong> (ch.8) calls; parallel workers are each <strong>stateless and independent</strong> (constraint B, ch.2); trajectories are written by completion status (<span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span>), batches into <span class="mono">data/&lt;run&gt;/</span>.
+  <div class="collab-sub">② Data-flow timing</div>
+  prompts split into batches → several <span class="mono">_process_batch_worker</span> in parallel (each runs AIAgent) → quality filter (drop zero-reasoning) → <span class="mono">trajectory_entry</span> written to JSONL → aggregate <span class="mono">tool_stats</span>; on the eval side: invariant assertions resist data drift.
+  <div class="collab-sub">③ The key point</div>
+  The research data pipeline = <strong>parallel batch + full trajectory + quality filter</strong>; the same agent core both serves real conversations and produces training data. The engineering discipline of eval = <strong>lock behavioral invariants, not data snapshots</strong>, so "models/data change daily" no longer breaks tests daily.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>parallel batch + full trajectory + quality filter + behavior-contract tests = a scalable research data pipeline + drift-proof eval</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — research needs scale: thousands of prompts must run in parallel, trajectories must persist in a standard format, and CI must stay maintainable while "models change weekly." Batch workers, JSONL trajectories, and invariant tests make "doing research" a scalable, low-maintenance infrastructure.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·error accumulation</span> — eval's very job is to <strong>quantify how much error accumulates over an agent's multi-turn autonomy</strong>; the trajectory's quality gate (reasoning required) <strong>discards low-quality samples</strong>, lest garbage data feed training and bake the error into the next model. Invariant tests also stop regressions from quietly accumulating across iterations.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern: writing <strong>change-detector tests</strong> — freezing model catalogs, config version numbers, enumeration counts into assertions. The moment a model ships or a config bumps, these tests <strong>all go red</strong>, forcing engineers to spend time "fixing the test" instead of fixing bugs. Lock invariants, not snapshots.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Parallel batch</strong>: <span class="mono">_process_batch_worker</span> runs independent prompts across workers (stateless, constraint B), generating data at scale.</li>
+    <li><strong>Full trajectory</strong>: a conversation becomes a JSONL training sample with <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>; <span class="mono">save_trajectories</span> is off by default.</li>
+    <li><strong>Quality filter</strong>: zero-reasoning samples are <span class="mono">continue</span>-dropped; the training set takes only high-quality samples with reasoning.</li>
+    <li><strong>Two-for-one</strong>: the same AIAgent core both serves real conversations and produces research trajectories.</li>
+    <li><strong>Drift-proof eval</strong>: tests lock <strong>behavioral invariants</strong> (relations) not <strong>data snapshots</strong> (specific values); no change-detectors, so a model/config change doesn't redden everything.</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Hermes batch-runs thousands of prompts to generate training data — how does it also ensure data quality?</div>
+  <ol class="opts">
+    <li>Multiple workers run independent prompts in parallel (stateless), each conversation becomes a JSONL trajectory; samples with zero reasoning throughout are continue-dropped, the training set takes only high-quality samples with reasoning</li>
+    <li>Just run each once</li>
+    <li>Hand-review each one</li>
+    <li>No filtering; everything goes in</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. _process_batch_worker runs independent prompts across workers (stateless, constraint B); a false has_any_reasoning triggers continue to drop zero-reasoning samples; each sample is one JSONL line with conversations/tool_stats/metadata. The quality filter blocks junk before data enters the training set.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. Two tests: `assert 'gemini-2.5-pro' in models` vs `assert len(models) >= 1` — which is the good one, and why?</div>
+  <ol class="opts">
+    <li>The first, because it's more precise</li>
+    <li>The second: it's a behavioral invariant (unbroken however data updates); the first is a data snapshot that breaks on the next model release — a classic change-detector</li>
+    <li>Both are good</li>
+    <li>Neither is good</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. A change-detector (snapshot) breaks whenever data changes (catalogs update weekly), forcing engineers to fix tests instead of bugs. An invariant (contract) locks how two pieces of data must relate (catalog has at least one model; every model has a context length), holding however data updates, drift-proof. Rule: if a test reads like a snapshot of current data, delete it; if like a contract about how data relates, keep it.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Why can the same AIAgent core both serve real conversations and produce research trajectory data? What is this 'two-for-one' worth for Nous's RL/eval research? Why is save_trajectories off by default?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Plugins, skills & MCP</h1>
+
+<p class="lead">Across the previous 22 chapters, Hermes's core has barely "grown" — platform adapters, memory backends, model providers, chat skills: the vast majority of capability is bolted on from the <strong>edges</strong>. This chapter pins down the discipline that runs through the whole book: <strong>capability extends at the edges, the core stays a narrow waist</strong>. Three mechanisms: plugins, skills, MCP.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · the Swiss Army knife vs the toolbox</div>
+  The core should hold only the few most-used blades (core tools); everything else goes in the <strong>toolbox</strong> (plugins/skills/MCP), pulled out only when needed. Weld every tool onto the knife and it gets <strong>too heavy to carry</strong> — because every outing (every API call) must lug <strong>the manual for all tools</strong> (every tool schema in the context). The more tools, the more the one you actually need <strong>drowns in the pile of manuals</strong>.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · the Footprint Ladder</div>
+  To add a capability, pick the highest rung by <strong>smallest footprint</strong>: ① extend existing code → ② CLI command + skill → ③ service-gated tool (<span class="mono">check_fn</span>) → ④ plugin → ⑤ MCP server (in the catalog) → ⑥ a new core tool (<strong>last resort</strong>). The further down, the more permanent core surface it occupies. Most capabilities should stop at the top rungs.
+</div>
+
+<h2>Plugins: hook into the core without touching it</h2>
+<p>A plugin attaches tools/commands/hooks to Hermes through one <span class="mono">register(ctx)</span>, <strong>touching not a single core file</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/plugins.py</span><span class="ln">367-400 · simplified</span></div>
+  <pre><span class="kw">class</span> <span class="fn">PluginContext</span>:
+    <span class="kw">def</span> <span class="fn">register_tool</span>(self, name, toolset, schema, handler,
+                      check_fn=<span class="kw">None</span>, override=<span class="kw">False</span>):
+        <span class="cm">&quot;&quot;&quot;Register a tool in the global registry and track it as plugin-provided.&quot;&quot;&quot;</span>
+        <span class="kw">from</span> tools.registry <span class="kw">import</span> registry
+        registry.register(name=name, toolset=toolset, schema=schema,
+                          handler=handler, check_fn=check_fn, override=override)</pre>
+</div>
+<p><span class="mono">register_tool</span> merely <strong>delegates</strong> to the <strong>same</strong> <span class="mono">tools.registry</span> as built-in tools (ch.8) — plugin tools and core tools take the exact same register/dispatch/availability path. <span class="mono">check_fn</span> makes a tool <strong>service-gated</strong> (absent until its credential is configured, zero footprint); <span class="mono">override</span> can even replace a built-in. The iron rule (Teknium): <strong>plugins must NOT modify core files</strong> (<span class="mono">run_agent.py</span>/<span class="mono">cli.py</span>…); if you need more, widen the generic plugin surface rather than hardcoding plugin logic into the core.</p>
+
+<h2>Hooks: intervene at the core's lifecycle joints</h2>
+<p>Plugins can also attach callbacks at key points of the agent's run, without touching the core loop:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/plugins.py</span><span class="ln">128-155 · excerpt</span></div>
+  <pre>VALID_HOOKS = {
+    <span class="st">"pre_tool_call"</span>, <span class="st">"post_tool_call"</span>,
+    <span class="st">"transform_llm_output"</span>,        <span class="cm"># rewrite the text returned to the user</span>
+    <span class="st">"pre_llm_call"</span>, <span class="st">"post_llm_call"</span>,
+    <span class="st">"on_session_start"</span>, <span class="st">"on_session_end"</span>,
+    <span class="st">"subagent_start"</span>, <span class="st">"subagent_stop"</span>,
+    <span class="st">"pre_gateway_dispatch"</span>,         <span class="cm"># before gateway dispatch (can skip/rewrite)</span>
+}</pre>
+</div>
+<p>These are <strong>reserved extension points</strong>: around tool calls, around LLM calls, session start/end, subagent start/stop, before gateway dispatch. A plugin attaches a callback to <strong>observe or rewrite</strong> the flow (e.g. <span class="mono">transform_llm_output</span> for persona rewriting, <span class="mono">pre_gateway_dispatch</span> to intercept messages). The core fires these hooks at fixed positions but <strong>neither knows nor cares</strong> who's attached — the narrow waist again.</p>
+
+<h2>Skills: inject a user message, don't break the cache (★ cache line)</h2>
+<p>Skills are another edge-extension line, and their injection method deliberately preserves the cache:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/skill_commands.py</span><span class="ln">245-274 · excerpt</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_build_skill_message</span>(loaded_skill, skill_dir, activation_note, ...):
+    <span class="cm">&quot;&quot;&quot;Format a loaded skill into a user/system message payload.&quot;&quot;&quot;</span>
+    content = str(loaded_skill.get(<span class="st">"content"</span>) <span class="kw">or</span> <span class="st">""</span>)
+    parts = [activation_note, <span class="st">""</span>, content.strip()]
+    <span class="kw">if</span> skill_dir:
+        parts.append(<span class="st">f"[Skill directory: {skill_dir}]"</span>)
+    ...                                  <span class="cm"># injected as a user message, not into the system prompt</span></pre>
+</div>
+<p>The key is the <strong>injection point</strong>: a skill's content is assembled into a <strong>user message</strong> fed into the conversation, <strong>not</strong> stuffed into the system prompt. This is deliberate — change the system prompt and you <strong>shatter the whole conversation's cached prefix</strong> (the ch.6 iron rule); but appending a user message is append-only, leaving the cached prefix <strong>untouched</strong>. So when you <span class="mono">/skill-name</span> to pull in a skill mid-conversation, you don't void the whole conversation's cache. Edge extension answers to the cache line too.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">need a new capability → pick the <strong>smallest-footprint</strong> rung on the Footprint Ladder</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">plugin: <span class="mono">register(ctx)</span> → <span class="mono">register_tool</span> (delegates to registry) / <span class="mono">register_hook</span>, no core files touched</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">skill: content assembled into a <strong>user message</strong> (not the system prompt, cache intact)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">MCP: external tools in the catalog, the core connects via its built-in MCP client, zero core-schema footprint</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">a new core tool = last resort (each is sent on <strong>every API call</strong>)</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "capability at the edges, core narrow"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>PluginContext.register_tool</strong> (plugins attach tools), <strong>VALID_HOOKS</strong> (lifecycle extension points), <strong>skill user-message injection</strong>, <strong>the MCP catalog</strong>. Cross-chapter teamwork: <span class="mono">register_tool</span> delegates to the very <strong>tool system</strong> (ch.8) registry, service-gating with the same <span class="mono">check_fn</span>; skills inject a user message that <strong>doesn't enter the system prompt = cache intact</strong> (ch.6); hooks fire at fixed points of tools/LLM/session/subagents (ch.13); even <strong>platform adapters</strong> (ch.17), memory backends (ch.11), and providers are plugins — vindicating the book's "thin core, thick edges."
+  <div class="collab-sub">② Data-flow timing</div>
+  new capability → pick a Footprint Ladder rung → plugin <span class="mono">register(ctx)</span> (register_tool/register_hook), or skill (user-message injection), or MCP (catalog) → attached at the edge, the core tool schema doesn't grow.
+  <div class="collab-sub">③ The key point</div>
+  Capability extends at the <strong>edges</strong>, the core stays a <strong>narrow waist</strong>: plugins don't touch core files (the Teknium iron rule), skills inject a user message to preserve the cache, MCP cages external tools in the catalog. A new core tool is the last resort — because each core tool is sent on <strong>every API call</strong>, costing tokens and diluting the model's attention.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>the Footprint Ladder — push capability to the edges, keep the core a narrow waist</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> — every <strong>core tool's schema enters the context of every single API call</strong>. The more tools, the more the context bloats and the more the one you actually need <strong>drowns in the tool pile</strong> (lost in the middle). Push capability to the edges (skills/plugins/MCP appearing on demand), keep the core toolset lean, and the model's attention isn't diluted by dozens of unused tools.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — every core tool is a <strong>permanent maintenance burden</strong> (sent on every API call, carried on every platform). Edge extension is nearly <strong>zero core cost</strong>: a plugin drops into <span class="mono">~/.hermes/plugins/</span>, a skill into <span class="mono">~/.hermes/skills/</span>, an MCP into the catalog; adding one touches no core and affects no other user.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern: making every capability a <strong>core tool</strong> — the core schema bloats linearly with capability count, every API call gets pricier and the model's attention thinner, and each one needs permanent upkeep. The Footprint Ladder exists to force the question first: "can this stop at a higher rung?"</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Footprint Ladder</strong>: extend existing code → CLI+skill → service-gated tool → plugin → MCP → a new core tool (last resort); pick the smallest-footprint rung.</li>
+    <li><strong>Plugins don't touch the core</strong>: <span class="mono">register(ctx)</span> delegates to <span class="mono">tools.registry</span> (ch.8) to attach tools/commands/hooks, never touching <span class="mono">run_agent.py</span> etc. (the Teknium iron rule).</li>
+    <li><strong>Lifecycle hooks</strong>: <span class="mono">VALID_HOOKS</span> opens observe-and-rewrite points around tools/LLM/session/subagents/gateway.</li>
+    <li><strong>Skills preserve the cache (★)</strong>: a skill's content is injected as a <strong>user message</strong> (append-only), not into the system prompt, so the whole conversation's cached prefix isn't voided (ch.6).</li>
+    <li><strong>Why core tools are expensive</strong>: every core tool's schema is sent on <strong>every API call</strong> — bloating the context (A·lost-in-the-middle) + permanent upkeep (G·ops).</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Adding a new capability to Hermes — why not just make it a core tool, why consult the Footprint Ladder first?</div>
+  <ol class="opts">
+    <li>Every core tool's schema is sent on every API call → bloats the context, dilutes the model's attention (A·lost-in-the-middle), and needs permanent upkeep; the Footprint Ladder forces picking a smaller-footprint rung first</li>
+    <li>Core tools are safer</li>
+    <li>Core tools run faster</li>
+    <li>No difference</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. Every core tool's schema enters the context of every API call: more tools means more bloat and the one you need drowning in the pile (A·lost-in-the-middle), plus permanent upkeep (G·ops). The Footprint Ladder (extend existing → CLI+skill → service-gated tool → plugin → MCP → new core tool) forces asking whether it can stop at a higher rung first.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. How does a plugin add a tool to Hermes without touching core files like run_agent.py / cli.py?</div>
+  <ol class="opts">
+    <li>register(ctx)'s register_tool delegates to the same tools.registry (plugin tools and core tools take the same register/dispatch path); the Teknium iron rule: plugins must never modify core files</li>
+    <li>Fork the whole repo</li>
+    <li>It's impossible</li>
+    <li>Edit the core files directly</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. PluginContext.register_tool merely delegates to the same tools.registry.register as built-in tools, so plugin tools automatically take the same register/dispatch/availability path. The Teknium rule: plugins must never modify core files (run_agent.py/cli.py…); for more capability, widen the generic plugin surface (a new hook/ctx method) rather than hardcoding plugin logic into the core.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Why is a skill's content injected as a user message rather than stuffed into the system prompt? How does this relate to 'caching is sacred'? Why does it show that 'even edge extension answers to the cache line'?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Security & threat model</h1>
+
+<p class="lead">Hermes has <strong>real privileges</strong>: it runs terminal commands, opens browsers, reads/writes files, connects to your messaging platforms. That means the threats are real too — malicious input wants to <strong>inject</strong> instructions, a poisoned skill wants to <strong>contaminate</strong>, a single <span class="mono">rm -rf /</span> wants to <strong>destroy the system</strong>. This chapter is a cross-cutting deep-dive: how Hermes uses <strong>defense in depth</strong> to block these threats layer by layer.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · a bank vault's layered security</div>
+  No single lock is absolute, so a bank <strong>layers its defenses</strong>: keycard access (command approval), guards who recognize blacklisted faces (dangerous-pattern detection), tellers with tiered permissions (subagent least-privilege), vendor background checks (dependency pinning). <strong>One layer falls, the next catches it.</strong> The key: don't count on "trusting one smart insider" — because that insider (the model) can be <strong>fooled</strong> by a single sentence (injection).
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · Defense in Depth</div>
+  The more capable the agent, the bigger the blast radius, so security is <strong>multiple independent layers</strong>: ① dangerous commands need <strong>approval</strong> (hardline patterns aren't even cleared by yolo); ② subagents are <strong>stripped</strong> of high-risk tools (least privilege); ③ control commands are <strong>separated</strong> from the data stream at the gateway (anti-injection, ch.18); ④ dependencies are all <strong>version-pinned</strong> (anti-supply-chain). Never rely on the model to "judge safety" itself — it can be fooled.
+</div>
+
+<h2>Layer one: dangerous-command approval</h2>
+<p>Every command the agent wants to run first passes a "dangerous pattern" blacklist:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/approval.py</span><span class="ln">262-275 / 657-668 · simplified</span></div>
+  <pre>HARDLINE_PATTERNS = [                       <span class="cm"># red lines: not even yolo clears these</span>
+    (<span class="st">r"\brm\s+(-[^\s]*\s+)*(/|/home|/root|/etc|/usr)"</span>, <span class="st">"recursive delete of system directory"</span>),
+    (<span class="st">r"\bmkfs(\.[a-z0-9]+)?\b"</span>, <span class="st">"format filesystem (mkfs)"</span>),
+    (<span class="st">r"\bdd\b[^\n]*\bof=/dev/(sd|nvme|hd)"</span>, <span class="st">"dd to raw block device"</span>),
+    (<span class="st">r":\(\)\s*\{\s*:\s*\|\s*:\s*&amp;\s*\}\s*;\s*:"</span>, <span class="st">"fork bomb"</span>),
+]
+
+<span class="kw">def</span> <span class="fn">detect_dangerous_command</span>(command):
+    <span class="cm">&quot;&quot;&quot;Returns (is_dangerous, pattern_key, description).&quot;&quot;&quot;</span>
+    <span class="kw">for</span> pattern_re, description <span class="kw">in</span> DANGEROUS_PATTERNS_COMPILED:
+        <span class="kw">if</span> pattern_re.search(command_lower):
+            <span class="kw">return</span> (<span class="kw">True</span>, description, description)
+    <span class="kw">return</span> (<span class="kw">False</span>, <span class="kw">None</span>, <span class="kw">None</span>)</pre>
+</div>
+<p><span class="mono">approval.py</span> is the <strong>single source of truth</strong> for the dangerous-command system: 12 <strong>HARDLINE</strong> patterns (delete root, format, raw-disk write, fork bomb…) + 47 <strong>DANGEROUS</strong>. A match requires user <strong>approval</strong>. The distinction: <span class="mono">/yolo</span> mode can clear DANGEROUS, but <strong>HARDLINE red lines always block</strong> — leaving a "convenience" door open while welding shut the "will destroy the system" ones. There's also a <strong>smart-approval</strong> layer: an auxiliary LLM auto-clears low-risk commands to cut the nagging.</p>
+
+<h2>Layer two: subagent least-privilege</h2>
+<p>When delegating to a subagent, a batch of high-risk tools is <strong>taken away</strong> first:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">45-53 · verbatim</span></div>
+  <pre>DELEGATE_BLOCKED_TOOLS = frozenset([
+    <span class="st">"delegate_task"</span>,  <span class="cm"># no recursive delegation</span>
+    <span class="st">"clarify"</span>,        <span class="cm"># no user interaction</span>
+    <span class="st">"memory"</span>,         <span class="cm"># no writes to shared MEMORY.md</span>
+    <span class="st">"send_message"</span>,   <span class="cm"># no cross-platform side effects</span>
+    <span class="st">"execute_code"</span>,   <span class="cm"># children should reason step-by-step, not write scripts</span>
+])</pre>
+</div>
+<p>Each stripped tool has an <strong>explicit reason</strong>: no <strong>recursive spawning</strong> (prevents explosion), no <strong>bothering the user</strong>, no <strong>writing shared memory</strong> (prevents pollution), no <strong>cross-platform messaging</strong> (prevents external side effects). This is <strong>least privilege</strong>: a subagent gets only the tools <strong>sufficient</strong> for its task, caging the blast radius at the edge (the security face of ch.13's delegation isolation).</p>
+
+<h2>Layer three: supply-chain pinning</h2>
+<p>The stealthiest attack comes through dependencies. Hermes <strong>version-pins</strong> every one:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">pyproject.toml</span><span class="ln">45-52 · excerpt</span></div>
+  <pre><span class="cm"># exact pins shrink the blast radius for the next supply-chain attack</span>
+dependencies = [
+    <span class="st">"openai==2.24.0"</span>,
+    <span class="st">"httpx[socks]==0.28.1"</span>,
+    <span class="st">"certifi==2026.5.20"</span>,
+    <span class="st">"pyyaml==6.0.3"</span>,
+    <span class="cm"># policy: PyPI &gt;=floor,&lt;next_major; Git URL commit SHA; Actions SHA</span>
+]</pre>
+</div>
+<p>This discipline was set after <span class="mono">litellm</span> was poisoned (a supply-chain attack): every PyPI package has an <strong>upper bound</strong> (<span class="mono">&gt;=floor,&lt;next_major</span>), Git deps pin a <strong>commit SHA</strong>, even GitHub Actions pin a SHA; and core runtime packages (like the openai/httpx above) were <strong>further tightened to exact</strong> (<span class="mono">==</span>) after the Mini Shai-Hulud worm hit mistralai. A compromised upstream package can't sneak in by "auto-upgrading to a malicious new version." <strong>Trust nothing that changes automatically</strong> — the same paranoia as "don't trust the model to judge safety itself."</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">agent wants to run a command → <span class="mono">detect_dangerous_command</span> matches HARDLINE/DANGEROUS</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">match → user approval required; HARDLINE blocks even <span class="mono">/yolo</span>, DANGEROUS can be cleared by yolo</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">delegating → strip <span class="mono">DELEGATE_BLOCKED_TOOLS</span> first (least privilege)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">control commands (<span class="mono">/stop</span>/<span class="mono">/approve</span>) separated from the data stream at the gateway (anti-injection, ch.18)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">all dependencies version-pinned (<span class="mono">==</span>/SHA), anti-supply-chain</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the security layers mesh into "defense in depth"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>detect_dangerous_command</strong> (dangerous-command approval), <strong>DELEGATE_BLOCKED_TOOLS</strong> (subagent least-privilege), <strong>dependency pinning</strong> (supply-chain lock). Cross-chapter teamwork: <strong>injection isolation</strong> rests on the gateway's two guards pulling control commands out of the data stream (ch.18, D·instr=data); subagents run in an <strong>isolated context + terminal</strong> (ch.13), least-privilege on top of isolation; <strong>profile isolation</strong> prevents cross-instance data contamination (ch.20); the <strong>Curator</strong> only touches <span class="mono">created_by:agent</span> skills, never user/official ones (ch.10, anti skill-poisoning); <span class="mono">/approve</span> reaches the runner via the gateway bypass (ch.18).
+  <div class="collab-sub">② Data-flow timing</div>
+  command → <span class="mono">detect_dangerous_command</span> → approve if dangerous (HARDLINE locked); delegate → strip <span class="mono">DELEGATE_BLOCKED_TOOLS</span> + isolated context (ch.13); message arrives → gateway guards split control commands from data (ch.18); dependencies → pinned throughout.
+  <div class="collab-sub">③ The key point</div>
+  <strong>Defense in depth</strong>: each layer independent, one falls the next catches. The core threat is <strong>injection</strong> — the model can't tell "is this malicious data or an instruction to me," so security <strong>never relies on the model's own judgment</strong>: dangerous commands blocked by a <strong>regex blacklist</strong>, control commands split at the <strong>gateway</strong>, privileges stripped in <strong>code</strong>, dependencies nailed by <strong>version</strong>.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>defense in depth — the agent has real privileges, each layer independently secure, never relying on the model's own judgment</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">D·instr=data</span> — to the model, the system prompt, user messages, tool returns, and web content are <strong>all tokens with no trusted boundary</strong>. A malicious web page/file can masquerade as a "system instruction" and <strong>inject</strong>. The countermeasure: <strong>don't let the model be the judge</strong>: control commands are explicitly parsed at the gateway via <span class="mono">get_command()</span> and routed on a bypass channel (ch.18); dangerous commands use a <strong>regex blacklist</strong>, not "ask the model whether this command is dangerous." Move the trust boundary <strong>into the code layer</strong>.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — security is an <strong>operational responsibility</strong>, not a one-off feature: the approval system, least privilege, supply-chain pins, and profile isolation are all <strong>continuously maintained infrastructure</strong>. Supply-chain poisonings drove repo-wide dependency pinning (<span class="mono">litellm</span> set the upper-bound policy; the Mini Shai-Hulud worm later tightened core packages to <span class="mono">==</span>), while the HARDLINE red lines borrow from Mercury Agent's hardened blocklist — the security discipline iterates with real threats.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern: <strong>trusting the model to judge safety</strong> ("this command looks fine, run it") — the model gets injected, hallucinates, gets lured. Hermes nails security decisions to <strong>deterministic code</strong> (regexes, frozensets, version numbers), not the model's probabilistic judgment.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Defense in depth</strong>: multiple independent layers (approval + least privilege + injection isolation + supply-chain lock); one falls, the next catches.</li>
+    <li><strong>Dangerous-command approval</strong>: <span class="mono">detect_dangerous_command</span> uses a regex blacklist (12 HARDLINE + 47 DANGEROUS); HARDLINE red lines block even <span class="mono">/yolo</span>.</li>
+    <li><strong>Subagent least-privilege</strong>: <span class="mono">DELEGATE_BLOCKED_TOOLS</span> strips recursive-spawn/interaction/memory-write/cross-platform/script-write, caging the blast radius at the edge (ch.13).</li>
+    <li><strong>Injection isolation (★)</strong>: control commands explicitly parsed at the gateway via <span class="mono">get_command()</span> on a bypass (ch.18), never letting the model judge (D·instr=data).</li>
+    <li><strong>Supply-chain lock</strong>: all deps pinned (<span class="mono">==</span>/upper bound/commit SHA), trusting nothing that auto-changes (the <span class="mono">litellm</span> lesson).</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. When the agent wants to run something like rm -rf /, what makes the safety decision?</div>
+  <ol class="opts">
+    <li>Don't check, just run</li>
+    <li>A deterministic regex blacklist (detect_dangerous_command); HARDLINE red lines (delete-root/format/fork-bomb) block even /yolo unconditionally, never relying on the model's judgment</li>
+    <li>Ask the model 'is this command dangerous'</li>
+    <li>Pop up a confirm for every command</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. Safety decisions are nailed to deterministic code: detect_dangerous_command uses a regex blacklist (12 HARDLINE + 47 DANGEROUS), not the model — the model gets injected/hallucinates. The distinction: /yolo can clear DANGEROUS, but HARDLINE red lines (rm delete-root, mkfs, dd raw-disk, fork bomb) block unconditionally, before the yolo check.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. When delegating to a subagent, why strip tools like delegate_task/memory/send_message first?</div>
+  <ol class="opts">
+    <li>Random</li>
+    <li>Those tools are slow</li>
+    <li>Least privilege: no recursive spawning (prevents explosion), no writing shared memory (prevents pollution), no cross-platform messaging (prevents external side effects), caging the blast radius at the edge</li>
+    <li>Subagents can't use those tools</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. DELEGATE_BLOCKED_TOOLS implements least privilege: each stripped tool has an explicit reason (no recursive delegation/no writes to shared MEMORY.md/no cross-platform side effects…). A subagent gets only the tools sufficient for its task, plus ch.13's isolated context, caging the blast radius at the edge.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Hermes's security philosophy is 'never let the probabilistic model be the judge; nail the trust boundary to deterministic code.' From three angles — dangerous-command approval, injection isolation (ch.18), and supply-chain pinning — explain how each realizes this and why the model's judgment can't be trusted.</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Design principles synthesis</h1>
+
+<p class="lead">After 24 chapters, you'll see every Hermes design answering <strong>the same question</strong>: an LLM has 7 inherent flaws (A–G), yet an agent must make the model work <strong>autonomously, continuously, and safely</strong> in the real world — every piece of engineering treats one of those flaws. This chapter gathers the whole book horizontally: three running <strong>design lines</strong> + an <strong>A–G constraint matrix</strong> + a <strong>glossary</strong>.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · connecting stars into constellations</div>
+  Each earlier chapter is a <strong>separate star</strong> (system prompt, memory, delegation, gateway…). But they aren't isolated — <strong>connect them</strong> and clear <strong>design lines</strong> emerge. See the lines and you graduate from "knowing each part" to "understanding why this machine is shaped this way." That's exactly what an interviewer wants to hear.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · the one-sentence thesis</div>
+  <strong>A stateless, easily-drowned, instruction-vs-data-blind probabilistic model must work autonomously, long-term, in the real world.</strong> All of Hermes's engineering revolves around the 7 hazards (A–G) of that sentence: <strong>externalize</strong> state, <strong>guard</strong> the context, <strong>push</strong> capability to the edges, <strong>nail</strong> security into code. The three thickest lines: <strong>the sacred-cache line, the self-evolution line, the narrow-waist line</strong>.
+</div>
+
+<h2>Line 1: per-conversation prompt caching is sacred</h2>
+<p>The <strong>most recurring</strong> line in the book. A long conversation reuses the cached prefix each turn; anything that mutates past context voids the cache and doubles the cost. So every part gives way to it:</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">6</span><span class="sc">the System Prompt is <strong>byte-stable</strong> for the whole conversation, the cached prefix stays warm</span></div>
+  <div class="step"><span class="num">15</span><span class="sc">context compression is the <strong>only</strong> exception that rebuilds the prefix (so it fires at 50%, with anti-thrashing)</span></div>
+  <div class="step"><span class="num">18</span><span class="sc">control commands (<span class="mono">/stop</span>/<span class="mono">/approve</span>) <strong>bypass</strong> at the gateway, never polluting history or breaking alternation</span></div>
+  <div class="step"><span class="num">21</span><span class="sc">Cron spins up an <strong>isolated session</strong>, not mirrored into the main conversation, so background automation doesn't disturb the cache</span></div>
+  <div class="step"><span class="num">23</span><span class="sc">skills inject as a <strong>user message</strong> (append-only), never into the system prompt</span></div>
+</div>
+
+<h2>Line 2: self-evolution (cross-session learning)</h2>
+<p>Hermes's signature — it <strong>gets to know you the more you use it</strong>. This line upgrades a one-off chat into a continuously growing partner:</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">9</span><span class="sc">a learning <strong>nudge</strong>: the model is guided to <strong>write reusable solutions into skills</strong></span></div>
+  <div class="step"><span class="num">10</span><span class="sc"><strong>Curator</strong>: a background gardener tracks skill usage, auto-archives stale ones (agent-created only)</span></div>
+  <div class="step"><span class="num">11</span><span class="sc"><strong>Memory</strong>: a MEMORY/USER two-layer + provider, distilling "who you are"</span></div>
+  <div class="step"><span class="num">12</span><span class="sc"><strong>Cross-session search</strong> (FTS5): a new session can dig out relevant slices of old ones</span></div>
+</div>
+
+<h2>Line 3: the narrow waist (thin core, capability at the edges)</h2>
+<p>Every core tool is sent on <strong>every API call</strong>, so each inch of core surface is precious. Hermes makes the core a <strong>narrow waist</strong>, with capability growing at the edges:</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">4</span><span class="sc">the <strong>narrow-waist philosophy</strong>: the core is a thin channel, complexity pushed to both ends</span></div>
+  <div class="step"><span class="num">8</span><span class="sc">the tool system + <strong>Footprint Ladder</strong>: new capability prefers non-core tools</span></div>
+  <div class="step"><span class="num">16</span><span class="sc">terminal <strong>multi-backend</strong> (local/docker/ssh/modal): differences caged in edge subclasses</span></div>
+  <div class="step"><span class="num">17</span><span class="sc">28+ <strong>platform adapters</strong> translate differences into a unified MessageEvent; the core knows only the abstraction</span></div>
+  <div class="step"><span class="num">23</span><span class="sc"><strong>plugins/skills/MCP</strong>: even mainstream platform adapters are edge plugins</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 The A–G constraint matrix · which chapters treat each LLM flaw</div>
+  <div class="collab-sub">A · lost-in-the-middle (mid-context info ignored in long inputs)</div>
+  Introduced (ch.2) → treated by: narrow-waist lean core tools (ch.4/8/23), context compression (ch.15), delegation caging intermediate work in a child context (ch.13).
+  <div class="collab-sub">B · statelessness (the model forgets between calls)</div>
+  Introduced (ch.2) → treated by: externalized state — system-prompt identity (ch.6), memory (ch.11), the profile state directory (ch.20), spawn-per-call session snapshot (ch.16).
+  <div class="collab-sub">C · hallucination / D · instr=data / E · brittle structured output</div>
+  (C/D introduced ch.3, E ch.2) → C: generate-verify split (ch.14), tools fetch real data (ch.8); D: gateway guards (ch.18), defense in depth (ch.24); E: tool schemas + in-place repair (ch.7/8).
+  <div class="collab-sub">F · error accumulation / G · ops</div>
+  (introduced ch.3) → F: review (ch.14), eval (ch.22), compression (ch.15); G: nearly every chapter — gateway (17), Cron (21), Profiles (20), security (24) are all operational infrastructure.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 The meta-design philosophy · the book's ledger of trade-offs</div>
+  Collapse the 7 constraints into one sentence: <strong>a stateless, probabilistic, easily-drowned, instruction-vs-data-blind core + all determinism externalized to code and files</strong>.
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> <span class="badge constraint">B·statelessness</span> <span class="badge constraint">C·hallucination</span> <span class="badge constraint">D·instr=data</span> <span class="badge constraint">E·brittle output</span> <span class="badge constraint">F·error accumulation</span> <span class="badge constraint">G·ops</span></p>
+  <p style="margin:.5rem 0 0">Three sentences to remember Hermes's design DNA: ① <strong>externalize state</strong> — the core has no memory; memory/skills/profile live in external files, the model is a pure function; ② <strong>the context is sacred</strong> — the cached prefix is byte-stable, with compression the one exception; ③ <strong>narrow waist, thick edges</strong> — the core is thin enough to hold in your head, capability all grows at the plugin/skill/MCP edge. Security is the cross-cut: <strong>never let the probabilistic model be the judge</strong>; the trust boundary is nailed to deterministic code.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern (the book's shared enemy): stuffing state into the model, mutating cached context, making every capability a core tool, letting the model judge safety — each crashes straight into one of the A–G constraints.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Glossary · quick reference</div>
+  <ul>
+    <li><strong>A–G constraints</strong>: the LLM's 7 inherent flaws (lost-in-the-middle / statelessness / hallucination / instr=data / brittle structured output / error accumulation / ops); every design in the book treats one.</li>
+    <li><strong>cached prefix</strong>: the byte-stable head of a long conversation reused each turn; mutate it = void it = double the cost. Compression is the only exception (ch.6/15).</li>
+    <li><strong>narrow waist</strong>: thin core, capability at the edges; new capability picks the smallest-footprint rung on the <strong>Footprint Ladder</strong> (ch.4/23).</li>
+    <li><strong>trajectory</strong>: a conversation turned into a JSONL training sample (reasoning + tool calls), for RL/eval (ch.22).</li>
+    <li><strong>leaf / orchestrator</strong>: subagent roles; a leaf is stripped of high-risk tools like delegate/memory (least privilege, ch.13/24).</li>
+    <li><strong>skip_memory / catchup / check_fn</strong>: cron runs no memory to avoid pollution (ch.21) / the half-period window to catch up a missed job (ch.21) / a tool's service gate, absent until its credential is configured (ch.8/23).</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Gathering all 25 chapters horizontally, what are the three thickest design lines?</div>
+  <ol class="opts">
+    <li>Frontend / backend / database</li>
+    <li>Input / processing / output</li>
+    <li>Performance / security / UI</li>
+    <li>The sacred-cache line, the self-evolution line, the narrow-waist line</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. Three lines running through the book: the sacred cache (ch6 stable system prompt -> ch15 compression as the only exception -> ch18 control-command bypass -> ch21 cron isolated session -> ch23 skill user-message); self-evolution (ch9 nudge -> ch10 Curator -> ch11 memory -> ch12 cross-session search); the narrow waist (ch4 philosophy -> ch8 tool Footprint Ladder -> ch16 multi-backend -> ch17 adapters -> ch23 plugins/MCP).</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. The LLM's B·statelessness constraint (it forgets between calls) — how does Hermes mainly treat it?</div>
+  <ol class="opts">
+    <li>Use a bigger model</li>
+    <li>Don't treat it, accept the amnesia</li>
+    <li>Cache the whole conversation</li>
+    <li>Externalize state outside the core: system-prompt identity (ch6), memory (ch11), the profile state directory (ch20), spawn-per-call session snapshot (ch16); the model is just a pure function</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. The countermeasure for B·statelessness is 'externalize state': the core itself has no memory; memory/skills/profile all live in external files, and the model is just a pure function mapping context to output. So memory (ch11), identity (ch6 system prompt), the profile store (ch20), and session snapshots (ch16 spawn-per-call) are facets of externalized state — the very reason Hermes's 'self-evolution' exists.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Summarize Hermes's design DNA in one sentence, and explain which inherent LLM flaw (A–G) each of 'externalize state / sacred context / narrow waist, thick edges' fights. Why is 'security the cross-cut — never let the probabilistic model be the judge'?</li>
   </ul>
 </div>
 </div>
