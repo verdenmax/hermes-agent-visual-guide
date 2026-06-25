@@ -408,3 +408,199 @@ LESSON_22 = {
 </div>
 """
 }
+
+
+LESSON_23 = {
+    "zh": r"""
+<p class="lead">前面 22 章,Hermes 的核心几乎没怎么"长大"——平台适配器、记忆后端、模型 provider、聊天技能,绝大多数能力都是从<strong>边缘</strong>挂上去的。这一章讲清那条贯穿全书的纪律:<strong>能力在边缘扩展,核心保持窄腰</strong>。机制有三:插件、技能、MCP。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 瑞士军刀 vs 工具箱</div>
+  核心只该放最常用的几把刀(核心工具);其余工具放<strong>工具箱</strong>(插件/技能/MCP),用时才取。要是把所有工具都焊死在军刀上,军刀会重得<strong>拿不动</strong>——因为每次出门(每次 API 调用)都得带上<strong>全部工具的说明书</strong>(工具 schema 全进 context)。工具越多,真正要用的那把越<strong>淹没在说明书堆里</strong>。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · Footprint Ladder(足迹阶梯)</div>
+  加新能力,按<strong>足迹从小到大</strong>选最高那一阶:① 扩展现有代码 → ② CLI 命令 + 技能 → ③ 服务门控工具(<span class="mono">check_fn</span>)→ ④ 插件 → ⑤ MCP server(进 catalog)→ ⑥ 新核心工具(<strong>最后手段</strong>)。越往下,永久占用的核心面越大。绝大多数能力都该停在前几阶。
+</div>
+
+<h2>插件:挂上核心,但不改核心</h2>
+<p>插件通过一个 <span class="mono">register(ctx)</span> 把工具/命令/钩子挂进 Hermes,<strong>一行核心文件都不碰</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/plugins.py</span><span class="ln">367-400 · 简化</span></div>
+  <pre><span class="kw">class</span> <span class="fn">PluginContext</span>:
+    <span class="kw">def</span> <span class="fn">register_tool</span>(self, name, toolset, schema, handler,
+                      check_fn=<span class="kw">None</span>, override=<span class="kw">False</span>):
+        <span class="cm">&quot;&quot;&quot;Register a tool in the global registry and track it as plugin-provided.&quot;&quot;&quot;</span>
+        <span class="kw">from</span> tools.registry <span class="kw">import</span> registry
+        registry.register(name=name, toolset=toolset, schema=schema,
+                          handler=handler, check_fn=check_fn, override=override)</pre>
+</div>
+<p><span class="mono">register_tool</span> 只是<strong>委托</strong>给和内置工具<strong>同一个</strong> <span class="mono">tools.registry</span>(第 8 章)——插件工具和核心工具走完全相同的注册/分派/可用性检查路径。<span class="mono">check_fn</span> 让工具<strong>服务门控</strong>(没配凭据就不出现,零足迹);<span class="mono">override</span> 甚至能替换内置工具。铁律(Teknium):<strong>插件绝不能改核心文件</strong>(<span class="mono">run_agent.py</span>/<span class="mono">cli.py</span>…);要更多能力,就把通用插件面拓宽,而非在核心里硬编码插件逻辑。</p>
+
+<h2>钩子:在核心生命周期的关节插手</h2>
+<p>插件还能在 agent 运行的关键节点挂回调,而无需碰核心循环:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/plugins.py</span><span class="ln">128-155 · 节选</span></div>
+  <pre>VALID_HOOKS = {
+    <span class="st">"pre_tool_call"</span>, <span class="st">"post_tool_call"</span>,
+    <span class="st">"transform_llm_output"</span>,        <span class="cm"># 改写返回给用户的文本</span>
+    <span class="st">"pre_llm_call"</span>, <span class="st">"post_llm_call"</span>,
+    <span class="st">"on_session_start"</span>, <span class="st">"on_session_end"</span>,
+    <span class="st">"subagent_start"</span>, <span class="st">"subagent_stop"</span>,
+    <span class="st">"pre_gateway_dispatch"</span>,         <span class="cm"># 网关分发前(可 skip/rewrite)</span>
+}</pre>
+</div>
+<p>这些是<strong>预留的扩展点</strong>:工具调用前后、LLM 调用前后、会话起止、子代理起止、网关分发前。插件挂一个回调就能<strong>观察或改写</strong>流程(比如 <span class="mono">transform_llm_output</span> 做人格化改写、<span class="mono">pre_gateway_dispatch</span> 拦截消息)。核心在固定位置触发这些钩子,但<strong>不知道也不关心</strong>具体挂了谁——又一次窄腰。</p>
+
+<h2>技能:注入 user message,不破缓存(★缓存线)</h2>
+<p>技能是另一条边缘扩展线,它的注入方式特意守住了缓存:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/skill_commands.py</span><span class="ln">245-274 · 节选</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_build_skill_message</span>(loaded_skill, skill_dir, activation_note, ...):
+    <span class="cm">&quot;&quot;&quot;Format a loaded skill into a user/system message payload.&quot;&quot;&quot;</span>
+    content = str(loaded_skill.get(<span class="st">"content"</span>) <span class="kw">or</span> <span class="st">""</span>)
+    parts = [activation_note, <span class="st">""</span>, content.strip()]
+    <span class="kw">if</span> skill_dir:
+        parts.append(<span class="st">f"[Skill directory: {skill_dir}]"</span>)
+    ...                                  <span class="cm"># 作为一条 user message 注入,不进 system prompt</span></pre>
+</div>
+<p>关键在<strong>注入位置</strong>:技能内容被拼成一条 <strong>user message</strong> 喂进对话,而<strong>不是</strong>塞进 system prompt。这是刻意的——system prompt 一改就<strong>击穿整会话的缓存前缀</strong>(第 6 章铁律);而追加一条 user message 是 append-only,缓存前缀<strong>纹丝不动</strong>。所以你 <span class="mono">/技能名</span> 临时调一个技能,不会让整段对话的缓存作废。边缘扩展,也要对缓存线负责。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">要加新能力 → 沿 Footprint Ladder 选<strong>足迹最小</strong>的一阶</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">插件:<span class="mono">register(ctx)</span> → <span class="mono">register_tool</span>(委托 registry)/<span class="mono">register_hook</span>,不碰核心文件</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">技能:内容拼成 <strong>user message</strong> 注入(不进 system prompt,不破缓存)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">MCP:外部工具进 catalog,核心经内置 MCP client 连接,零核心 schema 足迹</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">新核心工具 = 最后手段(每个都在<strong>每次 API 调用</strong>发送)</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「能力在边缘、核心窄腰」</div>
+  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
+  本章核心:<strong>PluginContext.register_tool</strong>(插件挂工具)、<strong>VALID_HOOKS</strong>(生命周期扩展点)、<strong>技能 user message 注入</strong>、<strong>MCP catalog</strong>。跨章节配合:插件 <span class="mono">register_tool</span> 委托的就是<strong>工具系统</strong>(第 8 章)那个 registry,服务门控用同一个 <span class="mono">check_fn</span>;技能注入 user message <strong>不进 system prompt = 不破缓存</strong>(第 6 章);钩子在工具/LLM/会话/子代理(第 13 章)的固定节点触发;连<strong>平台适配器</strong>(第 17 章)、记忆后端(第 11 章)、provider 都是插件——印证了全书"核心薄、边缘厚"。
+  <div class="collab-sub">② 数据流时序</div>
+  新能力 → Footprint Ladder 选阶 → 插件 <span class="mono">register(ctx)</span>(register_tool/register_hook)或技能(user message 注入)或 MCP(catalog)→ 边缘挂载,核心工具 schema 不膨胀。
+  <div class="collab-sub">③ 关键点</div>
+  能力在<strong>边缘</strong>扩展,核心保持<strong>窄腰</strong>:插件不改核心文件(Teknium 铁律)、技能注入 user message 保缓存、MCP 把外部工具关在 catalog。新核心工具是最后手段——因为每个核心工具都在<strong>每次 API 调用</strong>发送,既花 token 又稀释模型注意力。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>Footprint Ladder——能力推到边缘,核心保持窄腰</strong>。它主要治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span>——每个<strong>核心工具的 schema 都进每一次 API 调用的 context</strong>。工具越多,context 越膨胀,真正该用的那个越容易<strong>淹没在工具堆里</strong>(中间遗失)。把能力压到边缘(技能/插件/MCP 按需出现),核心工具集保持精简,模型的注意力才不被几十个用不上的工具稀释。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——每个核心工具都是<strong>永久的维护负担</strong>(每次 API call 都发、所有平台都带)。边缘扩展几乎<strong>零核心成本</strong>:插件装进 <span class="mono">~/.hermes/plugins/</span>、技能放进 <span class="mono">~/.hermes/skills/</span>、MCP 进 catalog,加一个不用动核心、不影响别的用户。</p>
+  <p style="margin:.5rem 0 0">反模式:什么能力都加成<strong>核心工具</strong>——核心 schema 随能力数量线性膨胀,每次 API 调用都更贵、模型注意力都更散,且每个都得永久维护。Footprint Ladder 的存在,就是逼你先问"能不能停在更高那一阶"。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>Footprint Ladder</strong>:扩展现有代码 → CLI+技能 → 服务门控工具 → 插件 → MCP → 新核心工具(最后手段);选足迹最小的一阶。</li>
+    <li><strong>插件不改核心</strong>:<span class="mono">register(ctx)</span> 委托 <span class="mono">tools.registry</span>(第 8 章)挂工具/命令/钩子,绝不碰 <span class="mono">run_agent.py</span> 等核心文件(Teknium 铁律)。</li>
+    <li><strong>生命周期钩子</strong>:<span class="mono">VALID_HOOKS</span> 在工具/LLM/会话/子代理/网关的固定节点开放观察与改写。</li>
+    <li><strong>技能保缓存(★)</strong>:技能内容注入为 <strong>user message</strong>(append-only),不进 system prompt,整会话缓存前缀不作废(第 6 章)。</li>
+    <li><strong>为什么核心工具贵</strong>:每个核心工具的 schema 都在<strong>每次 API 调用</strong>发送——膨胀 context(A·中间遗失)+ 永久维护(G·运维)。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">Across the previous 22 chapters, Hermes's core has barely "grown" — platform adapters, memory backends, model providers, chat skills: the vast majority of capability is bolted on from the <strong>edges</strong>. This chapter pins down the discipline that runs through the whole book: <strong>capability extends at the edges, the core stays a narrow waist</strong>. Three mechanisms: plugins, skills, MCP.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · the Swiss Army knife vs the toolbox</div>
+  The core should hold only the few most-used blades (core tools); everything else goes in the <strong>toolbox</strong> (plugins/skills/MCP), pulled out only when needed. Weld every tool onto the knife and it gets <strong>too heavy to carry</strong> — because every outing (every API call) must lug <strong>the manual for all tools</strong> (every tool schema in the context). The more tools, the more the one you actually need <strong>drowns in the pile of manuals</strong>.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · the Footprint Ladder</div>
+  To add a capability, pick the highest rung by <strong>smallest footprint</strong>: ① extend existing code → ② CLI command + skill → ③ service-gated tool (<span class="mono">check_fn</span>) → ④ plugin → ⑤ MCP server (in the catalog) → ⑥ a new core tool (<strong>last resort</strong>). The further down, the more permanent core surface it occupies. Most capabilities should stop at the top rungs.
+</div>
+
+<h2>Plugins: hook into the core without touching it</h2>
+<p>A plugin attaches tools/commands/hooks to Hermes through one <span class="mono">register(ctx)</span>, <strong>touching not a single core file</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/plugins.py</span><span class="ln">367-400 · simplified</span></div>
+  <pre><span class="kw">class</span> <span class="fn">PluginContext</span>:
+    <span class="kw">def</span> <span class="fn">register_tool</span>(self, name, toolset, schema, handler,
+                      check_fn=<span class="kw">None</span>, override=<span class="kw">False</span>):
+        <span class="cm">&quot;&quot;&quot;Register a tool in the global registry and track it as plugin-provided.&quot;&quot;&quot;</span>
+        <span class="kw">from</span> tools.registry <span class="kw">import</span> registry
+        registry.register(name=name, toolset=toolset, schema=schema,
+                          handler=handler, check_fn=check_fn, override=override)</pre>
+</div>
+<p><span class="mono">register_tool</span> merely <strong>delegates</strong> to the <strong>same</strong> <span class="mono">tools.registry</span> as built-in tools (ch.8) — plugin tools and core tools take the exact same register/dispatch/availability path. <span class="mono">check_fn</span> makes a tool <strong>service-gated</strong> (absent until its credential is configured, zero footprint); <span class="mono">override</span> can even replace a built-in. The iron rule (Teknium): <strong>plugins must NOT modify core files</strong> (<span class="mono">run_agent.py</span>/<span class="mono">cli.py</span>…); if you need more, widen the generic plugin surface rather than hardcoding plugin logic into the core.</p>
+
+<h2>Hooks: intervene at the core's lifecycle joints</h2>
+<p>Plugins can also attach callbacks at key points of the agent's run, without touching the core loop:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/plugins.py</span><span class="ln">128-155 · excerpt</span></div>
+  <pre>VALID_HOOKS = {
+    <span class="st">"pre_tool_call"</span>, <span class="st">"post_tool_call"</span>,
+    <span class="st">"transform_llm_output"</span>,        <span class="cm"># rewrite the text returned to the user</span>
+    <span class="st">"pre_llm_call"</span>, <span class="st">"post_llm_call"</span>,
+    <span class="st">"on_session_start"</span>, <span class="st">"on_session_end"</span>,
+    <span class="st">"subagent_start"</span>, <span class="st">"subagent_stop"</span>,
+    <span class="st">"pre_gateway_dispatch"</span>,         <span class="cm"># before gateway dispatch (can skip/rewrite)</span>
+}</pre>
+</div>
+<p>These are <strong>reserved extension points</strong>: around tool calls, around LLM calls, session start/end, subagent start/stop, before gateway dispatch. A plugin attaches a callback to <strong>observe or rewrite</strong> the flow (e.g. <span class="mono">transform_llm_output</span> for persona rewriting, <span class="mono">pre_gateway_dispatch</span> to intercept messages). The core fires these hooks at fixed positions but <strong>neither knows nor cares</strong> who's attached — the narrow waist again.</p>
+
+<h2>Skills: inject a user message, don't break the cache (★ cache line)</h2>
+<p>Skills are another edge-extension line, and their injection method deliberately preserves the cache:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/skill_commands.py</span><span class="ln">245-274 · excerpt</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_build_skill_message</span>(loaded_skill, skill_dir, activation_note, ...):
+    <span class="cm">&quot;&quot;&quot;Format a loaded skill into a user/system message payload.&quot;&quot;&quot;</span>
+    content = str(loaded_skill.get(<span class="st">"content"</span>) <span class="kw">or</span> <span class="st">""</span>)
+    parts = [activation_note, <span class="st">""</span>, content.strip()]
+    <span class="kw">if</span> skill_dir:
+        parts.append(<span class="st">f"[Skill directory: {skill_dir}]"</span>)
+    ...                                  <span class="cm"># injected as a user message, not into the system prompt</span></pre>
+</div>
+<p>The key is the <strong>injection point</strong>: a skill's content is assembled into a <strong>user message</strong> fed into the conversation, <strong>not</strong> stuffed into the system prompt. This is deliberate — change the system prompt and you <strong>shatter the whole conversation's cached prefix</strong> (the ch.6 iron rule); but appending a user message is append-only, leaving the cached prefix <strong>untouched</strong>. So when you <span class="mono">/skill-name</span> to pull in a skill mid-conversation, you don't void the whole conversation's cache. Edge extension answers to the cache line too.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">need a new capability → pick the <strong>smallest-footprint</strong> rung on the Footprint Ladder</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">plugin: <span class="mono">register(ctx)</span> → <span class="mono">register_tool</span> (delegates to registry) / <span class="mono">register_hook</span>, no core files touched</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">skill: content assembled into a <strong>user message</strong> (not the system prompt, cache intact)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">MCP: external tools in the catalog, the core connects via its built-in MCP client, zero core-schema footprint</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">a new core tool = last resort (each is sent on <strong>every API call</strong>)</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "capability at the edges, core narrow"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>PluginContext.register_tool</strong> (plugins attach tools), <strong>VALID_HOOKS</strong> (lifecycle extension points), <strong>skill user-message injection</strong>, <strong>the MCP catalog</strong>. Cross-chapter teamwork: <span class="mono">register_tool</span> delegates to the very <strong>tool system</strong> (ch.8) registry, service-gating with the same <span class="mono">check_fn</span>; skills inject a user message that <strong>doesn't enter the system prompt = cache intact</strong> (ch.6); hooks fire at fixed points of tools/LLM/session/subagents (ch.13); even <strong>platform adapters</strong> (ch.17), memory backends (ch.11), and providers are plugins — vindicating the book's "thin core, thick edges."
+  <div class="collab-sub">② Data-flow timing</div>
+  new capability → pick a Footprint Ladder rung → plugin <span class="mono">register(ctx)</span> (register_tool/register_hook), or skill (user-message injection), or MCP (catalog) → attached at the edge, the core tool schema doesn't grow.
+  <div class="collab-sub">③ The key point</div>
+  Capability extends at the <strong>edges</strong>, the core stays a <strong>narrow waist</strong>: plugins don't touch core files (the Teknium iron rule), skills inject a user message to preserve the cache, MCP cages external tools in the catalog. A new core tool is the last resort — because each core tool is sent on <strong>every API call</strong>, costing tokens and diluting the model's attention.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>the Footprint Ladder — push capability to the edges, keep the core a narrow waist</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> — every <strong>core tool's schema enters the context of every single API call</strong>. The more tools, the more the context bloats and the more the one you actually need <strong>drowns in the tool pile</strong> (lost in the middle). Push capability to the edges (skills/plugins/MCP appearing on demand), keep the core toolset lean, and the model's attention isn't diluted by dozens of unused tools.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — every core tool is a <strong>permanent maintenance burden</strong> (sent on every API call, carried on every platform). Edge extension is nearly <strong>zero core cost</strong>: a plugin drops into <span class="mono">~/.hermes/plugins/</span>, a skill into <span class="mono">~/.hermes/skills/</span>, an MCP into the catalog; adding one touches no core and affects no other user.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern: making every capability a <strong>core tool</strong> — the core schema bloats linearly with capability count, every API call gets pricier and the model's attention thinner, and each one needs permanent upkeep. The Footprint Ladder exists to force the question first: "can this stop at a higher rung?"</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Footprint Ladder</strong>: extend existing code → CLI+skill → service-gated tool → plugin → MCP → a new core tool (last resort); pick the smallest-footprint rung.</li>
+    <li><strong>Plugins don't touch the core</strong>: <span class="mono">register(ctx)</span> delegates to <span class="mono">tools.registry</span> (ch.8) to attach tools/commands/hooks, never touching <span class="mono">run_agent.py</span> etc. (the Teknium iron rule).</li>
+    <li><strong>Lifecycle hooks</strong>: <span class="mono">VALID_HOOKS</span> opens observe-and-rewrite points around tools/LLM/session/subagents/gateway.</li>
+    <li><strong>Skills preserve the cache (★)</strong>: a skill's content is injected as a <strong>user message</strong> (append-only), not into the system prompt, so the whole conversation's cached prefix isn't voided (ch.6).</li>
+    <li><strong>Why core tools are expensive</strong>: every core tool's schema is sent on <strong>every API call</strong> — bloating the context (A·lost-in-the-middle) + permanent upkeep (G·ops).</li>
+  </ul>
+</div>
+"""
+}

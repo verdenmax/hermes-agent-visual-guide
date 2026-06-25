@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var l=localStorage.getItem('havg-lang');if(l==='en'){document.documentElement.dataset.lang='en';document.documentElement.lang='en';}}catch(e){}</script>
+<title>23 · 插件、技能与 MCP / Plugins, skills &amp; MCP · Hermes Agent 设计图解</title>
+<meta name="description" content="第六部分 · 自动化与研究｜插件、技能与 MCP · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="theme-color" content="#c2630e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAzMiAzMic+PHJlY3Qgd2lkdGg9JzMyJyBoZWlnaHQ9JzMyJyByeD0nNycgZmlsbD0nI2M4YTAyYycvPjx0ZXh0IHg9JzE2JyB5PScyMicgZm9udC1mYW1pbHk9J3N5c3RlbS11aSxzYW5zLXNlcmlmJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nODAwJyBmaWxsPScjZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz7imKQ8L3RleHQ+PC9zdmc+">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Hermes Agent 设计图解">
+<meta property="og:title" content="23 · 插件、技能与 MCP / Plugins, skills &amp; MCP · Hermes Agent 设计图解">
+<meta property="og:description" content="第六部分 · 自动化与研究｜插件、技能与 MCP · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="23 · 插件、技能与 MCP / Plugins, skills &amp; MCP · Hermes Agent 设计图解">
+<meta name="twitter:description" content="第六部分 · 自动化与研究｜插件、技能与 MCP · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --ink: #1d2129;
+  --muted: #5b6470; --faint: #8a939f; --line: #e1e5ea;
+  --accent: #c8a02c; --accent-soft: #faf1d6; --accent-ink: #8a6d12;
+  --blue: #2563eb; --blue-soft: #e7efff; --amber: #b4690e; --amber-soft: #fdf1dd;
+  --purple: #7c3aed; --purple-soft: #f0e9ff; --red: #d23f3f; --red-soft: #fbe6e6;
+  --code-bg: #0f172a; --code-ink: #e2e8f0; --code-line: #1e293b;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232c; --ink: #e6edf3;
+    --muted: #9aa6b2; --faint: #6e7a86; --line: #2a323c;
+    --accent: #e3c05a; --accent-soft: #2e2510; --accent-ink: #f0d488;
+    --blue: #6ea8fe; --blue-soft: #16243f; --amber: #e0a44a; --amber-soft: #33270f;
+    --purple: #b794f6; --purple-soft: #271a40; --red: #f08080; --red-soft: #3a1a1a;
+    --code-bg: #0a0f1a; --code-ink: #d8e2f0; --code-line: #14202f;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+html { scroll-behavior: smooth; overflow-x: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+code, .mono { font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; overflow-wrap: break-word; }
+
+/* ---- top progress bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 50; background: var(--panel);
+  border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
+}
+.topbar-inner {
+  max-width: 960px; margin: 0 auto; padding: .7rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.topbar .home { font-size: .82rem; color: var(--muted); font-weight: 600; display:flex; gap:.5rem; align-items:center; }
+.topbar .home b { color: var(--accent); }
+.topbar .pill { font-size: .72rem; color: var(--muted); background: var(--panel-2);
+  padding: .2rem .6rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.progress { height: 3px; background: var(--panel-2); }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--blue)); }
+
+.wrap { max-width: 820px; margin: 0 auto; padding: 2.4rem 1.25rem 5rem; }
+
+/* ---- hero ---- */
+.hero { margin-bottom: 2rem; }
+.hero .part { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: .55rem; }
+.hero h1 { font-size: 2.05rem; line-height: 1.2; letter-spacing: -.01em; font-weight: 750; }
+.hero .lead { margin-top: .9rem; font-size: 1.06rem; color: var(--muted); }
+
+h2 { font-size: 1.32rem; margin: 2.4rem 0 .9rem; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: .55rem; }
+h2::before { content: ""; width: 4px; height: 1.05em; background: var(--accent); border-radius: 3px; display: inline-block; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+p { margin: .7rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .3rem 0; }
+strong { color: var(--ink); font-weight: 680; }
+.inline { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: .08em .4em; font-size: .9em; color: var(--accent-ink); }
+
+/* ---- callout cards ---- */
+.card { border-radius: var(--radius); padding: 1.05rem 1.2rem; margin: 1.2rem 0;
+  border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.card .tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.card.macro { border-left: 4px solid var(--blue); }
+.card.macro .tag { color: var(--blue); }
+.card.detail { border-left: 4px solid var(--purple); }
+.card.detail .tag { color: var(--purple); }
+.card.analogy { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+.card.analogy .tag { color: var(--amber); }
+.card.key { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.key .tag { color: var(--accent-ink); }
+.card.warn { border-left: 4px solid var(--red); background: var(--red-soft); }
+.card.warn .tag { color: var(--red); }
+.card.spark { border-left: 4px solid #e0a000;
+  background: linear-gradient(100deg, rgba(224,160,0,.12), transparent 70%); }
+.card.spark .tag { color: #c98a00; }
+@media (prefers-color-scheme: dark) { .card.spark .tag { color: #f0c050; } }
+
+/* ---- code file callout ---- */
+.codefile { margin: 1.2rem 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  box-shadow: var(--shadow); }
+.codefile .cf-head { display: flex; align-items: center; gap: .55rem; padding: .5rem .85rem;
+  background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: .8rem; }
+.codefile .cf-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink:0; }
+.codefile .cf-head .path { font-family: ui-monospace, monospace; color: var(--ink); font-weight: 600; }
+.codefile .cf-head .ln { margin-left: auto; color: var(--faint); font-size: .72rem; }
+.codefile pre { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem;
+  overflow-x: auto; font-size: .82rem; line-height: 1.6; }
+.codefile pre .cm { color: #7d8aa3; }
+.codefile pre .kw { color: #c792ea; }
+.codefile pre .fn { color: #82aaff; }
+.codefile pre .st { color: #c3e88d; }
+.codefile pre .nb { color: #f78c6c; }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem; border-radius: 12px;
+  overflow-x: auto; font-size: .83rem; line-height: 1.6; margin: 1.1rem 0; box-shadow: var(--shadow); }
+pre.code .cm { color: #7d8aa3; } pre.code .kw { color: #c792ea; }
+pre.code .fn { color: #82aaff; } pre.code .st { color: #c3e88d; } pre.code .nb { color: #f78c6c; }
+
+/* ---- collapsible accordion (details/summary) ---- */
+.accordion { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  margin: .7rem 0; box-shadow: var(--shadow); overflow: hidden; }
+.accordion > summary { cursor: pointer; padding: .85rem 1.1rem; font-weight: 650; font-size: .96rem;
+  list-style: none; display: flex; align-items: center; gap: .6rem; user-select: none; }
+.accordion > summary::-webkit-details-marker { display: none; }
+.accordion > summary::after { content: "▶"; font-size: .68rem; color: var(--accent);
+  margin-left: auto; transition: transform .15s ease; }
+.accordion[open] > summary::after { transform: rotate(90deg); }
+.accordion > summary:hover { background: var(--panel-2); }
+.accordion[open] > summary { border-bottom: 1px solid var(--line); }
+.accordion .badge-num { background: var(--accent-soft); color: var(--accent-ink);
+  width: 1.6rem; height: 1.6rem; border-radius: 7px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: .82rem; font-weight: 700; flex-shrink: 0; }
+.accordion .hint { font-size: .72rem; color: var(--faint); font-weight: 400; }
+.acc-body { padding: .9rem 1.1rem 1.1rem; }
+.acc-intro { color: var(--muted); font-size: .9rem; margin: .2rem 0 .4rem; }
+.qa { margin: 1rem 0; }
+.qa:first-child { margin-top: .3rem; }
+.qa .q { font-weight: 680; font-size: .9rem; display: flex; gap: .45rem; align-items: center; margin-bottom: .3rem; }
+.qa .a { color: var(--muted); font-size: .9rem; }
+.qa .a strong { color: var(--ink); }
+.qa pre.code { margin: .5rem 0 0; font-size: .78rem; }
+
+/* ---- flow diagram ---- */
+.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 1.3rem 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.2rem 1rem; box-shadow: var(--shadow); }
+.flow .node { flex: 1 1 0; min-width: 110px; text-align: center; padding: .7rem .5rem;
+  border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.flow .node .nt { font-weight: 700; font-size: .92rem; }
+.flow .node .nd { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+.flow .node.hl { background: var(--accent-soft); border-color: var(--accent); }
+.flow .arrow { align-self: center; color: var(--faint); font-size: 1.3rem; padding: 0 .35rem; }
+
+/* vertical flow */
+.vflow { margin: 1.3rem 0; }
+.vflow .step { display: flex; gap: .9rem; position: relative; padding-bottom: 1.1rem; }
+.vflow .step:not(:last-child)::before { content:""; position:absolute; left: 15px; top: 34px; bottom: -2px;
+  width: 2px; background: var(--line); }
+.vflow .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; z-index:1; }
+.vflow .sc h4 { margin: .25rem 0 .2rem; font-size: 1rem; }
+.vflow .sc p { margin: .15rem 0; font-size: .92rem; color: var(--muted); }
+.vflow .sc .mono { font-size: .8rem; color: var(--accent-ink); }
+
+/* layered architecture */
+.layers { margin: 1.3rem 0; display: flex; flex-direction: column; gap: .55rem; }
+.layer { border-radius: 12px; padding: .85rem 1.1rem; border: 1px solid var(--line); background: var(--panel);
+  box-shadow: var(--shadow); }
+.layer .lh { display: flex; align-items: center; gap: .6rem; }
+.layer .lh .badge { font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; }
+.layer .lh .name { font-weight: 700; font-family: ui-monospace, monospace; }
+.layer .ld { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
+.layer.l-core { border-left: 4px solid var(--accent); } .layer.l-core .badge { background: var(--accent-soft); color: var(--accent-ink); }
+.layer.l-main { border-left: 4px solid var(--blue); } .layer.l-main .badge { background: var(--blue-soft); color: var(--blue); }
+.layer.l-part { border-left: 4px solid var(--purple); } .layer.l-part .badge { background: var(--purple-soft); color: var(--purple); }
+.layer.l-app { border-left: 4px solid var(--amber); } .layer.l-app .badge { background: var(--amber-soft); color: var(--amber); }
+
+/* two-column compare */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0; }
+@media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+.col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; box-shadow: var(--shadow); min-width: 0; }
+.col h4 { margin: 0 0 .4rem; font-size: .95rem; }
+
+table.t { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .9rem;
+  background: var(--panel); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+table.t th, table.t td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--line); }
+table.t th { background: var(--panel-2); font-size: .8rem; letter-spacing: .02em; }
+table.t tr:last-child td { border-bottom: none; }
+table.t td.mono, table.t td .mono { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--accent-ink); }
+@media (max-width: 640px) {
+  /* Wide multi-column tables: scroll within their own box instead of
+     forcing page-level horizontal overflow (which clipped right columns). */
+  table.t { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.t th, table.t td { padding: .5rem .6rem; }
+}
+.selftest { margin: 2.2rem 0 0; border-top: 2px dashed var(--line); padding-top: 1.2rem; }
+.selftest > h2 { margin-top: .2rem; }
+.quiz { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+  border-radius: 12px; padding: .9rem 1.1rem; margin: 1rem 0; box-shadow: var(--shadow); }
+.quiz .qn { font-weight: 650; }
+.quiz ol.opts { list-style: upper-alpha; margin: .55rem 0 .6rem 1.5rem; padding: 0; }
+.quiz ol.opts li { margin: .3rem 0; padding-left: .15rem; }
+.quiz details.accordion { margin: .5rem 0 0; }
+.selftest code { font-family: ui-monospace, monospace; font-size: .9em; color: var(--accent-ink);
+  background: var(--accent-soft); padding: 0 .28em; border-radius: 4px; }
+
+/* footer nav */
+.footnav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem;
+  padding-top: 1.4rem; border-top: 1px solid var(--line); }
+.footnav a { flex: 1; padding: .85rem 1.1rem; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow); transition: .15s; }
+.footnav a:hover { border-color: var(--accent); transform: translateY(-1px); }
+.footnav a.next { text-align: right; }
+.footnav .dir { font-size: .72rem; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.footnav .ttl { font-weight: 700; color: var(--ink); margin-top: .15rem; }
+.footnav a.disabled { opacity: .35; pointer-events: none; }
+
+/* index page */
+.toc { display: grid; gap: .7rem; margin-top: 1.6rem; }
+.toc-part { font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--accent); margin: 1.4rem 0 .2rem; }
+.toc a { display: flex; align-items: center; gap: .9rem; padding: .85rem 1.05rem; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); transition: .15s; }
+.toc a:hover { border-color: var(--accent); transform: translateX(3px); }
+.toc .n { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+.toc .tt { font-weight: 650; color: var(--ink); }
+.toc .ts { font-size: .8rem; color: var(--muted); margin-left: auto; text-align: right; }
+.toc-search { position: relative; margin: 1.6rem 0 -.4rem; }
+.toc-search input { width: 100%; box-sizing: border-box; padding: .75rem 2.8rem .75rem 1rem;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font-size: .98rem; box-shadow: var(--shadow); }
+.toc-search input:focus { outline: none; border-color: var(--accent); }
+.toc-search .qcount { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  color: var(--faint); font-size: .8rem; pointer-events: none; }
+.toc a.hide, .toc .toc-part.hide { display: none; }
+.toc-empty { display: none; color: var(--muted); padding: 1rem; text-align: center; }
+.toc-empty.show { display: block; }
+.hero.index h1 { font-size: 2.3rem; }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:1rem; font-size:.8rem; color:var(--muted); }
+.legend span { display:flex; align-items:center; gap:.4rem; }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+.pdf-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1.1rem;
+  background:var(--accent); color:#fff; border-radius:10px; font-size:.9rem; font-weight:650;
+  box-shadow:var(--shadow); transition:.15s; }
+.pdf-btn:hover { background:var(--accent-ink); transform:translateY(-1px); }
+
+/* ---- bilingual language switch ----
+   Contract: <html> must carry data-lang="zh" (default) or "en".
+   page()/index_page() hard-code data-lang="zh"; LANG_BOOT may switch to "en". */
+html[data-lang="en"] .lang-zh { display: none !important; }
+html[data-lang="zh"] .lang-en { display: none !important; }
+.langtoggle { font-size:.72rem; font-weight:700; color:var(--accent-ink);
+  background:var(--accent-soft); border:1px solid var(--accent); border-radius:999px;
+  padding:.22rem .7rem; cursor:pointer; line-height:1.4; white-space:nowrap; }
+.langtoggle:hover { background:var(--accent); color:#fff; }
+
+/* ---- schematic: cell strips (token sequences / quant blocks / KV columns) ---- */
+.cellgroup { margin: 1.2rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.cellgroup .cg-cap { font-size: .82rem; color: var(--muted); margin-bottom: .55rem; }
+.cellgroup .cg-cap b { color: var(--ink); }
+.cells { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.cells + .cells { margin-top: .5rem; }
+.cell { min-width: 2.1rem; padding: .38rem .5rem; text-align: center; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: .78rem;
+  font-family: ui-monospace, monospace; white-space: nowrap; }
+.cell.scale { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); font-weight: 700; }
+.cell.hl    { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cell.q     { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.cell.dim   { opacity: .45; }
+.cells .lab { font-size: .76rem; color: var(--faint); padding: 0 .35rem; }
+.cells .sep { color: var(--faint); padding: 0 .1rem; }
+
+/* ---- schematic: timeline lanes (prefill vs decode, step-by-step) ---- */
+.timeline { margin: 1.2rem 0; display: flex; flex-direction: column; gap: .5rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.timeline .lane { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.timeline .lane-label { min-width: 6rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.timeline .tslot { padding: .4rem .6rem; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--line); font-size: .78rem; text-align: center; font-family: ui-monospace, monospace; }
+.timeline .tslot.span { flex: 1; min-width: 8rem; background: var(--blue-soft); border-color: var(--blue);
+  color: var(--blue); font-weight: 700; }
+.timeline .tslot.now { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+/* ---- worked-example trace: one concrete input, stepped through ---- */
+.trace { margin: 1.3rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.trace .tcap { font-size: .82rem; color: var(--muted); margin-bottom: .7rem; }
+.trace .tcap b { color: var(--accent-ink); }
+.trace .stations { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.trace .stn { flex: 1 1 0; min-width: 116px; border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem; background: var(--bg); }
+.trace .stn h5 { margin: 0 0 .45rem; font-size: .8rem; color: var(--ink); }
+.trace .cellrow { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.trace .vc { min-width: 2.1rem; padding: .32rem .45rem; text-align: center; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); font: 600 .76rem ui-monospace, monospace; white-space: nowrap; }
+.trace .vc.hot  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.trace .vc.blue { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.trace .vc.dim  { opacity: .42; }
+.trace .tlab { font-size: .68rem; color: var(--faint); margin-top: .35rem; }
+.trace .op { align-self: center; color: var(--accent); font: 700 .72rem ui-monospace, monospace;
+  padding: 0 .5rem; text-align: center; white-space: nowrap; }
+.trace svg { max-width: 100%; height: auto; display: block; margin: .3rem auto; }
+@media (max-width: 640px) { .trace .stations { flex-direction: column; } .trace .op { padding: .3rem 0; } }
+/* 🧩 collaboration-mechanism card */
+.card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
+.card.collab .tag { color: var(--blue); }
+.card.collab .collab-sub { font-weight:700; font-size:.82rem; margin:.85rem 0 .3rem; color:var(--ink); }
+/* 🎯 design-tradeoff card */
+.card.design { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.design .tag { color: var(--accent-ink); }
+/* A-G constraint back-reference badge */
+.badge.constraint { display:inline-block; font-size:.7rem; font-weight:700;
+  padding:.1rem .45rem; border-radius:999px; background:var(--purple-soft);
+  color:var(--purple); border:1px solid var(--purple); margin:0 .15rem; white-space:nowrap; }
+</style>
+</head><body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
+    <span class="pill"><span class="lang-zh">第六部分 · 自动化与研究</span><span class="lang-en">Part 6 · Automation &amp; Research</span></span>
+    <span class="pill">23 / 23</span>
+    <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
+  </div>
+  <div class="progress"><span style="width:100%"></span></div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="part"><span class="lang-zh">第六部分 · 自动化与研究</span><span class="lang-en">Part 6 · Automation &amp; Research</span></div>
+    <h1><span class="lang-zh">插件、技能与 MCP</span><span class="lang-en">Plugins, skills &amp; MCP</span></h1>
+  </div>
+  <div class="lang-zh">
+<p class="lead">前面 22 章,Hermes 的核心几乎没怎么"长大"——平台适配器、记忆后端、模型 provider、聊天技能,绝大多数能力都是从<strong>边缘</strong>挂上去的。这一章讲清那条贯穿全书的纪律:<strong>能力在边缘扩展,核心保持窄腰</strong>。机制有三:插件、技能、MCP。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 瑞士军刀 vs 工具箱</div>
+  核心只该放最常用的几把刀(核心工具);其余工具放<strong>工具箱</strong>(插件/技能/MCP),用时才取。要是把所有工具都焊死在军刀上,军刀会重得<strong>拿不动</strong>——因为每次出门(每次 API 调用)都得带上<strong>全部工具的说明书</strong>(工具 schema 全进 context)。工具越多,真正要用的那把越<strong>淹没在说明书堆里</strong>。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · Footprint Ladder(足迹阶梯)</div>
+  加新能力,按<strong>足迹从小到大</strong>选最高那一阶:① 扩展现有代码 → ② CLI 命令 + 技能 → ③ 服务门控工具(<span class="mono">check_fn</span>)→ ④ 插件 → ⑤ MCP server(进 catalog)→ ⑥ 新核心工具(<strong>最后手段</strong>)。越往下,永久占用的核心面越大。绝大多数能力都该停在前几阶。
+</div>
+
+<h2>插件:挂上核心,但不改核心</h2>
+<p>插件通过一个 <span class="mono">register(ctx)</span> 把工具/命令/钩子挂进 Hermes,<strong>一行核心文件都不碰</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/plugins.py</span><span class="ln">367-400 · 简化</span></div>
+  <pre><span class="kw">class</span> <span class="fn">PluginContext</span>:
+    <span class="kw">def</span> <span class="fn">register_tool</span>(self, name, toolset, schema, handler,
+                      check_fn=<span class="kw">None</span>, override=<span class="kw">False</span>):
+        <span class="cm">&quot;&quot;&quot;Register a tool in the global registry and track it as plugin-provided.&quot;&quot;&quot;</span>
+        <span class="kw">from</span> tools.registry <span class="kw">import</span> registry
+        registry.register(name=name, toolset=toolset, schema=schema,
+                          handler=handler, check_fn=check_fn, override=override)</pre>
+</div>
+<p><span class="mono">register_tool</span> 只是<strong>委托</strong>给和内置工具<strong>同一个</strong> <span class="mono">tools.registry</span>(第 8 章)——插件工具和核心工具走完全相同的注册/分派/可用性检查路径。<span class="mono">check_fn</span> 让工具<strong>服务门控</strong>(没配凭据就不出现,零足迹);<span class="mono">override</span> 甚至能替换内置工具。铁律(Teknium):<strong>插件绝不能改核心文件</strong>(<span class="mono">run_agent.py</span>/<span class="mono">cli.py</span>…);要更多能力,就把通用插件面拓宽,而非在核心里硬编码插件逻辑。</p>
+
+<h2>钩子:在核心生命周期的关节插手</h2>
+<p>插件还能在 agent 运行的关键节点挂回调,而无需碰核心循环:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/plugins.py</span><span class="ln">128-155 · 节选</span></div>
+  <pre>VALID_HOOKS = {
+    <span class="st">"pre_tool_call"</span>, <span class="st">"post_tool_call"</span>,
+    <span class="st">"transform_llm_output"</span>,        <span class="cm"># 改写返回给用户的文本</span>
+    <span class="st">"pre_llm_call"</span>, <span class="st">"post_llm_call"</span>,
+    <span class="st">"on_session_start"</span>, <span class="st">"on_session_end"</span>,
+    <span class="st">"subagent_start"</span>, <span class="st">"subagent_stop"</span>,
+    <span class="st">"pre_gateway_dispatch"</span>,         <span class="cm"># 网关分发前(可 skip/rewrite)</span>
+}</pre>
+</div>
+<p>这些是<strong>预留的扩展点</strong>:工具调用前后、LLM 调用前后、会话起止、子代理起止、网关分发前。插件挂一个回调就能<strong>观察或改写</strong>流程(比如 <span class="mono">transform_llm_output</span> 做人格化改写、<span class="mono">pre_gateway_dispatch</span> 拦截消息)。核心在固定位置触发这些钩子,但<strong>不知道也不关心</strong>具体挂了谁——又一次窄腰。</p>
+
+<h2>技能:注入 user message,不破缓存(★缓存线)</h2>
+<p>技能是另一条边缘扩展线,它的注入方式特意守住了缓存:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/skill_commands.py</span><span class="ln">245-274 · 节选</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_build_skill_message</span>(loaded_skill, skill_dir, activation_note, ...):
+    <span class="cm">&quot;&quot;&quot;Format a loaded skill into a user/system message payload.&quot;&quot;&quot;</span>
+    content = str(loaded_skill.get(<span class="st">"content"</span>) <span class="kw">or</span> <span class="st">""</span>)
+    parts = [activation_note, <span class="st">""</span>, content.strip()]
+    <span class="kw">if</span> skill_dir:
+        parts.append(<span class="st">f"[Skill directory: {skill_dir}]"</span>)
+    ...                                  <span class="cm"># 作为一条 user message 注入,不进 system prompt</span></pre>
+</div>
+<p>关键在<strong>注入位置</strong>:技能内容被拼成一条 <strong>user message</strong> 喂进对话,而<strong>不是</strong>塞进 system prompt。这是刻意的——system prompt 一改就<strong>击穿整会话的缓存前缀</strong>(第 6 章铁律);而追加一条 user message 是 append-only,缓存前缀<strong>纹丝不动</strong>。所以你 <span class="mono">/技能名</span> 临时调一个技能,不会让整段对话的缓存作废。边缘扩展,也要对缓存线负责。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">要加新能力 → 沿 Footprint Ladder 选<strong>足迹最小</strong>的一阶</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">插件:<span class="mono">register(ctx)</span> → <span class="mono">register_tool</span>(委托 registry)/<span class="mono">register_hook</span>,不碰核心文件</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">技能:内容拼成 <strong>user message</strong> 注入(不进 system prompt,不破缓存)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">MCP:外部工具进 catalog,核心经内置 MCP client 连接,零核心 schema 足迹</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">新核心工具 = 最后手段(每个都在<strong>每次 API 调用</strong>发送)</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「能力在边缘、核心窄腰」</div>
+  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
+  本章核心:<strong>PluginContext.register_tool</strong>(插件挂工具)、<strong>VALID_HOOKS</strong>(生命周期扩展点)、<strong>技能 user message 注入</strong>、<strong>MCP catalog</strong>。跨章节配合:插件 <span class="mono">register_tool</span> 委托的就是<strong>工具系统</strong>(第 8 章)那个 registry,服务门控用同一个 <span class="mono">check_fn</span>;技能注入 user message <strong>不进 system prompt = 不破缓存</strong>(第 6 章);钩子在工具/LLM/会话/子代理(第 13 章)的固定节点触发;连<strong>平台适配器</strong>(第 17 章)、记忆后端(第 11 章)、provider 都是插件——印证了全书"核心薄、边缘厚"。
+  <div class="collab-sub">② 数据流时序</div>
+  新能力 → Footprint Ladder 选阶 → 插件 <span class="mono">register(ctx)</span>(register_tool/register_hook)或技能(user message 注入)或 MCP(catalog)→ 边缘挂载,核心工具 schema 不膨胀。
+  <div class="collab-sub">③ 关键点</div>
+  能力在<strong>边缘</strong>扩展,核心保持<strong>窄腰</strong>:插件不改核心文件(Teknium 铁律)、技能注入 user message 保缓存、MCP 把外部工具关在 catalog。新核心工具是最后手段——因为每个核心工具都在<strong>每次 API 调用</strong>发送,既花 token 又稀释模型注意力。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>Footprint Ladder——能力推到边缘,核心保持窄腰</strong>。它主要治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span>——每个<strong>核心工具的 schema 都进每一次 API 调用的 context</strong>。工具越多,context 越膨胀,真正该用的那个越容易<strong>淹没在工具堆里</strong>(中间遗失)。把能力压到边缘(技能/插件/MCP 按需出现),核心工具集保持精简,模型的注意力才不被几十个用不上的工具稀释。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——每个核心工具都是<strong>永久的维护负担</strong>(每次 API call 都发、所有平台都带)。边缘扩展几乎<strong>零核心成本</strong>:插件装进 <span class="mono">~/.hermes/plugins/</span>、技能放进 <span class="mono">~/.hermes/skills/</span>、MCP 进 catalog,加一个不用动核心、不影响别的用户。</p>
+  <p style="margin:.5rem 0 0">反模式:什么能力都加成<strong>核心工具</strong>——核心 schema 随能力数量线性膨胀,每次 API 调用都更贵、模型注意力都更散,且每个都得永久维护。Footprint Ladder 的存在,就是逼你先问"能不能停在更高那一阶"。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>Footprint Ladder</strong>:扩展现有代码 → CLI+技能 → 服务门控工具 → 插件 → MCP → 新核心工具(最后手段);选足迹最小的一阶。</li>
+    <li><strong>插件不改核心</strong>:<span class="mono">register(ctx)</span> 委托 <span class="mono">tools.registry</span>(第 8 章)挂工具/命令/钩子,绝不碰 <span class="mono">run_agent.py</span> 等核心文件(Teknium 铁律)。</li>
+    <li><strong>生命周期钩子</strong>:<span class="mono">VALID_HOOKS</span> 在工具/LLM/会话/子代理/网关的固定节点开放观察与改写。</li>
+    <li><strong>技能保缓存(★)</strong>:技能内容注入为 <strong>user message</strong>(append-only),不进 system prompt,整会话缓存前缀不作废(第 6 章)。</li>
+    <li><strong>为什么核心工具贵</strong>:每个核心工具的 schema 都在<strong>每次 API 调用</strong>发送——膨胀 context(A·中间遗失)+ 永久维护(G·运维)。</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. 给 Hermes 加个新能力,为什么不直接加成核心工具、而要先看 Footprint Ladder?</div>
+  <ol class="opts">
+    <li>每个核心工具的 schema 都在每次 API call 发送→膨胀 context、稀释模型注意力(A·中间遗失),且要永久维护;Footprint Ladder 逼你先选足迹更小那一阶</li>
+    <li>核心工具更安全</li>
+    <li>核心工具跑得更快</li>
+    <li>没有区别</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：A</strong>。每个核心工具的 schema 都进每一次 API call 的 context:工具越多 context 越膨胀、真正要用的越淹没在工具堆里(A·中间遗失),且每个都得永久维护(G·运维)。Footprint Ladder(扩展现有→CLI+技能→服务门控工具→插件→MCP→新核心工具)逼你先问能不能停在更高那一阶。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. 一个插件怎么给 Hermes 加工具,而不碰 run_agent.py / cli.py 等核心文件?</div>
+  <ol class="opts">
+    <li>register(ctx) 的 register_tool 委托同一个 tools.registry 挂工具(插件工具和核心工具走相同注册/分派路径);Teknium 铁律:插件绝不改核心文件</li>
+    <li>fork 整个仓库</li>
+    <li>做不到</li>
+    <li>直接编辑核心文件</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：A</strong>。PluginContext.register_tool 只是委托给和内置工具同一个 tools.registry.register,于是插件工具自动和核心工具走相同的注册/分派/可用性检查路径。Teknium 规则:插件绝不能改核心文件(run_agent.py/cli.py…);要更多能力,就拓宽通用插件面(加 hook/ctx 方法),而非在核心里硬编码插件逻辑。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>技能内容为什么注入成 user message、而不是塞进 system prompt?这跟「缓存神圣」是什么关系?为什么说这体现了「连边缘扩展也要对缓存线负责」?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="lang-en">
+<p class="lead">Across the previous 22 chapters, Hermes's core has barely "grown" — platform adapters, memory backends, model providers, chat skills: the vast majority of capability is bolted on from the <strong>edges</strong>. This chapter pins down the discipline that runs through the whole book: <strong>capability extends at the edges, the core stays a narrow waist</strong>. Three mechanisms: plugins, skills, MCP.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · the Swiss Army knife vs the toolbox</div>
+  The core should hold only the few most-used blades (core tools); everything else goes in the <strong>toolbox</strong> (plugins/skills/MCP), pulled out only when needed. Weld every tool onto the knife and it gets <strong>too heavy to carry</strong> — because every outing (every API call) must lug <strong>the manual for all tools</strong> (every tool schema in the context). The more tools, the more the one you actually need <strong>drowns in the pile of manuals</strong>.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · the Footprint Ladder</div>
+  To add a capability, pick the highest rung by <strong>smallest footprint</strong>: ① extend existing code → ② CLI command + skill → ③ service-gated tool (<span class="mono">check_fn</span>) → ④ plugin → ⑤ MCP server (in the catalog) → ⑥ a new core tool (<strong>last resort</strong>). The further down, the more permanent core surface it occupies. Most capabilities should stop at the top rungs.
+</div>
+
+<h2>Plugins: hook into the core without touching it</h2>
+<p>A plugin attaches tools/commands/hooks to Hermes through one <span class="mono">register(ctx)</span>, <strong>touching not a single core file</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/plugins.py</span><span class="ln">367-400 · simplified</span></div>
+  <pre><span class="kw">class</span> <span class="fn">PluginContext</span>:
+    <span class="kw">def</span> <span class="fn">register_tool</span>(self, name, toolset, schema, handler,
+                      check_fn=<span class="kw">None</span>, override=<span class="kw">False</span>):
+        <span class="cm">&quot;&quot;&quot;Register a tool in the global registry and track it as plugin-provided.&quot;&quot;&quot;</span>
+        <span class="kw">from</span> tools.registry <span class="kw">import</span> registry
+        registry.register(name=name, toolset=toolset, schema=schema,
+                          handler=handler, check_fn=check_fn, override=override)</pre>
+</div>
+<p><span class="mono">register_tool</span> merely <strong>delegates</strong> to the <strong>same</strong> <span class="mono">tools.registry</span> as built-in tools (ch.8) — plugin tools and core tools take the exact same register/dispatch/availability path. <span class="mono">check_fn</span> makes a tool <strong>service-gated</strong> (absent until its credential is configured, zero footprint); <span class="mono">override</span> can even replace a built-in. The iron rule (Teknium): <strong>plugins must NOT modify core files</strong> (<span class="mono">run_agent.py</span>/<span class="mono">cli.py</span>…); if you need more, widen the generic plugin surface rather than hardcoding plugin logic into the core.</p>
+
+<h2>Hooks: intervene at the core's lifecycle joints</h2>
+<p>Plugins can also attach callbacks at key points of the agent's run, without touching the core loop:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/plugins.py</span><span class="ln">128-155 · excerpt</span></div>
+  <pre>VALID_HOOKS = {
+    <span class="st">"pre_tool_call"</span>, <span class="st">"post_tool_call"</span>,
+    <span class="st">"transform_llm_output"</span>,        <span class="cm"># rewrite the text returned to the user</span>
+    <span class="st">"pre_llm_call"</span>, <span class="st">"post_llm_call"</span>,
+    <span class="st">"on_session_start"</span>, <span class="st">"on_session_end"</span>,
+    <span class="st">"subagent_start"</span>, <span class="st">"subagent_stop"</span>,
+    <span class="st">"pre_gateway_dispatch"</span>,         <span class="cm"># before gateway dispatch (can skip/rewrite)</span>
+}</pre>
+</div>
+<p>These are <strong>reserved extension points</strong>: around tool calls, around LLM calls, session start/end, subagent start/stop, before gateway dispatch. A plugin attaches a callback to <strong>observe or rewrite</strong> the flow (e.g. <span class="mono">transform_llm_output</span> for persona rewriting, <span class="mono">pre_gateway_dispatch</span> to intercept messages). The core fires these hooks at fixed positions but <strong>neither knows nor cares</strong> who's attached — the narrow waist again.</p>
+
+<h2>Skills: inject a user message, don't break the cache (★ cache line)</h2>
+<p>Skills are another edge-extension line, and their injection method deliberately preserves the cache:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/skill_commands.py</span><span class="ln">245-274 · excerpt</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_build_skill_message</span>(loaded_skill, skill_dir, activation_note, ...):
+    <span class="cm">&quot;&quot;&quot;Format a loaded skill into a user/system message payload.&quot;&quot;&quot;</span>
+    content = str(loaded_skill.get(<span class="st">"content"</span>) <span class="kw">or</span> <span class="st">""</span>)
+    parts = [activation_note, <span class="st">""</span>, content.strip()]
+    <span class="kw">if</span> skill_dir:
+        parts.append(<span class="st">f"[Skill directory: {skill_dir}]"</span>)
+    ...                                  <span class="cm"># injected as a user message, not into the system prompt</span></pre>
+</div>
+<p>The key is the <strong>injection point</strong>: a skill's content is assembled into a <strong>user message</strong> fed into the conversation, <strong>not</strong> stuffed into the system prompt. This is deliberate — change the system prompt and you <strong>shatter the whole conversation's cached prefix</strong> (the ch.6 iron rule); but appending a user message is append-only, leaving the cached prefix <strong>untouched</strong>. So when you <span class="mono">/skill-name</span> to pull in a skill mid-conversation, you don't void the whole conversation's cache. Edge extension answers to the cache line too.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">need a new capability → pick the <strong>smallest-footprint</strong> rung on the Footprint Ladder</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">plugin: <span class="mono">register(ctx)</span> → <span class="mono">register_tool</span> (delegates to registry) / <span class="mono">register_hook</span>, no core files touched</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">skill: content assembled into a <strong>user message</strong> (not the system prompt, cache intact)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">MCP: external tools in the catalog, the core connects via its built-in MCP client, zero core-schema footprint</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">a new core tool = last resort (each is sent on <strong>every API call</strong>)</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "capability at the edges, core narrow"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>PluginContext.register_tool</strong> (plugins attach tools), <strong>VALID_HOOKS</strong> (lifecycle extension points), <strong>skill user-message injection</strong>, <strong>the MCP catalog</strong>. Cross-chapter teamwork: <span class="mono">register_tool</span> delegates to the very <strong>tool system</strong> (ch.8) registry, service-gating with the same <span class="mono">check_fn</span>; skills inject a user message that <strong>doesn't enter the system prompt = cache intact</strong> (ch.6); hooks fire at fixed points of tools/LLM/session/subagents (ch.13); even <strong>platform adapters</strong> (ch.17), memory backends (ch.11), and providers are plugins — vindicating the book's "thin core, thick edges."
+  <div class="collab-sub">② Data-flow timing</div>
+  new capability → pick a Footprint Ladder rung → plugin <span class="mono">register(ctx)</span> (register_tool/register_hook), or skill (user-message injection), or MCP (catalog) → attached at the edge, the core tool schema doesn't grow.
+  <div class="collab-sub">③ The key point</div>
+  Capability extends at the <strong>edges</strong>, the core stays a <strong>narrow waist</strong>: plugins don't touch core files (the Teknium iron rule), skills inject a user message to preserve the cache, MCP cages external tools in the catalog. A new core tool is the last resort — because each core tool is sent on <strong>every API call</strong>, costing tokens and diluting the model's attention.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>the Footprint Ladder — push capability to the edges, keep the core a narrow waist</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> — every <strong>core tool's schema enters the context of every single API call</strong>. The more tools, the more the context bloats and the more the one you actually need <strong>drowns in the tool pile</strong> (lost in the middle). Push capability to the edges (skills/plugins/MCP appearing on demand), keep the core toolset lean, and the model's attention isn't diluted by dozens of unused tools.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — every core tool is a <strong>permanent maintenance burden</strong> (sent on every API call, carried on every platform). Edge extension is nearly <strong>zero core cost</strong>: a plugin drops into <span class="mono">~/.hermes/plugins/</span>, a skill into <span class="mono">~/.hermes/skills/</span>, an MCP into the catalog; adding one touches no core and affects no other user.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern: making every capability a <strong>core tool</strong> — the core schema bloats linearly with capability count, every API call gets pricier and the model's attention thinner, and each one needs permanent upkeep. The Footprint Ladder exists to force the question first: "can this stop at a higher rung?"</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Footprint Ladder</strong>: extend existing code → CLI+skill → service-gated tool → plugin → MCP → a new core tool (last resort); pick the smallest-footprint rung.</li>
+    <li><strong>Plugins don't touch the core</strong>: <span class="mono">register(ctx)</span> delegates to <span class="mono">tools.registry</span> (ch.8) to attach tools/commands/hooks, never touching <span class="mono">run_agent.py</span> etc. (the Teknium iron rule).</li>
+    <li><strong>Lifecycle hooks</strong>: <span class="mono">VALID_HOOKS</span> opens observe-and-rewrite points around tools/LLM/session/subagents/gateway.</li>
+    <li><strong>Skills preserve the cache (★)</strong>: a skill's content is injected as a <strong>user message</strong> (append-only), not into the system prompt, so the whole conversation's cached prefix isn't voided (ch.6).</li>
+    <li><strong>Why core tools are expensive</strong>: every core tool's schema is sent on <strong>every API call</strong> — bloating the context (A·lost-in-the-middle) + permanent upkeep (G·ops).</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Adding a new capability to Hermes — why not just make it a core tool, why consult the Footprint Ladder first?</div>
+  <ol class="opts">
+    <li>Every core tool's schema is sent on every API call → bloats the context, dilutes the model's attention (A·lost-in-the-middle), and needs permanent upkeep; the Footprint Ladder forces picking a smaller-footprint rung first</li>
+    <li>Core tools are safer</li>
+    <li>Core tools run faster</li>
+    <li>No difference</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. Every core tool's schema enters the context of every API call: more tools means more bloat and the one you need drowning in the pile (A·lost-in-the-middle), plus permanent upkeep (G·ops). The Footprint Ladder (extend existing → CLI+skill → service-gated tool → plugin → MCP → new core tool) forces asking whether it can stop at a higher rung first.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. How does a plugin add a tool to Hermes without touching core files like run_agent.py / cli.py?</div>
+  <ol class="opts">
+    <li>register(ctx)'s register_tool delegates to the same tools.registry (plugin tools and core tools take the same register/dispatch path); the Teknium iron rule: plugins must never modify core files</li>
+    <li>Fork the whole repo</li>
+    <li>It's impossible</li>
+    <li>Edit the core files directly</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. PluginContext.register_tool merely delegates to the same tools.registry.register as built-in tools, so plugin tools automatically take the same register/dispatch/availability path. The Teknium rule: plugins must never modify core files (run_agent.py/cli.py…); for more capability, widen the generic plugin surface (a new hook/ctx method) rather than hardcoding plugin logic into the core.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Why is a skill's content injected as a user message rather than stuffed into the system prompt? How does this relate to 'caching is sacred'? Why does it show that 'even edge extension answers to the cache line'?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="footnav"><a class="prev" href="22-eval-batch-trajectory.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">评测、批量与轨迹</span><span class="lang-en">Eval, batch &amp; trajectory</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
+</div>
+<script>
+function havgSetLang(l){
+  l=(l==='en')?'en':'zh';
+  var d=document.documentElement;
+  d.dataset.lang=l; d.lang=(l==='en'?'en':'zh-CN');
+  try{localStorage.setItem('havg-lang',l);}catch(e){}
+}
+function havgToggleLang(){
+  havgSetLang(document.documentElement.dataset.lang==='en'?'zh':'en');
+}
+</script>
+</body></html>

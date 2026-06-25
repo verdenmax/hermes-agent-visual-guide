@@ -34,4 +34,5 @@ CONTENT = {
     "20-config-profiles.html": part5.LESSON_20,
     "21-cron-kanban.html": part6.LESSON_21,
     "22-eval-batch-trajectory.html": part6.LESSON_22,
+    "23-plugins-skills-mcp.html": part6.LESSON_23,
 }

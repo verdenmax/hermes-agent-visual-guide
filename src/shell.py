@@ -90,6 +90,8 @@ PAGES = [
      "第六部分 · 自动化与研究", "Part 6 · Automation & Research"),
     ("22-eval-batch-trajectory.html", "评测、批量与轨迹", "Eval, batch & trajectory",
      "第六部分 · 自动化与研究", "Part 6 · Automation & Research"),
+    ("23-plugins-skills-mcp.html", "插件、技能与 MCP", "Plugins, skills & MCP",
+     "第六部分 · 自动化与研究", "Part 6 · Automation & Research"),
 ]
 
 

@@ -789,6 +789,40 @@ QUIZZES = {
              "en": "Why can the same AIAgent core both serve real conversations and produce research trajectory data? What is this 'two-for-one' worth for Nous's RL/eval research? Why is save_trajectories off by default?"},
         ],
     },
+    "23-plugins-skills-mcp.html": {
+        "mcq": [
+            {
+                "q": {"zh": "给 Hermes 加个新能力,为什么不直接加成核心工具、而要先看 Footprint Ladder?",
+                      "en": "Adding a new capability to Hermes — why not just make it a core tool, why consult the Footprint Ladder first?"},
+                "opts": [
+                    {"zh": "核心工具跑得更快", "en": "Core tools run faster"},
+                    {"zh": "每个核心工具的 schema 都在每次 API call 发送→膨胀 context、稀释模型注意力(A·中间遗失),且要永久维护;Footprint Ladder 逼你先选足迹更小那一阶", "en": "Every core tool's schema is sent on every API call → bloats the context, dilutes the model's attention (A·lost-in-the-middle), and needs permanent upkeep; the Footprint Ladder forces picking a smaller-footprint rung first"},
+                    {"zh": "核心工具更安全", "en": "Core tools are safer"},
+                    {"zh": "没有区别", "en": "No difference"},
+                ],
+                "answer": 1,
+                "why": {"zh": "每个核心工具的 schema 都进每一次 API call 的 context:工具越多 context 越膨胀、真正要用的越淹没在工具堆里(A·中间遗失),且每个都得永久维护(G·运维)。Footprint Ladder(扩展现有→CLI+技能→服务门控工具→插件→MCP→新核心工具)逼你先问能不能停在更高那一阶。",
+                        "en": "Every core tool's schema enters the context of every API call: more tools means more bloat and the one you need drowning in the pile (A·lost-in-the-middle), plus permanent upkeep (G·ops). The Footprint Ladder (extend existing → CLI+skill → service-gated tool → plugin → MCP → new core tool) forces asking whether it can stop at a higher rung first."},
+            },
+            {
+                "q": {"zh": "一个插件怎么给 Hermes 加工具,而不碰 run_agent.py / cli.py 等核心文件?",
+                      "en": "How does a plugin add a tool to Hermes without touching core files like run_agent.py / cli.py?"},
+                "opts": [
+                    {"zh": "直接编辑核心文件", "en": "Edit the core files directly"},
+                    {"zh": "register(ctx) 的 register_tool 委托同一个 tools.registry 挂工具(插件工具和核心工具走相同注册/分派路径);Teknium 铁律:插件绝不改核心文件", "en": "register(ctx)'s register_tool delegates to the same tools.registry (plugin tools and core tools take the same register/dispatch path); the Teknium iron rule: plugins must never modify core files"},
+                    {"zh": "fork 整个仓库", "en": "Fork the whole repo"},
+                    {"zh": "做不到", "en": "It's impossible"},
+                ],
+                "answer": 1,
+                "why": {"zh": "PluginContext.register_tool 只是委托给和内置工具同一个 tools.registry.register,于是插件工具自动和核心工具走相同的注册/分派/可用性检查路径。Teknium 规则:插件绝不能改核心文件(run_agent.py/cli.py…);要更多能力,就拓宽通用插件面(加 hook/ctx 方法),而非在核心里硬编码插件逻辑。",
+                        "en": "PluginContext.register_tool merely delegates to the same tools.registry.register as built-in tools, so plugin tools automatically take the same register/dispatch/availability path. The Teknium rule: plugins must never modify core files (run_agent.py/cli.py…); for more capability, widen the generic plugin surface (a new hook/ctx method) rather than hardcoding plugin logic into the core."},
+            },
+        ],
+        "open": [
+            {"zh": "技能内容为什么注入成 user message、而不是塞进 system prompt?这跟「缓存神圣」是什么关系?为什么说这体现了「连边缘扩展也要对缓存线负责」?",
+             "en": "Why is a skill's content injected as a user message rather than stuffed into the system prompt? How does this relate to 'caching is sacred'? Why does it show that 'even edge extension answers to the cache line'?"},
+        ],
+    },
 }
 
 
