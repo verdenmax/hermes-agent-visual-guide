@@ -313,6 +313,40 @@ QUIZZES = {
              "en": "How does check_fn gating give an unmet-prerequisite tool 'zero footprint', and why cache the result with a ~30s TTL? How does this cooperate with ch.6's 'never swap toolsets mid-session' caching rule?"},
         ],
     },
+    "09-learning-nudge-skills.html": {
+        "mcq": [
+            {
+                "q": {"zh": "当 skill nudge 触发后，那段「该不该存技能」的提醒文字会注入到哪里？",
+                      "en": "When a skill nudge fires, where does the 'should I save a skill' reminder text get injected?"},
+                "opts": [
+                    {"zh": "注入到当前 user 消息末尾", "en": "Appended to the current user message"},
+                    {"zh": "哪里都不注入主对话——只置一个布尔，turn 结束、响应交付后才 fork 后台 review 消费", "en": "Nowhere in the main conversation — it only sets a boolean, consumed by a forked background review after the response is delivered"},
+                    {"zh": "注入到 system prompt", "en": "Into the system prompt"},
+                    {"zh": "注入到下一轮的 assistant 消息", "en": "Into the next assistant message"},
+                ],
+                "answer": 1,
+                "why": {"zh": "nudge 只把 _should_review_skills 置 True，绝不往主对话注入文字；真正的 review 在响应交付后、turn_finalizer 里 fork 一个独立 daemon agent 重放快照来做。主对话和缓存全程不动。",
+                        "en": "The nudge only sets _should_review_skills = True; it injects no text into the main conversation. The real review happens after the response, forked as a separate daemon agent replaying a snapshot. Main conversation and cache stay untouched."},
+            },
+            {
+                "q": {"zh": "技能被 /skill-name 调用、以及技能集变更时，为什么分别用「user 消息注入」和「默认延迟失效」？",
+                      "en": "Why are skills injected as user messages, and why are skill-set changes deferred by default?"},
+                "opts": [
+                    {"zh": "为了好看", "en": "For aesthetics"},
+                    {"zh": "都是为了不碰 system prompt 那条神圣前缀——user 消息进末尾、技能变更下个会话才进 stable，避免会话中途改前缀击穿缓存", "en": "Both avoid touching the sacred system-prompt prefix — user messages append at the tail, skill changes enter stable next session, so the cache isn't shattered mid-conversation"},
+                    {"zh": "因为 system prompt 满了", "en": "Because the system prompt is full"},
+                    {"zh": "随机决定", "en": "Random choice"},
+                ],
+                "answer": 1,
+                "why": {"zh": "技能清单在 system prompt 的 stable 层（第6章）。把技能作为 user 消息注入、把技能变更默认延迟到下个会话（--now 才立即），都是 cache-aware 设计：绝不在会话中途改写神圣前缀。",
+                        "en": "The skills list lives in the system prompt's stable tier (ch.6). Injecting skills as user messages and deferring skill changes to next session (--now for immediate) are both cache-aware: never rewrite the sacred prefix mid-session."},
+            },
+        ],
+        "open": [
+            {"zh": "「自我进化」要写入新技能，「缓存神圣」又要求会话中途绝不改前缀——这两个目标看似冲突，Hermes 用「响应后 fork + 写在别处、生效在下次」如何同时满足它们？",
+             "en": "'Self-improvement' must write new skills, yet 'the cache is sacred' forbids changing the prefix mid-session — how does Hermes's 'fork after the response, write elsewhere, take effect next time' satisfy both?"},
+        ],
+    },
 }
 
 

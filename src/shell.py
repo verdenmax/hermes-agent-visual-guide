@@ -62,6 +62,8 @@ PAGES = [
      "第二部分 · Agent 核心", "Part 2 · The Agent Core"),
     ("08-tool-system.html", "工具系统：注册·门控·分派·预算", "Tool system",
      "第二部分 · Agent 核心", "Part 2 · The Agent Core"),
+    ("09-learning-nudge-skills.html", "学习引擎与技能", "Learning engine & skills",
+     "第三部分 · 自我进化闭环", "Part 3 · The Self-Improvement Loop"),
 ]
 
 

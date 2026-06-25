@@ -341,6 +341,7 @@ details[open] > summary { list-style: none; }
   <li>System prompt & caching</li>
   <li>Message flow & providers</li>
   <li>Tool system</li>
+  <li>Learning engine & skills</li>
 </ol></div>
 <section class="lesson-print">
 <h1>What is Hermes</h1>
@@ -1742,6 +1743,156 @@ _tc_names = {tc.function.name <span class="kw">for</span> tc <span class="kw">in
   <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
   <ul>
     <li>How does check_fn gating give an unmet-prerequisite tool 'zero footprint', and why cache the result with a ~30s TTL? How does this cooperate with ch.6's 'never swap toolsets mid-session' caching rule?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Learning engine & skills</h1>
+
+<p class="lead">
+Hermes's signature feature is <strong>self-improvement</strong>: across sessions it gets better at understanding you and at doing your kind of task. This chapter covers the <strong>entry point</strong> of that learning loop — every ~10 turns (a configurable default), <strong>after a turn ends and the response is already delivered to you</strong>, Hermes forks a <strong>background review agent</strong> that replays the conversation and asks itself, "<strong>was there a skill or memory worth saving this turn?</strong>" The crucial line: all of this happens in the background, and the <strong>main conversation and prompt cache are never touched, not by a single byte</strong>.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · an after-hours debrief / an apprentice's notes</div>
+  Think of a diligent apprentice. While working during the day (the main conversation) he is <strong>fully focused</strong> on finishing the job — never stopping to journal, which would interrupt the task at hand. But <strong>after hours</strong> (the response already delivered) he reviews the day's tickets, <strong>distilling "how this class of job is done" into a manual</strong> (a skill) and <strong>jotting down "who this client is and what they like" into a memo</strong> (memory). Next morning he shows up with an <strong>updated manual</strong>, yet today's workflow was <strong>never once interrupted</strong>. Learning happens "at another time, in another set of hands" — exactly why the cache stays intact.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · procedural vs declarative memory</div>
+  Hermes splits "what it learns" into two kinds: <strong>skills</strong> are <strong>procedural</strong> — "how to do <strong>this class</strong> of task" (SKILL.md + scripts/templates/references), executable, reusable, loaded on demand; <strong>memory</strong> is <strong>declarative</strong> — "who the user is, what the current state is" (ch.11). Both are produced by the <strong>same</strong> background review fork. Skills sink to the <strong>edges</strong> (ch.4's narrow waist: capability stays out of the core, loaded on demand), so they neither crowd the per-call tool schema nor blow up the context.
+</div>
+
+<h2>The skill/memory boundary: which one to write to</h2>
+<p>What goes into a skill versus a memory? The background review's prompt draws that line sharply — this is the verbatim instruction actually fed to the review fork:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/background_review.py</span><span class="ln">233-237 · excerpt (verbatim review prompt)</span></div>
+  <pre>Memory captures <span class="st">'who the user is and what the current situation
+and state of your operations are'</span>; skills capture <span class="st">'how to do
+this class of task for this user'</span>. When they complain about how
+you handled a task, the skill that governs that task needs to
+carry the lesson.</pre>
+</div>
+<p>In a sentence: <strong>memory = who / what-state</strong> (compact, injected every turn), <strong>skill = how to do this class of task</strong> (an executable manual loaded on demand). When the user complains you handled a task poorly, the right move isn't "log a memory" — it's to <strong>update the skill that governs that class of task</strong>, so the lesson lands in "how to do it next time."</p>
+
+<h2>The trigger: nudge counts, but acts only after the response</h2>
+<p>Learning is driven by a <strong>counter</strong>: it increments each turn and sets a boolean at the threshold. The key: it <strong>injects no text into the main conversation</strong> — it's just a flag, consumed <strong>after the response has gone out</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/turn_finalizer.py</span><span class="ln">432-456 · simplified</span></div>
+  <pre><span class="cm"># Decide NOW whether to trigger a skill review, based on this turn's iterations</span>
+_should_review_skills = <span class="kw">False</span>
+<span class="kw">if</span> (agent._skill_nudge_interval &gt; 0
+        <span class="kw">and</span> agent._iters_since_skill &gt;= agent._skill_nudge_interval
+        <span class="kw">and</span> <span class="st">"skill_manage"</span> <span class="kw">in</span> agent.valid_tool_names):
+    _should_review_skills = <span class="kw">True</span>
+    agent._iters_since_skill = 0
+
+<span class="cm"># Background review — runs AFTER the response is delivered, never competing</span>
+<span class="cm"># with the user's task for model attention</span>
+<span class="kw">if</span> final_response <span class="kw">and</span> <span class="kw">not</span> interrupted <span class="kw">and</span> (_should_review_memory <span class="kw">or</span> _should_review_skills):
+    agent._spawn_background_review(
+        messages_snapshot=<span class="fn">list</span>(messages),       <span class="cm"># a snapshot, not live messages</span>
+        review_memory=_should_review_memory,
+        review_skills=_should_review_skills,
+    )</pre>
+</div>
+<p>Note the comment: <span class="inline">runs AFTER the response is delivered so it never competes with the user's task for model attention</span>. After a nudge fires, <strong>no text enters the main conversation</strong> — it's only the boolean <span class="mono">_should_review_skills = True</span>; the real review waits until the response is out and is consumed in <span class="mono">turn_finalizer</span>. What's handed to the fork is <span class="mono">list(messages)</span> — a <strong>snapshot</strong>, leaving the original conversation untouched.</p>
+
+<h2>Why the cache survives: fork a separate agent</h2>
+<p>The boolean is consumed by a <strong>separately forked review agent</strong>. Its module docstring pins the invariant:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/background_review.py</span><span class="ln">3-8 · excerpt</span></div>
+  <pre>After every turn, AIAgent.run_conversation may call spawn_background_review
+to fire off a daemon thread that replays the conversation snapshot in a
+forked AIAgent and asks itself <span class="st">"should any skill/memory be saved
+or updated?"</span>.  Writes go straight to the memory + skill stores.
+<span class="cm">Main conversation and prompt cache are never touched.</span></pre>
+</div>
+<p>This is the whole secret of how "self-improvement" coexists with "the cache is sacred": the review runs in a <strong>daemon thread + a forked AIAgent</strong>, replaying a conversation <strong>snapshot</strong>, asking whether to save, writing <strong>straight into the skill/memory stores</strong>. The main conversation's message sequence, system prompt, and upstream cache — <strong>all unchanged throughout</strong>. The write happens <strong>elsewhere</strong>; a new skill only enters the stable prefix <strong>next session</strong>.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">a turn ends, the response is <strong>already delivered</strong> (learning never happens before this)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">nudge counter <span class="mono">_iters_since_skill</span> hits the threshold → sets <span class="mono">_should_review_skills = True</span> (<strong>no</strong> text injected into the main conversation)</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">turn_finalizer forks a background review AIAgent (daemon thread)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">the review replays the <span class="mono">list(messages)</span> snapshot, asking 'should a skill / memory be saved?'</span></div>
+  <div class="step"><span class="num">5</span><span class="sc"><span class="mono">skill_manage(create)</span> writes to disk, provenance marked agent-created</span></div>
+  <div class="step"><span class="num">6</span><span class="sc">main conversation / system prompt / cache <strong>all unchanged</strong> — the new skill enters the stable prefix only next session</span></div>
+</div>
+
+<h2>Two guardrails: provenance gating + deferred invalidation</h2>
+<p>This auto-learning has two key guardrails. First, <strong>provenance gating</strong>: only skills created by the <strong>background review fork</strong> are marked "agent-created" and fall under the curator (ch.10) — skills <strong>you</strong> made by hand are never touched:</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/skill_manager_tool.py</span><span class="ln">1082-1084 · excerpt</span></div>
+  <pre><span class="kw">if</span> action == <span class="st">"create"</span>:
+    <span class="kw">if</span> is_background_review():        <span class="cm"># only when it comes from the background review fork</span>
+        mark_agent_created(name)</pre>
+</div>
+<p>Second, <strong>deferred invalidation</strong>: the skills list is part of the system prompt (ch.6's stable tier). So any command that changes the skill set is <strong>deferred by default</strong> — the change enters the prefix <strong>next session</strong>, sparing this session's cache; only an explicit <span class="mono">--now</span> (e.g. <span class="mono">/skills install --now</span>) invalidates immediately. This is the "cache-aware slash command" pattern pinned in AGENTS.md. One more detail: when a skill is invoked via <span class="mono">/skill-name</span>, it is injected as a <strong>user message</strong>, <strong>not</strong> dropped into the system prompt — again, to leave that sacred prefix alone.</p>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "learn without breaking the cache"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>nudge counting</strong> (<span class="mono">turn_finalizer</span>'s _iters_since_skill), the <strong>background review fork</strong> (a separate AIAgent replaying a snapshot), <strong>skill_commands</strong> (skills injected as user messages), <strong>provenance gating</strong> (<span class="mono">is_background_review</span> → mark_agent_created). Cross-chapter teamwork: the same fork <strong>saves both skills and memory</strong> (ch.11 — two outputs from one review); skills enter the <strong>stable tier</strong> and changes use <strong>deferred invalidation</strong> to guard the cache (ch.6); the curator only gardens <strong>fork-created</strong> agent-skills (ch.10); skill nudge is <strong>isomorphic</strong> to memory nudge, sharing turn_finalizer's "fork after the response" mechanism (ch.11).
+  <div class="collab-sub">② Data-flow timing</div>
+  each turn <span class="mono">_iters_since_skill++</span> → at the threshold set <span class="mono">_should_review_skills</span> → <strong>after the response is delivered</strong> (turn_finalizer) → fork a background review AIAgent → replay the <span class="mono">list(messages)</span> snapshot, ask "should a skill be extracted?" → <span class="mono">skill_manage(create)</span> writes to disk (provenance = agent-created) → <strong>main conversation / system prompt / cache all unchanged</strong> → the new skill enters the stable prefix only next session.
+  <div class="collab-sub">③ The key point</div>
+  Learning happens in the "background fork <strong>after</strong> the response" — neither <strong>competing for model attention</strong> with the user's task nor <strong>rewriting the main conversation's prefix</strong>. Written elsewhere, effective next time: that's how "self-improvement" coexists with "the cache is sacred."
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>the learning loop never breaks the cache</strong>. Three concrete techniques: a nudge only sets a boolean and forks after the turn (no injection into the main conversation); skills are injected as user messages (not into the system prompt); skill changes default to deferred invalidation (<span class="mono">--now</span> for immediate). It treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·stateless</span> — the model itself remembers nothing across sessions, so it fights that by distilling "experience" into <strong>durable skills / memory</strong>;
+  <span class="badge constraint">A·lost-in-the-middle</span> — skills are <strong>on-demand</strong> procedural memory, not dumped wholesale into context, avoiding attention overload. The anti-pattern: injecting nudge text into the main conversation, or reloading a new skill <strong>immediately</strong> into the system prompt — both rewrite the prefix mid-session and shatter the cache (ch.6).</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Skill = procedural memory</strong>: "how to do this class of task"; memory = declarative "who / what-state" (ch.11). Both produced by the same background fork.</li>
+    <li><strong>Nudge never enters the main conversation</strong>: it only sets the <span class="mono">_should_review_skills</span> boolean, consumed in turn_finalizer <strong>after the response is delivered</strong>.</li>
+    <li><strong>Forked, separate review</strong>: a daemon thread + forked AIAgent replays a snapshot; <span class="mono">Main conversation and prompt cache are never touched</span>.</li>
+    <li><strong>Provenance gating</strong>: only skills created via <span class="mono">is_background_review()</span> are <span class="mono">mark_agent_created</span> and curated; hand-made ones are left alone (ch.10).</li>
+    <li><strong>Deferred invalidation</strong>: skills live in the stable tier; changes default to next-session, <span class="mono">--now</span> for immediate — the cache-aware slash command pattern (ch.6).</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. When a skill nudge fires, where does the 'should I save a skill' reminder text get injected?</div>
+  <ol class="opts">
+    <li>Appended to the current user message</li>
+    <li>Into the next assistant message</li>
+    <li>Into the system prompt</li>
+    <li>Nowhere in the main conversation — it only sets a boolean, consumed by a forked background review after the response is delivered</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. The nudge only sets _should_review_skills = True; it injects no text into the main conversation. The real review happens after the response, forked as a separate daemon agent replaying a snapshot. Main conversation and cache stay untouched.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. Why are skills injected as user messages, and why are skill-set changes deferred by default?</div>
+  <ol class="opts">
+    <li>Because the system prompt is full</li>
+    <li>Both avoid touching the sacred system-prompt prefix — user messages append at the tail, skill changes enter stable next session, so the cache isn't shattered mid-conversation</li>
+    <li>Random choice</li>
+    <li>For aesthetics</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. The skills list lives in the system prompt's stable tier (ch.6). Injecting skills as user messages and deferring skill changes to next session (--now for immediate) are both cache-aware: never rewrite the sacred prefix mid-session.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>'Self-improvement' must write new skills, yet 'the cache is sacred' forbids changing the prefix mid-session — how does Hermes's 'fork after the response, write elsewhere, take effect next time' satisfy both?</li>
   </ul>
 </div>
 </div>
