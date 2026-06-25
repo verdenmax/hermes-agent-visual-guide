@@ -619,6 +619,40 @@ QUIZZES = {
              "en": "IRC has no 'typing' indicator, so IRCAdapter's send_typing is a no-op. Why should such capability gaps be 'absorbed' inside the edge adapter rather than reported up so the core decides what each platform supports?"},
         ],
     },
+    "18-gateway-guards.html": {
+        "mcq": [
+            {
+                "q": {"zh": "agent 正在跑一个长任务,用户又发来一条 /model 命令。为什么它不能像普通消息那样进队列排队?",
+                      "en": "The agent is mid-run on a long task and the user sends a /model command. Why can't it just queue like an ordinary message?"},
+                "opts": [
+                    {"zh": "排队其实更安全", "en": "Queueing is actually safer"},
+                    {"zh": "网关 runner 有兜底会丢弃排进队列的命令文本——排队的 /model 会「既打断 agent 又被丢弃」,得到空响应;而 /approve 排队更会死锁", "en": "The gateway runner's safety net discards queued command text — a queued /model 'interrupts the agent AND gets discarded,' a zero-char response; and a queued /approve would deadlock"},
+                    {"zh": "命令太长放不进队列", "en": "The command is too long for the queue"},
+                    {"zh": "随机决定", "en": "Random"},
+                ],
+                "answer": 1,
+                "why": {"zh": "should_bypass_active_session 的 docstring 点破:排进 pending 队列的命令文本会被 gateway.run 的兜底丢弃,变成 zero-char 空响应;/approve /deny 更糟——agent 阻塞在 Event.wait 等审批,审批却在队列里等 agent 结束,直接死锁。所以任何可解析的 slash 命令一律旁路、立即派发。",
+                        "en": "should_bypass_active_session's docstring nails it: command text reaching the pending queue is discarded by gateway.run's safety net, a zero-char response; /approve /deny is worse — the agent blocks on Event.wait for approval while the approval waits in the queue for the agent, a deadlock. So any resolvable slash command bypasses and dispatches immediately."},
+            },
+            {
+                "q": {"zh": "agent 运行时,一条 /stop 要穿过几道守卫才能真正打断 agent?",
+                      "en": "While the agent runs, how many guards must a /stop cross to actually interrupt it?"},
+                "opts": [
+                    {"zh": "一道", "en": "One"},
+                    {"zh": "两道——① 适配器层(busy 就排进 _pending_messages)② 网关 runner 层(slash 分派);控制命令必须同时旁路这两道、内联派发", "en": "Two — (1) the adapter layer (busy → queue in _pending_messages), (2) the gateway runner layer (slash dispatch); control commands must bypass both and dispatch inline"},
+                    {"zh": "零道,直接到 agent", "en": "Zero, straight to the agent"},
+                    {"zh": "四道", "en": "Four"},
+                ],
+                "answer": 1,
+                "why": {"zh": "两道顺序守卫:适配器层在 session 忙时把消息塞进 _pending_messages 排队;网关 runner 层按 canonical 分派 slash 命令。AGENTS.md 明确:控制/审批命令必须同时旁路这两道、内联派发,否则泄漏成用户文本或死锁。",
+                        "en": "Two sequential guards: the adapter layer queues messages into _pending_messages when the session is busy; the gateway runner dispatches slash commands by canonical name. AGENTS.md is explicit: control/approval commands must bypass BOTH and dispatch inline, else they leak as user text or deadlock."},
+            },
+        ],
+        "open": [
+            {"zh": "旁路一个控制命令时,代码特意「内联派发」而不走 _process_message_background。为什么?这条「控制命令不进对话历史」的纪律,又怎样呼应了全书「每个会话的 prompt 缓存神圣不可侵犯」这条主线?",
+             "en": "When bypassing a control command, the code deliberately dispatches inline rather than via _process_message_background. Why? And how does the discipline of 'control commands never enter conversation history' echo the book's throughline that 'per-conversation prompt caching is sacred'?"},
+        ],
+    },
 }
 
 

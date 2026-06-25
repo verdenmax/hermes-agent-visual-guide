@@ -232,3 +232,211 @@ LESSON_17 = {
 </div>
 """
 }
+
+
+LESSON_18 = {
+    "zh": r"""
+<p class="lead">当 agent 正在跑一个长任务时,用户又发来一条消息——怎么办?默认<strong>排队</strong>,等 agent 结束再处理。但有几个命令绝不能排队:<span class="mono">/stop</span>(打断)、<span class="mono">/approve</span>(agent 正阻塞着等它批准)。它们若排队,要么<strong>泄漏成对话文本被丢弃</strong>,要么<strong>直接死锁</strong>。这就是网关「两道守卫 + 控制命令旁路」的由来。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 急诊分诊台</div>
+  普通病人挂号排队(消息进 <span class="mono">_pending_messages</span>),等叫号。但「心脏骤停」(<span class="mono">/stop</span>)必须<strong>插队直达</strong>抢救;而「主治医生正等着的化验结果」(<span class="mono">/approve</span>)如果也去排队,医生就<strong>永远等不到、卡死在那</strong>。分诊台必须能识别这些「不能排队的」并放行。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 两道顺序守卫,控制命令旁路</div>
+  agent 运行时,消息要过<strong>两道顺序守卫</strong>:① 适配器层(busy 就排队)、② 网关 runner 层(分派 slash 命令)。普通对话老老实实排队;但<strong>任何可解析的 slash 命令必须同时旁路两道、内联派发</strong>——否则被当对话文本丢弃(空响应)或死锁。
+</div>
+
+<h2>第一道守卫:适配器层的 busy 状态</h2>
+<p>每个适配器记三张表,追踪「这个会话是不是正忙」:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">2154-2162 · 节选</span></div>
+  <pre><span class="cm"># _active_sessions 存每会话的中断 Event;_session_tasks 把</span>
+<span class="cm"># 会话映射到当前处理它的 Task,好让 /stop /new /reset 取消</span>
+<span class="cm"># 正确的任务、确定性地释放守卫。没有这张表,旧任务的 finally</span>
+<span class="cm"># 可能误删新任务的守卫,留下 stale busy 状态。</span>
+self._active_sessions: Dict[str, asyncio.Event] = {}
+self._pending_messages: Dict[str, MessageEvent] = {}
+self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
+</div>
+<p><span class="mono">_active_sessions</span> 里有这个 key,就说明该会话<strong>正在跑 agent</strong>。这时新来的普通消息会被塞进 <span class="mono">_pending_messages</span> 排队,等当前回合结束再喂进去。<span class="mono">_session_tasks</span> 记下「谁在处理这个会话」,这样 <span class="mono">/stop</span> 能精准取消那个任务,而不会误删别人的守卫。</p>
+
+<h2>旁路:控制命令不能排队</h2>
+<p>会话忙时,先看这条消息是不是个该旁路的命令:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">4262-4298 · 简化</span></div>
+  <pre><span class="kw">if</span> session_key <span class="kw">in</span> self._active_sessions:
+    cmd = event.get_command()
+    <span class="kw">from</span> hermes_cli.commands <span class="kw">import</span> should_bypass_active_session
+
+    <span class="kw">if</span> should_bypass_active_session(cmd):
+        <span class="kw">if</span> cmd <span class="kw">in</span> {<span class="st">"stop"</span>, <span class="st">"new"</span>, <span class="st">"reset"</span>}:
+            <span class="cm"># 取消在途任务 + 序列化交接</span>
+            <span class="kw">await</span> self._dispatch_active_session_command(event, session_key, cmd)
+            <span class="kw">return</span>
+        <span class="cm"># /approve /deny /status /background /restart：直接内联派发</span>
+        <span class="cm"># 不要用 _process_message_background——它管会话生命周期,</span>
+        <span class="cm"># 其清理会和正在跑的任务抢(见 PR #4926)</span>
+        ...</pre>
+</div>
+<p>分两类:<span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> 要<strong>取消在途任务</strong>(走专门的交接路径,序列化「取消 + 回应 + 排空队列」);<span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> 等不取消任务、只需<strong>直接内联派发</strong>。注释点破一个坑:<strong>千万别走 <span class="mono">_process_message_background</span></strong>——它管会话生命周期,清理逻辑会和正在跑的任务发生竞争。</p>
+
+<h2>为什么排队就出事:zero-char 响应</h2>
+<p>旁路判定函数的 docstring 把后果讲透了:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/commands.py</span><span class="ln">379-399 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">should_bypass_active_session</span>(command_name):
+    <span class="cm">&quot;&quot;&quot;Return True for any resolvable slash command.</span>
+<span class="cm">    Queueing is always wrong for a recognized slash command</span>
+<span class="cm">    because the safety net in gateway.run discards any command</span>
+<span class="cm">    text that reaches the pending queue — a mid-run /model would</span>
+<span class="cm">    silently interrupt the agent AND get discarded, a zero-char</span>
+<span class="cm">    response.&quot;&quot;&quot;</span>
+    <span class="kw">return</span> resolve_command(command_name) <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span> <span class="kw">if</span> command_name <span class="kw">else</span> <span class="kw">False</span></pre>
+</div>
+<p>道理很硬:网关 runner 有个兜底,会<strong>丢弃任何漏进排队队列的命令文本</strong>。所以一条跑到一半发的 <span class="mono">/model</span>,若被排队,就会「<strong>既悄悄打断了 agent、又被丢弃</strong>」,用户收到一个<strong>空响应</strong>。结论:只要是能解析的 slash 命令,一律旁路、立即派发,绝不排队。这也正是<strong>缓存线</strong>要守住的危险:控制命令一旦混进对话历史、被当成用户文本,就可能让历史里冒出连续两条用户消息、破坏严格角色交替(第 7 章的不变量),进而动摇被缓存的前缀(第 6 章)。旁路让控制命令走<strong>控制通道</strong>、根本不进历史,正是从源头掐断这条危险。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">消息到达,<span class="mono">session_key</span> 在 <span class="mono">_active_sessions</span> 里吗?(该会话正忙?)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">不忙 → 正常处理;忙 → 取 <span class="mono">cmd = get_command()</span></span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><span class="mono">should_bypass_active_session(cmd)</span>?不是命令 → 进 <span class="mono">_pending_messages</span> 排队</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">是 <span class="mono">/stop /new /reset</span> → 取消在途任务 + 交接;是 <span class="mono">/approve</span> 等 → 直接内联派发</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">旁路两道守卫,不经 <span class="mono">_process_message_background</span>(避免会话生命周期竞争)</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「并发安全 + 不破缓存」</div>
+  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
+  本章核心:<strong>_active_sessions</strong>(busy 状态)、<strong>_pending_messages</strong>(排队)、<strong>_session_tasks</strong>(会话→任务)、<strong>should_bypass_active_session</strong>(旁路判定)、<strong>第二道 runner 守卫</strong>(GATEWAY_KNOWN_COMMANDS 分派)。跨章节配合:消息先被适配器归一化成 <strong>MessageEvent</strong>(第 17 章)才进守卫;旁路保证控制命令不污染对话历史、维持严格角色交替=<strong>不破缓存</strong>(第 6 章);<span class="mono">/stop</span> 的中断会<strong>级联到子代理</strong>(第 13 章委派);<span class="mono">/approve</span> 是危险操作的<strong>人在回路审批</strong>(第 24 章安全)。
+  <div class="collab-sub">② 数据流时序</div>
+  MessageEvent → 第一道守卫(<span class="mono">session_key in _active_sessions</span>?) → <span class="mono">get_command()</span> + <span class="mono">should_bypass</span> → 旁路(<span class="mono">/stop</span> 取消任务 / <span class="mono">/approve</span> 内联派发)或排队(<span class="mono">_pending_messages</span>) → 第二道守卫(runner 按 <span class="mono">canonical</span> 分派)。
+  <div class="collab-sub">③ 关键点</div>
+  两道守卫<strong>都必须</strong>放行控制命令;排队一个控制命令 = 被兜底丢弃(空响应)或死锁(<span class="mono">/approve</span> 等不到);旁路必须走<strong>内联派发</strong>而非 <span class="mono">_process_message_background</span>,后者管会话生命周期、清理会和在跑任务抢。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>两道守卫拦截消息 + 控制命令旁路 = 并发安全 + 不破缓存</strong>。它主要治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">D·指令=数据</span>——模型分不清「这是给系统的指令」还是「这是对话内容」。网关不靠模型判断,而是用<strong>显式的 <span class="mono">get_command()</span> 解析 + 旁路通道</strong>,把 <span class="mono">/stop</span> <span class="mono">/approve</span> 这类<strong>指令</strong>从消息流里拎出来走控制通道,绝不当成对话<strong>数据</strong>喂给模型。这是 D 在网关层的工程对策。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——并发消息、会话生命周期、中断、审批,全是运维复杂度。两道守卫 + 旁路 + owner-task 映射,把「忙时谁能插队、谁该排队、怎么取消」管得确定、无竞争。</p>
+  <p style="margin:.5rem 0 0">反模式:把所有消息一视同仁排队——<span class="mono">/approve</span> 会死锁(agent 阻塞等审批,审批却在队列里等 agent),<span class="mono">/stop</span> 会丢失,跑到一半的 <span class="mono">/model</span> 变成空响应。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>两道守卫</strong>:适配器层(busy 排队 <span class="mono">_pending_messages</span>)+ 网关 runner 层(slash 命令分派)。控制命令必须<strong>同时旁路两道</strong>。</li>
+    <li><strong>旁路两类</strong>:<span class="mono">/stop /new /reset</span> 取消在途任务;<span class="mono">/approve /deny /status</span> 等直接内联派发(不取消)。</li>
+    <li><strong>排队=出事</strong>:控制命令进队列会被兜底<strong>丢弃</strong>(zero-char 响应)或<strong>死锁</strong>(<span class="mono">/approve</span>)。</li>
+    <li><strong>不破缓存</strong>:控制命令走控制通道、不混进对话历史,维持严格角色交替(第 6 章)。</li>
+    <li><strong>避开竞争</strong>:旁路用内联派发,<strong>不走</strong> <span class="mono">_process_message_background</span>(它和会话生命周期清理抢)。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">When the agent is busy on a long task and the user sends another message — what now? By default it <strong>queues</strong>, waiting for the agent to finish. But a few commands must never queue: <span class="mono">/stop</span> (interrupt), <span class="mono">/approve</span> (the agent is blocked waiting for it). If they queue, they either <strong>leak as conversation text and get discarded</strong>, or <strong>deadlock outright</strong>. Hence the gateway's "two guards + control-command bypass."</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · the ER triage desk</div>
+  Ordinary patients check in and queue (messages into <span class="mono">_pending_messages</span>), waiting to be called. But "cardiac arrest" (<span class="mono">/stop</span>) must <strong>jump the queue</strong> straight to resuscitation; and "the lab result the attending is waiting on" (<span class="mono">/approve</span>), if it also queues, leaves the doctor <strong>waiting forever, stuck</strong>. The triage desk must recognize these "must-not-queue" cases and let them through.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · two sequential guards, control commands bypass</div>
+  While the agent runs, a message passes <strong>two sequential guards</strong>: ① the adapter layer (queue if busy), ② the gateway runner layer (dispatch slash commands). Ordinary chat queues dutifully; but <strong>any resolvable slash command must bypass both and dispatch inline</strong> — otherwise it gets discarded as conversation text (empty response) or deadlocks.
+</div>
+
+<h2>Guard one: the adapter-layer busy state</h2>
+<p>Each adapter keeps three maps to track "is this session busy right now":</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">2154-2162 · excerpt</span></div>
+  <pre><span class="cm"># _active_sessions stores each session's interrupt Event; _session_tasks</span>
+<span class="cm"># maps a session to the Task processing it, so /stop /new /reset can cancel</span>
+<span class="cm"># the right task and release the guard deterministically. Without it, an old</span>
+<span class="cm"># task's finally could delete a newer task's guard, leaving stale busy state.</span>
+self._active_sessions: Dict[str, asyncio.Event] = {}
+self._pending_messages: Dict[str, MessageEvent] = {}
+self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
+</div>
+<p>If this key is in <span class="mono">_active_sessions</span>, the session is <strong>running an agent</strong>. A new ordinary message then gets stuffed into <span class="mono">_pending_messages</span> to queue, fed in after the current turn ends. <span class="mono">_session_tasks</span> records "who is processing this session," so <span class="mono">/stop</span> can cancel exactly that task without deleting someone else's guard.</p>
+
+<h2>Bypass: control commands must not queue</h2>
+<p>When a session is busy, first check whether this message is a command that should bypass:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">4262-4298 · simplified</span></div>
+  <pre><span class="kw">if</span> session_key <span class="kw">in</span> self._active_sessions:
+    cmd = event.get_command()
+    <span class="kw">from</span> hermes_cli.commands <span class="kw">import</span> should_bypass_active_session
+
+    <span class="kw">if</span> should_bypass_active_session(cmd):
+        <span class="kw">if</span> cmd <span class="kw">in</span> {<span class="st">"stop"</span>, <span class="st">"new"</span>, <span class="st">"reset"</span>}:
+            <span class="cm"># cancel the in-flight task + serialized handoff</span>
+            <span class="kw">await</span> self._dispatch_active_session_command(event, session_key, cmd)
+            <span class="kw">return</span>
+        <span class="cm"># /approve /deny /status /background /restart: dispatch inline</span>
+        <span class="cm"># Do NOT use _process_message_background — it manages session</span>
+        <span class="cm"># lifecycle and its cleanup races with the running task (PR #4926)</span>
+        ...</pre>
+</div>
+<p>Two classes: <span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> must <strong>cancel the in-flight task</strong> (via a dedicated handoff that serializes "cancel + respond + drain queue"); <span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> and friends don't cancel the task and just need <strong>inline dispatch</strong>. The comment flags a trap: <strong>never go through <span class="mono">_process_message_background</span></strong> — it manages session lifecycle, and its cleanup races with the running task.</p>
+
+<h2>Why queueing breaks things: the zero-char response</h2>
+<p>The bypass predicate's docstring spells out the consequence:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/commands.py</span><span class="ln">379-399 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">should_bypass_active_session</span>(command_name):
+    <span class="cm">&quot;&quot;&quot;Return True for any resolvable slash command.</span>
+<span class="cm">    Queueing is always wrong for a recognized slash command</span>
+<span class="cm">    because the safety net in gateway.run discards any command</span>
+<span class="cm">    text that reaches the pending queue — a mid-run /model would</span>
+<span class="cm">    silently interrupt the agent AND get discarded, a zero-char</span>
+<span class="cm">    response.&quot;&quot;&quot;</span>
+    <span class="kw">return</span> resolve_command(command_name) <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span> <span class="kw">if</span> command_name <span class="kw">else</span> <span class="kw">False</span></pre>
+</div>
+<p>The logic is hard: the gateway runner has a safety net that <strong>discards any command text that slips into the pending queue</strong>. So a <span class="mono">/model</span> sent mid-run, if queued, would "<strong>silently interrupt the agent AND get discarded</strong>," and the user gets an <strong>empty response</strong>. Conclusion: any resolvable slash command bypasses and dispatches immediately, never queues. This is exactly the danger the <strong>cache line</strong> guards against: once a control command leaks into conversation history as user text, it could put two user messages back to back, breaking strict role alternation (the invariant from ch.7) and thereby disturbing the cached prefix (ch.6). Bypass routes control commands onto a <strong>control channel</strong>, keeping them out of history entirely — cutting the danger off at the source.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">a message arrives — is <span class="mono">session_key</span> in <span class="mono">_active_sessions</span>? (is the session busy?)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">not busy → process normally; busy → take <span class="mono">cmd = get_command()</span></span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><span class="mono">should_bypass_active_session(cmd)</span>? not a command → queue in <span class="mono">_pending_messages</span></span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><span class="mono">/stop /new /reset</span> → cancel in-flight task + handoff; <span class="mono">/approve</span> etc. → inline dispatch</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">bypass both guards, not via <span class="mono">_process_message_background</span> (avoid session-lifecycle races)</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "concurrency-safe + cache-preserving"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>_active_sessions</strong> (busy state), <strong>_pending_messages</strong> (queue), <strong>_session_tasks</strong> (session→task), <strong>should_bypass_active_session</strong> (bypass predicate), <strong>the second runner guard</strong> (GATEWAY_KNOWN_COMMANDS dispatch). Cross-chapter teamwork: a message is first normalized by the adapter into a <strong>MessageEvent</strong> (ch.17) before reaching the guards; bypass keeps control commands out of conversation history, preserving strict role alternation = <strong>cache intact</strong> (ch.6); a <span class="mono">/stop</span> interrupt <strong>cascades to subagents</strong> (ch.13 delegation); <span class="mono">/approve</span> is the <strong>human-in-the-loop approval</strong> for dangerous operations (ch.24 security).
+  <div class="collab-sub">② Data-flow timing</div>
+  MessageEvent → guard one (<span class="mono">session_key in _active_sessions</span>?) → <span class="mono">get_command()</span> + <span class="mono">should_bypass</span> → bypass (<span class="mono">/stop</span> cancels task / <span class="mono">/approve</span> inline dispatch) or queue (<span class="mono">_pending_messages</span>) → guard two (runner dispatches by <span class="mono">canonical</span>).
+  <div class="collab-sub">③ The key point</div>
+  Both guards <strong>must</strong> let control commands through; queueing a control command = discarded by the safety net (empty response) or deadlock (<span class="mono">/approve</span> never arrives); the bypass must use <strong>inline dispatch</strong>, not <span class="mono">_process_message_background</span>, which manages session lifecycle and whose cleanup races the running task.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>two guards intercept messages + control commands bypass = concurrency-safe + cache-preserving</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">D·instr=data</span> — the model can't tell "this is an instruction to the system" from "this is conversation content." The gateway doesn't rely on the model to judge; it uses <strong>explicit <span class="mono">get_command()</span> parsing + a bypass channel</strong> to pull <strong>instructions</strong> like <span class="mono">/stop</span> <span class="mono">/approve</span> out of the message stream onto a control channel, never feeding them to the model as conversation <strong>data</strong>. This is D's engineering countermeasure at the gateway layer.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — concurrent messages, session lifecycle, interrupts, approvals are all operational complexity. Two guards + bypass + an owner-task map make "who can jump the queue, who should wait, how to cancel" deterministic and race-free.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern: queueing all messages alike — <span class="mono">/approve</span> deadlocks (the agent blocks waiting for approval while the approval waits in the queue for the agent), <span class="mono">/stop</span> is lost, and a mid-run <span class="mono">/model</span> becomes an empty response.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Two guards</strong>: the adapter layer (busy → queue in <span class="mono">_pending_messages</span>) + the gateway runner layer (slash-command dispatch). Control commands must <strong>bypass both</strong>.</li>
+    <li><strong>Two bypass classes</strong>: <span class="mono">/stop /new /reset</span> cancel the in-flight task; <span class="mono">/approve /deny /status</span> etc. dispatch inline (no cancel).</li>
+    <li><strong>Queue = trouble</strong>: a queued control command gets <strong>discarded</strong> by the safety net (zero-char response) or <strong>deadlocks</strong> (<span class="mono">/approve</span>).</li>
+    <li><strong>Cache intact</strong>: control commands ride a control channel, never mixing into conversation history, preserving strict role alternation (ch.6).</li>
+    <li><strong>Dodge the race</strong>: bypass uses inline dispatch, <strong>not</strong> <span class="mono">_process_message_background</span> (which races session-lifecycle cleanup).</li>
+  </ul>
+</div>
+""",
+}

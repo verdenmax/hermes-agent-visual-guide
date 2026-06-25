@@ -28,4 +28,5 @@ CONTENT = {
     "15-context-compression.html": part4.LESSON_15,
     "16-terminal-backends.html": part4.LESSON_16,
     "17-gateway-adapters.html": part5.LESSON_17,
+    "18-gateway-guards.html": part5.LESSON_18,
 }

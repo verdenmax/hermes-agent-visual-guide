@@ -80,6 +80,8 @@ PAGES = [
      "第四部分 · 规模化与隔离", "Part 4 · Scaling & Isolation"),
     ("17-gateway-adapters.html", "网关与多平台适配器", "Gateway & platform adapters",
      "第五部分 · 多端与网关", "Part 5 · Surfaces & Gateway"),
+    ("18-gateway-guards.html", "网关消息守卫", "Gateway message guards",
+     "第五部分 · 多端与网关", "Part 5 · Surfaces & Gateway"),
 ]
 
 
