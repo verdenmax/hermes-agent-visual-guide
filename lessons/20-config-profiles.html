@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var l=localStorage.getItem('havg-lang');if(l==='en'){document.documentElement.dataset.lang='en';document.documentElement.lang='en';}}catch(e){}</script>
+<title>20 · 配置与 Profiles / Config &amp; Profiles · Hermes Agent 设计图解</title>
+<meta name="description" content="第五部分 · 多端与网关｜配置与 Profiles · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="theme-color" content="#c2630e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAzMiAzMic+PHJlY3Qgd2lkdGg9JzMyJyBoZWlnaHQ9JzMyJyByeD0nNycgZmlsbD0nI2M4YTAyYycvPjx0ZXh0IHg9JzE2JyB5PScyMicgZm9udC1mYW1pbHk9J3N5c3RlbS11aSxzYW5zLXNlcmlmJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nODAwJyBmaWxsPScjZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz7imKQ8L3RleHQ+PC9zdmc+">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Hermes Agent 设计图解">
+<meta property="og:title" content="20 · 配置与 Profiles / Config &amp; Profiles · Hermes Agent 设计图解">
+<meta property="og:description" content="第五部分 · 多端与网关｜配置与 Profiles · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="20 · 配置与 Profiles / Config &amp; Profiles · Hermes Agent 设计图解">
+<meta name="twitter:description" content="第五部分 · 多端与网关｜配置与 Profiles · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --ink: #1d2129;
+  --muted: #5b6470; --faint: #8a939f; --line: #e1e5ea;
+  --accent: #c8a02c; --accent-soft: #faf1d6; --accent-ink: #8a6d12;
+  --blue: #2563eb; --blue-soft: #e7efff; --amber: #b4690e; --amber-soft: #fdf1dd;
+  --purple: #7c3aed; --purple-soft: #f0e9ff; --red: #d23f3f; --red-soft: #fbe6e6;
+  --code-bg: #0f172a; --code-ink: #e2e8f0; --code-line: #1e293b;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232c; --ink: #e6edf3;
+    --muted: #9aa6b2; --faint: #6e7a86; --line: #2a323c;
+    --accent: #e3c05a; --accent-soft: #2e2510; --accent-ink: #f0d488;
+    --blue: #6ea8fe; --blue-soft: #16243f; --amber: #e0a44a; --amber-soft: #33270f;
+    --purple: #b794f6; --purple-soft: #271a40; --red: #f08080; --red-soft: #3a1a1a;
+    --code-bg: #0a0f1a; --code-ink: #d8e2f0; --code-line: #14202f;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+html { scroll-behavior: smooth; overflow-x: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+code, .mono { font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; overflow-wrap: break-word; }
+
+/* ---- top progress bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 50; background: var(--panel);
+  border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
+}
+.topbar-inner {
+  max-width: 960px; margin: 0 auto; padding: .7rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.topbar .home { font-size: .82rem; color: var(--muted); font-weight: 600; display:flex; gap:.5rem; align-items:center; }
+.topbar .home b { color: var(--accent); }
+.topbar .pill { font-size: .72rem; color: var(--muted); background: var(--panel-2);
+  padding: .2rem .6rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.progress { height: 3px; background: var(--panel-2); }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--blue)); }
+
+.wrap { max-width: 820px; margin: 0 auto; padding: 2.4rem 1.25rem 5rem; }
+
+/* ---- hero ---- */
+.hero { margin-bottom: 2rem; }
+.hero .part { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: .55rem; }
+.hero h1 { font-size: 2.05rem; line-height: 1.2; letter-spacing: -.01em; font-weight: 750; }
+.hero .lead { margin-top: .9rem; font-size: 1.06rem; color: var(--muted); }
+
+h2 { font-size: 1.32rem; margin: 2.4rem 0 .9rem; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: .55rem; }
+h2::before { content: ""; width: 4px; height: 1.05em; background: var(--accent); border-radius: 3px; display: inline-block; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+p { margin: .7rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .3rem 0; }
+strong { color: var(--ink); font-weight: 680; }
+.inline { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: .08em .4em; font-size: .9em; color: var(--accent-ink); }
+
+/* ---- callout cards ---- */
+.card { border-radius: var(--radius); padding: 1.05rem 1.2rem; margin: 1.2rem 0;
+  border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.card .tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.card.macro { border-left: 4px solid var(--blue); }
+.card.macro .tag { color: var(--blue); }
+.card.detail { border-left: 4px solid var(--purple); }
+.card.detail .tag { color: var(--purple); }
+.card.analogy { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+.card.analogy .tag { color: var(--amber); }
+.card.key { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.key .tag { color: var(--accent-ink); }
+.card.warn { border-left: 4px solid var(--red); background: var(--red-soft); }
+.card.warn .tag { color: var(--red); }
+.card.spark { border-left: 4px solid #e0a000;
+  background: linear-gradient(100deg, rgba(224,160,0,.12), transparent 70%); }
+.card.spark .tag { color: #c98a00; }
+@media (prefers-color-scheme: dark) { .card.spark .tag { color: #f0c050; } }
+
+/* ---- code file callout ---- */
+.codefile { margin: 1.2rem 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  box-shadow: var(--shadow); }
+.codefile .cf-head { display: flex; align-items: center; gap: .55rem; padding: .5rem .85rem;
+  background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: .8rem; }
+.codefile .cf-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink:0; }
+.codefile .cf-head .path { font-family: ui-monospace, monospace; color: var(--ink); font-weight: 600; }
+.codefile .cf-head .ln { margin-left: auto; color: var(--faint); font-size: .72rem; }
+.codefile pre { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem;
+  overflow-x: auto; font-size: .82rem; line-height: 1.6; }
+.codefile pre .cm { color: #7d8aa3; }
+.codefile pre .kw { color: #c792ea; }
+.codefile pre .fn { color: #82aaff; }
+.codefile pre .st { color: #c3e88d; }
+.codefile pre .nb { color: #f78c6c; }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem; border-radius: 12px;
+  overflow-x: auto; font-size: .83rem; line-height: 1.6; margin: 1.1rem 0; box-shadow: var(--shadow); }
+pre.code .cm { color: #7d8aa3; } pre.code .kw { color: #c792ea; }
+pre.code .fn { color: #82aaff; } pre.code .st { color: #c3e88d; } pre.code .nb { color: #f78c6c; }
+
+/* ---- collapsible accordion (details/summary) ---- */
+.accordion { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  margin: .7rem 0; box-shadow: var(--shadow); overflow: hidden; }
+.accordion > summary { cursor: pointer; padding: .85rem 1.1rem; font-weight: 650; font-size: .96rem;
+  list-style: none; display: flex; align-items: center; gap: .6rem; user-select: none; }
+.accordion > summary::-webkit-details-marker { display: none; }
+.accordion > summary::after { content: "▶"; font-size: .68rem; color: var(--accent);
+  margin-left: auto; transition: transform .15s ease; }
+.accordion[open] > summary::after { transform: rotate(90deg); }
+.accordion > summary:hover { background: var(--panel-2); }
+.accordion[open] > summary { border-bottom: 1px solid var(--line); }
+.accordion .badge-num { background: var(--accent-soft); color: var(--accent-ink);
+  width: 1.6rem; height: 1.6rem; border-radius: 7px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: .82rem; font-weight: 700; flex-shrink: 0; }
+.accordion .hint { font-size: .72rem; color: var(--faint); font-weight: 400; }
+.acc-body { padding: .9rem 1.1rem 1.1rem; }
+.acc-intro { color: var(--muted); font-size: .9rem; margin: .2rem 0 .4rem; }
+.qa { margin: 1rem 0; }
+.qa:first-child { margin-top: .3rem; }
+.qa .q { font-weight: 680; font-size: .9rem; display: flex; gap: .45rem; align-items: center; margin-bottom: .3rem; }
+.qa .a { color: var(--muted); font-size: .9rem; }
+.qa .a strong { color: var(--ink); }
+.qa pre.code { margin: .5rem 0 0; font-size: .78rem; }
+
+/* ---- flow diagram ---- */
+.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 1.3rem 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.2rem 1rem; box-shadow: var(--shadow); }
+.flow .node { flex: 1 1 0; min-width: 110px; text-align: center; padding: .7rem .5rem;
+  border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.flow .node .nt { font-weight: 700; font-size: .92rem; }
+.flow .node .nd { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+.flow .node.hl { background: var(--accent-soft); border-color: var(--accent); }
+.flow .arrow { align-self: center; color: var(--faint); font-size: 1.3rem; padding: 0 .35rem; }
+
+/* vertical flow */
+.vflow { margin: 1.3rem 0; }
+.vflow .step { display: flex; gap: .9rem; position: relative; padding-bottom: 1.1rem; }
+.vflow .step:not(:last-child)::before { content:""; position:absolute; left: 15px; top: 34px; bottom: -2px;
+  width: 2px; background: var(--line); }
+.vflow .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; z-index:1; }
+.vflow .sc h4 { margin: .25rem 0 .2rem; font-size: 1rem; }
+.vflow .sc p { margin: .15rem 0; font-size: .92rem; color: var(--muted); }
+.vflow .sc .mono { font-size: .8rem; color: var(--accent-ink); }
+
+/* layered architecture */
+.layers { margin: 1.3rem 0; display: flex; flex-direction: column; gap: .55rem; }
+.layer { border-radius: 12px; padding: .85rem 1.1rem; border: 1px solid var(--line); background: var(--panel);
+  box-shadow: var(--shadow); }
+.layer .lh { display: flex; align-items: center; gap: .6rem; }
+.layer .lh .badge { font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; }
+.layer .lh .name { font-weight: 700; font-family: ui-monospace, monospace; }
+.layer .ld { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
+.layer.l-core { border-left: 4px solid var(--accent); } .layer.l-core .badge { background: var(--accent-soft); color: var(--accent-ink); }
+.layer.l-main { border-left: 4px solid var(--blue); } .layer.l-main .badge { background: var(--blue-soft); color: var(--blue); }
+.layer.l-part { border-left: 4px solid var(--purple); } .layer.l-part .badge { background: var(--purple-soft); color: var(--purple); }
+.layer.l-app { border-left: 4px solid var(--amber); } .layer.l-app .badge { background: var(--amber-soft); color: var(--amber); }
+
+/* two-column compare */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0; }
+@media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+.col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; box-shadow: var(--shadow); min-width: 0; }
+.col h4 { margin: 0 0 .4rem; font-size: .95rem; }
+
+table.t { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .9rem;
+  background: var(--panel); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+table.t th, table.t td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--line); }
+table.t th { background: var(--panel-2); font-size: .8rem; letter-spacing: .02em; }
+table.t tr:last-child td { border-bottom: none; }
+table.t td.mono, table.t td .mono { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--accent-ink); }
+@media (max-width: 640px) {
+  /* Wide multi-column tables: scroll within their own box instead of
+     forcing page-level horizontal overflow (which clipped right columns). */
+  table.t { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.t th, table.t td { padding: .5rem .6rem; }
+}
+.selftest { margin: 2.2rem 0 0; border-top: 2px dashed var(--line); padding-top: 1.2rem; }
+.selftest > h2 { margin-top: .2rem; }
+.quiz { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+  border-radius: 12px; padding: .9rem 1.1rem; margin: 1rem 0; box-shadow: var(--shadow); }
+.quiz .qn { font-weight: 650; }
+.quiz ol.opts { list-style: upper-alpha; margin: .55rem 0 .6rem 1.5rem; padding: 0; }
+.quiz ol.opts li { margin: .3rem 0; padding-left: .15rem; }
+.quiz details.accordion { margin: .5rem 0 0; }
+.selftest code { font-family: ui-monospace, monospace; font-size: .9em; color: var(--accent-ink);
+  background: var(--accent-soft); padding: 0 .28em; border-radius: 4px; }
+
+/* footer nav */
+.footnav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem;
+  padding-top: 1.4rem; border-top: 1px solid var(--line); }
+.footnav a { flex: 1; padding: .85rem 1.1rem; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow); transition: .15s; }
+.footnav a:hover { border-color: var(--accent); transform: translateY(-1px); }
+.footnav a.next { text-align: right; }
+.footnav .dir { font-size: .72rem; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.footnav .ttl { font-weight: 700; color: var(--ink); margin-top: .15rem; }
+.footnav a.disabled { opacity: .35; pointer-events: none; }
+
+/* index page */
+.toc { display: grid; gap: .7rem; margin-top: 1.6rem; }
+.toc-part { font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--accent); margin: 1.4rem 0 .2rem; }
+.toc a { display: flex; align-items: center; gap: .9rem; padding: .85rem 1.05rem; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); transition: .15s; }
+.toc a:hover { border-color: var(--accent); transform: translateX(3px); }
+.toc .n { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+.toc .tt { font-weight: 650; color: var(--ink); }
+.toc .ts { font-size: .8rem; color: var(--muted); margin-left: auto; text-align: right; }
+.toc-search { position: relative; margin: 1.6rem 0 -.4rem; }
+.toc-search input { width: 100%; box-sizing: border-box; padding: .75rem 2.8rem .75rem 1rem;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font-size: .98rem; box-shadow: var(--shadow); }
+.toc-search input:focus { outline: none; border-color: var(--accent); }
+.toc-search .qcount { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  color: var(--faint); font-size: .8rem; pointer-events: none; }
+.toc a.hide, .toc .toc-part.hide { display: none; }
+.toc-empty { display: none; color: var(--muted); padding: 1rem; text-align: center; }
+.toc-empty.show { display: block; }
+.hero.index h1 { font-size: 2.3rem; }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:1rem; font-size:.8rem; color:var(--muted); }
+.legend span { display:flex; align-items:center; gap:.4rem; }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+.pdf-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1.1rem;
+  background:var(--accent); color:#fff; border-radius:10px; font-size:.9rem; font-weight:650;
+  box-shadow:var(--shadow); transition:.15s; }
+.pdf-btn:hover { background:var(--accent-ink); transform:translateY(-1px); }
+
+/* ---- bilingual language switch ----
+   Contract: <html> must carry data-lang="zh" (default) or "en".
+   page()/index_page() hard-code data-lang="zh"; LANG_BOOT may switch to "en". */
+html[data-lang="en"] .lang-zh { display: none !important; }
+html[data-lang="zh"] .lang-en { display: none !important; }
+.langtoggle { font-size:.72rem; font-weight:700; color:var(--accent-ink);
+  background:var(--accent-soft); border:1px solid var(--accent); border-radius:999px;
+  padding:.22rem .7rem; cursor:pointer; line-height:1.4; white-space:nowrap; }
+.langtoggle:hover { background:var(--accent); color:#fff; }
+
+/* ---- schematic: cell strips (token sequences / quant blocks / KV columns) ---- */
+.cellgroup { margin: 1.2rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.cellgroup .cg-cap { font-size: .82rem; color: var(--muted); margin-bottom: .55rem; }
+.cellgroup .cg-cap b { color: var(--ink); }
+.cells { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.cells + .cells { margin-top: .5rem; }
+.cell { min-width: 2.1rem; padding: .38rem .5rem; text-align: center; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: .78rem;
+  font-family: ui-monospace, monospace; white-space: nowrap; }
+.cell.scale { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); font-weight: 700; }
+.cell.hl    { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cell.q     { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.cell.dim   { opacity: .45; }
+.cells .lab { font-size: .76rem; color: var(--faint); padding: 0 .35rem; }
+.cells .sep { color: var(--faint); padding: 0 .1rem; }
+
+/* ---- schematic: timeline lanes (prefill vs decode, step-by-step) ---- */
+.timeline { margin: 1.2rem 0; display: flex; flex-direction: column; gap: .5rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.timeline .lane { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.timeline .lane-label { min-width: 6rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.timeline .tslot { padding: .4rem .6rem; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--line); font-size: .78rem; text-align: center; font-family: ui-monospace, monospace; }
+.timeline .tslot.span { flex: 1; min-width: 8rem; background: var(--blue-soft); border-color: var(--blue);
+  color: var(--blue); font-weight: 700; }
+.timeline .tslot.now { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+/* ---- worked-example trace: one concrete input, stepped through ---- */
+.trace { margin: 1.3rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.trace .tcap { font-size: .82rem; color: var(--muted); margin-bottom: .7rem; }
+.trace .tcap b { color: var(--accent-ink); }
+.trace .stations { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.trace .stn { flex: 1 1 0; min-width: 116px; border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem; background: var(--bg); }
+.trace .stn h5 { margin: 0 0 .45rem; font-size: .8rem; color: var(--ink); }
+.trace .cellrow { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.trace .vc { min-width: 2.1rem; padding: .32rem .45rem; text-align: center; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); font: 600 .76rem ui-monospace, monospace; white-space: nowrap; }
+.trace .vc.hot  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.trace .vc.blue { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.trace .vc.dim  { opacity: .42; }
+.trace .tlab { font-size: .68rem; color: var(--faint); margin-top: .35rem; }
+.trace .op { align-self: center; color: var(--accent); font: 700 .72rem ui-monospace, monospace;
+  padding: 0 .5rem; text-align: center; white-space: nowrap; }
+.trace svg { max-width: 100%; height: auto; display: block; margin: .3rem auto; }
+@media (max-width: 640px) { .trace .stations { flex-direction: column; } .trace .op { padding: .3rem 0; } }
+/* 🧩 collaboration-mechanism card */
+.card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
+.card.collab .tag { color: var(--blue); }
+.card.collab .collab-sub { font-weight:700; font-size:.82rem; margin:.85rem 0 .3rem; color:var(--ink); }
+/* 🎯 design-tradeoff card */
+.card.design { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.design .tag { color: var(--accent-ink); }
+/* A-G constraint back-reference badge */
+.badge.constraint { display:inline-block; font-size:.7rem; font-weight:700;
+  padding:.1rem .45rem; border-radius:999px; background:var(--purple-soft);
+  color:var(--purple); border:1px solid var(--purple); margin:0 .15rem; white-space:nowrap; }
+</style>
+</head><body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
+    <span class="pill"><span class="lang-zh">第五部分 · 多端与网关</span><span class="lang-en">Part 5 · Surfaces &amp; Gateway</span></span>
+    <span class="pill">20 / 20</span>
+    <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
+  </div>
+  <div class="progress"><span style="width:100%"></span></div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="part"><span class="lang-zh">第五部分 · 多端与网关</span><span class="lang-en">Part 5 · Surfaces &amp; Gateway</span></div>
+    <h1><span class="lang-zh">配置与 Profiles</span><span class="lang-en">Config &amp; Profiles</span></h1>
+  </div>
+  <div class="lang-zh">
+<p class="lead">同一台机器上,你想跑两个完全独立的 Hermes:一个「工作号」、一个「私人号」,各有各的 API key、记忆、会话、技能、网关——互不串台。这就是 <strong>profile</strong>。它的全部魔法,浓缩成一句话:<strong>在任何模块 import 之前,抢先设好一个环境变量 <span class="mono">HERMES_HOME</span></strong>。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 连锁酒店的分店</div>
+  同一套管理系统(Hermes 代码),开了多家分店(profile)。每家分店有<strong>独立的钥匙、账本、客房</strong>(各自的 <span class="mono">HERMES_HOME</span> 目录)。你一进门,前台先确认「您是哪家分店的」(<span class="mono">_apply_profile_override</span> 抢先设 <span class="mono">HERMES_HOME</span>),之后你办的<strong>每一件事</strong>都自动用那家店的资源——不会刷错账本、拿错钥匙。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 一个环境变量决定一切</div>
+  profile 切换只做<strong>一件事</strong>:在 <span class="mono">main.py</span> 的<strong>模块顶层</strong>、其余 import 之前,把 <span class="mono">HERMES_HOME</span> 设成 <span class="mono">~/.hermes/profiles/&lt;名字&gt;</span>。之后全代码库唯一的路径入口 <span class="mono">get_hermes_home()</span> 自动指向那个目录,配置/密钥/记忆/会话/技能<strong>全部隔离</strong>。配置本身再分两层:行为设置进 <span class="mono">config.yaml</span>、密钥进 <span class="mono">.env</span>。
+</div>
+
+<h2>抢跑:import 之前设 HERMES_HOME</h2>
+<p>关键在「时机」——必须赶在任何模块把路径缓存下来<strong>之前</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/main.py</span><span class="ln">336-508 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_apply_profile_override</span>() -&gt; <span class="kw">None</span>:
+    <span class="cm">&quot;&quot;&quot;Pre-parse --profile/-p and set HERMES_HOME before imports.&quot;&quot;&quot;</span>
+    profile_name = ...                       <span class="cm"># 从 argv 解析 -p / --profile</span>
+    <span class="kw">if</span> profile_name <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span>:
+        hermes_home = resolve_profile_env(profile_name)   <span class="cm"># → ~/.hermes/profiles/coder</span>
+        os.environ[<span class="st">"HERMES_HOME"</span>] = hermes_home          <span class="cm"># 抢先设环境变量</span>
+        <span class="cm"># 再把 -p 标志从 argv 剥掉,免得后面 argparse 报错</span>
+
+_apply_profile_override()   <span class="cm"># 模块级:在其余 import 之前就执行</span></pre>
+</div>
+<p>注意最后那行 <span class="mono">_apply_profile_override()</span> 是<strong>模块级调用</strong>——在 <span class="mono">main.py</span> 顶层执行,<strong>早于</strong> <span class="mono">config</span>、<span class="mono">env_loader</span> 等会读取/缓存 <span class="mono">HERMES_HOME</span> 的落盘业务模块被 <span class="mono">import</span>。等到那些模块加载时去读 <span class="mono">HERMES_HOME</span>,看到的已经是 profile 的目录了。一个环境变量,把整棵依赖树重定向到了正确的实例。</p>
+
+<h2>单一真相源:所有路径都问它</h2>
+<p>全代码库不准硬编码 <span class="mono">~/.hermes</span>,一律走这一个函数:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_constants.py</span><span class="ln">54-109 · 节选</span></div>
+  <pre><span class="kw">def</span> <span class="fn">get_hermes_home</span>() -&gt; Path:
+    <span class="cm">&quot;&quot;&quot;Reads HERMES_HOME env var, falls back to the platform-native default.</span>
+<span class="cm">    This is the single source of truth — all other copies should import this.&quot;&quot;&quot;</span>
+    override = get_hermes_home_override()    <span class="cm"># ContextVar 级覆盖(并发隔离)</span>
+    <span class="kw">if</span> override:
+        <span class="kw">return</span> Path(override)
+    val = os.environ.get(<span class="st">"HERMES_HOME"</span>, <span class="st">""</span>).strip()
+    <span class="kw">if</span> val:
+        <span class="kw">return</span> Path(val)                     <span class="cm"># ← profile 设的就是这个</span>
+    <span class="kw">return</span> _get_platform_default_hermes_home()   <span class="cm"># 默认 ~/.hermes</span></pre>
+</div>
+<p><strong>「single source of truth — all other copies should import this」</strong>:全代码库 30+ 处要落盘的地方,都不自己拼 <span class="mono">~/.hermes</span>,而是调 <span class="mono">get_hermes_home()</span>。于是 profile 一旦在开头设好 <span class="mono">HERMES_HOME</span>,会话库、记忆、技能、网关日志……<strong>统统自动</strong>落到 profile 目录。反过来,任何一处硬编码 <span class="mono">Path.home()/".hermes"</span> 都会<strong>击穿隔离</strong>(PR #3575 一次就修了 5 个这种 bug)。</p>
+
+<h2>配置分层:行为进 yaml,密钥进 env</h2>
+<p>profile 隔离的是「存哪」;而「存什么」分两层,泾渭分明:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/config.py</span><span class="ln">883 / 2860 / 2885 · 简化</span></div>
+  <pre><span class="cm"># config.yaml —— 所有行为设置(超时/阈值/开关/显示偏好)</span>
+DEFAULT_CONFIG = {
+    <span class="st">"_config_version"</span>: 30,
+    <span class="st">"model"</span>: {...}, <span class="st">"agent"</span>: {...}, <span class="st">"terminal"</span>: {...},
+    <span class="st">"compression"</span>: {...}, <span class="st">"memory"</span>: {...}, <span class="st">"gateway"</span>: {...},
+}
+
+<span class="cm"># .env —— 凭据/密钥(密钥标 password:True,setup 时掩码输入)</span>
+OPTIONAL_ENV_VARS = {
+    <span class="st">"OPENROUTER_API_KEY"</span>: {<span class="st">"password"</span>: <span class="kw">True</span>, <span class="st">"category"</span>: <span class="st">"provider"</span>},
+    <span class="st">"TELEGRAM_BOT_TOKEN"</span>: {<span class="st">"password"</span>: <span class="kw">True</span>, <span class="st">"category"</span>: <span class="st">"messaging"</span>},
+}</pre>
+</div>
+<p>设计意图很明确:<strong><span class="mono">.env</span> 主要放凭据</strong>(密钥条目标 <span class="mono">password: True</span>、setup 向导掩码输入;<span class="mono">OPTIONAL_ENV_VARS</span> 里也有少量 <span class="mono">password: False</span> 的非密连接项,如 base URL、代理);而超时、阈值、功能开关、显示偏好这些<strong>行为设置一律进 <span class="mono">config.yaml</span></strong>。所以「给 messaging 设个工作目录」绝不能塞进 <span class="mono">.env</span>(已废弃的 <span class="mono">MESSAGING_CWD</span> 就是反例),而要写 <span class="mono">terminal.cwd</span>。这条线让凭据独立成一个可单独保护、单独 gitignore 的文件。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><span class="mono">hermes -p coder ...</span> 启动</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><span class="mono">main.py</span> 顶层 <span class="mono">_apply_profile_override()</span> 解析 <span class="mono">-p coder</span></span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><span class="mono">os.environ["HERMES_HOME"] = ~/.hermes/profiles/coder</span>(早于业务 import)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">其余模块加载,各自调 <span class="mono">get_hermes_home()</span> 读到 coder 目录</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">config / .env / 记忆 / 会话 / 技能 / 网关日志 全落在 coder 实例,与 default 完全隔离</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「多实例完全隔离」</div>
+  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
+  本章核心:<strong>_apply_profile_override</strong>(import 前抢设 env)、<strong>get_hermes_home</strong>(单一真相源)、<strong>DEFAULT_CONFIG / OPTIONAL_ENV_VARS</strong>(配置分层)。跨章节配合:<span class="mono">HERMES_HOME</span> 决定<strong>记忆</strong>(第 11 章)、<strong>技能</strong>(第 9 章)、<strong>Curator</strong>(第 10 章)、会话库、网关日志各自落哪个 profile;每个平台适配器用 <strong>token lock</strong> 防两个 profile 抢同一 bot 凭据(第 17 章);profile 之间是<strong>独立的岛</strong>——隔离本身就是设计,不做跨 profile 的实时配置继承。
+  <div class="collab-sub">② 数据流时序</div>
+  <span class="mono">-p coder</span> → <span class="mono">_apply_profile_override()</span>(模块顶层,import 前)→ <span class="mono">HERMES_HOME=profiles/coder</span> → import 链铺开 → 30+ 处模块级 <span class="mono">get_hermes_home()</span> 把路径缓存成 coder → 该进程全程认 coder 实例。
+  <div class="collab-sub">③ 关键点</div>
+  profile 隔离的全部实现 = 「在 import 之前设一个环境变量」+「所有路径走 <span class="mono">get_hermes_home()</span> 单一入口」。任何硬编码 <span class="mono">~/.hermes</span> 都会击穿隔离;非密配置塞 <span class="mono">.env</span> 是另一种坏味道(应进 <span class="mono">config.yaml</span>)。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>import 前抢设 HERMES_HOME + 单一真相源路径 = 完全隔离的多实例;配置再分层(密钥独立)</strong>。它主要治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——一个人要同时跑 work / personal / 各客户的多个 agent 实例,各自的密钥、记忆、会话、网关绝不能混。一个环境变量切换整套状态盘,运维上「开一个新实例」=「建一个新目录」,干净利落;<span class="mono">display_hermes_home()</span> 还让所有用户可见消息显示正确的 profile 路径。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——核心代码里<strong>没有</strong>全局的「当前是哪个实例」状态,全靠 <span class="mono">HERMES_HOME</span> 这一个外部变量 + <span class="mono">get_hermes_home()</span> 这一个入口推导。无状态内核 + 外部一个变量定乾坤,正是全书反复出现的母题。</p>
+  <p style="margin:.5rem 0 0">反模式:① 在代码里硬编码 <span class="mono">Path.home()/".hermes"</span>——会无视 profile、把数据写错实例(PR #3575 修了 5 个);② 把超时/开关这类<strong>非密行为</strong>配置塞进 <span class="mono">.env</span>——污染了「.env 放凭据、行为设置进 config.yaml」的边界。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>一个环境变量</strong>:profile = 在任何 import 之前把 <span class="mono">HERMES_HOME</span> 设成 <span class="mono">~/.hermes/profiles/&lt;名字&gt;</span>;<span class="mono">_apply_profile_override()</span> 是模块级调用,抢在最前。</li>
+    <li><strong>单一真相源</strong>:全代码库走 <span class="mono">get_hermes_home()</span> 读 <span class="mono">HERMES_HOME</span>;<strong>禁止</strong>硬编码 <span class="mono">~/.hermes</span>(否则击穿隔离,PR #3575)。</li>
+    <li><strong>配置分层</strong>:行为设置(超时/阈值/开关)进 <span class="mono">config.yaml</span>(<span class="mono">DEFAULT_CONFIG</span>);凭据进 <span class="mono">.env</span>(<span class="mono">OPTIONAL_ENV_VARS</span>,密钥标 <span class="mono">password: True</span> 掩码输入)。</li>
+    <li><strong>完全隔离</strong>:每个 profile 的 config / 密钥 / 记忆 / 会话 / 技能 / 网关全独立;profile 之间是独立的岛,不做实时配置继承。</li>
+    <li><strong>用户可见路径</strong>:打印/日志用 <span class="mono">display_hermes_home()</span>(default 显示 <span class="mono">~/.hermes</span>、profile 显示 <span class="mono">~/.hermes/profiles/coder</span>)。</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. Hermes 的 profile 多实例隔离(work/personal 各一套独立 key/记忆/会话),靠什么实现?</div>
+  <ol class="opts">
+    <li>在任何业务模块 import 之前,_apply_profile_override() 抢先把 HERMES_HOME 设成 profile 目录;之后所有 get_hermes_home() 自动指向它</li>
+    <li>每个 profile 跑一个 Docker 容器</li>
+    <li>给每个 profile 分配一个端口</li>
+    <li>改数据库 schema</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：A</strong>。_apply_profile_override() 是 main.py 顶层的模块级调用,抢在 config/env_loader 等落盘业务模块 import 前把 HERMES_HOME 设好;get_hermes_home() 作为单一真相源读它,于是 config/密钥/记忆/会话/技能/网关日志全部落进 profile 目录、完全隔离。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. 在 Hermes 代码里要拿到「当前 hermes home 目录」,正确做法是什么?</div>
+  <ol class="opts">
+    <li>调 get_hermes_home() 这个单一真相源,绝不硬编码 ~/.hermes(否则会击穿 profile 隔离)</li>
+    <li>写死 /root/.hermes</li>
+    <li>自己读环境变量再拼路径</li>
+    <li>硬编码 Path.home() / '.hermes'</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：A</strong>。get_hermes_home() 是全代码库唯一的路径入口(读 HERMES_HOME)。任何一处硬编码 Path.home()/'.hermes' 都会无视当前 profile、把数据写进错误的实例——这正是 PR#3575 一次修掉的 5 个 bug 的根因。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>一个「messaging 默认工作目录」该写进 .env 还是 config.yaml?为什么 Hermes 坚持把行为配置(超时/开关/路径)与凭据(API key/token)分成两层?这对 profile 隔离和安全各有什么好处?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="lang-en">
+<p class="lead">On one machine you want two fully independent Hermes instances: a "work" one and a "personal" one, each with its own API keys, memory, sessions, skills, gateway — never crossing wires. That's a <strong>profile</strong>. All its magic boils down to one sentence: <strong>before any module is imported, set one environment variable, <span class="mono">HERMES_HOME</span>, first</strong>.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · branches of a hotel chain</div>
+  One management system (the Hermes code) runs many branches (profiles). Each branch has <strong>its own keys, ledgers, rooms</strong> (its own <span class="mono">HERMES_HOME</span> directory). The moment you walk in, the front desk confirms "which branch are you" (<span class="mono">_apply_profile_override</span> sets <span class="mono">HERMES_HOME</span> first), and from then on <strong>everything</strong> you do automatically uses that branch's resources — no charging the wrong ledger, no grabbing the wrong key.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · one env var decides everything</div>
+  Switching profiles does <strong>one thing</strong>: at the <strong>module top level</strong> of <span class="mono">main.py</span>, before any other import, set <span class="mono">HERMES_HOME</span> to <span class="mono">~/.hermes/profiles/&lt;name&gt;</span>. After that, the codebase's single path entry point <span class="mono">get_hermes_home()</span> automatically points there, and config/keys/memory/sessions/skills are <strong>fully isolated</strong>. Config itself splits in two layers: behavioral settings go in <span class="mono">config.yaml</span>, secrets in <span class="mono">.env</span>.
+</div>
+
+<h2>Win the race: set HERMES_HOME before imports</h2>
+<p>The key is timing — it must happen <strong>before</strong> any module caches a path:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/main.py</span><span class="ln">336-508 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_apply_profile_override</span>() -&gt; <span class="kw">None</span>:
+    <span class="cm">&quot;&quot;&quot;Pre-parse --profile/-p and set HERMES_HOME before imports.&quot;&quot;&quot;</span>
+    profile_name = ...                       <span class="cm"># parse -p / --profile from argv</span>
+    <span class="kw">if</span> profile_name <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span>:
+        hermes_home = resolve_profile_env(profile_name)   <span class="cm"># → ~/.hermes/profiles/coder</span>
+        os.environ[<span class="st">"HERMES_HOME"</span>] = hermes_home          <span class="cm"># set the env var first</span>
+        <span class="cm"># then strip the -p flag from argv so argparse won't choke</span>
+
+_apply_profile_override()   <span class="cm"># module-level: runs before the other imports</span></pre>
+</div>
+<p>Notice that last line, <span class="mono">_apply_profile_override()</span>, is a <strong>module-level call</strong> — it runs at the top of <span class="mono">main.py</span>, <strong>earlier than</strong> importing the persistence modules like <span class="mono">config</span> and <span class="mono">env_loader</span> that read/cache <span class="mono">HERMES_HOME</span>. By the time those modules read <span class="mono">HERMES_HOME</span> at load time, it already points at the profile's directory. One env var redirects the whole dependency tree to the right instance.</p>
+
+<h2>Single source of truth: every path asks it</h2>
+<p>The codebase must not hardcode <span class="mono">~/.hermes</span>; everything goes through this one function:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_constants.py</span><span class="ln">54-109 · excerpt</span></div>
+  <pre><span class="kw">def</span> <span class="fn">get_hermes_home</span>() -&gt; Path:
+    <span class="cm">&quot;&quot;&quot;Reads HERMES_HOME env var, falls back to the platform-native default.</span>
+<span class="cm">    This is the single source of truth — all other copies should import this.&quot;&quot;&quot;</span>
+    override = get_hermes_home_override()    <span class="cm"># ContextVar-level override (concurrency)</span>
+    <span class="kw">if</span> override:
+        <span class="kw">return</span> Path(override)
+    val = os.environ.get(<span class="st">"HERMES_HOME"</span>, <span class="st">""</span>).strip()
+    <span class="kw">if</span> val:
+        <span class="kw">return</span> Path(val)                     <span class="cm"># ← exactly what the profile set</span>
+    <span class="kw">return</span> _get_platform_default_hermes_home()   <span class="cm"># default ~/.hermes</span></pre>
+</div>
+<p><strong>"single source of truth — all other copies should import this"</strong>: all 30+ places in the codebase that persist state don't splice <span class="mono">~/.hermes</span> themselves — they call <span class="mono">get_hermes_home()</span>. So once a profile sets <span class="mono">HERMES_HOME</span> up front, the session store, memory, skills, gateway logs… <strong>all automatically</strong> land in the profile directory. Conversely, any one hardcoded <span class="mono">Path.home()/".hermes"</span> would <strong>pierce the isolation</strong> (PR #3575 fixed 5 such bugs in one go).</p>
+
+<h2>Config layering: behavior in yaml, secrets in env</h2>
+<p>Profiles isolate "where to store"; "what to store" splits cleanly in two:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/config.py</span><span class="ln">883 / 2860 / 2885 · simplified</span></div>
+  <pre><span class="cm"># config.yaml — all behavioral settings (timeouts/thresholds/flags/display)</span>
+DEFAULT_CONFIG = {
+    <span class="st">"_config_version"</span>: 30,
+    <span class="st">"model"</span>: {...}, <span class="st">"agent"</span>: {...}, <span class="st">"terminal"</span>: {...},
+    <span class="st">"compression"</span>: {...}, <span class="st">"memory"</span>: {...}, <span class="st">"gateway"</span>: {...},
+}
+
+<span class="cm"># .env — credentials/secrets (secret entries password:True, masked in setup)</span>
+OPTIONAL_ENV_VARS = {
+    <span class="st">"OPENROUTER_API_KEY"</span>: {<span class="st">"password"</span>: <span class="kw">True</span>, <span class="st">"category"</span>: <span class="st">"provider"</span>},
+    <span class="st">"TELEGRAM_BOT_TOKEN"</span>: {<span class="st">"password"</span>: <span class="kw">True</span>, <span class="st">"category"</span>: <span class="st">"messaging"</span>},
+}</pre>
+</div>
+<p>The design intent is clear: <strong><span class="mono">.env</span> is mainly for credentials</strong> (secret entries marked <span class="mono">password: True</span> and masked in the setup wizard; <span class="mono">OPTIONAL_ENV_VARS</span> also holds a few <span class="mono">password: False</span> non-secret connection entries like base URLs and proxies); while timeouts, thresholds, feature flags, display prefs — those <strong>behavioral settings all go in <span class="mono">config.yaml</span></strong>. So "set a working directory for messaging" must never go in <span class="mono">.env</span> (the deprecated <span class="mono">MESSAGING_CWD</span> is the cautionary tale) but in <span class="mono">terminal.cwd</span>. This line keeps credentials in a separately protectable, separately gitignored file.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><span class="mono">hermes -p coder ...</span> starts</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><span class="mono">main.py</span> top-level <span class="mono">_apply_profile_override()</span> parses <span class="mono">-p coder</span></span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><span class="mono">os.environ["HERMES_HOME"] = ~/.hermes/profiles/coder</span> (before business imports)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">other modules load, each calls <span class="mono">get_hermes_home()</span> and reads the coder dir</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">config / .env / memory / sessions / skills / gateway logs all land in the coder instance, fully isolated from default</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "fully isolated multi-instance"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>_apply_profile_override</strong> (set env before imports), <strong>get_hermes_home</strong> (single source of truth), <strong>DEFAULT_CONFIG / OPTIONAL_ENV_VARS</strong> (config layering). Cross-chapter teamwork: <span class="mono">HERMES_HOME</span> decides which profile holds <strong>memory</strong> (ch.11), <strong>skills</strong> (ch.9), the <strong>Curator</strong> (ch.10), the session store, and gateway logs; each platform adapter uses a <strong>token lock</strong> so two profiles can't grab the same bot credential (ch.17); profiles are <strong>independent islands</strong> — isolation is the design, so there's no live cross-profile config inheritance.
+  <div class="collab-sub">② Data-flow timing</div>
+  <span class="mono">-p coder</span> → <span class="mono">_apply_profile_override()</span> (module top level, before imports) → <span class="mono">HERMES_HOME=profiles/coder</span> → the import chain unfolds → 30+ module-level <span class="mono">get_hermes_home()</span> calls cache the path as coder → that process honors the coder instance throughout.
+  <div class="collab-sub">③ The key point</div>
+  All of profile isolation = "set one env var before imports" + "every path goes through the single <span class="mono">get_hermes_home()</span> entry." Any hardcoded <span class="mono">~/.hermes</span> pierces the isolation; stuffing non-secret config into <span class="mono">.env</span> is the other bad smell (it belongs in <span class="mono">config.yaml</span>).
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>set HERMES_HOME before imports + a single source of truth for paths = fully isolated instances; then layer config (secrets apart)</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — one person runs work / personal / per-client agent instances at once, and their keys, memory, sessions, gateways must never mix. One env var switches the whole state directory, so operationally "spin up a new instance" = "make a new directory," clean and simple; <span class="mono">display_hermes_home()</span> also makes every user-facing message show the correct profile path.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·statelessness</span> — the core code holds <strong>no</strong> global "which instance am I" state; it derives everything from the one external <span class="mono">HERMES_HOME</span> var plus the one <span class="mono">get_hermes_home()</span> entry. A stateless core plus one external variable to rule them all — the book's recurring motif.</p>
+  <p style="margin:.5rem 0 0">Anti-patterns: ① hardcoding <span class="mono">Path.home()/".hermes"</span> in code — ignores the profile and writes to the wrong instance (PR #3575 fixed 5); ② stuffing <strong>non-secret behavioral</strong> config like timeouts/flags into <span class="mono">.env</span> — pollutes the ".env for credentials, behavioral settings in config.yaml" boundary.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>One env var</strong>: a profile = setting <span class="mono">HERMES_HOME</span> to <span class="mono">~/.hermes/profiles/&lt;name&gt;</span> before any import; <span class="mono">_apply_profile_override()</span> is a module-level call that runs first.</li>
+    <li><strong>Single source of truth</strong>: the whole codebase calls <span class="mono">get_hermes_home()</span> to read <span class="mono">HERMES_HOME</span>; <strong>never</strong> hardcode <span class="mono">~/.hermes</span> (or you pierce isolation, PR #3575).</li>
+    <li><strong>Config layering</strong>: behavioral settings (timeouts/thresholds/flags) go in <span class="mono">config.yaml</span> (<span class="mono">DEFAULT_CONFIG</span>); credentials in <span class="mono">.env</span> (<span class="mono">OPTIONAL_ENV_VARS</span>, secret entries marked <span class="mono">password: True</span>).</li>
+    <li><strong>Full isolation</strong>: each profile's config / secrets / memory / sessions / skills / gateway are independent; profiles are independent islands, no live config inheritance.</li>
+    <li><strong>User-facing paths</strong>: print/log with <span class="mono">display_hermes_home()</span> (default shows <span class="mono">~/.hermes</span>, a profile shows <span class="mono">~/.hermes/profiles/coder</span>).</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Hermes profile isolation (work/personal each with its own keys/memory/sessions) — how is it implemented?</div>
+  <ol class="opts">
+    <li>Before any business module is imported, _apply_profile_override() sets HERMES_HOME to the profile dir first; then every get_hermes_home() points there automatically</li>
+    <li>Each profile runs its own Docker container</li>
+    <li>Assign each profile a port</li>
+    <li>Change the database schema</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. _apply_profile_override() is a module-level call at the top of main.py, setting HERMES_HOME before persistence modules like config/env_loader are imported; get_hermes_home() reads it as the single source of truth, so config/keys/memory/sessions/skills/gateway-logs all land in the profile dir, fully isolated.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. In Hermes code, what's the right way to get the current hermes home directory?</div>
+  <ol class="opts">
+    <li>Call get_hermes_home(), the single source of truth; never hardcode ~/.hermes (or you pierce profile isolation)</li>
+    <li>Hardcode /root/.hermes</li>
+    <li>Read the env var and splice the path yourself</li>
+    <li>Hardcode Path.home() / '.hermes'</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. get_hermes_home() is the codebase's single path entry (reads HERMES_HOME). Any hardcoded Path.home()/'.hermes' ignores the active profile and writes to the wrong instance — the root cause of the 5 bugs PR#3575 fixed in one go.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Should a 'default working directory for messaging' go in .env or config.yaml? Why does Hermes insist on splitting behavioral config (timeouts/flags/paths) from credentials (API keys/tokens) into two layers? What does each buy for profile isolation and security?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="footnav"><a class="prev" href="19-tui-desktop.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">TUI 与桌面</span><span class="lang-en">TUI &amp; desktop</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
+</div>
+<script>
+function havgSetLang(l){
+  l=(l==='en')?'en':'zh';
+  var d=document.documentElement;
+  d.dataset.lang=l; d.lang=(l==='en'?'en':'zh-CN');
+  try{localStorage.setItem('havg-lang',l);}catch(e){}
+}
+function havgToggleLang(){
+  havgSetLang(document.documentElement.dataset.lang==='en'?'zh':'en');
+}
+</script>
+</body></html>

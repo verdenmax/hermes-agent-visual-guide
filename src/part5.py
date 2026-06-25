@@ -669,3 +669,217 @@ LESSON_19 = {
 </div>
 """
 }
+
+
+LESSON_20 = {
+    "zh": r"""
+<p class="lead">同一台机器上,你想跑两个完全独立的 Hermes:一个「工作号」、一个「私人号」,各有各的 API key、记忆、会话、技能、网关——互不串台。这就是 <strong>profile</strong>。它的全部魔法,浓缩成一句话:<strong>在任何模块 import 之前,抢先设好一个环境变量 <span class="mono">HERMES_HOME</span></strong>。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 连锁酒店的分店</div>
+  同一套管理系统(Hermes 代码),开了多家分店(profile)。每家分店有<strong>独立的钥匙、账本、客房</strong>(各自的 <span class="mono">HERMES_HOME</span> 目录)。你一进门,前台先确认「您是哪家分店的」(<span class="mono">_apply_profile_override</span> 抢先设 <span class="mono">HERMES_HOME</span>),之后你办的<strong>每一件事</strong>都自动用那家店的资源——不会刷错账本、拿错钥匙。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 一个环境变量决定一切</div>
+  profile 切换只做<strong>一件事</strong>:在 <span class="mono">main.py</span> 的<strong>模块顶层</strong>、其余 import 之前,把 <span class="mono">HERMES_HOME</span> 设成 <span class="mono">~/.hermes/profiles/&lt;名字&gt;</span>。之后全代码库唯一的路径入口 <span class="mono">get_hermes_home()</span> 自动指向那个目录,配置/密钥/记忆/会话/技能<strong>全部隔离</strong>。配置本身再分两层:行为设置进 <span class="mono">config.yaml</span>、密钥进 <span class="mono">.env</span>。
+</div>
+
+<h2>抢跑:import 之前设 HERMES_HOME</h2>
+<p>关键在「时机」——必须赶在任何模块把路径缓存下来<strong>之前</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/main.py</span><span class="ln">336-508 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_apply_profile_override</span>() -&gt; <span class="kw">None</span>:
+    <span class="cm">&quot;&quot;&quot;Pre-parse --profile/-p and set HERMES_HOME before imports.&quot;&quot;&quot;</span>
+    profile_name = ...                       <span class="cm"># 从 argv 解析 -p / --profile</span>
+    <span class="kw">if</span> profile_name <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span>:
+        hermes_home = resolve_profile_env(profile_name)   <span class="cm"># → ~/.hermes/profiles/coder</span>
+        os.environ[<span class="st">"HERMES_HOME"</span>] = hermes_home          <span class="cm"># 抢先设环境变量</span>
+        <span class="cm"># 再把 -p 标志从 argv 剥掉,免得后面 argparse 报错</span>
+
+_apply_profile_override()   <span class="cm"># 模块级:在其余 import 之前就执行</span></pre>
+</div>
+<p>注意最后那行 <span class="mono">_apply_profile_override()</span> 是<strong>模块级调用</strong>——在 <span class="mono">main.py</span> 顶层执行,<strong>早于</strong> <span class="mono">config</span>、<span class="mono">env_loader</span> 等会读取/缓存 <span class="mono">HERMES_HOME</span> 的落盘业务模块被 <span class="mono">import</span>。等到那些模块加载时去读 <span class="mono">HERMES_HOME</span>,看到的已经是 profile 的目录了。一个环境变量,把整棵依赖树重定向到了正确的实例。</p>
+
+<h2>单一真相源:所有路径都问它</h2>
+<p>全代码库不准硬编码 <span class="mono">~/.hermes</span>,一律走这一个函数:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_constants.py</span><span class="ln">54-109 · 节选</span></div>
+  <pre><span class="kw">def</span> <span class="fn">get_hermes_home</span>() -&gt; Path:
+    <span class="cm">&quot;&quot;&quot;Reads HERMES_HOME env var, falls back to the platform-native default.</span>
+<span class="cm">    This is the single source of truth — all other copies should import this.&quot;&quot;&quot;</span>
+    override = get_hermes_home_override()    <span class="cm"># ContextVar 级覆盖(并发隔离)</span>
+    <span class="kw">if</span> override:
+        <span class="kw">return</span> Path(override)
+    val = os.environ.get(<span class="st">"HERMES_HOME"</span>, <span class="st">""</span>).strip()
+    <span class="kw">if</span> val:
+        <span class="kw">return</span> Path(val)                     <span class="cm"># ← profile 设的就是这个</span>
+    <span class="kw">return</span> _get_platform_default_hermes_home()   <span class="cm"># 默认 ~/.hermes</span></pre>
+</div>
+<p><strong>「single source of truth — all other copies should import this」</strong>:全代码库 30+ 处要落盘的地方,都不自己拼 <span class="mono">~/.hermes</span>,而是调 <span class="mono">get_hermes_home()</span>。于是 profile 一旦在开头设好 <span class="mono">HERMES_HOME</span>,会话库、记忆、技能、网关日志……<strong>统统自动</strong>落到 profile 目录。反过来,任何一处硬编码 <span class="mono">Path.home()/".hermes"</span> 都会<strong>击穿隔离</strong>(PR #3575 一次就修了 5 个这种 bug)。</p>
+
+<h2>配置分层:行为进 yaml,密钥进 env</h2>
+<p>profile 隔离的是「存哪」;而「存什么」分两层,泾渭分明:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/config.py</span><span class="ln">883 / 2860 / 2885 · 简化</span></div>
+  <pre><span class="cm"># config.yaml —— 所有行为设置(超时/阈值/开关/显示偏好)</span>
+DEFAULT_CONFIG = {
+    <span class="st">"_config_version"</span>: 30,
+    <span class="st">"model"</span>: {...}, <span class="st">"agent"</span>: {...}, <span class="st">"terminal"</span>: {...},
+    <span class="st">"compression"</span>: {...}, <span class="st">"memory"</span>: {...}, <span class="st">"gateway"</span>: {...},
+}
+
+<span class="cm"># .env —— 凭据/密钥(密钥标 password:True,setup 时掩码输入)</span>
+OPTIONAL_ENV_VARS = {
+    <span class="st">"OPENROUTER_API_KEY"</span>: {<span class="st">"password"</span>: <span class="kw">True</span>, <span class="st">"category"</span>: <span class="st">"provider"</span>},
+    <span class="st">"TELEGRAM_BOT_TOKEN"</span>: {<span class="st">"password"</span>: <span class="kw">True</span>, <span class="st">"category"</span>: <span class="st">"messaging"</span>},
+}</pre>
+</div>
+<p>设计意图很明确:<strong><span class="mono">.env</span> 主要放凭据</strong>(密钥条目标 <span class="mono">password: True</span>、setup 向导掩码输入;<span class="mono">OPTIONAL_ENV_VARS</span> 里也有少量 <span class="mono">password: False</span> 的非密连接项,如 base URL、代理);而超时、阈值、功能开关、显示偏好这些<strong>行为设置一律进 <span class="mono">config.yaml</span></strong>。所以「给 messaging 设个工作目录」绝不能塞进 <span class="mono">.env</span>(已废弃的 <span class="mono">MESSAGING_CWD</span> 就是反例),而要写 <span class="mono">terminal.cwd</span>。这条线让凭据独立成一个可单独保护、单独 gitignore 的文件。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><span class="mono">hermes -p coder ...</span> 启动</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><span class="mono">main.py</span> 顶层 <span class="mono">_apply_profile_override()</span> 解析 <span class="mono">-p coder</span></span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><span class="mono">os.environ["HERMES_HOME"] = ~/.hermes/profiles/coder</span>(早于业务 import)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">其余模块加载,各自调 <span class="mono">get_hermes_home()</span> 读到 coder 目录</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">config / .env / 记忆 / 会话 / 技能 / 网关日志 全落在 coder 实例,与 default 完全隔离</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「多实例完全隔离」</div>
+  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
+  本章核心:<strong>_apply_profile_override</strong>(import 前抢设 env)、<strong>get_hermes_home</strong>(单一真相源)、<strong>DEFAULT_CONFIG / OPTIONAL_ENV_VARS</strong>(配置分层)。跨章节配合:<span class="mono">HERMES_HOME</span> 决定<strong>记忆</strong>(第 11 章)、<strong>技能</strong>(第 9 章)、<strong>Curator</strong>(第 10 章)、会话库、网关日志各自落哪个 profile;每个平台适配器用 <strong>token lock</strong> 防两个 profile 抢同一 bot 凭据(第 17 章);profile 之间是<strong>独立的岛</strong>——隔离本身就是设计,不做跨 profile 的实时配置继承。
+  <div class="collab-sub">② 数据流时序</div>
+  <span class="mono">-p coder</span> → <span class="mono">_apply_profile_override()</span>(模块顶层,import 前)→ <span class="mono">HERMES_HOME=profiles/coder</span> → import 链铺开 → 30+ 处模块级 <span class="mono">get_hermes_home()</span> 把路径缓存成 coder → 该进程全程认 coder 实例。
+  <div class="collab-sub">③ 关键点</div>
+  profile 隔离的全部实现 = 「在 import 之前设一个环境变量」+「所有路径走 <span class="mono">get_hermes_home()</span> 单一入口」。任何硬编码 <span class="mono">~/.hermes</span> 都会击穿隔离;非密配置塞 <span class="mono">.env</span> 是另一种坏味道(应进 <span class="mono">config.yaml</span>)。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>import 前抢设 HERMES_HOME + 单一真相源路径 = 完全隔离的多实例;配置再分层(密钥独立)</strong>。它主要治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——一个人要同时跑 work / personal / 各客户的多个 agent 实例,各自的密钥、记忆、会话、网关绝不能混。一个环境变量切换整套状态盘,运维上「开一个新实例」=「建一个新目录」,干净利落;<span class="mono">display_hermes_home()</span> 还让所有用户可见消息显示正确的 profile 路径。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——核心代码里<strong>没有</strong>全局的「当前是哪个实例」状态,全靠 <span class="mono">HERMES_HOME</span> 这一个外部变量 + <span class="mono">get_hermes_home()</span> 这一个入口推导。无状态内核 + 外部一个变量定乾坤,正是全书反复出现的母题。</p>
+  <p style="margin:.5rem 0 0">反模式:① 在代码里硬编码 <span class="mono">Path.home()/".hermes"</span>——会无视 profile、把数据写错实例(PR #3575 修了 5 个);② 把超时/开关这类<strong>非密行为</strong>配置塞进 <span class="mono">.env</span>——污染了「.env 放凭据、行为设置进 config.yaml」的边界。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>一个环境变量</strong>:profile = 在任何 import 之前把 <span class="mono">HERMES_HOME</span> 设成 <span class="mono">~/.hermes/profiles/&lt;名字&gt;</span>;<span class="mono">_apply_profile_override()</span> 是模块级调用,抢在最前。</li>
+    <li><strong>单一真相源</strong>:全代码库走 <span class="mono">get_hermes_home()</span> 读 <span class="mono">HERMES_HOME</span>;<strong>禁止</strong>硬编码 <span class="mono">~/.hermes</span>(否则击穿隔离,PR #3575)。</li>
+    <li><strong>配置分层</strong>:行为设置(超时/阈值/开关)进 <span class="mono">config.yaml</span>(<span class="mono">DEFAULT_CONFIG</span>);凭据进 <span class="mono">.env</span>(<span class="mono">OPTIONAL_ENV_VARS</span>,密钥标 <span class="mono">password: True</span> 掩码输入)。</li>
+    <li><strong>完全隔离</strong>:每个 profile 的 config / 密钥 / 记忆 / 会话 / 技能 / 网关全独立;profile 之间是独立的岛,不做实时配置继承。</li>
+    <li><strong>用户可见路径</strong>:打印/日志用 <span class="mono">display_hermes_home()</span>(default 显示 <span class="mono">~/.hermes</span>、profile 显示 <span class="mono">~/.hermes/profiles/coder</span>)。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">On one machine you want two fully independent Hermes instances: a "work" one and a "personal" one, each with its own API keys, memory, sessions, skills, gateway — never crossing wires. That's a <strong>profile</strong>. All its magic boils down to one sentence: <strong>before any module is imported, set one environment variable, <span class="mono">HERMES_HOME</span>, first</strong>.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · branches of a hotel chain</div>
+  One management system (the Hermes code) runs many branches (profiles). Each branch has <strong>its own keys, ledgers, rooms</strong> (its own <span class="mono">HERMES_HOME</span> directory). The moment you walk in, the front desk confirms "which branch are you" (<span class="mono">_apply_profile_override</span> sets <span class="mono">HERMES_HOME</span> first), and from then on <strong>everything</strong> you do automatically uses that branch's resources — no charging the wrong ledger, no grabbing the wrong key.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · one env var decides everything</div>
+  Switching profiles does <strong>one thing</strong>: at the <strong>module top level</strong> of <span class="mono">main.py</span>, before any other import, set <span class="mono">HERMES_HOME</span> to <span class="mono">~/.hermes/profiles/&lt;name&gt;</span>. After that, the codebase's single path entry point <span class="mono">get_hermes_home()</span> automatically points there, and config/keys/memory/sessions/skills are <strong>fully isolated</strong>. Config itself splits in two layers: behavioral settings go in <span class="mono">config.yaml</span>, secrets in <span class="mono">.env</span>.
+</div>
+
+<h2>Win the race: set HERMES_HOME before imports</h2>
+<p>The key is timing — it must happen <strong>before</strong> any module caches a path:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/main.py</span><span class="ln">336-508 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">_apply_profile_override</span>() -&gt; <span class="kw">None</span>:
+    <span class="cm">&quot;&quot;&quot;Pre-parse --profile/-p and set HERMES_HOME before imports.&quot;&quot;&quot;</span>
+    profile_name = ...                       <span class="cm"># parse -p / --profile from argv</span>
+    <span class="kw">if</span> profile_name <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span>:
+        hermes_home = resolve_profile_env(profile_name)   <span class="cm"># → ~/.hermes/profiles/coder</span>
+        os.environ[<span class="st">"HERMES_HOME"</span>] = hermes_home          <span class="cm"># set the env var first</span>
+        <span class="cm"># then strip the -p flag from argv so argparse won't choke</span>
+
+_apply_profile_override()   <span class="cm"># module-level: runs before the other imports</span></pre>
+</div>
+<p>Notice that last line, <span class="mono">_apply_profile_override()</span>, is a <strong>module-level call</strong> — it runs at the top of <span class="mono">main.py</span>, <strong>earlier than</strong> importing the persistence modules like <span class="mono">config</span> and <span class="mono">env_loader</span> that read/cache <span class="mono">HERMES_HOME</span>. By the time those modules read <span class="mono">HERMES_HOME</span> at load time, it already points at the profile's directory. One env var redirects the whole dependency tree to the right instance.</p>
+
+<h2>Single source of truth: every path asks it</h2>
+<p>The codebase must not hardcode <span class="mono">~/.hermes</span>; everything goes through this one function:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_constants.py</span><span class="ln">54-109 · excerpt</span></div>
+  <pre><span class="kw">def</span> <span class="fn">get_hermes_home</span>() -&gt; Path:
+    <span class="cm">&quot;&quot;&quot;Reads HERMES_HOME env var, falls back to the platform-native default.</span>
+<span class="cm">    This is the single source of truth — all other copies should import this.&quot;&quot;&quot;</span>
+    override = get_hermes_home_override()    <span class="cm"># ContextVar-level override (concurrency)</span>
+    <span class="kw">if</span> override:
+        <span class="kw">return</span> Path(override)
+    val = os.environ.get(<span class="st">"HERMES_HOME"</span>, <span class="st">""</span>).strip()
+    <span class="kw">if</span> val:
+        <span class="kw">return</span> Path(val)                     <span class="cm"># ← exactly what the profile set</span>
+    <span class="kw">return</span> _get_platform_default_hermes_home()   <span class="cm"># default ~/.hermes</span></pre>
+</div>
+<p><strong>"single source of truth — all other copies should import this"</strong>: all 30+ places in the codebase that persist state don't splice <span class="mono">~/.hermes</span> themselves — they call <span class="mono">get_hermes_home()</span>. So once a profile sets <span class="mono">HERMES_HOME</span> up front, the session store, memory, skills, gateway logs… <strong>all automatically</strong> land in the profile directory. Conversely, any one hardcoded <span class="mono">Path.home()/".hermes"</span> would <strong>pierce the isolation</strong> (PR #3575 fixed 5 such bugs in one go).</p>
+
+<h2>Config layering: behavior in yaml, secrets in env</h2>
+<p>Profiles isolate "where to store"; "what to store" splits cleanly in two:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/config.py</span><span class="ln">883 / 2860 / 2885 · simplified</span></div>
+  <pre><span class="cm"># config.yaml — all behavioral settings (timeouts/thresholds/flags/display)</span>
+DEFAULT_CONFIG = {
+    <span class="st">"_config_version"</span>: 30,
+    <span class="st">"model"</span>: {...}, <span class="st">"agent"</span>: {...}, <span class="st">"terminal"</span>: {...},
+    <span class="st">"compression"</span>: {...}, <span class="st">"memory"</span>: {...}, <span class="st">"gateway"</span>: {...},
+}
+
+<span class="cm"># .env — credentials/secrets (secret entries password:True, masked in setup)</span>
+OPTIONAL_ENV_VARS = {
+    <span class="st">"OPENROUTER_API_KEY"</span>: {<span class="st">"password"</span>: <span class="kw">True</span>, <span class="st">"category"</span>: <span class="st">"provider"</span>},
+    <span class="st">"TELEGRAM_BOT_TOKEN"</span>: {<span class="st">"password"</span>: <span class="kw">True</span>, <span class="st">"category"</span>: <span class="st">"messaging"</span>},
+}</pre>
+</div>
+<p>The design intent is clear: <strong><span class="mono">.env</span> is mainly for credentials</strong> (secret entries marked <span class="mono">password: True</span> and masked in the setup wizard; <span class="mono">OPTIONAL_ENV_VARS</span> also holds a few <span class="mono">password: False</span> non-secret connection entries like base URLs and proxies); while timeouts, thresholds, feature flags, display prefs — those <strong>behavioral settings all go in <span class="mono">config.yaml</span></strong>. So "set a working directory for messaging" must never go in <span class="mono">.env</span> (the deprecated <span class="mono">MESSAGING_CWD</span> is the cautionary tale) but in <span class="mono">terminal.cwd</span>. This line keeps credentials in a separately protectable, separately gitignored file.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><span class="mono">hermes -p coder ...</span> starts</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><span class="mono">main.py</span> top-level <span class="mono">_apply_profile_override()</span> parses <span class="mono">-p coder</span></span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><span class="mono">os.environ["HERMES_HOME"] = ~/.hermes/profiles/coder</span> (before business imports)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">other modules load, each calls <span class="mono">get_hermes_home()</span> and reads the coder dir</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">config / .env / memory / sessions / skills / gateway logs all land in the coder instance, fully isolated from default</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "fully isolated multi-instance"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>_apply_profile_override</strong> (set env before imports), <strong>get_hermes_home</strong> (single source of truth), <strong>DEFAULT_CONFIG / OPTIONAL_ENV_VARS</strong> (config layering). Cross-chapter teamwork: <span class="mono">HERMES_HOME</span> decides which profile holds <strong>memory</strong> (ch.11), <strong>skills</strong> (ch.9), the <strong>Curator</strong> (ch.10), the session store, and gateway logs; each platform adapter uses a <strong>token lock</strong> so two profiles can't grab the same bot credential (ch.17); profiles are <strong>independent islands</strong> — isolation is the design, so there's no live cross-profile config inheritance.
+  <div class="collab-sub">② Data-flow timing</div>
+  <span class="mono">-p coder</span> → <span class="mono">_apply_profile_override()</span> (module top level, before imports) → <span class="mono">HERMES_HOME=profiles/coder</span> → the import chain unfolds → 30+ module-level <span class="mono">get_hermes_home()</span> calls cache the path as coder → that process honors the coder instance throughout.
+  <div class="collab-sub">③ The key point</div>
+  All of profile isolation = "set one env var before imports" + "every path goes through the single <span class="mono">get_hermes_home()</span> entry." Any hardcoded <span class="mono">~/.hermes</span> pierces the isolation; stuffing non-secret config into <span class="mono">.env</span> is the other bad smell (it belongs in <span class="mono">config.yaml</span>).
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>set HERMES_HOME before imports + a single source of truth for paths = fully isolated instances; then layer config (secrets apart)</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — one person runs work / personal / per-client agent instances at once, and their keys, memory, sessions, gateways must never mix. One env var switches the whole state directory, so operationally "spin up a new instance" = "make a new directory," clean and simple; <span class="mono">display_hermes_home()</span> also makes every user-facing message show the correct profile path.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·statelessness</span> — the core code holds <strong>no</strong> global "which instance am I" state; it derives everything from the one external <span class="mono">HERMES_HOME</span> var plus the one <span class="mono">get_hermes_home()</span> entry. A stateless core plus one external variable to rule them all — the book's recurring motif.</p>
+  <p style="margin:.5rem 0 0">Anti-patterns: ① hardcoding <span class="mono">Path.home()/".hermes"</span> in code — ignores the profile and writes to the wrong instance (PR #3575 fixed 5); ② stuffing <strong>non-secret behavioral</strong> config like timeouts/flags into <span class="mono">.env</span> — pollutes the ".env for credentials, behavioral settings in config.yaml" boundary.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>One env var</strong>: a profile = setting <span class="mono">HERMES_HOME</span> to <span class="mono">~/.hermes/profiles/&lt;name&gt;</span> before any import; <span class="mono">_apply_profile_override()</span> is a module-level call that runs first.</li>
+    <li><strong>Single source of truth</strong>: the whole codebase calls <span class="mono">get_hermes_home()</span> to read <span class="mono">HERMES_HOME</span>; <strong>never</strong> hardcode <span class="mono">~/.hermes</span> (or you pierce isolation, PR #3575).</li>
+    <li><strong>Config layering</strong>: behavioral settings (timeouts/thresholds/flags) go in <span class="mono">config.yaml</span> (<span class="mono">DEFAULT_CONFIG</span>); credentials in <span class="mono">.env</span> (<span class="mono">OPTIONAL_ENV_VARS</span>, secret entries marked <span class="mono">password: True</span>).</li>
+    <li><strong>Full isolation</strong>: each profile's config / secrets / memory / sessions / skills / gateway are independent; profiles are independent islands, no live config inheritance.</li>
+    <li><strong>User-facing paths</strong>: print/log with <span class="mono">display_hermes_home()</span> (default shows <span class="mono">~/.hermes</span>, a profile shows <span class="mono">~/.hermes/profiles/coder</span>).</li>
+  </ul>
+</div>
+"""
+}

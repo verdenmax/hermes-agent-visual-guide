@@ -687,6 +687,40 @@ QUIZZES = {
              "en": "Why does Hermes tuck the agent core into a Python backend exposed via a stable JSON-RPC envelope, rather than each surface (CLI/TUI/desktop/dashboard) writing its own agent logic? How does this relate to the 'narrow waist' and multi-surface ops (constraint G)?"},
         ],
     },
+    "20-config-profiles.html": {
+        "mcq": [
+            {
+                "q": {"zh": "Hermes 的 profile 多实例隔离(work/personal 各一套独立 key/记忆/会话),靠什么实现?",
+                      "en": "Hermes profile isolation (work/personal each with its own keys/memory/sessions) — how is it implemented?"},
+                "opts": [
+                    {"zh": "每个 profile 跑一个 Docker 容器", "en": "Each profile runs its own Docker container"},
+                    {"zh": "在任何业务模块 import 之前,_apply_profile_override() 抢先把 HERMES_HOME 设成 profile 目录;之后所有 get_hermes_home() 自动指向它", "en": "Before any business module is imported, _apply_profile_override() sets HERMES_HOME to the profile dir first; then every get_hermes_home() points there automatically"},
+                    {"zh": "给每个 profile 分配一个端口", "en": "Assign each profile a port"},
+                    {"zh": "改数据库 schema", "en": "Change the database schema"},
+                ],
+                "answer": 1,
+                "why": {"zh": "_apply_profile_override() 是 main.py 顶层的模块级调用,抢在 config/env_loader 等落盘业务模块 import 前把 HERMES_HOME 设好;get_hermes_home() 作为单一真相源读它,于是 config/密钥/记忆/会话/技能/网关日志全部落进 profile 目录、完全隔离。",
+                        "en": "_apply_profile_override() is a module-level call at the top of main.py, setting HERMES_HOME before persistence modules like config/env_loader are imported; get_hermes_home() reads it as the single source of truth, so config/keys/memory/sessions/skills/gateway-logs all land in the profile dir, fully isolated."},
+            },
+            {
+                "q": {"zh": "在 Hermes 代码里要拿到「当前 hermes home 目录」,正确做法是什么?",
+                      "en": "In Hermes code, what's the right way to get the current hermes home directory?"},
+                "opts": [
+                    {"zh": "硬编码 Path.home() / '.hermes'", "en": "Hardcode Path.home() / '.hermes'"},
+                    {"zh": "调 get_hermes_home() 这个单一真相源,绝不硬编码 ~/.hermes(否则会击穿 profile 隔离)", "en": "Call get_hermes_home(), the single source of truth; never hardcode ~/.hermes (or you pierce profile isolation)"},
+                    {"zh": "自己读环境变量再拼路径", "en": "Read the env var and splice the path yourself"},
+                    {"zh": "写死 /root/.hermes", "en": "Hardcode /root/.hermes"},
+                ],
+                "answer": 1,
+                "why": {"zh": "get_hermes_home() 是全代码库唯一的路径入口(读 HERMES_HOME)。任何一处硬编码 Path.home()/'.hermes' 都会无视当前 profile、把数据写进错误的实例——这正是 PR#3575 一次修掉的 5 个 bug 的根因。",
+                        "en": "get_hermes_home() is the codebase's single path entry (reads HERMES_HOME). Any hardcoded Path.home()/'.hermes' ignores the active profile and writes to the wrong instance — the root cause of the 5 bugs PR#3575 fixed in one go."},
+            },
+        ],
+        "open": [
+            {"zh": "一个「messaging 默认工作目录」该写进 .env 还是 config.yaml?为什么 Hermes 坚持把行为配置(超时/开关/路径)与凭据(API key/token)分成两层?这对 profile 隔离和安全各有什么好处?",
+             "en": "Should a 'default working directory for messaging' go in .env or config.yaml? Why does Hermes insist on splitting behavioral config (timeouts/flags/paths) from credentials (API keys/tokens) into two layers? What does each buy for profile isolation and security?"},
+        ],
+    },
 }
 
 

@@ -84,6 +84,8 @@ PAGES = [
      "第五部分 · 多端与网关", "Part 5 · Surfaces & Gateway"),
     ("19-tui-desktop.html", "TUI 与桌面", "TUI & desktop",
      "第五部分 · 多端与网关", "Part 5 · Surfaces & Gateway"),
+    ("20-config-profiles.html", "配置与 Profiles", "Config & Profiles",
+     "第五部分 · 多端与网关", "Part 5 · Surfaces & Gateway"),
 ]
 
 
