@@ -16,7 +16,7 @@
 6.（正文/校验核实）**CJK trigram 路由 + get_anchored_view 书签** — `hermes_state.py:3590-3717`(CJK)、`:2875`(get_anchored_view)。
 
 ## 🧩 协作机制框（三段）
-- ① 组件清单：SessionDB FTS5 表+触发器(写入即索引) + search_messages(MATCH+BM25+snippet) + CJK trigram 路由 + session_search(4模式) + get_anchored_view(书签)。跨章节：搜索结果作为 tool 消息 append 不改前缀(第6章缓存 + 第8章工具结果 append-only)；跨会话召回对抗无状态(第3章 B)；标题生成走辅助模型后台线程(与第10章辅助模型隔离同源)。
+- ① 组件清单：SessionDB FTS5 表+触发器(写入即索引) + search_messages(MATCH+BM25+snippet) + CJK trigram 路由 + session_search(4模式) + get_anchored_view(书签)。跨章节：搜索结果作为 tool 消息 append 不改前缀(第6章缓存 + 第8章工具结果 append-only)；跨会话召回对抗无状态(第2章 B)；标题生成走辅助模型链后台线程(主模型优先否则回退辅助 client，与第10章辅助模型隔离同源)。
 - ② 数据流时序：消息 INSERT→触发器同步建 FTS5；session_search(query)→MATCH+BM25+snippet(CJK trigram 兜底)→get_anchored_view 锚点窗口+书签→原文 tool 消息 append→agent 自读。标题首轮后台 fire-and-forget。
 - ③ 关键点：跨会话记忆不必用 LLM——本地 FTS5 写入即索引(零额外步骤)、检索零模型调用(零成本)、返回只 append tool 消息(不破缓存)。
 

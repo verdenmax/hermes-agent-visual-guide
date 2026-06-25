@@ -68,6 +68,8 @@ PAGES = [
      "第三部分 · 自我进化闭环", "Part 3 · The Self-Improvement Loop"),
     ("11-memory.html", "记忆：MEMORY / USER", "Memory: MEMORY / USER",
      "第三部分 · 自我进化闭环", "Part 3 · The Self-Improvement Loop"),
+    ("12-session-search.html", "跨会话搜索：FTS5", "Cross-session search: FTS5",
+     "第三部分 · 自我进化闭环", "Part 3 · The Self-Improvement Loop"),
 ]
 
 

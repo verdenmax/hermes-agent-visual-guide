@@ -415,6 +415,40 @@ QUIZZES = {
              "en": "Memory and skills (ch.9) share the same 'fork review after the response' mechanism, one writing MEMORY/USER, the other SKILL.md. Why do both put 'writing' in a background fork after the response, rather than writing live in the main conversation?"},
         ],
     },
+    "12-session-search.html": {
+        "mcq": [
+            {
+                "q": {"zh": "session_search 召回历史时，会调用 LLM 去「总结」检索到的内容吗？",
+                      "en": "When session_search recalls history, does it call an LLM to 'summarize' the retrieved content?"},
+                "opts": [
+                    {"zh": "会，用辅助模型总结后返回", "en": "Yes, it summarizes with an auxiliary model"},
+                    {"zh": "不会——零 LLM，直接返回 SQLite FTS5 命中的原始消息让 agent 自读（早期 summary 路径在模块合并后已不复存在）", "en": "No — zero LLM, it returns the raw SQLite FTS5 messages for the agent to read (the early summary path ceased to exist after the module merged)"},
+                    {"zh": "会，用主模型总结", "en": "Yes, with the main model"},
+                    {"zh": "看消息长度决定", "en": "Depends on message length"},
+                ],
+                "answer": 1,
+                "why": {"zh": "docstring 明写 No LLM calls anywhere — every shape returns actual messages from the DB。返回的是 FTS5 命中的原文（snippet + 锚点窗口），由 agent 自己读。README「with LLM summarization」是过时文案。",
+                        "en": "The docstring states: No LLM calls anywhere — every shape returns actual messages from the DB. It returns FTS5-hit originals (snippet + anchored window) for the agent to read. README's 'with LLM summarization' is stale copy."},
+            },
+            {
+                "q": {"zh": "一条消息要等什么时候才能被跨会话搜索检索到？",
+                      "en": "When does a message become searchable by cross-session search?"},
+                "opts": [
+                    {"zh": "要等一个离线建索引的批处理跑完", "en": "After an offline batch indexing job runs"},
+                    {"zh": "写入即索引——消息一 INSERT，AFTER INSERT 触发器就同步把它喂进 FTS5，下一秒可检索", "en": "Index on write — the moment it's INSERTed, an AFTER INSERT trigger synchronously feeds it into FTS5, searchable a second later"},
+                    {"zh": "要等会话结束", "en": "After the session ends"},
+                    {"zh": "要等 curator 巡查", "en": "After the curator patrols"},
+                ],
+                "answer": 1,
+                "why": {"zh": "messages_fts_insert 触发器 AFTER INSERT ON messages 同步把 content+tool_name+tool_calls 写进 FTS5 倒排索引（rowid=messages.id）。无需任何离线建库，刚说的话下一秒就能搜到。",
+                        "en": "The messages_fts_insert trigger (AFTER INSERT ON messages) synchronously writes content+tool_name+tool_calls into the FTS5 inverted index (rowid=messages.id). No offline indexing — what you just said is searchable a second later."},
+            },
+        ],
+        "open": [
+            {"zh": "「跨会话记忆」似乎天然需要某种「理解/总结」能力，但 Hermes 偏偏用零 LLM 的本地 FTS5 + 原文 append 实现它。这个选择在「成本/延迟」与「缓存神圣」两个维度上各带来什么好处？",
+             "en": "'Cross-session memory' seems to inherently need some 'understanding/summarizing', yet Hermes implements it with zero-LLM local FTS5 + verbatim append. What does this choice gain on both the 'cost/latency' and 'cache is sacred' axes?"},
+        ],
+    },
 }
 
 

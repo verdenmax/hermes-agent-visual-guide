@@ -20,4 +20,5 @@ CONTENT = {
     "09-learning-nudge-skills.html": part3.LESSON_09,
     "10-curator.html": part3.LESSON_10,
     "11-memory.html": part3.LESSON_11,
+    "12-session-search.html": part3.LESSON_12,
 }

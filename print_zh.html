@@ -344,6 +344,7 @@ details[open] > summary { list-style: none; }
   <li>学习引擎与技能</li>
   <li>Curator：技能园丁</li>
   <li>记忆：MEMORY / USER</li>
+  <li>跨会话搜索：FTS5</li>
 </ol></div>
 <section class="lesson-print">
 <h1>Hermes 是什么</h1>
@@ -2108,6 +2109,148 @@ should_review_memory = <span class="kw">False</span>
   <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
   <ul>
     <li>记忆和技能（第9章）共用同一套「响应后 fork review」机制，一个写 MEMORY/USER、一个写 SKILL.md。为什么两者都把「写入」放到响应之后的后台 fork，而不是在主对话里实时写？</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>跨会话搜索：FTS5</h1>
+
+<p class="lead">
+你和 Hermes 聊过几百次，某天问它「我们<strong>以前</strong>讨论过的那个部署方案是什么来着？」——它能<strong>跨会话</strong>想起来。这就是跨会话搜索。但它有个反直觉的设计：<strong>零 LLM、零成本</strong>。它不调用任何模型去「理解」或「总结」，而是直接查一个本地 SQLite 的 <strong>FTS5 全文索引</strong>，把<strong>原始消息原文</strong>返回给 agent 自己读。而且召回结果<strong>不破坏 prompt 缓存</strong>。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 图书馆卡片目录</div>
+  老式图书馆的<strong>卡片目录</strong>：每本书一上架，管理员就把它的关键词抄进卡片柜（写入即索引）。你要找书时，不需要请一位学者<strong>读完所有书再告诉你大意</strong>（那是 LLM 总结，又慢又贵）——你直接翻卡片柜，按相关性排好序，<strong>拿到书的原始页码和摘录</strong>，自己去读。Hermes 的跨会话搜索就是这个卡片柜：FTS5 索引在消息写入时<strong>同步建好</strong>，搜索时直接出原文，<strong>全程不惊动任何模型</strong>。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 写入即索引，原文召回，零 LLM</div>
+  三件事拼成这条链：①<strong>写入即索引</strong>——每条消息 INSERT 进 SQLite，触发器<strong>同步</strong>把它喂进 FTS5 倒排索引（content + tool_name + tool_calls）；②<strong>FTS5 检索</strong>——搜索走 <span class="mono">MATCH</span> + BM25 相关性排序 + <span class="mono">snippet()</span> 高亮，CJK 还有 trigram 子串兜底；③<strong>原文 append</strong>——命中的<strong>原始消息</strong>作为 tool 结果消息追加到对话末尾，让 agent 自己阅读。<strong>没有一次 LLM 调用</strong>——这既省钱，又（因为只是 append tool 消息）<strong>不碰 system prompt、不破缓存</strong>。
+</div>
+
+<h2>写入即索引：AFTER INSERT 触发器</h2>
+<p>不需要任何额外的「建索引」步骤——消息一写进 <span class="mono">messages</span> 表，SQLite 触发器就<strong>同步</strong>把它送进 FTS5：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_state.py</span><span class="ln">612-621 · 节选</span></div>
+  <pre><span class="kw">CREATE VIRTUAL TABLE</span> messages_fts <span class="kw">USING</span> fts5(content);
+
+<span class="kw">CREATE TRIGGER</span> messages_fts_insert <span class="kw">AFTER INSERT ON</span> messages <span class="kw">BEGIN</span>
+    <span class="kw">INSERT INTO</span> messages_fts(rowid, content) <span class="kw">VALUES</span> (
+        new.id,
+        <span class="fn">COALESCE</span>(new.content, <span class="st">''</span>) || <span class="st">' '</span> ||
+        <span class="fn">COALESCE</span>(new.tool_name, <span class="st">''</span>) || <span class="st">' '</span> ||
+        <span class="fn">COALESCE</span>(new.tool_calls, <span class="st">''</span>)
+    );
+<span class="kw">END</span>;</pre>
+</div>
+<p>这里有两个巧思。其一，<span class="mono">rowid = new.id</span>——FTS 索引的行号就是 <span class="mono">messages.id</span>，命中后能直接 JOIN 回原始消息。其二，索引的不是单纯 content，而是 <span class="mono">content + tool_name + tool_calls</span> 拼接——所以连「某次调用了什么工具」也能被搜到。写入即索引意味着：<strong>无需任何离线建库</strong>，刚说完的话下一秒就可被检索。</p>
+
+<h2>检索：FTS5 MATCH + BM25 + snippet</h2>
+<p>搜索本身是一条纯 SQL，用足了 FTS5 的特性——全文匹配、相关性排序、高亮摘要：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_state.py</span><span class="ln">3532-3579 · 简化</span></div>
+  <pre><span class="kw">SELECT</span> m.id, m.session_id, m.role,
+       <span class="fn">snippet</span>(messages_fts, 0, <span class="st">'&gt;&gt;&gt;'</span>, <span class="st">'&lt;&lt;&lt;'</span>, <span class="st">'...'</span>, 40) <span class="kw">AS</span> snippet,
+       m.content, m.timestamp, s.source
+<span class="kw">FROM</span> messages_fts
+<span class="kw">JOIN</span> messages m <span class="kw">ON</span> m.id = messages_fts.rowid    <span class="cm">-- rowid 直接 JOIN 回原消息</span>
+<span class="kw">JOIN</span> sessions s <span class="kw">ON</span> s.id = m.session_id
+<span class="kw">WHERE</span> messages_fts <span class="kw">MATCH</span> ?                    <span class="cm">-- 全文匹配</span>
+<span class="kw">ORDER BY</span> rank                                <span class="cm">-- BM25 相关性排序</span>
+<span class="kw">LIMIT</span> ? <span class="kw">OFFSET</span> ?</pre>
+</div>
+<p>三个 FTS5 特性各司其职：<span class="mono">MATCH</span> 做倒排全文匹配（支持 AND/OR/NOT/短语/前缀）；<span class="mono">ORDER BY rank</span> 是 FTS5 内建的 <strong>BM25</strong> 相关性排序；<span class="mono">snippet()</span> 把命中词用 <span class="mono">&gt;&gt;&gt;…&lt;&lt;&lt;</span> 包起来、最多 40 token 的高亮摘要。中文无空格分词，还有一张 <span class="mono">messages_fts_trigram</span>（trigram 分词器）做子串兜底，1–2 个汉字时退回 <span class="mono">LIKE</span>。整条检索<strong>没有任何模型参与</strong>。</p>
+
+<h2>诚实的注脚：summary 路径已被移除</h2>
+<p>这里有个值得讲的<strong>设计演进</strong>。早期版本（PR #20238）确实埋过一条「fast / summary 双模」——用辅助模型总结召回内容。但后来的工具集扩展（PR #26419）把整套<strong>合并重写</strong>成单一形态，summary 路径<strong>就此不复存在</strong>。今天的模块 docstring 把现状写得很清楚：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/session_search_tool.py</span><span class="ln">21-29 · 节选</span></div>
+  <pre>All three modes operate on the SQLite session DB via the FTS5 index and
+the get_anchored_view / get_messages_around primitives in hermes_state.
+<span class="cm">No LLM calls anywhere — every shape returns actual messages from the DB.</span>
+
+History: PR #20238 seeded a fast/summary dual-mode split; ... This module
+merges all of that into a single calling shape with no mode parameter,
+<span class="cm">no summary LLM path</span>, and explicit scroll support.</pre>
+</div>
+<p>（注意：README.md 里仍写着「FTS5 session search <strong>with LLM summarization</strong>」——那是<strong>过时的营销文案</strong>，与当前代码不符。忠于代码的说法是：<strong>零 LLM、直出 DB 原文 + BM25 排序 + 锚点书签</strong>。）这条注脚本身就是一课：当性能/成本与「让模型多做一步」冲突时，Hermes 选择了<strong>把原文交给主 agent 自己读</strong>——省一次调用，又不破缓存。</p>
+
+<h2>四种模式 + 召回不破缓存</h2>
+<p>工具 <span class="mono">session_search</span> 用<strong>参数推断</strong>四种模式（无显式 mode 参数）：给 <span class="mono">query</span> 是 <strong>DISCOVERY</strong>（FTS5 检索）；给 <span class="mono">session_id + around_message_id</span> 是 <strong>SCROLL</strong>（锚点翻页）；只给 <span class="mono">session_id</span> 是 <strong>READ</strong>（整会话）；什么都不给是 <strong>BROWSE</strong>（最近会话列表）。无论哪种，结果都<strong>原文</strong>作为 <strong>tool 消息 append</strong> 到对话末尾——不改 system prompt、不改任何历史轮次，所以缓存前缀<strong>逐字节不变</strong>。另外，会话标题由 <span class="mono">title_generator</span> 在首轮后<strong>后台线程 fire-and-forget</strong> 生成，绝不给用户响应加延迟。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><strong>写入即索引</strong>：消息 INSERT → AFTER INSERT 触发器同步喂进 FTS5（content+tool_name+tool_calls，rowid=messages.id）</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><strong>检索</strong>：agent 调 session_search(query=…) → MATCH + ORDER BY rank(BM25) + snippet() 高亮（CJK 走 trigram/LIKE 兜底）</span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><strong>锚点窗口</strong>：命中后取 ±N 条上下文 + 会话首尾书签（按需取回，不加载整段）</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><strong>原文 append</strong>：结果作为 tool 消息追加到对话末尾——零 LLM 总结，原文交给 agent 自读</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">不改 system prompt / 不改历史轮次 → 缓存前缀逐字节不变，召回<strong>不破缓存</strong></span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「零成本召回而不破缓存」</div>
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章核心：<strong>SessionDB FTS5 表 + 触发器</strong>（写入即索引）、<strong>search_messages</strong>（MATCH+BM25+snippet）、<strong>CJK trigram 路由</strong>、<strong>session_search 工具</strong>（4 模式）、<strong>get_anchored_view</strong>（锚点书签）。跨章节配合：搜索结果作为 <strong>tool 消息 append</strong>、不改前缀（第 6 章缓存 + 第 8 章工具结果 append-only）；跨会话召回对抗<strong>模型无状态</strong>（第 2 章 B）；标题生成在首轮后由<strong>辅助模型链</strong>（主模型优先、否则回退辅助 client）后台线程生成、不阻塞主响应（与第 10 章辅助模型隔离同源）。
+  <div class="collab-sub">② 数据流时序</div>
+  消息 INSERT → 触发器同步建 FTS5 索引（写入即索引）；agent 想起旧事 → session_search(query) → MATCH+BM25+snippet（CJK trigram 兜底）→ get_anchored_view 取锚点窗口+书签 → 原文作为 tool 消息 append 到对话末尾 → agent 自读。标题生成在首轮后台 fire-and-forget。
+  <div class="collab-sub">③ 关键点</div>
+  「跨会话记忆」不一定要 LLM。Hermes 用<strong>本地 FTS5 + 原文 append</strong> 实现召回：写入时同步建索引（零额外步骤），检索时零模型调用（零成本），返回时只 append tool 消息（不破缓存）。三者合起来，让「想起以前」既<strong>便宜</strong>又<strong>不伤性能</strong>。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线：<strong>零 LLM 直出 DB 原文 + append-only 召回</strong>——既省成本又不破缓存。它治两条 LLM 固有约束：
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——模型跨会话什么都记不住，靠本地 FTS5 索引把<strong>所有历史对话</strong>变成可检索的外部记忆；
+  <span class="badge constraint">A·中间遗失</span>——召回用 <strong>BM25 排序 + 锚点书签</strong> 只取最相关的片段（按需取回），而非把整段历史塞回上下文淹没注意力。反模式：为了「更聪明的召回」而引入一次 LLM 总结——它既加成本、加延迟，若把总结塞进 system prompt 还会<strong>击穿缓存</strong>。Hermes 反其道：原文交给主 agent 自己读。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>写入即索引</strong>：<span class="mono">AFTER INSERT</span> 触发器同步把消息喂进 FTS5（<span class="mono">content+tool_name+tool_calls</span>，rowid=messages.id），无需离线建库。</li>
+    <li><strong>FTS5 检索</strong>：<span class="mono">MATCH</span> 全文匹配 + <span class="mono">ORDER BY rank</span>（BM25）+ <span class="mono">snippet()</span> 高亮；CJK 用 trigram/LIKE 兜底。</li>
+    <li><strong>零 LLM</strong>：summary 路径在模块合并为单一形态后已不复存在（PR #20238 埋下、#26419 扩展合并）；返回 DB 原文让 agent 自读（README「with LLM summarization」是过时文案）。</li>
+    <li><strong>4 种模式</strong>：参数推断 DISCOVERY / SCROLL / READ / BROWSE，无显式 mode 参数。</li>
+    <li><strong>召回不破缓存</strong>：结果作为 tool 消息 append，不改 system prompt/历史 → 前缀逐字节不变（第 6/8 章）。</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. session_search 召回历史时，会调用 LLM 去「总结」检索到的内容吗？</div>
+  <ol class="opts">
+    <li>会，用辅助模型总结后返回</li>
+    <li>看消息长度决定</li>
+    <li>会，用主模型总结</li>
+    <li>不会——零 LLM，直接返回 SQLite FTS5 命中的原始消息让 agent 自读（早期 summary 路径在模块合并后已不复存在）</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：D</strong>。docstring 明写 No LLM calls anywhere — every shape returns actual messages from the DB。返回的是 FTS5 命中的原文（snippet + 锚点窗口），由 agent 自己读。README「with LLM summarization」是过时文案。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. 一条消息要等什么时候才能被跨会话搜索检索到？</div>
+  <ol class="opts">
+    <li>写入即索引——消息一 INSERT，AFTER INSERT 触发器就同步把它喂进 FTS5，下一秒可检索</li>
+    <li>要等会话结束</li>
+    <li>要等一个离线建索引的批处理跑完</li>
+    <li>要等 curator 巡查</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：A</strong>。messages_fts_insert 触发器 AFTER INSERT ON messages 同步把 content+tool_name+tool_calls 写进 FTS5 倒排索引（rowid=messages.id）。无需任何离线建库，刚说的话下一秒就能搜到。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>「跨会话记忆」似乎天然需要某种「理解/总结」能力，但 Hermes 偏偏用零 LLM 的本地 FTS5 + 原文 append 实现它。这个选择在「成本/延迟」与「缓存神圣」两个维度上各带来什么好处？</li>
   </ul>
 </div>
 </div>
