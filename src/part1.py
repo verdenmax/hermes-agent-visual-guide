@@ -1034,3 +1034,326 @@ The entry signature is clean:</p>
 </div>
 """,
 }
+
+LESSON_05 = {
+    "zh": r"""
+<p class="lead">
+一次对话从你敲下的一句话，到 Hermes 给出最终回复，中间到底发生了什么？答案是一个<strong>同步主循环</strong>：模型每"想一步"就可能调用工具，工具结果被<strong>追加</strong>回消息列表，再喂回模型——如此往复，直到模型不再调用工具、直接给出最终回答。这个循环是整个 agent 的<strong>心脏</strong>，它住在 <span class="mono">agent/conversation_loop.py</span> 里，并带着三个硬约束：<strong>可中断</strong>、<strong>有迭代预算</strong>、<strong>严格的消息角色交替</strong>。本章把这颗心脏拆开给你看。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 生活类比</div>
+  把一次对话想成一条<strong>工厂流水线</strong>：原料（你的消息）进来，沿传送带走过一个个工位（每个工位 = 模型调用一次工具），工位加工完把半成品<strong>放回传送带</strong>继续往下走。流水线是<strong>同步</strong>的——上一个工位没干完，下一个不会启动。它还装了两个安全装置：一个<strong>计数器</strong>（最多过 N 道工序就强制停，免得空转烧钱），一个<strong>急停按钮</strong>（你随时能喊停，机器立刻松手）。Hermes 的对话循环，就是这条带安全装置的流水线。
+</div>
+
+<h2>宏观：一个同步的 while 循环</h2>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观理解</div>
+  别被 Hermes 的体量吓到——一次对话的核心是一个<strong>普普通通的同步 while 循环</strong>。每转一圈做五件事：<strong>检查中断 → 消费一格预算 → 调一次模型 → 若有 tool_calls 就执行并把结果追加回 messages → 没有 tool_calls 就收尾</strong>。所有"记忆"都装在 <span class="mono">messages</span> 这个列表里，<strong>每轮整体重发</strong>给模型——因为模型本身两次调用之间什么都不记得（第 2 章 B·无状态）。循环不重建上下文、只往末尾追加，这正是为了守住 prompt 缓存（第 6 章）。
+</div>
+
+<p>你在源码里可能先撞见 <span class="mono">run_conversation()</span>，但要诚实地说：<span class="mono">run_agent.py:5302</span> 里的它只是个<strong>转发器</strong>，docstring 写得明明白白——<span class="mono">Forwarder — see agent.conversation_loop.run_conversation</span>。真正的主循环在 <span class="mono">agent/conversation_loop.py</span>。而更上层、最常被入门示例调用的 <span class="mono">chat()</span>（<span class="mono">run_agent.py:5325</span>）又是它的极简封装，最后一行就是 <span class="mono">return result["final_response"]</span>：</p>
+
+<div class="flow">
+  <div class="node"><div class="nt">chat(msg)</div><div class="nd">return result["final_response"]</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">run_conversation()</div><div class="nd">转发器 · run_agent.py:5302</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">conversation_loop</div><div class="nd">真正的 while 主循环</div></div>
+</div>
+
+<h2>主循环：while 条件与循环体</h2>
+<p>循环"能活多久"由 <span class="mono">while</span> 条件决定，"怎么退出"则有三条路。先看条件和循环体（<span class="mono">conversation_loop.py:589</span> 与 <span class="mono">594-614</span>）：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py</span><span class="ln">589 · 594-614 …</span></div>
+  <pre><span class="kw">while</span> (api_call_count &lt; agent.max_iterations <span class="kw">and</span> agent.iteration_budget.remaining &gt; 0) <span class="kw">or</span> agent._budget_grace_call:
+
+    <span class="cm"># Check for interrupt request (e.g., user sent new message)</span>
+    <span class="kw">if</span> agent._interrupt_requested:
+        interrupted = <span class="kw">True</span>
+        _turn_exit_reason = <span class="st">"interrupted_by_user"</span>
+        <span class="kw">break</span>
+
+    api_call_count += 1
+    agent._api_call_count = api_call_count
+
+    <span class="cm"># Grace call: the budget is exhausted but we gave the model one</span>
+    <span class="cm"># more chance.  Consume the grace flag so the loop exits after</span>
+    <span class="cm"># this iteration regardless of outcome.</span>
+    <span class="kw">if</span> agent._budget_grace_call:
+        agent._budget_grace_call = <span class="kw">False</span>
+    <span class="kw">elif</span> <span class="kw">not</span> agent.iteration_budget.consume():
+        _turn_exit_reason = <span class="st">"budget_exhausted"</span>
+        <span class="kw">break</span></pre>
+</div>
+
+<p>读懂这十几行，<strong>三种退出方式</strong>就一目了然：① <strong>达到 max_iterations</strong>——<span class="mono">api_call_count &lt; max_iterations</span> 不再成立；② <strong>预算耗尽</strong>——<span class="mono">consume()</span> 返回 <span class="mono">False</span>，打上 <span class="mono">budget_exhausted</span> 并 <span class="mono">break</span>；③ <strong>用户中断</strong>——循环顶部发现 <span class="mono">_interrupt_requested</span> 为真，打上 <span class="mono">interrupted_by_user</span> 并 <span class="mono">break</span>。注意中断检查放在<strong>每圈最开头</strong>，所以哪怕模型正排着一长串工具，也能在下一圈被立刻截停。</p>
+
+<h3>诚实标注：grace call 是预留钩子，核心未主动触发</h3>
+<p><span class="mono">_budget_grace_call</span> 字面上像"预算耗尽还会宽限多跑一轮"，但请<strong>别被注释误导</strong>。核心代码只有三处碰它：<span class="mono">agent_init.py:525</span> 初始化置 <span class="mono">False</span>、<span class="mono">conversation_loop.py:589</span> 的 <span class="mono">while</span> 条件读它、<span class="mono">608-609</span> 在循环体里消费后又置 <span class="mono">False</span>——<strong>没有任何核心代码把它设成 True</strong>。换句话说它是一个<strong>预留放行钩子、核心未主动触发</strong>，正常对话里它<strong>永远是 False</strong>，不会让循环多跑一轮。预算耗尽后真正给模型"收个尾"的逻辑，由独立的 <span class="mono">_handle_max_iterations</span> 负责，与这个标志无关。</p>
+
+<h2>时序：一圈循环里发生了什么</h2>
+<p>把一次对话的数据流摊开，就是下面这条线——从用户消息进入，到 <span class="mono">final_response</span> 收尾，中间那段方括号里的步骤会<strong>循环</strong>很多圈：</p>
+<div class="vflow">
+  <div class="step"><div class="num">1</div><div class="sc"><h4>用户消息入列</h4><p>你的输入作为一条 <span class="mono">user</span> 消息追加进 <span class="mono">messages</span></p></div></div>
+  <div class="step"><div class="num">2</div><div class="sc"><h4>进入 while 循环</h4><p>条件：未达 max_iterations 且预算 remaining &gt; 0</p></div></div>
+  <div class="step"><div class="num">3</div><div class="sc"><h4>检查中断</h4><p><span class="mono">_interrupt_requested</span> 为真则立刻 break</p></div></div>
+  <div class="step"><div class="num">4</div><div class="sc"><h4>消费一格预算</h4><p><span class="mono">consume()</span> 返回 False 则 break（budget_exhausted）</p></div></div>
+  <div class="step"><div class="num">5</div><div class="sc"><h4>调用模型</h4><p>把整个 <span class="mono">messages</span> 重发，拿回 assistant 消息</p></div></div>
+  <div class="step"><div class="num">6</div><div class="sc"><h4>有 tool_calls？</h4><p>有：append assistant 消息，再 <span class="mono">_execute_tool_calls</span> 执行工具</p></div></div>
+  <div class="step"><div class="num">7</div><div class="sc"><h4>append 工具结果</h4><p>每个工具结果作为 <span class="mono">tool</span> 消息追加回 messages → <span class="mono">continue</span> 回到第 3 步</p></div></div>
+  <div class="step"><div class="num">8</div><div class="sc"><h4>无 tool_calls 收尾</h4><p><span class="mono">final_response = assistant_message.content</span> → 返回</p></div></div>
+</div>
+
+<p>同样的故事换个角度看：一圈圈迭代向右推进，每圈跑的都是同一段方括号步骤；而循环只会从三个门里走出去其中一个。</p>
+<div class="timeline">
+  <div class="lane"><div class="lane-label">迭代</div><div class="tslot">#1</div><div class="tslot">#2</div><div class="tslot">#3</div><div class="tslot">…</div><div class="tslot now">#N</div></div>
+  <div class="lane"><div class="lane-label">每圈做</div><div class="tslot span">检查中断 → consume 预算 → 调模型 → 处理 tool_calls → append 结果</div></div>
+  <div class="lane"><div class="lane-label">三种退出</div><div class="tslot">达到 max_iterations</div><div class="tslot">预算耗尽</div><div class="tslot now">用户中断</div></div>
+</div>
+
+<h2>迭代预算：防止失控长循环</h2>
+<p>第 5 步每调一次模型，就先 <span class="mono">consume()</span> 一格预算。这把"门闩"由 <span class="mono">IterationBudget</span> 把守（<span class="mono">agent/iteration_budget.py</span>），<strong>线程安全</strong>，parent 默认上限 <strong>90</strong>、每个 subagent 独立默认 <strong>50</strong>。它的两个核心方法短得能背下来：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/iteration_budget.py</span><span class="ln">37-43 · 56-59</span></div>
+  <pre><span class="kw">def</span> <span class="fn">consume</span>(self) -&gt; bool:
+    <span class="cm">&quot;&quot;&quot;Try to consume one iteration.  Returns True if allowed.&quot;&quot;&quot;</span>
+    <span class="kw">with</span> self._lock:
+        <span class="kw">if</span> self._used &gt;= self.max_total:
+            <span class="kw">return</span> <span class="kw">False</span>
+        self._used += 1
+        <span class="kw">return</span> <span class="kw">True</span>
+
+@property
+<span class="kw">def</span> <span class="fn">remaining</span>(self) -&gt; int:
+    <span class="kw">with</span> self._lock:
+        <span class="kw">return</span> max(0, self.max_total - self._used)</pre>
+</div>
+
+<p>为什么要给循环上预算？因为大模型的错误会<strong>逐轮累积</strong>（第 3 章 F·误差累积）：一旦规划跑偏，它可能没完没了地调工具、绕圈子，把你的钱烧光也到不了终点。<strong>有界的迭代数</strong>就是一道硬刹车——既封住成本与延迟（A·延迟成本），也给失控的长循环兜了底。一个贴心设计：<span class="mono">execute_code</span> 这种"编程式工具调用"会调 <span class="mono">refund()</span> 把那一格<strong>退回去</strong>，所以它不占正常的对话预算。</p>
+
+<h2>可中断：随时能喊停</h2>
+<p>循环每圈开头都查 <span class="mono">_interrupt_requested</span>，那么这个标志是谁设的？是 <span class="mono">interrupt()</span>（<span class="mono">run_agent.py:2400-2440</span>）：它把 <span class="mono">_interrupt_requested = True</span>，记下中断消息，并把信号<strong>级联</strong>给正在执行的工具线程与子 agent，让 in-flight 操作尽快收手。最典型的触发场景在消息网关：当某个会话的 agent 还在跑、你又发来一条新消息，网关就调 <span class="mono">running_agent.interrupt(new_message.text)</span>——于是它在下一圈循环顶部被截停，转身处理你的新指令。</p>
+
+<h2>严格角色交替：provider 要求 + 不破缓存</h2>
+<p>每圈往 <span class="mono">messages</span> 里追加的，无非两类消息。<strong>assistant 消息</strong>由 <span class="mono">chat_completion_helpers.py:885-890</span> 构造，带着 <span class="mono">content</span>、<span class="mono">reasoning</span>、<span class="mono">finish_reason</span> 三件套；<strong>tool 消息</strong>由 <span class="mono">tool_dispatch_helpers.py:336-343</span> 构造，带着 <span class="mono">name</span>、<span class="mono">content</span>、<span class="mono">tool_call_id</span>。四种角色各司其职：</p>
+<table class="t">
+  <tr><th>角色</th><th>谁产生</th><th>关键字段</th></tr>
+  <tr><td><span class="mono">system</span></td><td>会话开始的固定前缀</td><td>整段 prompt（缓存命中全靠它字节稳定）</td></tr>
+  <tr><td><span class="mono">user</span></td><td>你的输入 / nudge</td><td><span class="mono">content</span>；连续两条会被合并</td></tr>
+  <tr><td><span class="mono">assistant</span></td><td>模型</td><td><span class="mono">content + reasoning + finish_reason</span></td></tr>
+  <tr><td><span class="mono">tool</span></td><td>工具执行结果</td><td><span class="mono">name + content + tool_call_id</span></td></tr>
+</table>
+
+<p>这些消息必须严格<strong>交替</strong>：system 之后，user/tool 与 assistant 一来一回，<strong>不能出现两条连续的 user 消息</strong>。<span class="mono">repair_message_sequence</span>（<span class="mono">agent_runtime_helpers.py:348-435</span>）就是临门那道防线，它的 docstring 原文说得很直白：「Providers (OpenAI, OpenRouter, Anthropic) expect strict alternation … no two consecutive user messages …」。它在发请求前做两遍修复：Pass 1 丢弃找不到对应 assistant 调用的<strong>孤儿 tool 消息</strong>；Pass 2 把<strong>连续的 user 消息合并</strong>（换行拼接，一条输入都不丢）：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/agent_runtime_helpers.py</span><span class="ln">413-435</span></div>
+  <pre><span class="cm"># Pass 2: merge consecutive user messages. Preserves all user input</span>
+<span class="cm"># so nothing the user typed is lost.</span>
+merged: List[Dict] = []
+<span class="kw">for</span> msg <span class="kw">in</span> filtered:
+    <span class="kw">if</span> (
+        merged
+        <span class="kw">and</span> isinstance(msg, dict)
+        <span class="kw">and</span> msg.get(<span class="st">"role"</span>) == <span class="st">"user"</span>
+        <span class="kw">and</span> isinstance(merged[-1], dict)
+        <span class="kw">and</span> merged[-1].get(<span class="st">"role"</span>) == <span class="st">"user"</span>
+    ):
+        <span class="cm"># → 用换行拼接两条 user 消息，一条都不丢（后续 424-435 行）</span>
+        ...</pre>
+</div>
+
+<p>为什么这么较真？因为违反交替会让多数 provider <strong>静默返回空响应</strong>，触发徒劳的空响应重试；更要命的是，任何对历史的中途改写都可能<strong>击穿 prompt 缓存</strong>（第 6 章），让长对话每轮成本翻倍。所以修复只在发请求前做"防御性合并"，绝不重建上下文。</p>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 一次对话由哪些部件拼成</div>
+  <div class="collab-sub">① 组件清单</div>
+  <strong>conversation_loop</strong>（主循环，<span class="mono">conversation_loop.py:589</span>）拍板节奏；<strong>IterationBudget</strong>（预算，<span class="mono">iteration_budget.py</span>）守 <span class="mono">consume/remaining</span>；<strong>_interrupt_requested</strong>（中断标志，由 <span class="mono">interrupt()</span> @ <span class="mono">run_agent.py:2400</span> 设置）管急停；<strong>repair_message_sequence</strong>（<span class="mono">agent_runtime_helpers.py:348</span>）保交替；<strong>_execute_tool_calls</strong> 执行工具并 append <span class="mono">tool</span> 结果；<strong>chat_completion_helpers</strong>（<span class="mono">:885</span>）构造带 reasoning 的 assistant 消息。跨章节：messages 外置全部状态（第 2 章 B），预算防误差累积（第 3 章 F），交替不变量服务 prompt 缓存（第 6 章）。
+  <div class="collab-sub">② 数据流时序</div>
+  用户消息 → 进入 <span class="mono">while</span> 循环 →〔检查中断 → <span class="mono">consume</span> 预算 → LLM 调用 → 处理 <span class="mono">tool_calls</span> → append <span class="mono">tool</span> 结果〕反复多圈 → 某轮模型<strong>无 tool_calls</strong> → 收尾为 <span class="mono">final_response</span>。
+  <div class="collab-sub">③ 关键点</div>
+  全部状态都在 <span class="mono">messages</span> 里、循环同步可中断、预算有界——三者合起来，让 agent loop 既能放手干活，又<strong>不会失控</strong>。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  本章围绕对话循环的三条主线：<strong>可中断 + 迭代预算 + 严格角色交替不变量</strong>。可中断让长任务随时能被新消息接管；迭代预算给"放手让模型自己干"上了硬上限；严格交替既满足 provider 的格式要求，又顺手守住了缓存。
+  <p style="margin:.5rem 0 0">它对抗的 LLM 固有约束：<span class="badge constraint">B·无状态</span>——状态全外置在 <span class="mono">messages</span>、每轮重发；<span class="badge constraint">F·误差累积</span>——预算 + 中断防止失控的长循环；<span class="badge constraint">A·延迟成本</span>——有界迭代直接压住长度与花销。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li>对话的核心是一个<strong>同步 while 循环</strong>（<span class="mono">conversation_loop.py:589</span>）；<span class="mono">run_conversation()/chat()</span> 只是它的<strong>转发器/封装</strong>。</li>
+    <li>主循环<strong>三种退出</strong>：达到 <span class="mono">max_iterations</span> / 预算耗尽 / 用户中断；中断检查在每圈<strong>最开头</strong>。</li>
+    <li><strong>IterationBudget</strong> 线程安全，parent 90 / subagent 50；<span class="mono">execute_code</span> 用 <span class="mono">refund()</span> 退格、不占预算。</li>
+    <li><strong>严格角色交替</strong>是 provider 硬要求，也护着缓存；<span class="mono">repair_message_sequence</span> 丢孤儿 tool、合并连续 user。</li>
+    <li>诚实点：<span class="mono">_budget_grace_call</span> 是<strong>预留放行钩子、核心未主动触发</strong>（全仓无 True-setter，正常对话恒为 False）。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">
+From the moment you hit enter to the moment Hermes hands back a final answer, what actually happens? The answer is a <strong>synchronous main loop</strong>: every time the model "thinks a step" it may call tools, the tool results are <strong>appended</strong> back onto the message list, and the whole thing is fed back to the model — round after round, until the model stops calling tools and just answers. This loop is the <strong>heart</strong> of the agent. It lives in <span class="mono">agent/conversation_loop.py</span> and carries three hard constraints: <strong>interruptible</strong>, <strong>budgeted iterations</strong>, and <strong>strict message-role alternation</strong>. This chapter cracks that heart open.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy</div>
+  Picture one conversation as a <strong>factory assembly line</strong>: raw material (your message) enters, rides the belt past one station after another (each station = the model calling one tool), and each station drops its half-finished part <strong>back on the belt</strong> to continue. The line is <strong>synchronous</strong> — the next station won't start until the previous one finishes. It also ships two safety devices: a <strong>counter</strong> (stop after at most N stations, so it can't spin and burn money) and an <strong>emergency stop</strong> (you can halt it any time and it lets go instantly). Hermes' conversation loop is exactly this line, safety devices included.
+</div>
+
+<h2>Macro: one synchronous while loop</h2>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture</div>
+  Don't let Hermes' size scare you — the core of a conversation is an utterly ordinary <strong>synchronous while loop</strong>. Each turn does five things: <strong>check for interrupt → consume one unit of budget → call the model once → if there are tool_calls, run them and append results back to messages → if there are none, finish</strong>. All "memory" lives in the <span class="mono">messages</span> list and is <strong>resent in full every turn</strong> — because the model itself remembers nothing between calls (Ch. 2, B·statelessness). The loop never rebuilds context, only appends to the end, precisely to keep the prompt cache intact (Ch. 6).
+</div>
+
+<p>You may first bump into <span class="mono">run_conversation()</span> in the source, but be honest about it: the one in <span class="mono">run_agent.py:5302</span> is just a <strong>forwarder</strong> — its docstring says so outright: <span class="mono">Forwarder — see agent.conversation_loop.run_conversation</span>. The real main loop is in <span class="mono">agent/conversation_loop.py</span>. And the even-higher-level <span class="mono">chat()</span> (<span class="mono">run_agent.py:5325</span>), the one tutorials call most, is just a thin wrapper whose last line is <span class="mono">return result["final_response"]</span>:</p>
+
+<div class="flow">
+  <div class="node"><div class="nt">chat(msg)</div><div class="nd">return result["final_response"]</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">run_conversation()</div><div class="nd">forwarder · run_agent.py:5302</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">conversation_loop</div><div class="nd">the real while loop</div></div>
+</div>
+
+<h2>The main loop: while condition and loop body</h2>
+<p>How long the loop lives is decided by the <span class="mono">while</span> condition; how it exits has three paths. First the condition and body (<span class="mono">conversation_loop.py:589</span> and <span class="mono">594-614</span>):</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py</span><span class="ln">589 · 594-614 …</span></div>
+  <pre><span class="kw">while</span> (api_call_count &lt; agent.max_iterations <span class="kw">and</span> agent.iteration_budget.remaining &gt; 0) <span class="kw">or</span> agent._budget_grace_call:
+
+    <span class="cm"># Check for interrupt request (e.g., user sent new message)</span>
+    <span class="kw">if</span> agent._interrupt_requested:
+        interrupted = <span class="kw">True</span>
+        _turn_exit_reason = <span class="st">"interrupted_by_user"</span>
+        <span class="kw">break</span>
+
+    api_call_count += 1
+    agent._api_call_count = api_call_count
+
+    <span class="cm"># Grace call: the budget is exhausted but we gave the model one</span>
+    <span class="cm"># more chance.  Consume the grace flag so the loop exits after</span>
+    <span class="cm"># this iteration regardless of outcome.</span>
+    <span class="kw">if</span> agent._budget_grace_call:
+        agent._budget_grace_call = <span class="kw">False</span>
+    <span class="kw">elif</span> <span class="kw">not</span> agent.iteration_budget.consume():
+        _turn_exit_reason = <span class="st">"budget_exhausted"</span>
+        <span class="kw">break</span></pre>
+</div>
+
+<p>Read those dozen lines and the <strong>three exits</strong> jump out: ① <strong>hit max_iterations</strong> — <span class="mono">api_call_count &lt; max_iterations</span> stops holding; ② <strong>budget exhausted</strong> — <span class="mono">consume()</span> returns <span class="mono">False</span>, tagged <span class="mono">budget_exhausted</span>, then <span class="mono">break</span>; ③ <strong>user interrupt</strong> — the loop top finds <span class="mono">_interrupt_requested</span> true, tags <span class="mono">interrupted_by_user</span>, then <span class="mono">break</span>. Note the interrupt check sits at the <strong>very top of each turn</strong>, so even if the model has queued a long string of tools, it can be cut off on the next turn.</p>
+
+<h3>Honest note: grace call is a reserved hook, never fired by the core</h3>
+<p><span class="mono">_budget_grace_call</span> reads like "when the budget is spent we still allow one bonus turn" — but <strong>don't be misled by the comment</strong>. The whole repo touches it in exactly three places: <span class="mono">agent_init.py:525</span> initializes it to <span class="mono">False</span>, the <span class="mono">while</span> condition at <span class="mono">conversation_loop.py:589</span> reads it, and <span class="mono">608-609</span> consumes it back to <span class="mono">False</span> inside the body — <strong>no core code ever sets it to True</strong>. In other words it is a <strong>reserved release hook the core never actively fires</strong>; in a normal conversation it is <strong>always False</strong> and grants no extra turn. The real "wrap it up" logic after budget exhaustion lives in the separate <span class="mono">_handle_max_iterations</span>, unrelated to this flag.</p>
+
+<h2>Sequence: what happens in one turn</h2>
+<p>Lay the data flow flat and you get this line — from the user message in, to <span class="mono">final_response</span> out, with the bracketed middle steps <strong>looping</strong> many times:</p>
+<div class="vflow">
+  <div class="step"><div class="num">1</div><div class="sc"><h4>User message enqueued</h4><p>Your input is appended as a <span class="mono">user</span> message onto <span class="mono">messages</span></p></div></div>
+  <div class="step"><div class="num">2</div><div class="sc"><h4>Enter the while loop</h4><p>Condition: under max_iterations and budget remaining &gt; 0</p></div></div>
+  <div class="step"><div class="num">3</div><div class="sc"><h4>Check interrupt</h4><p>If <span class="mono">_interrupt_requested</span> is true, break immediately</p></div></div>
+  <div class="step"><div class="num">4</div><div class="sc"><h4>Consume one unit</h4><p><span class="mono">consume()</span> returning False breaks (budget_exhausted)</p></div></div>
+  <div class="step"><div class="num">5</div><div class="sc"><h4>Call the model</h4><p>Resend all of <span class="mono">messages</span>, get back an assistant message</p></div></div>
+  <div class="step"><div class="num">6</div><div class="sc"><h4>tool_calls?</h4><p>Yes: append the assistant message, then <span class="mono">_execute_tool_calls</span></p></div></div>
+  <div class="step"><div class="num">7</div><div class="sc"><h4>Append tool results</h4><p>Each result is appended as a <span class="mono">tool</span> message → <span class="mono">continue</span> to step 3</p></div></div>
+  <div class="step"><div class="num">8</div><div class="sc"><h4>No tool_calls → finish</h4><p><span class="mono">final_response = assistant_message.content</span> → return</p></div></div>
+</div>
+
+<p>Same story from another angle: iterations march to the right, each running the same bracketed steps, and the loop leaves through exactly one of three doors.</p>
+<div class="timeline">
+  <div class="lane"><div class="lane-label">iteration</div><div class="tslot">#1</div><div class="tslot">#2</div><div class="tslot">#3</div><div class="tslot">…</div><div class="tslot now">#N</div></div>
+  <div class="lane"><div class="lane-label">each turn</div><div class="tslot span">check interrupt → consume budget → call model → handle tool_calls → append results</div></div>
+  <div class="lane"><div class="lane-label">three exits</div><div class="tslot">hit max_iterations</div><div class="tslot">budget exhausted</div><div class="tslot now">user interrupt</div></div>
+</div>
+
+<h2>Iteration budget: stopping runaway loops</h2>
+<p>At step 5, every model call first <span class="mono">consume()</span>s one unit of budget. That latch is guarded by <span class="mono">IterationBudget</span> (<span class="mono">agent/iteration_budget.py</span>), <strong>thread-safe</strong>, with a parent cap of <strong>90</strong> by default and each subagent capped independently at <strong>50</strong>. Its two core methods are short enough to memorize:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/iteration_budget.py</span><span class="ln">37-43 · 56-59</span></div>
+  <pre><span class="kw">def</span> <span class="fn">consume</span>(self) -&gt; bool:
+    <span class="cm">&quot;&quot;&quot;Try to consume one iteration.  Returns True if allowed.&quot;&quot;&quot;</span>
+    <span class="kw">with</span> self._lock:
+        <span class="kw">if</span> self._used &gt;= self.max_total:
+            <span class="kw">return</span> <span class="kw">False</span>
+        self._used += 1
+        <span class="kw">return</span> <span class="kw">True</span>
+
+@property
+<span class="kw">def</span> <span class="fn">remaining</span>(self) -&gt; int:
+    <span class="kw">with</span> self._lock:
+        <span class="kw">return</span> max(0, self.max_total - self._used)</pre>
+</div>
+
+<p>Why budget the loop at all? Because model errors <strong>compound turn over turn</strong> (Ch. 3, F·error-compounding): once the plan drifts, the model can call tools forever, circling without reaching the goal and draining your wallet. A <strong>bounded iteration count</strong> is the hard brake — it caps cost and latency (A·latency/cost) and backstops runaway loops. One thoughtful touch: <span class="mono">execute_code</span>'s "programmatic tool calling" calls <span class="mono">refund()</span> to <strong>hand that unit back</strong>, so it doesn't eat the normal conversation budget.</p>
+
+<h2>Interruptible: halt any time</h2>
+<p>Every turn starts by checking <span class="mono">_interrupt_requested</span> — so who sets it? <span class="mono">interrupt()</span> (<span class="mono">run_agent.py:2400-2440</span>): it sets <span class="mono">_interrupt_requested = True</span>, records the interrupt message, and <strong>cascades</strong> the signal to in-flight tool threads and subagents so live operations abort fast. The classic trigger is the messaging gateway: when a session's agent is still running and you send a new message, the gateway calls <span class="mono">running_agent.interrupt(new_message.text)</span> — so it's cut off at the top of the next turn and pivots to your new instruction.</p>
+
+<h2>Strict role alternation: provider requirement + cache safety</h2>
+<p>What gets appended to <span class="mono">messages</span> each turn is just two kinds of message. The <strong>assistant message</strong> is built by <span class="mono">chat_completion_helpers.py:885-890</span> carrying <span class="mono">content</span>, <span class="mono">reasoning</span>, and <span class="mono">finish_reason</span>; the <strong>tool message</strong> is built by <span class="mono">tool_dispatch_helpers.py:336-343</span> carrying <span class="mono">name</span>, <span class="mono">content</span>, and <span class="mono">tool_call_id</span>. Four roles, each with its job:</p>
+<table class="t">
+  <tr><th>Role</th><th>Produced by</th><th>Key fields</th></tr>
+  <tr><td><span class="mono">system</span></td><td>fixed prefix at session start</td><td>the whole prompt (cache hits rely on it being byte-stable)</td></tr>
+  <tr><td><span class="mono">user</span></td><td>your input / nudge</td><td><span class="mono">content</span>; two in a row get merged</td></tr>
+  <tr><td><span class="mono">assistant</span></td><td>the model</td><td><span class="mono">content + reasoning + finish_reason</span></td></tr>
+  <tr><td><span class="mono">tool</span></td><td>tool execution result</td><td><span class="mono">name + content + tool_call_id</span></td></tr>
+</table>
+
+<p>These messages must strictly <strong>alternate</strong>: after system, user/tool trades off with assistant, and <strong>no two consecutive user messages</strong> are allowed. <span class="mono">repair_message_sequence</span> (<span class="mono">agent_runtime_helpers.py:348-435</span>) is the last line of defense; its docstring puts it plainly: "Providers (OpenAI, OpenRouter, Anthropic) expect strict alternation … no two consecutive user messages …". It runs two repair passes right before the request: Pass 1 drops <strong>orphan tool messages</strong> with no matching assistant call; Pass 2 <strong>merges consecutive user messages</strong> (newline-joined, losing no input):</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/agent_runtime_helpers.py</span><span class="ln">413-435</span></div>
+  <pre><span class="cm"># Pass 2: merge consecutive user messages. Preserves all user input</span>
+<span class="cm"># so nothing the user typed is lost.</span>
+merged: List[Dict] = []
+<span class="kw">for</span> msg <span class="kw">in</span> filtered:
+    <span class="kw">if</span> (
+        merged
+        <span class="kw">and</span> isinstance(msg, dict)
+        <span class="kw">and</span> msg.get(<span class="st">"role"</span>) == <span class="st">"user"</span>
+        <span class="kw">and</span> isinstance(merged[-1], dict)
+        <span class="kw">and</span> merged[-1].get(<span class="st">"role"</span>) == <span class="st">"user"</span>
+    ):
+        <span class="cm"># → newline-join the two user turns, nothing lost (lines 424-435)</span>
+        ...</pre>
+</div>
+
+<p>Why so picky? Because violating alternation makes most providers <strong>silently return an empty response</strong>, triggering a pointless empty-retry loop; worse, any mid-stream rewrite of history can <strong>shatter the prompt cache</strong> (Ch. 6), doubling per-turn cost on long conversations. So the repair only does a defensive merge right before the request — it never rebuilds context.</p>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · which parts make one conversation</div>
+  <div class="collab-sub">① Component list</div>
+  <strong>conversation_loop</strong> (main loop, <span class="mono">conversation_loop.py:589</span>) sets the rhythm; <strong>IterationBudget</strong> (<span class="mono">iteration_budget.py</span>) guards <span class="mono">consume/remaining</span>; <strong>_interrupt_requested</strong> (set by <span class="mono">interrupt()</span> @ <span class="mono">run_agent.py:2400</span>) handles the e-stop; <strong>repair_message_sequence</strong> (<span class="mono">agent_runtime_helpers.py:348</span>) keeps alternation; <strong>_execute_tool_calls</strong> runs tools and appends the <span class="mono">tool</span> results; <strong>chat_completion_helpers</strong> (<span class="mono">:885</span>) builds the assistant message with reasoning. Cross-chapter: messages externalize all state (Ch. 2, B), the budget fights error-compounding (Ch. 3, F), the alternation invariant serves prompt caching (Ch. 6).
+  <div class="collab-sub">② Data-flow sequence</div>
+  user message → enter the <span class="mono">while</span> loop →〔check interrupt → <span class="mono">consume</span> budget → LLM call → handle <span class="mono">tool_calls</span> → append <span class="mono">tool</span> results〕many turns → a turn with <strong>no tool_calls</strong> → finish as <span class="mono">final_response</span>.
+  <div class="collab-sub">③ Key point</div>
+  All state lives in <span class="mono">messages</span>, the loop is synchronous and interruptible, and the budget is bounded — together they let the agent loop work freely yet <strong>never spin out of control</strong>.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  This chapter centers on the loop's three throughlines: <strong>interruptible + iteration budget + the strict-alternation invariant</strong>. Interruptibility lets a long task be taken over by a new message any time; the budget puts a hard ceiling on "let the model run itself"; strict alternation satisfies the provider format and protects the cache in one stroke.
+  <p style="margin:.5rem 0 0">The LLM constraints it fights: <span class="badge constraint">B·stateless</span> — all state externalized into <span class="mono">messages</span>, resent every turn; <span class="badge constraint">F·error-compounding</span> — budget + interrupt prevent runaway loops; <span class="badge constraint">A·latency/cost</span> — bounded iterations cap length and spend.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li>The core of a conversation is a <strong>synchronous while loop</strong> (<span class="mono">conversation_loop.py:589</span>); <span class="mono">run_conversation()/chat()</span> are just its <strong>forwarder/wrapper</strong>.</li>
+    <li>The loop has <strong>three exits</strong>: hit <span class="mono">max_iterations</span> / budget exhausted / user interrupt; the interrupt check sits at the <strong>top of every turn</strong>.</li>
+    <li><strong>IterationBudget</strong> is thread-safe, parent 90 / subagent 50; <span class="mono">execute_code</span> uses <span class="mono">refund()</span> to give a unit back and not eat the budget.</li>
+    <li><strong>Strict role alternation</strong> is a provider hard requirement and also guards the cache; <span class="mono">repair_message_sequence</span> drops orphan tools and merges consecutive users.</li>
+    <li>Honest note: <span class="mono">_budget_grace_call</span> is a <strong>reserved release hook the core never fires</strong> (no True-setter anywhere; always False in normal conversations).</li>
+  </ul>
+</div>
+""",
+}

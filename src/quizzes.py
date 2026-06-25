@@ -177,6 +177,40 @@ QUIZZES = {
              "en": "What maintenance win comes from “one agent core drives five front-ends”? To add a sixth (say voice calls), would you change the core or add an edge?"},
         ],
     },
+    "05-conversation-lifecycle.html": {
+        "mcq": [
+            {
+                "q": {"zh": "Hermes 的对话主循环有三种退出方式，下面哪个**不是**其中之一？",
+                      "en": "Hermes' main conversation loop has three exits. Which is **NOT** one of them?"},
+                "opts": [
+                    {"zh": "达到 max_iterations 上限", "en": "Hitting the max_iterations ceiling"},
+                    {"zh": "迭代预算耗尽（consume 返回 False）", "en": "Iteration budget exhausted (consume returns False)"},
+                    {"zh": "用户中断（_interrupt_requested）", "en": "User interrupt (_interrupt_requested)"},
+                    {"zh": "_budget_grace_call 被设为 True 触发宽限退出", "en": "_budget_grace_call set to True triggering a grace exit"},
+                ],
+                "answer": 3,
+                "why": {"zh": "三种退出是 max_iterations / 预算耗尽 / 用户中断；_budget_grace_call 是预留钩子，核心从不把它设为 True，正常对话恒 False。",
+                        "en": "The three exits are max_iterations / budget exhausted / user interrupt; _budget_grace_call is a reserved hook the core never sets to True (always False in normal conversations)."},
+            },
+            {
+                "q": {"zh": "为什么 Hermes 在每次 API 调用前要跑 repair_message_sequence 修复消息序列？",
+                      "en": "Why does Hermes run repair_message_sequence before every API call?"},
+                "opts": [
+                    {"zh": "为了压缩 token", "en": "To compress tokens"},
+                    {"zh": "provider 要求严格角色交替（不能两条同 role 连续），违反会返回空响应；中途改写历史还会破坏缓存", "en": "Providers require strict role alternation (no two same-role in a row); violating it returns empty responses, and rewriting history mid-stream breaks the cache"},
+                    {"zh": "为了排序工具调用", "en": "To sort tool calls"},
+                    {"zh": "为了翻译成不同语言", "en": "To translate languages"},
+                ],
+                "answer": 1,
+                "why": {"zh": "严格交替是 provider 硬要求，违反致空响应重试；repair 只在请求前做防御性合并，不重建上下文（保护缓存）。",
+                        "en": "Strict alternation is a provider hard requirement; violating it causes empty-retry loops. Repair only does a defensive merge right before the request, never rebuilding context (protecting the cache)."},
+            },
+        ],
+        "open": [
+            {"zh": "迭代预算（parent 90 / subagent 50）和「可中断」如何一起防止 agent 失控？如果没有它们，第 3 章的哪个 LLM 约束会失控？",
+             "en": "How do the iteration budget (parent 90 / subagent 50) and interruptibility together prevent an agent from spinning out? Without them, which ch.3 LLM constraint runs wild?"},
+        ],
+    },
 }
 
 

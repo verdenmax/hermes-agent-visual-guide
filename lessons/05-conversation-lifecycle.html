@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var l=localStorage.getItem('havg-lang');if(l==='en'){document.documentElement.dataset.lang='en';document.documentElement.lang='en';}}catch(e){}</script>
+<title>05 · 一次对话的生命周期 / Lifecycle of one conversation · Hermes Agent 设计图解</title>
+<meta name="description" content="第一部分 · 宏观全景｜一次对话的生命周期 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="theme-color" content="#c2630e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAzMiAzMic+PHJlY3Qgd2lkdGg9JzMyJyBoZWlnaHQ9JzMyJyByeD0nNycgZmlsbD0nI2M4YTAyYycvPjx0ZXh0IHg9JzE2JyB5PScyMicgZm9udC1mYW1pbHk9J3N5c3RlbS11aSxzYW5zLXNlcmlmJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nODAwJyBmaWxsPScjZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz7imKQ8L3RleHQ+PC9zdmc+">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Hermes Agent 设计图解">
+<meta property="og:title" content="05 · 一次对话的生命周期 / Lifecycle of one conversation · Hermes Agent 设计图解">
+<meta property="og:description" content="第一部分 · 宏观全景｜一次对话的生命周期 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="05 · 一次对话的生命周期 / Lifecycle of one conversation · Hermes Agent 设计图解">
+<meta name="twitter:description" content="第一部分 · 宏观全景｜一次对话的生命周期 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --ink: #1d2129;
+  --muted: #5b6470; --faint: #8a939f; --line: #e1e5ea;
+  --accent: #c8a02c; --accent-soft: #faf1d6; --accent-ink: #8a6d12;
+  --blue: #2563eb; --blue-soft: #e7efff; --amber: #b4690e; --amber-soft: #fdf1dd;
+  --purple: #7c3aed; --purple-soft: #f0e9ff; --red: #d23f3f; --red-soft: #fbe6e6;
+  --code-bg: #0f172a; --code-ink: #e2e8f0; --code-line: #1e293b;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232c; --ink: #e6edf3;
+    --muted: #9aa6b2; --faint: #6e7a86; --line: #2a323c;
+    --accent: #e3c05a; --accent-soft: #2e2510; --accent-ink: #f0d488;
+    --blue: #6ea8fe; --blue-soft: #16243f; --amber: #e0a44a; --amber-soft: #33270f;
+    --purple: #b794f6; --purple-soft: #271a40; --red: #f08080; --red-soft: #3a1a1a;
+    --code-bg: #0a0f1a; --code-ink: #d8e2f0; --code-line: #14202f;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+html { scroll-behavior: smooth; overflow-x: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+code, .mono { font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; overflow-wrap: break-word; }
+
+/* ---- top progress bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 50; background: var(--panel);
+  border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
+}
+.topbar-inner {
+  max-width: 960px; margin: 0 auto; padding: .7rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.topbar .home { font-size: .82rem; color: var(--muted); font-weight: 600; display:flex; gap:.5rem; align-items:center; }
+.topbar .home b { color: var(--accent); }
+.topbar .pill { font-size: .72rem; color: var(--muted); background: var(--panel-2);
+  padding: .2rem .6rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.progress { height: 3px; background: var(--panel-2); }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--blue)); }
+
+.wrap { max-width: 820px; margin: 0 auto; padding: 2.4rem 1.25rem 5rem; }
+
+/* ---- hero ---- */
+.hero { margin-bottom: 2rem; }
+.hero .part { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: .55rem; }
+.hero h1 { font-size: 2.05rem; line-height: 1.2; letter-spacing: -.01em; font-weight: 750; }
+.hero .lead { margin-top: .9rem; font-size: 1.06rem; color: var(--muted); }
+
+h2 { font-size: 1.32rem; margin: 2.4rem 0 .9rem; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: .55rem; }
+h2::before { content: ""; width: 4px; height: 1.05em; background: var(--accent); border-radius: 3px; display: inline-block; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+p { margin: .7rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .3rem 0; }
+strong { color: var(--ink); font-weight: 680; }
+.inline { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: .08em .4em; font-size: .9em; color: var(--accent-ink); }
+
+/* ---- callout cards ---- */
+.card { border-radius: var(--radius); padding: 1.05rem 1.2rem; margin: 1.2rem 0;
+  border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.card .tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.card.macro { border-left: 4px solid var(--blue); }
+.card.macro .tag { color: var(--blue); }
+.card.detail { border-left: 4px solid var(--purple); }
+.card.detail .tag { color: var(--purple); }
+.card.analogy { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+.card.analogy .tag { color: var(--amber); }
+.card.key { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.key .tag { color: var(--accent-ink); }
+.card.warn { border-left: 4px solid var(--red); background: var(--red-soft); }
+.card.warn .tag { color: var(--red); }
+.card.spark { border-left: 4px solid #e0a000;
+  background: linear-gradient(100deg, rgba(224,160,0,.12), transparent 70%); }
+.card.spark .tag { color: #c98a00; }
+@media (prefers-color-scheme: dark) { .card.spark .tag { color: #f0c050; } }
+
+/* ---- code file callout ---- */
+.codefile { margin: 1.2rem 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  box-shadow: var(--shadow); }
+.codefile .cf-head { display: flex; align-items: center; gap: .55rem; padding: .5rem .85rem;
+  background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: .8rem; }
+.codefile .cf-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink:0; }
+.codefile .cf-head .path { font-family: ui-monospace, monospace; color: var(--ink); font-weight: 600; }
+.codefile .cf-head .ln { margin-left: auto; color: var(--faint); font-size: .72rem; }
+.codefile pre { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem;
+  overflow-x: auto; font-size: .82rem; line-height: 1.6; }
+.codefile pre .cm { color: #7d8aa3; }
+.codefile pre .kw { color: #c792ea; }
+.codefile pre .fn { color: #82aaff; }
+.codefile pre .st { color: #c3e88d; }
+.codefile pre .nb { color: #f78c6c; }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem; border-radius: 12px;
+  overflow-x: auto; font-size: .83rem; line-height: 1.6; margin: 1.1rem 0; box-shadow: var(--shadow); }
+pre.code .cm { color: #7d8aa3; } pre.code .kw { color: #c792ea; }
+pre.code .fn { color: #82aaff; } pre.code .st { color: #c3e88d; } pre.code .nb { color: #f78c6c; }
+
+/* ---- collapsible accordion (details/summary) ---- */
+.accordion { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  margin: .7rem 0; box-shadow: var(--shadow); overflow: hidden; }
+.accordion > summary { cursor: pointer; padding: .85rem 1.1rem; font-weight: 650; font-size: .96rem;
+  list-style: none; display: flex; align-items: center; gap: .6rem; user-select: none; }
+.accordion > summary::-webkit-details-marker { display: none; }
+.accordion > summary::after { content: "▶"; font-size: .68rem; color: var(--accent);
+  margin-left: auto; transition: transform .15s ease; }
+.accordion[open] > summary::after { transform: rotate(90deg); }
+.accordion > summary:hover { background: var(--panel-2); }
+.accordion[open] > summary { border-bottom: 1px solid var(--line); }
+.accordion .badge-num { background: var(--accent-soft); color: var(--accent-ink);
+  width: 1.6rem; height: 1.6rem; border-radius: 7px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: .82rem; font-weight: 700; flex-shrink: 0; }
+.accordion .hint { font-size: .72rem; color: var(--faint); font-weight: 400; }
+.acc-body { padding: .9rem 1.1rem 1.1rem; }
+.acc-intro { color: var(--muted); font-size: .9rem; margin: .2rem 0 .4rem; }
+.qa { margin: 1rem 0; }
+.qa:first-child { margin-top: .3rem; }
+.qa .q { font-weight: 680; font-size: .9rem; display: flex; gap: .45rem; align-items: center; margin-bottom: .3rem; }
+.qa .a { color: var(--muted); font-size: .9rem; }
+.qa .a strong { color: var(--ink); }
+.qa pre.code { margin: .5rem 0 0; font-size: .78rem; }
+
+/* ---- flow diagram ---- */
+.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 1.3rem 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.2rem 1rem; box-shadow: var(--shadow); }
+.flow .node { flex: 1 1 0; min-width: 110px; text-align: center; padding: .7rem .5rem;
+  border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.flow .node .nt { font-weight: 700; font-size: .92rem; }
+.flow .node .nd { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+.flow .node.hl { background: var(--accent-soft); border-color: var(--accent); }
+.flow .arrow { align-self: center; color: var(--faint); font-size: 1.3rem; padding: 0 .35rem; }
+
+/* vertical flow */
+.vflow { margin: 1.3rem 0; }
+.vflow .step { display: flex; gap: .9rem; position: relative; padding-bottom: 1.1rem; }
+.vflow .step:not(:last-child)::before { content:""; position:absolute; left: 15px; top: 34px; bottom: -2px;
+  width: 2px; background: var(--line); }
+.vflow .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; z-index:1; }
+.vflow .sc h4 { margin: .25rem 0 .2rem; font-size: 1rem; }
+.vflow .sc p { margin: .15rem 0; font-size: .92rem; color: var(--muted); }
+.vflow .sc .mono { font-size: .8rem; color: var(--accent-ink); }
+
+/* layered architecture */
+.layers { margin: 1.3rem 0; display: flex; flex-direction: column; gap: .55rem; }
+.layer { border-radius: 12px; padding: .85rem 1.1rem; border: 1px solid var(--line); background: var(--panel);
+  box-shadow: var(--shadow); }
+.layer .lh { display: flex; align-items: center; gap: .6rem; }
+.layer .lh .badge { font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; }
+.layer .lh .name { font-weight: 700; font-family: ui-monospace, monospace; }
+.layer .ld { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
+.layer.l-core { border-left: 4px solid var(--accent); } .layer.l-core .badge { background: var(--accent-soft); color: var(--accent-ink); }
+.layer.l-main { border-left: 4px solid var(--blue); } .layer.l-main .badge { background: var(--blue-soft); color: var(--blue); }
+.layer.l-part { border-left: 4px solid var(--purple); } .layer.l-part .badge { background: var(--purple-soft); color: var(--purple); }
+.layer.l-app { border-left: 4px solid var(--amber); } .layer.l-app .badge { background: var(--amber-soft); color: var(--amber); }
+
+/* two-column compare */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0; }
+@media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+.col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; box-shadow: var(--shadow); min-width: 0; }
+.col h4 { margin: 0 0 .4rem; font-size: .95rem; }
+
+table.t { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .9rem;
+  background: var(--panel); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+table.t th, table.t td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--line); }
+table.t th { background: var(--panel-2); font-size: .8rem; letter-spacing: .02em; }
+table.t tr:last-child td { border-bottom: none; }
+table.t td.mono, table.t td .mono { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--accent-ink); }
+@media (max-width: 640px) {
+  /* Wide multi-column tables: scroll within their own box instead of
+     forcing page-level horizontal overflow (which clipped right columns). */
+  table.t { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.t th, table.t td { padding: .5rem .6rem; }
+}
+.selftest { margin: 2.2rem 0 0; border-top: 2px dashed var(--line); padding-top: 1.2rem; }
+.selftest > h2 { margin-top: .2rem; }
+.quiz { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+  border-radius: 12px; padding: .9rem 1.1rem; margin: 1rem 0; box-shadow: var(--shadow); }
+.quiz .qn { font-weight: 650; }
+.quiz ol.opts { list-style: upper-alpha; margin: .55rem 0 .6rem 1.5rem; padding: 0; }
+.quiz ol.opts li { margin: .3rem 0; padding-left: .15rem; }
+.quiz details.accordion { margin: .5rem 0 0; }
+.selftest code { font-family: ui-monospace, monospace; font-size: .9em; color: var(--accent-ink);
+  background: var(--accent-soft); padding: 0 .28em; border-radius: 4px; }
+
+/* footer nav */
+.footnav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem;
+  padding-top: 1.4rem; border-top: 1px solid var(--line); }
+.footnav a { flex: 1; padding: .85rem 1.1rem; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow); transition: .15s; }
+.footnav a:hover { border-color: var(--accent); transform: translateY(-1px); }
+.footnav a.next { text-align: right; }
+.footnav .dir { font-size: .72rem; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.footnav .ttl { font-weight: 700; color: var(--ink); margin-top: .15rem; }
+.footnav a.disabled { opacity: .35; pointer-events: none; }
+
+/* index page */
+.toc { display: grid; gap: .7rem; margin-top: 1.6rem; }
+.toc-part { font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--accent); margin: 1.4rem 0 .2rem; }
+.toc a { display: flex; align-items: center; gap: .9rem; padding: .85rem 1.05rem; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); transition: .15s; }
+.toc a:hover { border-color: var(--accent); transform: translateX(3px); }
+.toc .n { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+.toc .tt { font-weight: 650; color: var(--ink); }
+.toc .ts { font-size: .8rem; color: var(--muted); margin-left: auto; text-align: right; }
+.toc-search { position: relative; margin: 1.6rem 0 -.4rem; }
+.toc-search input { width: 100%; box-sizing: border-box; padding: .75rem 2.8rem .75rem 1rem;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font-size: .98rem; box-shadow: var(--shadow); }
+.toc-search input:focus { outline: none; border-color: var(--accent); }
+.toc-search .qcount { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  color: var(--faint); font-size: .8rem; pointer-events: none; }
+.toc a.hide, .toc .toc-part.hide { display: none; }
+.toc-empty { display: none; color: var(--muted); padding: 1rem; text-align: center; }
+.toc-empty.show { display: block; }
+.hero.index h1 { font-size: 2.3rem; }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:1rem; font-size:.8rem; color:var(--muted); }
+.legend span { display:flex; align-items:center; gap:.4rem; }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+.pdf-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1.1rem;
+  background:var(--accent); color:#fff; border-radius:10px; font-size:.9rem; font-weight:650;
+  box-shadow:var(--shadow); transition:.15s; }
+.pdf-btn:hover { background:var(--accent-ink); transform:translateY(-1px); }
+
+/* ---- bilingual language switch ----
+   Contract: <html> must carry data-lang="zh" (default) or "en".
+   page()/index_page() hard-code data-lang="zh"; LANG_BOOT may switch to "en". */
+html[data-lang="en"] .lang-zh { display: none !important; }
+html[data-lang="zh"] .lang-en { display: none !important; }
+.langtoggle { font-size:.72rem; font-weight:700; color:var(--accent-ink);
+  background:var(--accent-soft); border:1px solid var(--accent); border-radius:999px;
+  padding:.22rem .7rem; cursor:pointer; line-height:1.4; white-space:nowrap; }
+.langtoggle:hover { background:var(--accent); color:#fff; }
+
+/* ---- schematic: cell strips (token sequences / quant blocks / KV columns) ---- */
+.cellgroup { margin: 1.2rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.cellgroup .cg-cap { font-size: .82rem; color: var(--muted); margin-bottom: .55rem; }
+.cellgroup .cg-cap b { color: var(--ink); }
+.cells { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.cells + .cells { margin-top: .5rem; }
+.cell { min-width: 2.1rem; padding: .38rem .5rem; text-align: center; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: .78rem;
+  font-family: ui-monospace, monospace; white-space: nowrap; }
+.cell.scale { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); font-weight: 700; }
+.cell.hl    { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cell.q     { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.cell.dim   { opacity: .45; }
+.cells .lab { font-size: .76rem; color: var(--faint); padding: 0 .35rem; }
+.cells .sep { color: var(--faint); padding: 0 .1rem; }
+
+/* ---- schematic: timeline lanes (prefill vs decode, step-by-step) ---- */
+.timeline { margin: 1.2rem 0; display: flex; flex-direction: column; gap: .5rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.timeline .lane { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.timeline .lane-label { min-width: 6rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.timeline .tslot { padding: .4rem .6rem; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--line); font-size: .78rem; text-align: center; font-family: ui-monospace, monospace; }
+.timeline .tslot.span { flex: 1; min-width: 8rem; background: var(--blue-soft); border-color: var(--blue);
+  color: var(--blue); font-weight: 700; }
+.timeline .tslot.now { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+/* ---- worked-example trace: one concrete input, stepped through ---- */
+.trace { margin: 1.3rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.trace .tcap { font-size: .82rem; color: var(--muted); margin-bottom: .7rem; }
+.trace .tcap b { color: var(--accent-ink); }
+.trace .stations { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.trace .stn { flex: 1 1 0; min-width: 116px; border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem; background: var(--bg); }
+.trace .stn h5 { margin: 0 0 .45rem; font-size: .8rem; color: var(--ink); }
+.trace .cellrow { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.trace .vc { min-width: 2.1rem; padding: .32rem .45rem; text-align: center; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); font: 600 .76rem ui-monospace, monospace; white-space: nowrap; }
+.trace .vc.hot  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.trace .vc.blue { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.trace .vc.dim  { opacity: .42; }
+.trace .tlab { font-size: .68rem; color: var(--faint); margin-top: .35rem; }
+.trace .op { align-self: center; color: var(--accent); font: 700 .72rem ui-monospace, monospace;
+  padding: 0 .5rem; text-align: center; white-space: nowrap; }
+.trace svg { max-width: 100%; height: auto; display: block; margin: .3rem auto; }
+@media (max-width: 640px) { .trace .stations { flex-direction: column; } .trace .op { padding: .3rem 0; } }
+/* 🧩 collaboration-mechanism card */
+.card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
+.card.collab .tag { color: var(--blue); }
+.card.collab .collab-sub { font-weight:700; font-size:.82rem; margin:.85rem 0 .3rem; color:var(--ink); }
+/* 🎯 design-tradeoff card */
+.card.design { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.design .tag { color: var(--accent-ink); }
+/* A-G constraint back-reference badge */
+.badge.constraint { display:inline-block; font-size:.7rem; font-weight:700;
+  padding:.1rem .45rem; border-radius:999px; background:var(--purple-soft);
+  color:var(--purple); border:1px solid var(--purple); margin:0 .15rem; white-space:nowrap; }
+</style>
+</head><body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
+    <span class="pill"><span class="lang-zh">第一部分 · 宏观全景</span><span class="lang-en">Part 1 · The Big Picture</span></span>
+    <span class="pill">05 / 05</span>
+    <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
+  </div>
+  <div class="progress"><span style="width:100%"></span></div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="part"><span class="lang-zh">第一部分 · 宏观全景</span><span class="lang-en">Part 1 · The Big Picture</span></div>
+    <h1><span class="lang-zh">一次对话的生命周期</span><span class="lang-en">Lifecycle of one conversation</span></h1>
+  </div>
+  <div class="lang-zh">
+<p class="lead">
+一次对话从你敲下的一句话，到 Hermes 给出最终回复，中间到底发生了什么？答案是一个<strong>同步主循环</strong>：模型每"想一步"就可能调用工具，工具结果被<strong>追加</strong>回消息列表，再喂回模型——如此往复，直到模型不再调用工具、直接给出最终回答。这个循环是整个 agent 的<strong>心脏</strong>，它住在 <span class="mono">agent/conversation_loop.py</span> 里，并带着三个硬约束：<strong>可中断</strong>、<strong>有迭代预算</strong>、<strong>严格的消息角色交替</strong>。本章把这颗心脏拆开给你看。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 生活类比</div>
+  把一次对话想成一条<strong>工厂流水线</strong>：原料（你的消息）进来，沿传送带走过一个个工位（每个工位 = 模型调用一次工具），工位加工完把半成品<strong>放回传送带</strong>继续往下走。流水线是<strong>同步</strong>的——上一个工位没干完，下一个不会启动。它还装了两个安全装置：一个<strong>计数器</strong>（最多过 N 道工序就强制停，免得空转烧钱），一个<strong>急停按钮</strong>（你随时能喊停，机器立刻松手）。Hermes 的对话循环，就是这条带安全装置的流水线。
+</div>
+
+<h2>宏观：一个同步的 while 循环</h2>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观理解</div>
+  别被 Hermes 的体量吓到——一次对话的核心是一个<strong>普普通通的同步 while 循环</strong>。每转一圈做五件事：<strong>检查中断 → 消费一格预算 → 调一次模型 → 若有 tool_calls 就执行并把结果追加回 messages → 没有 tool_calls 就收尾</strong>。所有"记忆"都装在 <span class="mono">messages</span> 这个列表里，<strong>每轮整体重发</strong>给模型——因为模型本身两次调用之间什么都不记得（第 2 章 B·无状态）。循环不重建上下文、只往末尾追加，这正是为了守住 prompt 缓存（第 6 章）。
+</div>
+
+<p>你在源码里可能先撞见 <span class="mono">run_conversation()</span>，但要诚实地说：<span class="mono">run_agent.py:5302</span> 里的它只是个<strong>转发器</strong>，docstring 写得明明白白——<span class="mono">Forwarder — see agent.conversation_loop.run_conversation</span>。真正的主循环在 <span class="mono">agent/conversation_loop.py</span>。而更上层、最常被入门示例调用的 <span class="mono">chat()</span>（<span class="mono">run_agent.py:5325</span>）又是它的极简封装，最后一行就是 <span class="mono">return result["final_response"]</span>：</p>
+
+<div class="flow">
+  <div class="node"><div class="nt">chat(msg)</div><div class="nd">return result["final_response"]</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">run_conversation()</div><div class="nd">转发器 · run_agent.py:5302</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">conversation_loop</div><div class="nd">真正的 while 主循环</div></div>
+</div>
+
+<h2>主循环：while 条件与循环体</h2>
+<p>循环"能活多久"由 <span class="mono">while</span> 条件决定，"怎么退出"则有三条路。先看条件和循环体（<span class="mono">conversation_loop.py:589</span> 与 <span class="mono">594-614</span>）：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py</span><span class="ln">589 · 594-614 …</span></div>
+  <pre><span class="kw">while</span> (api_call_count &lt; agent.max_iterations <span class="kw">and</span> agent.iteration_budget.remaining &gt; 0) <span class="kw">or</span> agent._budget_grace_call:
+
+    <span class="cm"># Check for interrupt request (e.g., user sent new message)</span>
+    <span class="kw">if</span> agent._interrupt_requested:
+        interrupted = <span class="kw">True</span>
+        _turn_exit_reason = <span class="st">"interrupted_by_user"</span>
+        <span class="kw">break</span>
+
+    api_call_count += 1
+    agent._api_call_count = api_call_count
+
+    <span class="cm"># Grace call: the budget is exhausted but we gave the model one</span>
+    <span class="cm"># more chance.  Consume the grace flag so the loop exits after</span>
+    <span class="cm"># this iteration regardless of outcome.</span>
+    <span class="kw">if</span> agent._budget_grace_call:
+        agent._budget_grace_call = <span class="kw">False</span>
+    <span class="kw">elif</span> <span class="kw">not</span> agent.iteration_budget.consume():
+        _turn_exit_reason = <span class="st">"budget_exhausted"</span>
+        <span class="kw">break</span></pre>
+</div>
+
+<p>读懂这十几行，<strong>三种退出方式</strong>就一目了然：① <strong>达到 max_iterations</strong>——<span class="mono">api_call_count &lt; max_iterations</span> 不再成立；② <strong>预算耗尽</strong>——<span class="mono">consume()</span> 返回 <span class="mono">False</span>，打上 <span class="mono">budget_exhausted</span> 并 <span class="mono">break</span>；③ <strong>用户中断</strong>——循环顶部发现 <span class="mono">_interrupt_requested</span> 为真，打上 <span class="mono">interrupted_by_user</span> 并 <span class="mono">break</span>。注意中断检查放在<strong>每圈最开头</strong>，所以哪怕模型正排着一长串工具，也能在下一圈被立刻截停。</p>
+
+<h3>诚实标注：grace call 是预留钩子，核心未主动触发</h3>
+<p><span class="mono">_budget_grace_call</span> 字面上像"预算耗尽还会宽限多跑一轮"，但请<strong>别被注释误导</strong>。核心代码只有三处碰它：<span class="mono">agent_init.py:525</span> 初始化置 <span class="mono">False</span>、<span class="mono">conversation_loop.py:589</span> 的 <span class="mono">while</span> 条件读它、<span class="mono">608-609</span> 在循环体里消费后又置 <span class="mono">False</span>——<strong>没有任何核心代码把它设成 True</strong>。换句话说它是一个<strong>预留放行钩子、核心未主动触发</strong>，正常对话里它<strong>永远是 False</strong>，不会让循环多跑一轮。预算耗尽后真正给模型"收个尾"的逻辑，由独立的 <span class="mono">_handle_max_iterations</span> 负责，与这个标志无关。</p>
+
+<h2>时序：一圈循环里发生了什么</h2>
+<p>把一次对话的数据流摊开，就是下面这条线——从用户消息进入，到 <span class="mono">final_response</span> 收尾，中间那段方括号里的步骤会<strong>循环</strong>很多圈：</p>
+<div class="vflow">
+  <div class="step"><div class="num">1</div><div class="sc"><h4>用户消息入列</h4><p>你的输入作为一条 <span class="mono">user</span> 消息追加进 <span class="mono">messages</span></p></div></div>
+  <div class="step"><div class="num">2</div><div class="sc"><h4>进入 while 循环</h4><p>条件：未达 max_iterations 且预算 remaining &gt; 0</p></div></div>
+  <div class="step"><div class="num">3</div><div class="sc"><h4>检查中断</h4><p><span class="mono">_interrupt_requested</span> 为真则立刻 break</p></div></div>
+  <div class="step"><div class="num">4</div><div class="sc"><h4>消费一格预算</h4><p><span class="mono">consume()</span> 返回 False 则 break（budget_exhausted）</p></div></div>
+  <div class="step"><div class="num">5</div><div class="sc"><h4>调用模型</h4><p>把整个 <span class="mono">messages</span> 重发，拿回 assistant 消息</p></div></div>
+  <div class="step"><div class="num">6</div><div class="sc"><h4>有 tool_calls？</h4><p>有：append assistant 消息，再 <span class="mono">_execute_tool_calls</span> 执行工具</p></div></div>
+  <div class="step"><div class="num">7</div><div class="sc"><h4>append 工具结果</h4><p>每个工具结果作为 <span class="mono">tool</span> 消息追加回 messages → <span class="mono">continue</span> 回到第 3 步</p></div></div>
+  <div class="step"><div class="num">8</div><div class="sc"><h4>无 tool_calls 收尾</h4><p><span class="mono">final_response = assistant_message.content</span> → 返回</p></div></div>
+</div>
+
+<p>同样的故事换个角度看：一圈圈迭代向右推进，每圈跑的都是同一段方括号步骤；而循环只会从三个门里走出去其中一个。</p>
+<div class="timeline">
+  <div class="lane"><div class="lane-label">迭代</div><div class="tslot">#1</div><div class="tslot">#2</div><div class="tslot">#3</div><div class="tslot">…</div><div class="tslot now">#N</div></div>
+  <div class="lane"><div class="lane-label">每圈做</div><div class="tslot span">检查中断 → consume 预算 → 调模型 → 处理 tool_calls → append 结果</div></div>
+  <div class="lane"><div class="lane-label">三种退出</div><div class="tslot">达到 max_iterations</div><div class="tslot">预算耗尽</div><div class="tslot now">用户中断</div></div>
+</div>
+
+<h2>迭代预算：防止失控长循环</h2>
+<p>第 5 步每调一次模型，就先 <span class="mono">consume()</span> 一格预算。这把"门闩"由 <span class="mono">IterationBudget</span> 把守（<span class="mono">agent/iteration_budget.py</span>），<strong>线程安全</strong>，parent 默认上限 <strong>90</strong>、每个 subagent 独立默认 <strong>50</strong>。它的两个核心方法短得能背下来：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/iteration_budget.py</span><span class="ln">37-43 · 56-59</span></div>
+  <pre><span class="kw">def</span> <span class="fn">consume</span>(self) -&gt; bool:
+    <span class="cm">&quot;&quot;&quot;Try to consume one iteration.  Returns True if allowed.&quot;&quot;&quot;</span>
+    <span class="kw">with</span> self._lock:
+        <span class="kw">if</span> self._used &gt;= self.max_total:
+            <span class="kw">return</span> <span class="kw">False</span>
+        self._used += 1
+        <span class="kw">return</span> <span class="kw">True</span>
+
+@property
+<span class="kw">def</span> <span class="fn">remaining</span>(self) -&gt; int:
+    <span class="kw">with</span> self._lock:
+        <span class="kw">return</span> max(0, self.max_total - self._used)</pre>
+</div>
+
+<p>为什么要给循环上预算？因为大模型的错误会<strong>逐轮累积</strong>（第 3 章 F·误差累积）：一旦规划跑偏，它可能没完没了地调工具、绕圈子，把你的钱烧光也到不了终点。<strong>有界的迭代数</strong>就是一道硬刹车——既封住成本与延迟（A·延迟成本），也给失控的长循环兜了底。一个贴心设计：<span class="mono">execute_code</span> 这种"编程式工具调用"会调 <span class="mono">refund()</span> 把那一格<strong>退回去</strong>，所以它不占正常的对话预算。</p>
+
+<h2>可中断：随时能喊停</h2>
+<p>循环每圈开头都查 <span class="mono">_interrupt_requested</span>，那么这个标志是谁设的？是 <span class="mono">interrupt()</span>（<span class="mono">run_agent.py:2400-2440</span>）：它把 <span class="mono">_interrupt_requested = True</span>，记下中断消息，并把信号<strong>级联</strong>给正在执行的工具线程与子 agent，让 in-flight 操作尽快收手。最典型的触发场景在消息网关：当某个会话的 agent 还在跑、你又发来一条新消息，网关就调 <span class="mono">running_agent.interrupt(new_message.text)</span>——于是它在下一圈循环顶部被截停，转身处理你的新指令。</p>
+
+<h2>严格角色交替：provider 要求 + 不破缓存</h2>
+<p>每圈往 <span class="mono">messages</span> 里追加的，无非两类消息。<strong>assistant 消息</strong>由 <span class="mono">chat_completion_helpers.py:885-890</span> 构造，带着 <span class="mono">content</span>、<span class="mono">reasoning</span>、<span class="mono">finish_reason</span> 三件套；<strong>tool 消息</strong>由 <span class="mono">tool_dispatch_helpers.py:336-343</span> 构造，带着 <span class="mono">name</span>、<span class="mono">content</span>、<span class="mono">tool_call_id</span>。四种角色各司其职：</p>
+<table class="t">
+  <tr><th>角色</th><th>谁产生</th><th>关键字段</th></tr>
+  <tr><td><span class="mono">system</span></td><td>会话开始的固定前缀</td><td>整段 prompt（缓存命中全靠它字节稳定）</td></tr>
+  <tr><td><span class="mono">user</span></td><td>你的输入 / nudge</td><td><span class="mono">content</span>；连续两条会被合并</td></tr>
+  <tr><td><span class="mono">assistant</span></td><td>模型</td><td><span class="mono">content + reasoning + finish_reason</span></td></tr>
+  <tr><td><span class="mono">tool</span></td><td>工具执行结果</td><td><span class="mono">name + content + tool_call_id</span></td></tr>
+</table>
+
+<p>这些消息必须严格<strong>交替</strong>：system 之后，user/tool 与 assistant 一来一回，<strong>不能出现两条连续的 user 消息</strong>。<span class="mono">repair_message_sequence</span>（<span class="mono">agent_runtime_helpers.py:348-435</span>）就是临门那道防线，它的 docstring 原文说得很直白：「Providers (OpenAI, OpenRouter, Anthropic) expect strict alternation … no two consecutive user messages …」。它在发请求前做两遍修复：Pass 1 丢弃找不到对应 assistant 调用的<strong>孤儿 tool 消息</strong>；Pass 2 把<strong>连续的 user 消息合并</strong>（换行拼接，一条输入都不丢）：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/agent_runtime_helpers.py</span><span class="ln">413-435</span></div>
+  <pre><span class="cm"># Pass 2: merge consecutive user messages. Preserves all user input</span>
+<span class="cm"># so nothing the user typed is lost.</span>
+merged: List[Dict] = []
+<span class="kw">for</span> msg <span class="kw">in</span> filtered:
+    <span class="kw">if</span> (
+        merged
+        <span class="kw">and</span> isinstance(msg, dict)
+        <span class="kw">and</span> msg.get(<span class="st">"role"</span>) == <span class="st">"user"</span>
+        <span class="kw">and</span> isinstance(merged[-1], dict)
+        <span class="kw">and</span> merged[-1].get(<span class="st">"role"</span>) == <span class="st">"user"</span>
+    ):
+        <span class="cm"># → 用换行拼接两条 user 消息，一条都不丢（后续 424-435 行）</span>
+        ...</pre>
+</div>
+
+<p>为什么这么较真？因为违反交替会让多数 provider <strong>静默返回空响应</strong>，触发徒劳的空响应重试；更要命的是，任何对历史的中途改写都可能<strong>击穿 prompt 缓存</strong>（第 6 章），让长对话每轮成本翻倍。所以修复只在发请求前做"防御性合并"，绝不重建上下文。</p>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 一次对话由哪些部件拼成</div>
+  <div class="collab-sub">① 组件清单</div>
+  <strong>conversation_loop</strong>（主循环，<span class="mono">conversation_loop.py:589</span>）拍板节奏；<strong>IterationBudget</strong>（预算，<span class="mono">iteration_budget.py</span>）守 <span class="mono">consume/remaining</span>；<strong>_interrupt_requested</strong>（中断标志，由 <span class="mono">interrupt()</span> @ <span class="mono">run_agent.py:2400</span> 设置）管急停；<strong>repair_message_sequence</strong>（<span class="mono">agent_runtime_helpers.py:348</span>）保交替；<strong>_execute_tool_calls</strong> 执行工具并 append <span class="mono">tool</span> 结果；<strong>chat_completion_helpers</strong>（<span class="mono">:885</span>）构造带 reasoning 的 assistant 消息。跨章节：messages 外置全部状态（第 2 章 B），预算防误差累积（第 3 章 F），交替不变量服务 prompt 缓存（第 6 章）。
+  <div class="collab-sub">② 数据流时序</div>
+  用户消息 → 进入 <span class="mono">while</span> 循环 →〔检查中断 → <span class="mono">consume</span> 预算 → LLM 调用 → 处理 <span class="mono">tool_calls</span> → append <span class="mono">tool</span> 结果〕反复多圈 → 某轮模型<strong>无 tool_calls</strong> → 收尾为 <span class="mono">final_response</span>。
+  <div class="collab-sub">③ 关键点</div>
+  全部状态都在 <span class="mono">messages</span> 里、循环同步可中断、预算有界——三者合起来，让 agent loop 既能放手干活，又<strong>不会失控</strong>。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  本章围绕对话循环的三条主线：<strong>可中断 + 迭代预算 + 严格角色交替不变量</strong>。可中断让长任务随时能被新消息接管；迭代预算给"放手让模型自己干"上了硬上限；严格交替既满足 provider 的格式要求，又顺手守住了缓存。
+  <p style="margin:.5rem 0 0">它对抗的 LLM 固有约束：<span class="badge constraint">B·无状态</span>——状态全外置在 <span class="mono">messages</span>、每轮重发；<span class="badge constraint">F·误差累积</span>——预算 + 中断防止失控的长循环；<span class="badge constraint">A·延迟成本</span>——有界迭代直接压住长度与花销。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li>对话的核心是一个<strong>同步 while 循环</strong>（<span class="mono">conversation_loop.py:589</span>）；<span class="mono">run_conversation()/chat()</span> 只是它的<strong>转发器/封装</strong>。</li>
+    <li>主循环<strong>三种退出</strong>：达到 <span class="mono">max_iterations</span> / 预算耗尽 / 用户中断；中断检查在每圈<strong>最开头</strong>。</li>
+    <li><strong>IterationBudget</strong> 线程安全，parent 90 / subagent 50；<span class="mono">execute_code</span> 用 <span class="mono">refund()</span> 退格、不占预算。</li>
+    <li><strong>严格角色交替</strong>是 provider 硬要求，也护着缓存；<span class="mono">repair_message_sequence</span> 丢孤儿 tool、合并连续 user。</li>
+    <li>诚实点：<span class="mono">_budget_grace_call</span> 是<strong>预留放行钩子、核心未主动触发</strong>（全仓无 True-setter，正常对话恒为 False）。</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. Hermes 的对话主循环有三种退出方式，下面哪个**不是**其中之一？</div>
+  <ol class="opts">
+    <li>迭代预算耗尽（consume 返回 False）</li>
+    <li>用户中断（_interrupt_requested）</li>
+    <li>_budget_grace_call 被设为 True 触发宽限退出</li>
+    <li>达到 max_iterations 上限</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：C</strong>。三种退出是 max_iterations / 预算耗尽 / 用户中断；_budget_grace_call 是预留钩子，核心从不把它设为 True，正常对话恒 False。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. 为什么 Hermes 在每次 API 调用前要跑 repair_message_sequence 修复消息序列？</div>
+  <ol class="opts">
+    <li>provider 要求严格角色交替（不能两条同 role 连续），违反会返回空响应；中途改写历史还会破坏缓存</li>
+    <li>为了排序工具调用</li>
+    <li>为了压缩 token</li>
+    <li>为了翻译成不同语言</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：A</strong>。严格交替是 provider 硬要求，违反致空响应重试；repair 只在请求前做防御性合并，不重建上下文（保护缓存）。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>迭代预算（parent 90 / subagent 50）和「可中断」如何一起防止 agent 失控？如果没有它们，第 3 章的哪个 LLM 约束会失控？</li>
+  </ul>
+</div>
+</div></div>
+  <div class="lang-en">
+<p class="lead">
+From the moment you hit enter to the moment Hermes hands back a final answer, what actually happens? The answer is a <strong>synchronous main loop</strong>: every time the model "thinks a step" it may call tools, the tool results are <strong>appended</strong> back onto the message list, and the whole thing is fed back to the model — round after round, until the model stops calling tools and just answers. This loop is the <strong>heart</strong> of the agent. It lives in <span class="mono">agent/conversation_loop.py</span> and carries three hard constraints: <strong>interruptible</strong>, <strong>budgeted iterations</strong>, and <strong>strict message-role alternation</strong>. This chapter cracks that heart open.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy</div>
+  Picture one conversation as a <strong>factory assembly line</strong>: raw material (your message) enters, rides the belt past one station after another (each station = the model calling one tool), and each station drops its half-finished part <strong>back on the belt</strong> to continue. The line is <strong>synchronous</strong> — the next station won't start until the previous one finishes. It also ships two safety devices: a <strong>counter</strong> (stop after at most N stations, so it can't spin and burn money) and an <strong>emergency stop</strong> (you can halt it any time and it lets go instantly). Hermes' conversation loop is exactly this line, safety devices included.
+</div>
+
+<h2>Macro: one synchronous while loop</h2>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture</div>
+  Don't let Hermes' size scare you — the core of a conversation is an utterly ordinary <strong>synchronous while loop</strong>. Each turn does five things: <strong>check for interrupt → consume one unit of budget → call the model once → if there are tool_calls, run them and append results back to messages → if there are none, finish</strong>. All "memory" lives in the <span class="mono">messages</span> list and is <strong>resent in full every turn</strong> — because the model itself remembers nothing between calls (Ch. 2, B·statelessness). The loop never rebuilds context, only appends to the end, precisely to keep the prompt cache intact (Ch. 6).
+</div>
+
+<p>You may first bump into <span class="mono">run_conversation()</span> in the source, but be honest about it: the one in <span class="mono">run_agent.py:5302</span> is just a <strong>forwarder</strong> — its docstring says so outright: <span class="mono">Forwarder — see agent.conversation_loop.run_conversation</span>. The real main loop is in <span class="mono">agent/conversation_loop.py</span>. And the even-higher-level <span class="mono">chat()</span> (<span class="mono">run_agent.py:5325</span>), the one tutorials call most, is just a thin wrapper whose last line is <span class="mono">return result["final_response"]</span>:</p>
+
+<div class="flow">
+  <div class="node"><div class="nt">chat(msg)</div><div class="nd">return result["final_response"]</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">run_conversation()</div><div class="nd">forwarder · run_agent.py:5302</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">conversation_loop</div><div class="nd">the real while loop</div></div>
+</div>
+
+<h2>The main loop: while condition and loop body</h2>
+<p>How long the loop lives is decided by the <span class="mono">while</span> condition; how it exits has three paths. First the condition and body (<span class="mono">conversation_loop.py:589</span> and <span class="mono">594-614</span>):</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py</span><span class="ln">589 · 594-614 …</span></div>
+  <pre><span class="kw">while</span> (api_call_count &lt; agent.max_iterations <span class="kw">and</span> agent.iteration_budget.remaining &gt; 0) <span class="kw">or</span> agent._budget_grace_call:
+
+    <span class="cm"># Check for interrupt request (e.g., user sent new message)</span>
+    <span class="kw">if</span> agent._interrupt_requested:
+        interrupted = <span class="kw">True</span>
+        _turn_exit_reason = <span class="st">"interrupted_by_user"</span>
+        <span class="kw">break</span>
+
+    api_call_count += 1
+    agent._api_call_count = api_call_count
+
+    <span class="cm"># Grace call: the budget is exhausted but we gave the model one</span>
+    <span class="cm"># more chance.  Consume the grace flag so the loop exits after</span>
+    <span class="cm"># this iteration regardless of outcome.</span>
+    <span class="kw">if</span> agent._budget_grace_call:
+        agent._budget_grace_call = <span class="kw">False</span>
+    <span class="kw">elif</span> <span class="kw">not</span> agent.iteration_budget.consume():
+        _turn_exit_reason = <span class="st">"budget_exhausted"</span>
+        <span class="kw">break</span></pre>
+</div>
+
+<p>Read those dozen lines and the <strong>three exits</strong> jump out: ① <strong>hit max_iterations</strong> — <span class="mono">api_call_count &lt; max_iterations</span> stops holding; ② <strong>budget exhausted</strong> — <span class="mono">consume()</span> returns <span class="mono">False</span>, tagged <span class="mono">budget_exhausted</span>, then <span class="mono">break</span>; ③ <strong>user interrupt</strong> — the loop top finds <span class="mono">_interrupt_requested</span> true, tags <span class="mono">interrupted_by_user</span>, then <span class="mono">break</span>. Note the interrupt check sits at the <strong>very top of each turn</strong>, so even if the model has queued a long string of tools, it can be cut off on the next turn.</p>
+
+<h3>Honest note: grace call is a reserved hook, never fired by the core</h3>
+<p><span class="mono">_budget_grace_call</span> reads like "when the budget is spent we still allow one bonus turn" — but <strong>don't be misled by the comment</strong>. The whole repo touches it in exactly three places: <span class="mono">agent_init.py:525</span> initializes it to <span class="mono">False</span>, the <span class="mono">while</span> condition at <span class="mono">conversation_loop.py:589</span> reads it, and <span class="mono">608-609</span> consumes it back to <span class="mono">False</span> inside the body — <strong>no core code ever sets it to True</strong>. In other words it is a <strong>reserved release hook the core never actively fires</strong>; in a normal conversation it is <strong>always False</strong> and grants no extra turn. The real "wrap it up" logic after budget exhaustion lives in the separate <span class="mono">_handle_max_iterations</span>, unrelated to this flag.</p>
+
+<h2>Sequence: what happens in one turn</h2>
+<p>Lay the data flow flat and you get this line — from the user message in, to <span class="mono">final_response</span> out, with the bracketed middle steps <strong>looping</strong> many times:</p>
+<div class="vflow">
+  <div class="step"><div class="num">1</div><div class="sc"><h4>User message enqueued</h4><p>Your input is appended as a <span class="mono">user</span> message onto <span class="mono">messages</span></p></div></div>
+  <div class="step"><div class="num">2</div><div class="sc"><h4>Enter the while loop</h4><p>Condition: under max_iterations and budget remaining &gt; 0</p></div></div>
+  <div class="step"><div class="num">3</div><div class="sc"><h4>Check interrupt</h4><p>If <span class="mono">_interrupt_requested</span> is true, break immediately</p></div></div>
+  <div class="step"><div class="num">4</div><div class="sc"><h4>Consume one unit</h4><p><span class="mono">consume()</span> returning False breaks (budget_exhausted)</p></div></div>
+  <div class="step"><div class="num">5</div><div class="sc"><h4>Call the model</h4><p>Resend all of <span class="mono">messages</span>, get back an assistant message</p></div></div>
+  <div class="step"><div class="num">6</div><div class="sc"><h4>tool_calls?</h4><p>Yes: append the assistant message, then <span class="mono">_execute_tool_calls</span></p></div></div>
+  <div class="step"><div class="num">7</div><div class="sc"><h4>Append tool results</h4><p>Each result is appended as a <span class="mono">tool</span> message → <span class="mono">continue</span> to step 3</p></div></div>
+  <div class="step"><div class="num">8</div><div class="sc"><h4>No tool_calls → finish</h4><p><span class="mono">final_response = assistant_message.content</span> → return</p></div></div>
+</div>
+
+<p>Same story from another angle: iterations march to the right, each running the same bracketed steps, and the loop leaves through exactly one of three doors.</p>
+<div class="timeline">
+  <div class="lane"><div class="lane-label">iteration</div><div class="tslot">#1</div><div class="tslot">#2</div><div class="tslot">#3</div><div class="tslot">…</div><div class="tslot now">#N</div></div>
+  <div class="lane"><div class="lane-label">each turn</div><div class="tslot span">check interrupt → consume budget → call model → handle tool_calls → append results</div></div>
+  <div class="lane"><div class="lane-label">three exits</div><div class="tslot">hit max_iterations</div><div class="tslot">budget exhausted</div><div class="tslot now">user interrupt</div></div>
+</div>
+
+<h2>Iteration budget: stopping runaway loops</h2>
+<p>At step 5, every model call first <span class="mono">consume()</span>s one unit of budget. That latch is guarded by <span class="mono">IterationBudget</span> (<span class="mono">agent/iteration_budget.py</span>), <strong>thread-safe</strong>, with a parent cap of <strong>90</strong> by default and each subagent capped independently at <strong>50</strong>. Its two core methods are short enough to memorize:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/iteration_budget.py</span><span class="ln">37-43 · 56-59</span></div>
+  <pre><span class="kw">def</span> <span class="fn">consume</span>(self) -&gt; bool:
+    <span class="cm">&quot;&quot;&quot;Try to consume one iteration.  Returns True if allowed.&quot;&quot;&quot;</span>
+    <span class="kw">with</span> self._lock:
+        <span class="kw">if</span> self._used &gt;= self.max_total:
+            <span class="kw">return</span> <span class="kw">False</span>
+        self._used += 1
+        <span class="kw">return</span> <span class="kw">True</span>
+
+@property
+<span class="kw">def</span> <span class="fn">remaining</span>(self) -&gt; int:
+    <span class="kw">with</span> self._lock:
+        <span class="kw">return</span> max(0, self.max_total - self._used)</pre>
+</div>
+
+<p>Why budget the loop at all? Because model errors <strong>compound turn over turn</strong> (Ch. 3, F·error-compounding): once the plan drifts, the model can call tools forever, circling without reaching the goal and draining your wallet. A <strong>bounded iteration count</strong> is the hard brake — it caps cost and latency (A·latency/cost) and backstops runaway loops. One thoughtful touch: <span class="mono">execute_code</span>'s "programmatic tool calling" calls <span class="mono">refund()</span> to <strong>hand that unit back</strong>, so it doesn't eat the normal conversation budget.</p>
+
+<h2>Interruptible: halt any time</h2>
+<p>Every turn starts by checking <span class="mono">_interrupt_requested</span> — so who sets it? <span class="mono">interrupt()</span> (<span class="mono">run_agent.py:2400-2440</span>): it sets <span class="mono">_interrupt_requested = True</span>, records the interrupt message, and <strong>cascades</strong> the signal to in-flight tool threads and subagents so live operations abort fast. The classic trigger is the messaging gateway: when a session's agent is still running and you send a new message, the gateway calls <span class="mono">running_agent.interrupt(new_message.text)</span> — so it's cut off at the top of the next turn and pivots to your new instruction.</p>
+
+<h2>Strict role alternation: provider requirement + cache safety</h2>
+<p>What gets appended to <span class="mono">messages</span> each turn is just two kinds of message. The <strong>assistant message</strong> is built by <span class="mono">chat_completion_helpers.py:885-890</span> carrying <span class="mono">content</span>, <span class="mono">reasoning</span>, and <span class="mono">finish_reason</span>; the <strong>tool message</strong> is built by <span class="mono">tool_dispatch_helpers.py:336-343</span> carrying <span class="mono">name</span>, <span class="mono">content</span>, and <span class="mono">tool_call_id</span>. Four roles, each with its job:</p>
+<table class="t">
+  <tr><th>Role</th><th>Produced by</th><th>Key fields</th></tr>
+  <tr><td><span class="mono">system</span></td><td>fixed prefix at session start</td><td>the whole prompt (cache hits rely on it being byte-stable)</td></tr>
+  <tr><td><span class="mono">user</span></td><td>your input / nudge</td><td><span class="mono">content</span>; two in a row get merged</td></tr>
+  <tr><td><span class="mono">assistant</span></td><td>the model</td><td><span class="mono">content + reasoning + finish_reason</span></td></tr>
+  <tr><td><span class="mono">tool</span></td><td>tool execution result</td><td><span class="mono">name + content + tool_call_id</span></td></tr>
+</table>
+
+<p>These messages must strictly <strong>alternate</strong>: after system, user/tool trades off with assistant, and <strong>no two consecutive user messages</strong> are allowed. <span class="mono">repair_message_sequence</span> (<span class="mono">agent_runtime_helpers.py:348-435</span>) is the last line of defense; its docstring puts it plainly: "Providers (OpenAI, OpenRouter, Anthropic) expect strict alternation … no two consecutive user messages …". It runs two repair passes right before the request: Pass 1 drops <strong>orphan tool messages</strong> with no matching assistant call; Pass 2 <strong>merges consecutive user messages</strong> (newline-joined, losing no input):</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/agent_runtime_helpers.py</span><span class="ln">413-435</span></div>
+  <pre><span class="cm"># Pass 2: merge consecutive user messages. Preserves all user input</span>
+<span class="cm"># so nothing the user typed is lost.</span>
+merged: List[Dict] = []
+<span class="kw">for</span> msg <span class="kw">in</span> filtered:
+    <span class="kw">if</span> (
+        merged
+        <span class="kw">and</span> isinstance(msg, dict)
+        <span class="kw">and</span> msg.get(<span class="st">"role"</span>) == <span class="st">"user"</span>
+        <span class="kw">and</span> isinstance(merged[-1], dict)
+        <span class="kw">and</span> merged[-1].get(<span class="st">"role"</span>) == <span class="st">"user"</span>
+    ):
+        <span class="cm"># → newline-join the two user turns, nothing lost (lines 424-435)</span>
+        ...</pre>
+</div>
+
+<p>Why so picky? Because violating alternation makes most providers <strong>silently return an empty response</strong>, triggering a pointless empty-retry loop; worse, any mid-stream rewrite of history can <strong>shatter the prompt cache</strong> (Ch. 6), doubling per-turn cost on long conversations. So the repair only does a defensive merge right before the request — it never rebuilds context.</p>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · which parts make one conversation</div>
+  <div class="collab-sub">① Component list</div>
+  <strong>conversation_loop</strong> (main loop, <span class="mono">conversation_loop.py:589</span>) sets the rhythm; <strong>IterationBudget</strong> (<span class="mono">iteration_budget.py</span>) guards <span class="mono">consume/remaining</span>; <strong>_interrupt_requested</strong> (set by <span class="mono">interrupt()</span> @ <span class="mono">run_agent.py:2400</span>) handles the e-stop; <strong>repair_message_sequence</strong> (<span class="mono">agent_runtime_helpers.py:348</span>) keeps alternation; <strong>_execute_tool_calls</strong> runs tools and appends the <span class="mono">tool</span> results; <strong>chat_completion_helpers</strong> (<span class="mono">:885</span>) builds the assistant message with reasoning. Cross-chapter: messages externalize all state (Ch. 2, B), the budget fights error-compounding (Ch. 3, F), the alternation invariant serves prompt caching (Ch. 6).
+  <div class="collab-sub">② Data-flow sequence</div>
+  user message → enter the <span class="mono">while</span> loop →〔check interrupt → <span class="mono">consume</span> budget → LLM call → handle <span class="mono">tool_calls</span> → append <span class="mono">tool</span> results〕many turns → a turn with <strong>no tool_calls</strong> → finish as <span class="mono">final_response</span>.
+  <div class="collab-sub">③ Key point</div>
+  All state lives in <span class="mono">messages</span>, the loop is synchronous and interruptible, and the budget is bounded — together they let the agent loop work freely yet <strong>never spin out of control</strong>.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  This chapter centers on the loop's three throughlines: <strong>interruptible + iteration budget + the strict-alternation invariant</strong>. Interruptibility lets a long task be taken over by a new message any time; the budget puts a hard ceiling on "let the model run itself"; strict alternation satisfies the provider format and protects the cache in one stroke.
+  <p style="margin:.5rem 0 0">The LLM constraints it fights: <span class="badge constraint">B·stateless</span> — all state externalized into <span class="mono">messages</span>, resent every turn; <span class="badge constraint">F·error-compounding</span> — budget + interrupt prevent runaway loops; <span class="badge constraint">A·latency/cost</span> — bounded iterations cap length and spend.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li>The core of a conversation is a <strong>synchronous while loop</strong> (<span class="mono">conversation_loop.py:589</span>); <span class="mono">run_conversation()/chat()</span> are just its <strong>forwarder/wrapper</strong>.</li>
+    <li>The loop has <strong>three exits</strong>: hit <span class="mono">max_iterations</span> / budget exhausted / user interrupt; the interrupt check sits at the <strong>top of every turn</strong>.</li>
+    <li><strong>IterationBudget</strong> is thread-safe, parent 90 / subagent 50; <span class="mono">execute_code</span> uses <span class="mono">refund()</span> to give a unit back and not eat the budget.</li>
+    <li><strong>Strict role alternation</strong> is a provider hard requirement and also guards the cache; <span class="mono">repair_message_sequence</span> drops orphan tools and merges consecutive users.</li>
+    <li>Honest note: <span class="mono">_budget_grace_call</span> is a <strong>reserved release hook the core never fires</strong> (no True-setter anywhere; always False in normal conversations).</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Hermes' main conversation loop has three exits. Which is **NOT** one of them?</div>
+  <ol class="opts">
+    <li>Iteration budget exhausted (consume returns False)</li>
+    <li>User interrupt (_interrupt_requested)</li>
+    <li>_budget_grace_call set to True triggering a grace exit</li>
+    <li>Hitting the max_iterations ceiling</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. The three exits are max_iterations / budget exhausted / user interrupt; _budget_grace_call is a reserved hook the core never sets to True (always False in normal conversations).</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. Why does Hermes run repair_message_sequence before every API call?</div>
+  <ol class="opts">
+    <li>Providers require strict role alternation (no two same-role in a row); violating it returns empty responses, and rewriting history mid-stream breaks the cache</li>
+    <li>To sort tool calls</li>
+    <li>To compress tokens</li>
+    <li>To translate languages</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. Strict alternation is a provider hard requirement; violating it causes empty-retry loops. Repair only does a defensive merge right before the request, never rebuilding context (protecting the cache).</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>How do the iteration budget (parent 90 / subagent 50) and interruptibility together prevent an agent from spinning out? Without them, which ch.3 LLM constraint runs wild?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="footnav"><a class="prev" href="04-project-map-narrow-waist.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">项目全景地图 · 窄腰</span><span class="lang-en">Project map · the narrow waist</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
+</div>
+<script>
+function havgSetLang(l){
+  l=(l==='en')?'en':'zh';
+  var d=document.documentElement;
+  d.dataset.lang=l; d.lang=(l==='en'?'en':'zh-CN');
+  try{localStorage.setItem('havg-lang',l);}catch(e){}
+}
+function havgToggleLang(){
+  havgSetLang(document.documentElement.dataset.lang==='en'?'zh':'en');
+}
+</script>
+</body></html>

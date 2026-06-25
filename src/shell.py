@@ -54,6 +54,8 @@ PAGES = [
      "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
     ("04-project-map-narrow-waist.html", "项目全景地图 · 窄腰", "Project map · the narrow waist",
      "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
+    ("05-conversation-lifecycle.html", "一次对话的生命周期", "Lifecycle of one conversation",
+     "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
 ]
 
 
