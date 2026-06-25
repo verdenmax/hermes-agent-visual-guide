@@ -74,6 +74,8 @@ PAGES = [
      "第四部分 · 规模化与隔离", "Part 4 · Scaling & Isolation"),
     ("14-review-verification.html", "审查与验证分离", "Review & verification",
      "第四部分 · 规模化与隔离", "Part 4 · Scaling & Isolation"),
+    ("15-context-compression.html", "上下文压缩", "Context compression",
+     "第四部分 · 规模化与隔离", "Part 4 · Scaling & Isolation"),
 ]
 
 

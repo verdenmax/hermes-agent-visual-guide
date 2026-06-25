@@ -347,6 +347,7 @@ details[open] > summary { list-style: none; }
   <li>跨会话搜索：FTS5</li>
   <li>委派与子代理</li>
   <li>审查与验证分离</li>
+  <li>上下文压缩</li>
 </ol></div>
 <section class="lesson-print">
 <h1>Hermes 是什么</h1>
@@ -2534,6 +2535,143 @@ Verdict: APPROVED or REQUEST_CHANGES.
   <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
   <ul>
     <li>「生成-验证差」——验证一个结果比从头生成它便宜——是 subagent-driven-development 两阶段审查的成本逻辑。结合「No agent should verify its own work」，解释为什么 Hermes 宁愿多花几次审查子代理调用，也要让独立 context 来验证？</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>上下文压缩</h1>
+
+<p class="lead">
+第 6 章立下铁律：<strong>prompt 缓存神圣不可侵犯，唯一的例外是上下文压缩</strong>。本章就讲这个例外。当对话长到逼近模型的上下文窗口，Hermes 会把早期历史<strong>摘要压缩</strong>成更短的一段。这一步<strong>必然</strong>改写了被缓存的前缀——缓存<strong>注定作废</strong>。所以它被设计成<strong>万不得已才触发</strong>：用一次「缓存重置」的代价，换回继续对话的空间。这是「缓存神圣」唯一让步的地方，也是对抗「上下文有限」和「上下文腐烂」的核心武器。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 把会议纪要压成要点</div>
+  一场开了三小时的会，逐字记录有几万字——再开下去，新人根本读不完前情。聪明的做法是：<strong>保留最近的讨论</strong>（尾部）和<strong>最初的议题</strong>（头部），把<strong>中间冗长的过程</strong>压成一页<strong>结构化要点</strong>（做了什么、定了什么、还剩什么）。压缩后，会议继续，但纪要<strong>换了一版</strong>——这正是「缓存作废」的代价。Hermes 只在<strong>纪要快撑爆</strong>时才做这件事，平时绝不动它。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 用一次缓存重置，换回继续的空间</div>
+  压缩的逻辑链是：①<strong>逼近才触发</strong>——默认到上下文窗口的 <strong>50%</strong> 才考虑，且有防抖动护栏；②<strong>保头保尾、摘要中段</strong>——保护最初的任务框架（头）和最近的上下文（尾），用<strong>辅助模型</strong>把中间轮摘要成结构化要点；③<strong>重建前缀</strong>——压缩改写了历史，必须 <span class="mono">_invalidate_system_prompt()</span> 清缓存、<span class="mono">_build_system_prompt()</span> 重建。这第三步就是「缓存唯一例外」的实证。它对抗 <span class="badge constraint">A·中间遗失</span>（上下文有限）和 <span class="badge constraint">F·误差累积</span>（上下文腐烂）。
+</div>
+
+<h2>何时触发：逼近才压，且防抖动</h2>
+<p>压缩不是随时做，而是<strong>逼近窗口</strong>才触发，还要防止「压了一点点就又压」的抖动：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/context_compressor.py</span><span class="ln">964-984 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">should_compress</span>(self, prompt_tokens=<span class="kw">None</span>) -&gt; bool:
+    <span class="cm"># 默认到上下文窗口 50% 的 token 阈值才触发(threshold_percent=0.50)</span>
+    tokens = prompt_tokens <span class="kw">if</span> prompt_tokens <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span> <span class="kw">else</span> self.last_prompt_tokens
+    <span class="kw">if</span> tokens &lt; self.threshold_tokens:
+        <span class="kw">return</span> <span class="kw">False</span>
+    <span class="cm"># 防抖动:若最近两次压缩各只省下 &lt;10%,跳过,避免每次只删 1-2 条的死循环</span>
+    <span class="kw">if</span> self._ineffective_compression_count &gt;= 2:
+        <span class="kw">return</span> <span class="kw">False</span>
+    <span class="kw">return</span> <span class="kw">True</span></pre>
+</div>
+<p>两道闸：其一，<strong>token 没到阈值就不压</strong>（默认窗口的 50%，小模型逼近时升到 85%）——平时尽量「省着用」整个上下文；其二，<strong>防抖动</strong>：如果最近两次压缩<strong>各只省下不到 10%</strong>，说明已经压无可压，再压只会陷入「每次删 1-2 条」的死循环，于是<strong>跳过</strong>。这两道闸合起来就是「万不得已才触发」——因为每触发一次，缓存就作废一次，代价昂贵。</p>
+
+<h2>缓存的唯一例外：压缩后重建 system prompt</h2>
+<p>这是全书的关键三行——<strong>压缩为什么是缓存铁律的唯一例外</strong>，就实证在这里：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_compression.py</span><span class="ln">515-517 · 节选</span></div>
+  <pre>agent._invalidate_system_prompt()                    <span class="cm"># 清空 _cached_system_prompt = None</span>
+new_system_prompt = agent._build_system_prompt(system_message)  <span class="cm"># 重建</span>
+agent._cached_system_prompt = new_system_prompt      <span class="cm"># 写回新前缀</span></pre>
+</div>
+<p>平时（第 6 章），<span class="mono">_cached_system_prompt</span> 一旦构建就<strong>逐字节不变</strong>，整会话复用、命中前缀缓存。但压缩<strong>重写了历史前缀</strong>——继续用旧缓存就错了。所以这里 <span class="mono">_invalidate_system_prompt()</span> 把缓存清空（置 <span class="kw">None</span>），随即 <span class="mono">_build_system_prompt()</span> 重建并写回。而 <span class="mono">invalidate_system_prompt</span> 还<strong>顺便 reload 记忆快照</strong>（<span class="mono">load_from_disk()</span>）——这正是第 11 章说的「记忆快照只在压缩边界刷新」：压缩本来就要重建，顺势把这会话写入的新记忆也纳入，<strong>不增加额外的缓存代价</strong>。</p>
+
+<h2>对抗上下文腐烂：保留什么、丢弃什么</h2>
+<p>压缩不是简单截断，而是<strong>结构化保留关键、丢弃冗余</strong>。摘要用一个固定模板，逼辅助模型抽出「该记住的」：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/context_compressor.py</span><span class="ln">1559-1606 · 节选（摘要模板）</span></div>
+  <pre>## Goal
+[用户整体想达成什么]
+## Constraints &amp; Preferences
+[用户偏好、编码风格、约束、重要决定]
+## Completed Actions
+[已采取的具体动作 — 工具、目标、结果]
+## Key Decisions
+[重要技术决定 + 为什么这么定]
+## Resolved Questions
+[已回答的问题 + 答案,避免重复问]
+## Critical Context
+[具体值、报错、配置 — 绝不含 API key]</pre>
+</div>
+<p>这套结构直接对抗 <span class="badge constraint">F·误差累积</span> 里的<strong>上下文腐烂</strong>：① <strong>头部保护随轮次衰减</strong>——第一次压缩保留最初几轮任务框架，但之后衰减到 0，免得早期消息「化石化」、把头部撑得无限大；② <strong>时序锚定</strong>——把「待办」改写成<strong>已完成的过去式</strong>，防止压缩恢复后<strong>重复执行</strong>旧任务；外加 <strong>STALE 标注</strong>——待办 / 剩余工作段被另标为「STALE 仅供参考，除非用户明确要求否则别执行」；③ 压缩前先<strong>廉价剪枝</strong>旧 tool 结果（无 LLM 调用，把长输出换成一行摘要）。还有一个细节：摘要本身是<strong>会话中段的消息、不在缓存前缀里</strong>，所以摘要里的日期等不会影响缓存稳定。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><strong>逼近触发</strong>:token 达上下文窗口 ~50%(should_compress) + 防抖动(连续2次省&lt;10%则跳过)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><strong>剪枝</strong>:廉价剪掉旧 tool 结果(无 LLM),去重</span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><strong>保头保尾、摘要中段</strong>:辅助模型按结构化模板摘要中间轮(Goal/Decisions/...);时序锚定防重复执行</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><strong>★重建前缀</strong>:_invalidate_system_prompt()→_build_system_prompt()→_cached_system_prompt=new(缓存唯一例外)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">顺带 reload 记忆快照(load_from_disk);压缩锁防并发(防 session 血缘分裂)</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「缓存唯一例外」</div>
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章核心:<strong>should_compress</strong>(触发+防抖动)、<strong>剪枝+保头保尾+摘要</strong>(辅助模型)、<strong>_invalidate_system_prompt + 重建</strong>(缓存唯一例外)、<strong>时序锚定/头部衰减</strong>(对抗 rot)、<strong>压缩锁</strong>(防并发)。跨章节配合:平时 _cached_system_prompt 逐字节稳定(第 6 章),压缩是它<strong>唯一</strong>被重建的时机;压缩边界顺带 reload <strong>记忆快照</strong>(第 11 章 load_from_disk);摘要走<strong>辅助模型</strong>(第 10 章辅助模型隔离,auxiliary.compression);压缩(腾空间)与委派(隔离)是对抗「上下文有限」的<strong>两条不同路</strong>(第 13 章)。
+  <div class="collab-sub">② 数据流时序</div>
+  逼近窗口 → should_compress(防抖动)→ 剪枝旧 tool → 保头(衰减)保尾(token预算)、辅助模型摘要中段(结构化模板+时序锚定)→ _invalidate_system_prompt()清缓存 → _build_system_prompt()重建(顺带reload记忆)→ _cached_system_prompt=new → 继续对话。
+  <div class="collab-sub">③ 关键点</div>
+  压缩是「缓存神圣」唯一让步:它<strong>必然</strong>作废前缀缓存,所以设计成「逼近+防抖动才触发」(万不得已);换来的是把「会腐烂、会遗失」的长历史<strong>结构化压缩</strong>成高信号要点,让对话能继续。一次缓存重置的代价,换回继续的空间。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>压缩是缓存铁律的唯一例外——用一次缓存重置换回继续对话的空间;万不得已才触发</strong>。它治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span>——上下文窗口有限,长对话会把关键信息挤到中间被遗忘;压缩把中段<strong>摘要成高信号要点</strong>,腾出空间、保住关键;
+  <span class="badge constraint">F·误差累积</span>——长对话会「上下文腐烂」(旧待办被反复执行、早期消息化石化);时序锚定(待办改过去式)+头部衰减+STALE 标注直接对治。反模式:<strong>频繁压缩</strong>(每次都作废缓存,成本爆炸)——所以要逼近+防抖动;或压缩时把摘要<strong>塞进 system prompt 前缀</strong>当永久内容(摘要应是中段消息,不进缓存前缀)。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>缓存唯一例外</strong>:压缩重写历史前缀 → <span class="mono">_invalidate_system_prompt()</span> 清缓存 + <span class="mono">_build_system_prompt()</span> 重建(conversation_compression.py:515-517);这是第 6 章铁律的唯一让步。</li>
+    <li><strong>逼近才触发 + 防抖动</strong>:默认窗口 50% 阈值,连续两次省 &lt;10% 则跳过,避免「每次删 1-2 条」死循环。</li>
+    <li><strong>保头保尾、摘要中段</strong>:辅助模型按结构化模板(Goal/Decisions/Resolved/...)摘要中间轮,保护最初任务框架与最近上下文。</li>
+    <li><strong>对抗上下文腐烂</strong>:时序锚定(待办改过去式防重复执行)、头部保护衰减(防化石化)、剪枝旧 tool 结果。</li>
+    <li><strong>顺带刷新记忆</strong>:invalidate 时 <span class="mono">load_from_disk()</span> 重载记忆快照(第 11 章);摘要是中段消息,不在缓存前缀。</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. 第6章说「prompt 缓存神圣，唯一例外是上下文压缩」。为什么压缩是那个唯一例外？</div>
+  <ol class="opts">
+    <li>压缩把早期历史摘要、重写了被缓存的前缀，所以必须 _invalidate_system_prompt() 清缓存、_build_system_prompt() 重建（515-517）——缓存注定作废</li>
+    <li>压缩用了 LLM</li>
+    <li>随机决定</li>
+    <li>压缩比较慢</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：A</strong>。平时 _cached_system_prompt 逐字节稳定、整会话复用。但压缩改写了历史前缀，旧缓存就错了——conversation_compression.py:515-517 三行清缓存+重建+写回新前缀。这是缓存铁律唯一让步的地方。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. 压缩为什么被设计成「万不得已才触发」，而不是随时压一点？</div>
+  <ol class="opts">
+    <li>随机决定</li>
+    <li>因为模型不喜欢</li>
+    <li>因为压缩没用</li>
+    <li>因为每触发一次就作废一次缓存、代价昂贵——所以默认到窗口 50% 才触发，且防抖动（连续两次省下不到 10% 就跳过）</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：D</strong>。压缩=一次缓存重置。频繁压缩=反复击穿缓存，成本爆炸。所以 should_compress 默认到 50% token 阈值才触发，且 _ineffective_compression_count>=2（连续两次省下不到 10%）就跳过，避免每次删 1-2 条的死循环。用一次缓存重置换回继续对话的空间。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>压缩（腾空间）和第 13 章委派（隔离）都对抗「上下文有限」，但一个改写历史前缀（破缓存）、一个把中间过程关进子 context（不破父缓存）。为什么压缩必须接受「作废缓存」这个代价，而委派能避开它？</li>
   </ul>
 </div>
 </div>

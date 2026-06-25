@@ -517,6 +517,40 @@ QUIZZES = {
              "en": "The 'generation-verification gap' — verifying a result is cheaper than generating it from scratch — is the cost logic of subagent-driven-development's two-stage review. Combined with 'No agent should verify its own work,' explain why Hermes would rather spend extra review-subagent calls to have an independent context verify?"},
         ],
     },
+    "15-context-compression.html": {
+        "mcq": [
+            {
+                "q": {"zh": "第6章说「prompt 缓存神圣，唯一例外是上下文压缩」。为什么压缩是那个唯一例外？",
+                      "en": "Ch.6 says 'the prompt cache is sacred, the only exception is context compression.' Why is compression that one exception?"},
+                "opts": [
+                    {"zh": "压缩比较慢", "en": "Compression is slow"},
+                    {"zh": "压缩把早期历史摘要、重写了被缓存的前缀，所以必须 _invalidate_system_prompt() 清缓存、_build_system_prompt() 重建（515-517）——缓存注定作废", "en": "Compression summarizes early history, rewriting the cached prefix, so it must _invalidate_system_prompt() and _build_system_prompt() to rebuild (515-517) — the cache is bound to be voided"},
+                    {"zh": "压缩用了 LLM", "en": "Compression uses an LLM"},
+                    {"zh": "随机决定", "en": "Random"},
+                ],
+                "answer": 1,
+                "why": {"zh": "平时 _cached_system_prompt 逐字节稳定、整会话复用。但压缩改写了历史前缀，旧缓存就错了——conversation_compression.py:515-517 三行清缓存+重建+写回新前缀。这是缓存铁律唯一让步的地方。",
+                        "en": "Normally _cached_system_prompt is byte-stable, reused all session. But compression rewrote the history prefix, so the old cache is wrong — conversation_compression.py:515-517 clears, rebuilds, writes back the new prefix. This is the one place the iron rule yields."},
+            },
+            {
+                "q": {"zh": "压缩为什么被设计成「万不得已才触发」，而不是随时压一点？",
+                      "en": "Why is compression designed to fire 'only as a last resort' rather than compressing a bit anytime?"},
+                "opts": [
+                    {"zh": "因为压缩没用", "en": "Because it's useless"},
+                    {"zh": "因为每触发一次就作废一次缓存、代价昂贵——所以默认到窗口 50% 才触发，且防抖动（连续两次省下不到 10% 就跳过）", "en": "Because each fire voids the cache once, an expensive cost — so it defaults to firing at 50% of the window, with anti-thrashing (skip if two in a row saved under 10%)"},
+                    {"zh": "因为模型不喜欢", "en": "Because the model dislikes it"},
+                    {"zh": "随机决定", "en": "Random"},
+                ],
+                "answer": 1,
+                "why": {"zh": "压缩=一次缓存重置。频繁压缩=反复击穿缓存，成本爆炸。所以 should_compress 默认到 50% token 阈值才触发，且 _ineffective_compression_count>=2（连续两次省下不到 10%）就跳过，避免每次删 1-2 条的死循环。用一次缓存重置换回继续对话的空间。",
+                        "en": "Compression = one cache reset. Frequent compression = repeatedly shattering the cache, costs explode. So should_compress fires only at the default 50% token threshold, and skips when _ineffective_compression_count>=2 (two in a row saved under 10%), avoiding a 'remove 1-2 each time' loop. One cache reset bought for room to keep talking."},
+            },
+        ],
+        "open": [
+            {"zh": "压缩（腾空间）和第 13 章委派（隔离）都对抗「上下文有限」，但一个改写历史前缀（破缓存）、一个把中间过程关进子 context（不破父缓存）。为什么压缩必须接受「作废缓存」这个代价，而委派能避开它？",
+             "en": "Compression (make room) and ch.13 delegation (isolate) both fight 'limited context,' but one rewrites the history prefix (breaks the cache) while the other locks intermediate work in a child context (doesn't break the parent cache). Why must compression accept the 'void the cache' cost while delegation avoids it?"},
+        ],
+    },
 }
 
 

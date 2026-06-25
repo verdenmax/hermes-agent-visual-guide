@@ -418,3 +418,204 @@ Verdict: APPROVED or REQUEST_CHANGES.
 </div>
 """,
 }
+
+LESSON_15 = {
+    "zh": r"""
+<p class="lead">
+第 6 章立下铁律：<strong>prompt 缓存神圣不可侵犯，唯一的例外是上下文压缩</strong>。本章就讲这个例外。当对话长到逼近模型的上下文窗口，Hermes 会把早期历史<strong>摘要压缩</strong>成更短的一段。这一步<strong>必然</strong>改写了被缓存的前缀——缓存<strong>注定作废</strong>。所以它被设计成<strong>万不得已才触发</strong>：用一次「缓存重置」的代价，换回继续对话的空间。这是「缓存神圣」唯一让步的地方，也是对抗「上下文有限」和「上下文腐烂」的核心武器。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 把会议纪要压成要点</div>
+  一场开了三小时的会，逐字记录有几万字——再开下去，新人根本读不完前情。聪明的做法是：<strong>保留最近的讨论</strong>（尾部）和<strong>最初的议题</strong>（头部），把<strong>中间冗长的过程</strong>压成一页<strong>结构化要点</strong>（做了什么、定了什么、还剩什么）。压缩后，会议继续，但纪要<strong>换了一版</strong>——这正是「缓存作废」的代价。Hermes 只在<strong>纪要快撑爆</strong>时才做这件事，平时绝不动它。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 用一次缓存重置，换回继续的空间</div>
+  压缩的逻辑链是：①<strong>逼近才触发</strong>——默认到上下文窗口的 <strong>50%</strong> 才考虑，且有防抖动护栏；②<strong>保头保尾、摘要中段</strong>——保护最初的任务框架（头）和最近的上下文（尾），用<strong>辅助模型</strong>把中间轮摘要成结构化要点；③<strong>重建前缀</strong>——压缩改写了历史，必须 <span class="mono">_invalidate_system_prompt()</span> 清缓存、<span class="mono">_build_system_prompt()</span> 重建。这第三步就是「缓存唯一例外」的实证。它对抗 <span class="badge constraint">A·中间遗失</span>（上下文有限）和 <span class="badge constraint">F·误差累积</span>（上下文腐烂）。
+</div>
+
+<h2>何时触发：逼近才压，且防抖动</h2>
+<p>压缩不是随时做，而是<strong>逼近窗口</strong>才触发，还要防止「压了一点点就又压」的抖动：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/context_compressor.py</span><span class="ln">964-984 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">should_compress</span>(self, prompt_tokens=<span class="kw">None</span>) -&gt; bool:
+    <span class="cm"># 默认到上下文窗口 50% 的 token 阈值才触发(threshold_percent=0.50)</span>
+    tokens = prompt_tokens <span class="kw">if</span> prompt_tokens <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span> <span class="kw">else</span> self.last_prompt_tokens
+    <span class="kw">if</span> tokens &lt; self.threshold_tokens:
+        <span class="kw">return</span> <span class="kw">False</span>
+    <span class="cm"># 防抖动:若最近两次压缩各只省下 &lt;10%,跳过,避免每次只删 1-2 条的死循环</span>
+    <span class="kw">if</span> self._ineffective_compression_count &gt;= 2:
+        <span class="kw">return</span> <span class="kw">False</span>
+    <span class="kw">return</span> <span class="kw">True</span></pre>
+</div>
+<p>两道闸：其一，<strong>token 没到阈值就不压</strong>（默认窗口的 50%，小模型逼近时升到 85%）——平时尽量「省着用」整个上下文；其二，<strong>防抖动</strong>：如果最近两次压缩<strong>各只省下不到 10%</strong>，说明已经压无可压，再压只会陷入「每次删 1-2 条」的死循环，于是<strong>跳过</strong>。这两道闸合起来就是「万不得已才触发」——因为每触发一次，缓存就作废一次，代价昂贵。</p>
+
+<h2>缓存的唯一例外：压缩后重建 system prompt</h2>
+<p>这是全书的关键三行——<strong>压缩为什么是缓存铁律的唯一例外</strong>，就实证在这里：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_compression.py</span><span class="ln">515-517 · 节选</span></div>
+  <pre>agent._invalidate_system_prompt()                    <span class="cm"># 清空 _cached_system_prompt = None</span>
+new_system_prompt = agent._build_system_prompt(system_message)  <span class="cm"># 重建</span>
+agent._cached_system_prompt = new_system_prompt      <span class="cm"># 写回新前缀</span></pre>
+</div>
+<p>平时（第 6 章），<span class="mono">_cached_system_prompt</span> 一旦构建就<strong>逐字节不变</strong>，整会话复用、命中前缀缓存。但压缩<strong>重写了历史前缀</strong>——继续用旧缓存就错了。所以这里 <span class="mono">_invalidate_system_prompt()</span> 把缓存清空（置 <span class="kw">None</span>），随即 <span class="mono">_build_system_prompt()</span> 重建并写回。而 <span class="mono">invalidate_system_prompt</span> 还<strong>顺便 reload 记忆快照</strong>（<span class="mono">load_from_disk()</span>）——这正是第 11 章说的「记忆快照只在压缩边界刷新」：压缩本来就要重建，顺势把这会话写入的新记忆也纳入，<strong>不增加额外的缓存代价</strong>。</p>
+
+<h2>对抗上下文腐烂：保留什么、丢弃什么</h2>
+<p>压缩不是简单截断，而是<strong>结构化保留关键、丢弃冗余</strong>。摘要用一个固定模板，逼辅助模型抽出「该记住的」：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/context_compressor.py</span><span class="ln">1559-1606 · 节选（摘要模板）</span></div>
+  <pre>## Goal
+[用户整体想达成什么]
+## Constraints &amp; Preferences
+[用户偏好、编码风格、约束、重要决定]
+## Completed Actions
+[已采取的具体动作 — 工具、目标、结果]
+## Key Decisions
+[重要技术决定 + 为什么这么定]
+## Resolved Questions
+[已回答的问题 + 答案,避免重复问]
+## Critical Context
+[具体值、报错、配置 — 绝不含 API key]</pre>
+</div>
+<p>这套结构直接对抗 <span class="badge constraint">F·误差累积</span> 里的<strong>上下文腐烂</strong>：① <strong>头部保护随轮次衰减</strong>——第一次压缩保留最初几轮任务框架，但之后衰减到 0，免得早期消息「化石化」、把头部撑得无限大；② <strong>时序锚定</strong>——把「待办」改写成<strong>已完成的过去式</strong>，防止压缩恢复后<strong>重复执行</strong>旧任务；外加 <strong>STALE 标注</strong>——待办 / 剩余工作段被另标为「STALE 仅供参考，除非用户明确要求否则别执行」；③ 压缩前先<strong>廉价剪枝</strong>旧 tool 结果（无 LLM 调用，把长输出换成一行摘要）。还有一个细节：摘要本身是<strong>会话中段的消息、不在缓存前缀里</strong>，所以摘要里的日期等不会影响缓存稳定。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><strong>逼近触发</strong>:token 达上下文窗口 ~50%(should_compress) + 防抖动(连续2次省&lt;10%则跳过)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><strong>剪枝</strong>:廉价剪掉旧 tool 结果(无 LLM),去重</span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><strong>保头保尾、摘要中段</strong>:辅助模型按结构化模板摘要中间轮(Goal/Decisions/...);时序锚定防重复执行</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><strong>★重建前缀</strong>:_invalidate_system_prompt()→_build_system_prompt()→_cached_system_prompt=new(缓存唯一例外)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">顺带 reload 记忆快照(load_from_disk);压缩锁防并发(防 session 血缘分裂)</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「缓存唯一例外」</div>
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章核心:<strong>should_compress</strong>(触发+防抖动)、<strong>剪枝+保头保尾+摘要</strong>(辅助模型)、<strong>_invalidate_system_prompt + 重建</strong>(缓存唯一例外)、<strong>时序锚定/头部衰减</strong>(对抗 rot)、<strong>压缩锁</strong>(防并发)。跨章节配合:平时 _cached_system_prompt 逐字节稳定(第 6 章),压缩是它<strong>唯一</strong>被重建的时机;压缩边界顺带 reload <strong>记忆快照</strong>(第 11 章 load_from_disk);摘要走<strong>辅助模型</strong>(第 10 章辅助模型隔离,auxiliary.compression);压缩(腾空间)与委派(隔离)是对抗「上下文有限」的<strong>两条不同路</strong>(第 13 章)。
+  <div class="collab-sub">② 数据流时序</div>
+  逼近窗口 → should_compress(防抖动)→ 剪枝旧 tool → 保头(衰减)保尾(token预算)、辅助模型摘要中段(结构化模板+时序锚定)→ _invalidate_system_prompt()清缓存 → _build_system_prompt()重建(顺带reload记忆)→ _cached_system_prompt=new → 继续对话。
+  <div class="collab-sub">③ 关键点</div>
+  压缩是「缓存神圣」唯一让步:它<strong>必然</strong>作废前缀缓存,所以设计成「逼近+防抖动才触发」(万不得已);换来的是把「会腐烂、会遗失」的长历史<strong>结构化压缩</strong>成高信号要点,让对话能继续。一次缓存重置的代价,换回继续的空间。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>压缩是缓存铁律的唯一例外——用一次缓存重置换回继续对话的空间;万不得已才触发</strong>。它治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span>——上下文窗口有限,长对话会把关键信息挤到中间被遗忘;压缩把中段<strong>摘要成高信号要点</strong>,腾出空间、保住关键;
+  <span class="badge constraint">F·误差累积</span>——长对话会「上下文腐烂」(旧待办被反复执行、早期消息化石化);时序锚定(待办改过去式)+头部衰减+STALE 标注直接对治。反模式:<strong>频繁压缩</strong>(每次都作废缓存,成本爆炸)——所以要逼近+防抖动;或压缩时把摘要<strong>塞进 system prompt 前缀</strong>当永久内容(摘要应是中段消息,不进缓存前缀)。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>缓存唯一例外</strong>:压缩重写历史前缀 → <span class="mono">_invalidate_system_prompt()</span> 清缓存 + <span class="mono">_build_system_prompt()</span> 重建(conversation_compression.py:515-517);这是第 6 章铁律的唯一让步。</li>
+    <li><strong>逼近才触发 + 防抖动</strong>:默认窗口 50% 阈值,连续两次省 &lt;10% 则跳过,避免「每次删 1-2 条」死循环。</li>
+    <li><strong>保头保尾、摘要中段</strong>:辅助模型按结构化模板(Goal/Decisions/Resolved/...)摘要中间轮,保护最初任务框架与最近上下文。</li>
+    <li><strong>对抗上下文腐烂</strong>:时序锚定(待办改过去式防重复执行)、头部保护衰减(防化石化)、剪枝旧 tool 结果。</li>
+    <li><strong>顺带刷新记忆</strong>:invalidate 时 <span class="mono">load_from_disk()</span> 重载记忆快照(第 11 章);摘要是中段消息,不在缓存前缀。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">
+Ch.6 laid down the iron rule: <strong>the prompt cache is sacred, and the only exception is context compression</strong>. This chapter is about that exception. When a conversation grows close to the model's context window, Hermes <strong>summarizes and compresses</strong> the early history into a shorter span. That step <strong>necessarily</strong> rewrites the cached prefix — the cache is <strong>bound to be voided</strong>. So it's designed to fire only as a <strong>last resort</strong>: spend one "cache reset" to buy back room to keep talking. This is the one place "the cache is sacred" yields, and the core weapon against "limited context" and "context rot."
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · compressing meeting minutes into key points</div>
+  A three-hour meeting has tens of thousands of words of verbatim notes — keep going and a newcomer can't possibly read the backstory. The smart move: <strong>keep the recent discussion</strong> (the tail) and <strong>the original agenda</strong> (the head), and compress the <strong>long middle</strong> into a page of <strong>structured key points</strong> (what was done, what was decided, what's left). After compression the meeting continues, but the minutes are <strong>a new version</strong> — exactly the cost of "cache invalidation." Hermes only does this when the minutes are <strong>about to overflow</strong>, never touching them otherwise.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · spend one cache reset to buy back room</div>
+  Compression's logic chain: ① <strong>fire only near the limit</strong> — by default it considers compaction at <strong>50%</strong> of the context window, with anti-thrashing guards; ② <strong>protect head and tail, summarize the middle</strong> — keep the original task framing (head) and recent context (tail), and use an <strong>auxiliary model</strong> to summarize the middle turns into structured key points; ③ <strong>rebuild the prefix</strong> — compression rewrote history, so it must <span class="mono">_invalidate_system_prompt()</span> to clear the cache and <span class="mono">_build_system_prompt()</span> to rebuild. That third step is the proof of "the cache's only exception." It treats <span class="badge constraint">A·lost-in-the-middle</span> (limited context) and <span class="badge constraint">F·error accumulation</span> (context rot).
+</div>
+
+<h2>When it fires: only near the limit, and anti-thrashing</h2>
+<p>Compression isn't done anytime — it fires only <strong>near the window</strong>, and guards against "compress a tiny bit then compress again" thrashing:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/context_compressor.py</span><span class="ln">964-984 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">should_compress</span>(self, prompt_tokens=<span class="kw">None</span>) -&gt; bool:
+    <span class="cm"># fires only at the token threshold = 50% of the context window (threshold_percent=0.50)</span>
+    tokens = prompt_tokens <span class="kw">if</span> prompt_tokens <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span> <span class="kw">else</span> self.last_prompt_tokens
+    <span class="kw">if</span> tokens &lt; self.threshold_tokens:
+        <span class="kw">return</span> <span class="kw">False</span>
+    <span class="cm"># anti-thrashing: if the last two compressions each saved &lt;10%, skip — avoid a loop that removes 1-2 msgs each time</span>
+    <span class="kw">if</span> self._ineffective_compression_count &gt;= 2:
+        <span class="kw">return</span> <span class="kw">False</span>
+    <span class="kw">return</span> <span class="kw">True</span></pre>
+</div>
+<p>Two gates: first, <strong>don't compress until tokens hit the threshold</strong> (default 50% of the window, rising to 85% for small models near the edge) — normally "use up" the whole context first; second, <strong>anti-thrashing</strong>: if the last two compressions each <strong>saved less than 10%</strong>, there's nothing left to squeeze, and compressing again would spiral into a "remove 1-2 messages each time" loop, so it <strong>skips</strong>. Together these are "last resort only" — because each fire voids the cache once, an expensive cost.</p>
+
+<h2>The cache's only exception: rebuild the system prompt after compression</h2>
+<p>Here are the book's key three lines — <strong>why compression is the iron rule's only exception</strong> is proven right here:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_compression.py</span><span class="ln">515-517 · excerpt</span></div>
+  <pre>agent._invalidate_system_prompt()                    <span class="cm"># clears _cached_system_prompt = None</span>
+new_system_prompt = agent._build_system_prompt(system_message)  <span class="cm"># rebuild</span>
+agent._cached_system_prompt = new_system_prompt      <span class="cm"># write back the new prefix</span></pre>
+</div>
+<p>Normally (ch.6), once <span class="mono">_cached_system_prompt</span> is built it stays <strong>byte-stable</strong>, reused all session to hit the prefix cache. But compression <strong>rewrote the history prefix</strong> — keeping the old cache would be wrong. So here <span class="mono">_invalidate_system_prompt()</span> clears the cache (sets it <span class="kw">None</span>) and <span class="mono">_build_system_prompt()</span> rebuilds and writes back. And <span class="mono">invalidate_system_prompt</span> also <strong>reloads the memory snapshot</strong> (<span class="mono">load_from_disk()</span>) — exactly ch.11's "the memory snapshot refreshes only at a compression boundary": compression has to rebuild anyway, so it folds in the new memory written this session at <strong>no extra cache cost</strong>.</p>
+
+<h2>Fighting context rot: what to keep, what to drop</h2>
+<p>Compression isn't a simple truncation — it <strong>structurally keeps the key, drops the redundant</strong>. The summary uses a fixed template, forcing the auxiliary model to extract "what should be remembered":</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/context_compressor.py</span><span class="ln">1559-1606 · excerpt (summary template)</span></div>
+  <pre>## Goal
+[What the user is trying to accomplish overall]
+## Constraints &amp; Preferences
+[User preferences, coding style, constraints, important decisions]
+## Completed Actions
+[Concrete actions taken — tool, target, outcome]
+## Key Decisions
+[Important technical decisions and WHY]
+## Resolved Questions
+[Questions already answered + the answer, so it's not repeated]
+## Critical Context
+[Specific values, errors, config — NEVER include API keys]</pre>
+</div>
+<p>This structure directly treats the <strong>context rot</strong> within <span class="badge constraint">F·error accumulation</span>: ① <strong>head protection decays over cycles</strong> — the first compaction keeps the early task framing, but later it decays to 0, so early messages don't "fossilize" and grow the head unboundedly; ② <strong>temporal anchoring</strong> — rewrite "to-dos" as <strong>completed past tense</strong> to prevent <strong>re-execution</strong> of old tasks after recovery; plus a separate <strong>STALE marking</strong> — pending/remaining-work sections are labeled "STALE, for reference only; don't act unless the user explicitly asks"; ③ before compressing, a <strong>cheap prune</strong> of old tool results (no LLM, replacing long output with a one-line summary). One detail: the summary itself is a <strong>mid-conversation message, not in the cached prefix</strong>, so a date in it never affects cache stability.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><strong>Fire near the limit</strong>: tokens hit ~50% of the window (should_compress) + anti-thrashing (skip if 2 in a row saved &lt;10%)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><strong>Prune</strong>: cheaply trim old tool results (no LLM), dedupe</span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><strong>Protect head/tail, summarize the middle</strong>: auxiliary model summarizes middle turns by template (Goal/Decisions/...); temporal anchoring prevents re-execution</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><strong>★Rebuild the prefix</strong>: _invalidate_system_prompt()→_build_system_prompt()→_cached_system_prompt=new (the cache's only exception)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">also reloads the memory snapshot (load_from_disk); a compression lock prevents concurrent compaction (avoiding session-lineage splits)</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "the cache's only exception"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>should_compress</strong> (trigger + anti-thrashing), <strong>prune + protect head/tail + summarize</strong> (auxiliary model), <strong>_invalidate_system_prompt + rebuild</strong> (the cache's only exception), <strong>temporal anchoring / head decay</strong> (fighting rot), the <strong>compression lock</strong> (anti-concurrency). Cross-chapter teamwork: normally _cached_system_prompt is byte-stable (ch.6), and compression is its <strong>only</strong> rebuild moment; the compression boundary also reloads the <strong>memory snapshot</strong> (ch.11 load_from_disk); the summary runs on the <strong>auxiliary model</strong> (ch.10 auxiliary-model isolation, auxiliary.compression); compression (make room) and delegation (isolate) are <strong>two different routes</strong> against "limited context" (ch.13).
+  <div class="collab-sub">② Data-flow timing</div>
+  near the window → should_compress (anti-thrashing) → prune old tools → protect head (decaying) and tail (token budget), auxiliary model summarizes the middle (structured template + temporal anchoring) → _invalidate_system_prompt() clears cache → _build_system_prompt() rebuilds (also reloads memory) → _cached_system_prompt=new → continue.
+  <div class="collab-sub">③ The key point</div>
+  Compression is "the cache is sacred"'s one concession: it <strong>necessarily</strong> voids the prefix cache, so it's designed to fire "only near the limit, with anti-thrashing" (last resort); in return it <strong>structurally compresses</strong> the rotting, forgettable long history into high-signal points so the conversation can continue. One cache reset bought for room to keep going.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>compression is the iron rule's only exception — spend one cache reset to buy back room; fire only as a last resort</strong>. It treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> — the context window is finite, and a long conversation pushes key info into the forgotten middle; compression summarizes the middle into <strong>high-signal points</strong>, freeing space while keeping the essentials;
+  <span class="badge constraint">F·error accumulation</span> — a long conversation "rots" (old to-dos re-executed, early messages fossilized); temporal anchoring (to-dos as past tense) + head decay + STALE marking directly counter it. The anti-pattern: <strong>frequent compression</strong> (each voids the cache, costs explode) — hence near-limit + anti-thrashing; or jamming the summary into the <strong>system-prompt prefix</strong> as permanent content (the summary should be a mid-conversation message, not in the cached prefix).</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>The cache's only exception</strong>: compression rewrites the history prefix → <span class="mono">_invalidate_system_prompt()</span> clears the cache + <span class="mono">_build_system_prompt()</span> rebuilds (conversation_compression.py:515-517); ch.6's iron rule yields here alone.</li>
+    <li><strong>Fire near the limit + anti-thrashing</strong>: default 50% window threshold; skip if two in a row saved &lt;10%, avoiding a "remove 1-2 each time" loop.</li>
+    <li><strong>Protect head/tail, summarize the middle</strong>: the auxiliary model summarizes middle turns by a structured template (Goal/Decisions/Resolved/...), keeping the original task framing and recent context.</li>
+    <li><strong>Fight context rot</strong>: temporal anchoring (to-dos to past tense to prevent re-execution), head-protection decay (no fossilizing), pruning old tool results.</li>
+    <li><strong>Also refresh memory</strong>: invalidate triggers <span class="mono">load_from_disk()</span> to reload the memory snapshot (ch.11); the summary is a mid-conversation message, not in the cached prefix.</li>
+  </ul>
+</div>
+""",
+}
