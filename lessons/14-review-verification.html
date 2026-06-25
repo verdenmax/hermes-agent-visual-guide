@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var l=localStorage.getItem('havg-lang');if(l==='en'){document.documentElement.dataset.lang='en';document.documentElement.lang='en';}}catch(e){}</script>
+<title>14 · 审查与验证分离 / Review &amp; verification · Hermes Agent 设计图解</title>
+<meta name="description" content="第四部分 · 规模化与隔离｜审查与验证分离 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="theme-color" content="#c2630e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAzMiAzMic+PHJlY3Qgd2lkdGg9JzMyJyBoZWlnaHQ9JzMyJyByeD0nNycgZmlsbD0nI2M4YTAyYycvPjx0ZXh0IHg9JzE2JyB5PScyMicgZm9udC1mYW1pbHk9J3N5c3RlbS11aSxzYW5zLXNlcmlmJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nODAwJyBmaWxsPScjZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz7imKQ8L3RleHQ+PC9zdmc+">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Hermes Agent 设计图解">
+<meta property="og:title" content="14 · 审查与验证分离 / Review &amp; verification · Hermes Agent 设计图解">
+<meta property="og:description" content="第四部分 · 规模化与隔离｜审查与验证分离 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="14 · 审查与验证分离 / Review &amp; verification · Hermes Agent 设计图解">
+<meta name="twitter:description" content="第四部分 · 规模化与隔离｜审查与验证分离 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --ink: #1d2129;
+  --muted: #5b6470; --faint: #8a939f; --line: #e1e5ea;
+  --accent: #c8a02c; --accent-soft: #faf1d6; --accent-ink: #8a6d12;
+  --blue: #2563eb; --blue-soft: #e7efff; --amber: #b4690e; --amber-soft: #fdf1dd;
+  --purple: #7c3aed; --purple-soft: #f0e9ff; --red: #d23f3f; --red-soft: #fbe6e6;
+  --code-bg: #0f172a; --code-ink: #e2e8f0; --code-line: #1e293b;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232c; --ink: #e6edf3;
+    --muted: #9aa6b2; --faint: #6e7a86; --line: #2a323c;
+    --accent: #e3c05a; --accent-soft: #2e2510; --accent-ink: #f0d488;
+    --blue: #6ea8fe; --blue-soft: #16243f; --amber: #e0a44a; --amber-soft: #33270f;
+    --purple: #b794f6; --purple-soft: #271a40; --red: #f08080; --red-soft: #3a1a1a;
+    --code-bg: #0a0f1a; --code-ink: #d8e2f0; --code-line: #14202f;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+html { scroll-behavior: smooth; overflow-x: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+code, .mono { font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; overflow-wrap: break-word; }
+
+/* ---- top progress bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 50; background: var(--panel);
+  border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
+}
+.topbar-inner {
+  max-width: 960px; margin: 0 auto; padding: .7rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.topbar .home { font-size: .82rem; color: var(--muted); font-weight: 600; display:flex; gap:.5rem; align-items:center; }
+.topbar .home b { color: var(--accent); }
+.topbar .pill { font-size: .72rem; color: var(--muted); background: var(--panel-2);
+  padding: .2rem .6rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.progress { height: 3px; background: var(--panel-2); }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--blue)); }
+
+.wrap { max-width: 820px; margin: 0 auto; padding: 2.4rem 1.25rem 5rem; }
+
+/* ---- hero ---- */
+.hero { margin-bottom: 2rem; }
+.hero .part { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: .55rem; }
+.hero h1 { font-size: 2.05rem; line-height: 1.2; letter-spacing: -.01em; font-weight: 750; }
+.hero .lead { margin-top: .9rem; font-size: 1.06rem; color: var(--muted); }
+
+h2 { font-size: 1.32rem; margin: 2.4rem 0 .9rem; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: .55rem; }
+h2::before { content: ""; width: 4px; height: 1.05em; background: var(--accent); border-radius: 3px; display: inline-block; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+p { margin: .7rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .3rem 0; }
+strong { color: var(--ink); font-weight: 680; }
+.inline { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: .08em .4em; font-size: .9em; color: var(--accent-ink); }
+
+/* ---- callout cards ---- */
+.card { border-radius: var(--radius); padding: 1.05rem 1.2rem; margin: 1.2rem 0;
+  border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.card .tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.card.macro { border-left: 4px solid var(--blue); }
+.card.macro .tag { color: var(--blue); }
+.card.detail { border-left: 4px solid var(--purple); }
+.card.detail .tag { color: var(--purple); }
+.card.analogy { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+.card.analogy .tag { color: var(--amber); }
+.card.key { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.key .tag { color: var(--accent-ink); }
+.card.warn { border-left: 4px solid var(--red); background: var(--red-soft); }
+.card.warn .tag { color: var(--red); }
+.card.spark { border-left: 4px solid #e0a000;
+  background: linear-gradient(100deg, rgba(224,160,0,.12), transparent 70%); }
+.card.spark .tag { color: #c98a00; }
+@media (prefers-color-scheme: dark) { .card.spark .tag { color: #f0c050; } }
+
+/* ---- code file callout ---- */
+.codefile { margin: 1.2rem 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  box-shadow: var(--shadow); }
+.codefile .cf-head { display: flex; align-items: center; gap: .55rem; padding: .5rem .85rem;
+  background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: .8rem; }
+.codefile .cf-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink:0; }
+.codefile .cf-head .path { font-family: ui-monospace, monospace; color: var(--ink); font-weight: 600; }
+.codefile .cf-head .ln { margin-left: auto; color: var(--faint); font-size: .72rem; }
+.codefile pre { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem;
+  overflow-x: auto; font-size: .82rem; line-height: 1.6; }
+.codefile pre .cm { color: #7d8aa3; }
+.codefile pre .kw { color: #c792ea; }
+.codefile pre .fn { color: #82aaff; }
+.codefile pre .st { color: #c3e88d; }
+.codefile pre .nb { color: #f78c6c; }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem; border-radius: 12px;
+  overflow-x: auto; font-size: .83rem; line-height: 1.6; margin: 1.1rem 0; box-shadow: var(--shadow); }
+pre.code .cm { color: #7d8aa3; } pre.code .kw { color: #c792ea; }
+pre.code .fn { color: #82aaff; } pre.code .st { color: #c3e88d; } pre.code .nb { color: #f78c6c; }
+
+/* ---- collapsible accordion (details/summary) ---- */
+.accordion { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  margin: .7rem 0; box-shadow: var(--shadow); overflow: hidden; }
+.accordion > summary { cursor: pointer; padding: .85rem 1.1rem; font-weight: 650; font-size: .96rem;
+  list-style: none; display: flex; align-items: center; gap: .6rem; user-select: none; }
+.accordion > summary::-webkit-details-marker { display: none; }
+.accordion > summary::after { content: "▶"; font-size: .68rem; color: var(--accent);
+  margin-left: auto; transition: transform .15s ease; }
+.accordion[open] > summary::after { transform: rotate(90deg); }
+.accordion > summary:hover { background: var(--panel-2); }
+.accordion[open] > summary { border-bottom: 1px solid var(--line); }
+.accordion .badge-num { background: var(--accent-soft); color: var(--accent-ink);
+  width: 1.6rem; height: 1.6rem; border-radius: 7px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: .82rem; font-weight: 700; flex-shrink: 0; }
+.accordion .hint { font-size: .72rem; color: var(--faint); font-weight: 400; }
+.acc-body { padding: .9rem 1.1rem 1.1rem; }
+.acc-intro { color: var(--muted); font-size: .9rem; margin: .2rem 0 .4rem; }
+.qa { margin: 1rem 0; }
+.qa:first-child { margin-top: .3rem; }
+.qa .q { font-weight: 680; font-size: .9rem; display: flex; gap: .45rem; align-items: center; margin-bottom: .3rem; }
+.qa .a { color: var(--muted); font-size: .9rem; }
+.qa .a strong { color: var(--ink); }
+.qa pre.code { margin: .5rem 0 0; font-size: .78rem; }
+
+/* ---- flow diagram ---- */
+.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 1.3rem 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.2rem 1rem; box-shadow: var(--shadow); }
+.flow .node { flex: 1 1 0; min-width: 110px; text-align: center; padding: .7rem .5rem;
+  border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.flow .node .nt { font-weight: 700; font-size: .92rem; }
+.flow .node .nd { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+.flow .node.hl { background: var(--accent-soft); border-color: var(--accent); }
+.flow .arrow { align-self: center; color: var(--faint); font-size: 1.3rem; padding: 0 .35rem; }
+
+/* vertical flow */
+.vflow { margin: 1.3rem 0; }
+.vflow .step { display: flex; gap: .9rem; position: relative; padding-bottom: 1.1rem; }
+.vflow .step:not(:last-child)::before { content:""; position:absolute; left: 15px; top: 34px; bottom: -2px;
+  width: 2px; background: var(--line); }
+.vflow .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; z-index:1; }
+.vflow .sc h4 { margin: .25rem 0 .2rem; font-size: 1rem; }
+.vflow .sc p { margin: .15rem 0; font-size: .92rem; color: var(--muted); }
+.vflow .sc .mono { font-size: .8rem; color: var(--accent-ink); }
+
+/* layered architecture */
+.layers { margin: 1.3rem 0; display: flex; flex-direction: column; gap: .55rem; }
+.layer { border-radius: 12px; padding: .85rem 1.1rem; border: 1px solid var(--line); background: var(--panel);
+  box-shadow: var(--shadow); }
+.layer .lh { display: flex; align-items: center; gap: .6rem; }
+.layer .lh .badge { font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; }
+.layer .lh .name { font-weight: 700; font-family: ui-monospace, monospace; }
+.layer .ld { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
+.layer.l-core { border-left: 4px solid var(--accent); } .layer.l-core .badge { background: var(--accent-soft); color: var(--accent-ink); }
+.layer.l-main { border-left: 4px solid var(--blue); } .layer.l-main .badge { background: var(--blue-soft); color: var(--blue); }
+.layer.l-part { border-left: 4px solid var(--purple); } .layer.l-part .badge { background: var(--purple-soft); color: var(--purple); }
+.layer.l-app { border-left: 4px solid var(--amber); } .layer.l-app .badge { background: var(--amber-soft); color: var(--amber); }
+
+/* two-column compare */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0; }
+@media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+.col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; box-shadow: var(--shadow); min-width: 0; }
+.col h4 { margin: 0 0 .4rem; font-size: .95rem; }
+
+table.t { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .9rem;
+  background: var(--panel); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+table.t th, table.t td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--line); }
+table.t th { background: var(--panel-2); font-size: .8rem; letter-spacing: .02em; }
+table.t tr:last-child td { border-bottom: none; }
+table.t td.mono, table.t td .mono { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--accent-ink); }
+@media (max-width: 640px) {
+  /* Wide multi-column tables: scroll within their own box instead of
+     forcing page-level horizontal overflow (which clipped right columns). */
+  table.t { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.t th, table.t td { padding: .5rem .6rem; }
+}
+.selftest { margin: 2.2rem 0 0; border-top: 2px dashed var(--line); padding-top: 1.2rem; }
+.selftest > h2 { margin-top: .2rem; }
+.quiz { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+  border-radius: 12px; padding: .9rem 1.1rem; margin: 1rem 0; box-shadow: var(--shadow); }
+.quiz .qn { font-weight: 650; }
+.quiz ol.opts { list-style: upper-alpha; margin: .55rem 0 .6rem 1.5rem; padding: 0; }
+.quiz ol.opts li { margin: .3rem 0; padding-left: .15rem; }
+.quiz details.accordion { margin: .5rem 0 0; }
+.selftest code { font-family: ui-monospace, monospace; font-size: .9em; color: var(--accent-ink);
+  background: var(--accent-soft); padding: 0 .28em; border-radius: 4px; }
+
+/* footer nav */
+.footnav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem;
+  padding-top: 1.4rem; border-top: 1px solid var(--line); }
+.footnav a { flex: 1; padding: .85rem 1.1rem; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow); transition: .15s; }
+.footnav a:hover { border-color: var(--accent); transform: translateY(-1px); }
+.footnav a.next { text-align: right; }
+.footnav .dir { font-size: .72rem; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.footnav .ttl { font-weight: 700; color: var(--ink); margin-top: .15rem; }
+.footnav a.disabled { opacity: .35; pointer-events: none; }
+
+/* index page */
+.toc { display: grid; gap: .7rem; margin-top: 1.6rem; }
+.toc-part { font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--accent); margin: 1.4rem 0 .2rem; }
+.toc a { display: flex; align-items: center; gap: .9rem; padding: .85rem 1.05rem; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); transition: .15s; }
+.toc a:hover { border-color: var(--accent); transform: translateX(3px); }
+.toc .n { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+.toc .tt { font-weight: 650; color: var(--ink); }
+.toc .ts { font-size: .8rem; color: var(--muted); margin-left: auto; text-align: right; }
+.toc-search { position: relative; margin: 1.6rem 0 -.4rem; }
+.toc-search input { width: 100%; box-sizing: border-box; padding: .75rem 2.8rem .75rem 1rem;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font-size: .98rem; box-shadow: var(--shadow); }
+.toc-search input:focus { outline: none; border-color: var(--accent); }
+.toc-search .qcount { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  color: var(--faint); font-size: .8rem; pointer-events: none; }
+.toc a.hide, .toc .toc-part.hide { display: none; }
+.toc-empty { display: none; color: var(--muted); padding: 1rem; text-align: center; }
+.toc-empty.show { display: block; }
+.hero.index h1 { font-size: 2.3rem; }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:1rem; font-size:.8rem; color:var(--muted); }
+.legend span { display:flex; align-items:center; gap:.4rem; }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+.pdf-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1.1rem;
+  background:var(--accent); color:#fff; border-radius:10px; font-size:.9rem; font-weight:650;
+  box-shadow:var(--shadow); transition:.15s; }
+.pdf-btn:hover { background:var(--accent-ink); transform:translateY(-1px); }
+
+/* ---- bilingual language switch ----
+   Contract: <html> must carry data-lang="zh" (default) or "en".
+   page()/index_page() hard-code data-lang="zh"; LANG_BOOT may switch to "en". */
+html[data-lang="en"] .lang-zh { display: none !important; }
+html[data-lang="zh"] .lang-en { display: none !important; }
+.langtoggle { font-size:.72rem; font-weight:700; color:var(--accent-ink);
+  background:var(--accent-soft); border:1px solid var(--accent); border-radius:999px;
+  padding:.22rem .7rem; cursor:pointer; line-height:1.4; white-space:nowrap; }
+.langtoggle:hover { background:var(--accent); color:#fff; }
+
+/* ---- schematic: cell strips (token sequences / quant blocks / KV columns) ---- */
+.cellgroup { margin: 1.2rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.cellgroup .cg-cap { font-size: .82rem; color: var(--muted); margin-bottom: .55rem; }
+.cellgroup .cg-cap b { color: var(--ink); }
+.cells { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.cells + .cells { margin-top: .5rem; }
+.cell { min-width: 2.1rem; padding: .38rem .5rem; text-align: center; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: .78rem;
+  font-family: ui-monospace, monospace; white-space: nowrap; }
+.cell.scale { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); font-weight: 700; }
+.cell.hl    { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cell.q     { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.cell.dim   { opacity: .45; }
+.cells .lab { font-size: .76rem; color: var(--faint); padding: 0 .35rem; }
+.cells .sep { color: var(--faint); padding: 0 .1rem; }
+
+/* ---- schematic: timeline lanes (prefill vs decode, step-by-step) ---- */
+.timeline { margin: 1.2rem 0; display: flex; flex-direction: column; gap: .5rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.timeline .lane { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.timeline .lane-label { min-width: 6rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.timeline .tslot { padding: .4rem .6rem; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--line); font-size: .78rem; text-align: center; font-family: ui-monospace, monospace; }
+.timeline .tslot.span { flex: 1; min-width: 8rem; background: var(--blue-soft); border-color: var(--blue);
+  color: var(--blue); font-weight: 700; }
+.timeline .tslot.now { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+/* ---- worked-example trace: one concrete input, stepped through ---- */
+.trace { margin: 1.3rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.trace .tcap { font-size: .82rem; color: var(--muted); margin-bottom: .7rem; }
+.trace .tcap b { color: var(--accent-ink); }
+.trace .stations { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.trace .stn { flex: 1 1 0; min-width: 116px; border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem; background: var(--bg); }
+.trace .stn h5 { margin: 0 0 .45rem; font-size: .8rem; color: var(--ink); }
+.trace .cellrow { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.trace .vc { min-width: 2.1rem; padding: .32rem .45rem; text-align: center; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); font: 600 .76rem ui-monospace, monospace; white-space: nowrap; }
+.trace .vc.hot  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.trace .vc.blue { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.trace .vc.dim  { opacity: .42; }
+.trace .tlab { font-size: .68rem; color: var(--faint); margin-top: .35rem; }
+.trace .op { align-self: center; color: var(--accent); font: 700 .72rem ui-monospace, monospace;
+  padding: 0 .5rem; text-align: center; white-space: nowrap; }
+.trace svg { max-width: 100%; height: auto; display: block; margin: .3rem auto; }
+@media (max-width: 640px) { .trace .stations { flex-direction: column; } .trace .op { padding: .3rem 0; } }
+/* 🧩 collaboration-mechanism card */
+.card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
+.card.collab .tag { color: var(--blue); }
+.card.collab .collab-sub { font-weight:700; font-size:.82rem; margin:.85rem 0 .3rem; color:var(--ink); }
+/* 🎯 design-tradeoff card */
+.card.design { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.design .tag { color: var(--accent-ink); }
+/* A-G constraint back-reference badge */
+.badge.constraint { display:inline-block; font-size:.7rem; font-weight:700;
+  padding:.1rem .45rem; border-radius:999px; background:var(--purple-soft);
+  color:var(--purple); border:1px solid var(--purple); margin:0 .15rem; white-space:nowrap; }
+</style>
+</head><body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
+    <span class="pill"><span class="lang-zh">第四部分 · 规模化与隔离</span><span class="lang-en">Part 4 · Scaling &amp; Isolation</span></span>
+    <span class="pill">14 / 14</span>
+    <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
+  </div>
+  <div class="progress"><span style="width:100%"></span></div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="part"><span class="lang-zh">第四部分 · 规模化与隔离</span><span class="lang-en">Part 4 · Scaling &amp; Isolation</span></div>
+    <h1><span class="lang-zh">审查与验证分离</span><span class="lang-en">Review &amp; verification</span></h1>
+  </div>
+  <div class="lang-zh">
+<p class="lead">
+第 13 章给了你一把「上下文隔离的锤子」——<span class="mono">delegate_task</span>。但「先规划后执行」「让独立的人审查」这些复杂工作流，Hermes 的委派层<strong>并没有内建</strong>。这恰恰是本章最值得讲的设计取舍：Hermes <strong>不</strong>把规划/执行/审查做进核心，而是用<strong>技能编排 delegate_task 的隔离能力</strong>，在边缘搭出「生成者-验证者分离」。核心只提供一条原语（隔离的子代理），复杂度留给技能——这是窄腰哲学（第 4 章）在多代理协作上的体现。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 同行评审 / 第三方审计</div>
+  没有哪个作者该<strong>自己审自己的论文</strong>——他对自己的疏漏有盲点。学术界的办法是<strong>同行评审</strong>：找一个<strong>没参与写作</strong>的人，只给他论文（不给你的草稿笔记、不给你的辩解），让他用<strong>全新的眼睛</strong>挑错。代码也一样：实现者、审查者、修复者是<strong>三个独立的人</strong>，各自<strong>全新的上下文</strong>。Hermes 把这套「独立验证」用 <span class="mono">delegate_task</span> 的上下文隔离实现——审查者拿到的<strong>只有 diff</strong>，<strong>不</strong>共享实现者的上下文。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 生成-验证分离的核心是「独立 context」</div>
+  一条原则统领本章：<strong>没有 agent 应该验证自己的工作</strong>（<span class="inline">No agent should verify its own work</span>）。为什么？模型对自己刚生成的东西有<strong>确认偏误</strong>，还容易<strong>谄媚附和</strong>。对策是<strong>用全新的 context 来验证</strong>——验证者不知道生成者「想证明什么」，只看结果。Hermes 没有把这做成委派工具的内建流程，而是<strong>三个技能</strong>各司其职：<span class="mono">plan</span>（纯规划）、<span class="mono">subagent-driven-development</span>（执行 + 两阶段审查）、<span class="mono">requesting-code-review</span>（独立审查 + 自动修复）。其中<strong>执行/审查两个</strong>技能<strong>调用 delegate_task 的隔离能力</strong>制造「全新 context」（<span class="mono">plan</span> 只产出计划、本身不委派）。
+</div>
+
+<h2>Hermes 唯一内建的验证倾向：子代理自报不可全信</h2>
+<p>委派工具<strong>本身</strong>只内建了一条验证指令——提醒父代理：子代理的摘要是<strong>自报</strong>，不是已核实的事实：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">2923-2929 · 节选（工具描述）</span></div>
+  <pre>- Subagent summaries are SELF-REPORTS, not verified facts. A subagent
+  that claims "uploaded successfully" or "file written" may be wrong.
+  For operations with external side-effects (HTTP POST/PUT, remote
+  writes, file creation at shared paths, publishing), require the subagent to return a
+  verifiable handle (URL, ID, absolute path, HTTP status) and verify it
+  yourself -- fetch the URL, stat the file, read back the content --
+  before telling the user the operation succeeded.</pre>
+</div>
+<p>这条指令对抗 <span class="badge constraint">C·幻觉</span>——子代理可能<strong>真诚地</strong>报告「上传成功」，但其实没有。所以涉及外部副作用时，要求子代理返回一个<strong>可验证的把手</strong>（URL / ID / 路径 / HTTP 状态），父代理<strong>自己去验</strong>（拉取 URL、stat 文件、读回内容）。这是委派层<strong>唯一</strong>的内建验证倾向；更复杂的「独立审查」流程，则交给技能。</p>
+
+<h2>核心原则：没有 agent 该验证自己的工作</h2>
+<p>真正的「独立审查」在 <span class="mono">requesting-code-review</span> 技能里。它的核心原则只有一句话，却是整套设计的地基：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">skills/…/requesting-code-review/SKILL.md</span><span class="ln">19 / 125-198 · 节选</span></div>
+  <pre><span class="cm"># Core principle</span>
+No agent should verify its own work. Fresh context finds what you miss.
+
+<span class="cm"># Step 5 — Independent reviewer subagent</span>
+The reviewer gets ONLY the diff and static scan results.
+No shared context with the implementer. Fail-closed.
+
+<span class="cm"># Step 7 — Auto-fix loop</span>
+Spawn a THIRD agent context -- not you (the implementer), not the reviewer.</pre>
+</div>
+<p>三个角色、三个<strong>独立 context</strong>：实现者写代码、审查者<strong>只看 diff</strong>（不共享实现者上下文）、修复者是<strong>第三个</strong>全新 context。审查者「fail-closed」——解析不了的回复一律判失败，绝不放水。通过的提交打上 <span class="mono">[verified]</span> 前缀，标明「一个独立审查者批准了它」。这套「独立性」正是对 <span class="badge constraint">F·误差累积</span> 与<strong>谄媚自我背书</strong>的工程对策——它不靠在 prompt 里写「别谄媚」，而靠<strong>结构上的 context 隔离</strong>。</p>
+
+<h2>两阶段审查：spec 合规 + 代码质量</h2>
+<p><span class="mono">subagent-driven-development</span> 技能把审查拆成两阶段，每阶段一个独立 reviewer：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">optional-skills/…/subagent-driven-development/SKILL.md</span><span class="ln">20 / 92-148 / 246-253 · 节选</span></div>
+  <pre><span class="cm"># Core principle</span>
+Fresh subagent per task + two-stage review (spec then quality).
+
+<span class="cm"># Step 2 — Spec Compliance Reviewer</span>
+OUTPUT: PASS or list of specific spec gaps to fix.
+
+<span class="cm"># Step 3 — Code Quality Reviewer</span>
+Verdict: APPROVED or REQUEST_CHANGES.
+
+<span class="cm"># Why two-stage: catches issues before they compound across tasks.</span></pre>
+</div>
+<p>先查<strong>是否符合 spec</strong>（PASS / 列出差距），再查<strong>代码质量</strong>（APPROVED / REQUEST_CHANGES）。为什么值得多花这些验证调用？技能里写得很实在：<strong>「在错误跨任务累积之前抓住它们」</strong>——这正是<strong>生成-验证差</strong>的工程化：验证一个结果比从头生成它<strong>便宜</strong>，多花的审查调用，换来的是不必事后调试「滚雪球式」的复合错误。这是对 <span class="badge constraint">F·误差累积</span> 的直接对策。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><strong>规划</strong>：<span class="mono">plan</span> 技能——纯规划、禁止执行，产出 markdown 计划到 .hermes/plans/</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><strong>执行</strong>：<span class="mono">subagent-driven-development</span> 每个任务派 fresh implementer 子代理（delegate_task 隔离）</span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><strong>两阶段审查</strong>：spec 合规 reviewer（PASS/gaps）→ 代码质量 reviewer（APPROVED/REQUEST_CHANGES），各自独立 context</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><strong>独立审查 + 修复</strong>：<span class="mono">requesting-code-review</span> 审查者只看 diff、修复者是第三个 context → 提交打 [verified]</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">全程靠 delegate_task 的<strong>上下文隔离</strong>制造「全新 context」，核心不内建任何 plan/execute/review 状态机</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「生成-验证分离」</div>
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章核心：委派工具的<strong>「self-reports, verify yourself」</strong>指令（唯一内建）、<span class="mono">plan</span> 技能（纯规划）、<span class="mono">subagent-driven-development</span>（执行 + 两阶段审查）、<span class="mono">requesting-code-review</span>（独立 reviewer + auto-fix）。跨章节配合：所有「独立 context」都靠 <strong>delegate_task 的上下文隔离</strong>（第 13 章）制造；这些工作流是<strong>技能</strong>（第 9 章程序性记忆），而非核心内建——正是<strong>窄腰</strong>（第 4 章）；<span class="mono">background_review.py</span> 是「每轮后 fork 评估存不存技能/记忆」的自改进（第 9 章），<strong>不是</strong>委派审查，别混用。
+  <div class="collab-sub">② 数据流时序</div>
+  plan 技能产出计划 → subagent-driven-development 派 implementer 子代理执行 → spec 合规 reviewer（独立 context，只看实现 vs spec）→ 代码质量 reviewer（独立 context）→ requesting-code-review 派审查者（只看 diff）→ 不通过则第三个 context 修复 → [verified] 提交。
+  <div class="collab-sub">③ 关键点</div>
+  Hermes 没把「规划/执行/审查」做成委派的内建状态机，而是用<strong>三个技能编排 delegate_task 的隔离原语</strong>。核心保持窄：只提供「隔离的子代理」一条原语；复杂的多代理工作流<strong>在边缘（技能）演化</strong>，可被替换、可被扩展，而核心不动。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线：<strong>生成-验证分离靠「独立 context」，工作流用技能编排委派原语（窄腰）</strong>。它治两条 LLM 固有约束：
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·误差累积</span>——模型对自己的输出有确认偏误、易谄媚自我背书；用<strong>独立 context 的验证者</strong>（不靠 prompt 写「别谄媚」，靠结构隔离）+ 两阶段审查「在错误复合前抓住」；
+  <span class="badge constraint">C·幻觉</span>——子代理可能真诚地误报「成功」，故内建「self-reports, verify yourself」要求可验证把手。反模式：让生成者<strong>自己审自己</strong>（盲点 + 谄媚）；或把规划/审查<strong>硬塞进核心</strong>（违背窄腰，复杂工作流应在技能层演化）。注：<strong>核心 prompt 并无显式 anti-sycophancy 指令</strong>，谄媚对策完全靠「独立验证者 + fresh context」的架构。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>委派层无内建审查</strong>：规划/执行/审查不是 delegate_task 的内建状态机，而是<strong>三个技能</strong>（plan / subagent-driven-development / requesting-code-review）编排 delegate_task 隔离能力。</li>
+    <li><strong>唯一内建验证倾向</strong>：工具描述的「Subagent summaries are SELF-REPORTS... verify it yourself」，要求可验证把手（URL/ID/路径/HTTP 状态）。</li>
+    <li><strong>核心原则</strong>：<span class="inline">No agent should verify its own work. Fresh context finds what you miss</span>——实现/审查/修复三个独立 context。</li>
+    <li><strong>两阶段审查</strong>：spec 合规（PASS/gaps）+ 代码质量（APPROVED/REQUEST_CHANGES），「在错误复合前抓住」——生成-验证差的工程化。</li>
+    <li><strong>谄媚对策靠结构</strong>：核心 prompt 无 anti-sycophancy 指令；靠「独立验证者 + fresh context」的 context 隔离对抗自我背书。</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. Hermes 的「先规划后执行」「独立审查」工作流，是 delegate_task 工具内建的吗？</div>
+  <ol class="opts">
+    <li>是，delegate_task 内置 plan/execute/review 状态机</li>
+    <li>不是——委派层只有 leaf/orchestrator 两角色；规划/审查是 plan、subagent-driven-development、requesting-code-review 三个技能编排 delegate_task 的隔离能力</li>
+    <li>Hermes 不支持审查</li>
+    <li>是，但只在 orchestrator 模式</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。delegate_task 只有 role enum [leaf,orchestrator]，无 plan/execute/verify 状态机。规划/执行/审查由三个技能（程序性记忆，第9章）编排 delegate_task 的上下文隔离实现——这正是窄腰（第4章）：核心提供隔离原语，复杂工作流在边缘技能演化。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. Hermes 没有反谄媚的 prompt 指令——那它靠什么对抗谄媚自我背书？</div>
+  <ol class="opts">
+    <li>靠用户手动检查</li>
+    <li>靠结构——独立 context 的验证者（审查者只看 diff、不共享实现者上下文，修复者是第三个 context），用 context 隔离抵消自我附和</li>
+    <li>靠更大的模型</li>
+    <li>靠在 prompt 里写「别谄媚」</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。核心 prompt 确无 anti-sycophancy 指令（grep 零命中）。模型对自己输出有确认偏误、易谄媚，所以靠『独立 context 的验证者』结构对抗：审查者只看 diff、不共享实现者上下文，修复者是第三个 fresh context。不靠写「别谄媚」，靠结构隔离。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>「生成-验证差」——验证一个结果比从头生成它便宜——是 subagent-driven-development 两阶段审查的成本逻辑。结合「No agent should verify its own work」，解释为什么 Hermes 宁愿多花几次审查子代理调用，也要让独立 context 来验证？</li>
+  </ul>
+</div>
+</div></div>
+  <div class="lang-en">
+<p class="lead">
+Ch.13 gave you a "context-isolation hammer" — <span class="mono">delegate_task</span>. But complex workflows like "plan first, execute later" and "have an independent party review" are <strong>not built into</strong> Hermes's delegation layer. That is exactly this chapter's notable trade-off: Hermes does <strong>not</strong> bake planning/execution/review into the core — it uses <strong>skills to orchestrate delegate_task's isolation</strong>, building "generator-verifier separation" at the edges. The core provides just one primitive (an isolated subagent); the complexity lives in skills — the narrow-waist philosophy (ch.4) applied to multi-agent collaboration.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · peer review / third-party audit</div>
+  No author should <strong>review their own paper</strong> — they have blind spots about their own oversights. Academia's answer is <strong>peer review</strong>: find someone who <strong>wasn't involved</strong> in the writing, give them only the paper (not your draft notes, not your rationalizations), and let <strong>fresh eyes</strong> find the flaws. Code is the same: implementer, reviewer, fixer are <strong>three separate people</strong>, each with a <strong>fresh context</strong>. Hermes implements this "independent verification" via <span class="mono">delegate_task</span>'s context isolation — the reviewer gets <strong>only the diff</strong>, with <strong>no</strong> shared context with the implementer.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · generator-verifier separation rests on "independent context"</div>
+  One principle governs this chapter: <strong>no agent should verify its own work</strong> (<span class="inline">No agent should verify its own work</span>). Why? A model has a <strong>confirmation bias</strong> about what it just generated, and is prone to <strong>sycophantic agreement</strong>. The countermeasure is <strong>verifying with a fresh context</strong> — the verifier doesn't know what the generator "wanted to prove," it only sees the result. Hermes doesn't make this a built-in flow of the delegation tool — instead <strong>three skills</strong> each play a part: <span class="mono">plan</span> (pure planning), <span class="mono">subagent-driven-development</span> (execution + two-stage review), <span class="mono">requesting-code-review</span> (independent review + auto-fix). The <strong>execution/review two</strong> of them <strong>call delegate_task's isolation</strong> to manufacture a "fresh context" (<span class="mono">plan</span> only produces a plan and doesn't delegate).
+</div>
+
+<h2>Hermes's only built-in verification leaning: subagent self-reports aren't trustworthy</h2>
+<p>The delegation tool <strong>itself</strong> builds in just one verification instruction — reminding the parent that a subagent's summary is a <strong>self-report</strong>, not a verified fact:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">2923-2929 · excerpt (tool description)</span></div>
+  <pre>- Subagent summaries are SELF-REPORTS, not verified facts. A subagent
+  that claims "uploaded successfully" or "file written" may be wrong.
+  For operations with external side-effects (HTTP POST/PUT, remote
+  writes, file creation at shared paths, publishing), require the subagent to return a
+  verifiable handle (URL, ID, absolute path, HTTP status) and verify it
+  yourself -- fetch the URL, stat the file, read back the content --
+  before telling the user the operation succeeded.</pre>
+</div>
+<p>This instruction treats <span class="badge constraint">C·hallucination</span> — a subagent may <strong>sincerely</strong> report "uploaded successfully" when it didn't. So for external side-effects, require the subagent to return a <strong>verifiable handle</strong> (URL / ID / path / HTTP status), and the parent <strong>verifies it itself</strong> (fetch the URL, stat the file, read it back). This is the delegation layer's <strong>only</strong> built-in verification leaning; the more complex "independent review" flow is left to skills.</p>
+
+<h2>The core principle: no agent should verify its own work</h2>
+<p>The real "independent review" lives in the <span class="mono">requesting-code-review</span> skill. Its core principle is a single sentence, yet it's the foundation of the whole design:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">skills/…/requesting-code-review/SKILL.md</span><span class="ln">19 / 125-198 · excerpt</span></div>
+  <pre><span class="cm"># Core principle</span>
+No agent should verify its own work. Fresh context finds what you miss.
+
+<span class="cm"># Step 5 — Independent reviewer subagent</span>
+The reviewer gets ONLY the diff and static scan results.
+No shared context with the implementer. Fail-closed.
+
+<span class="cm"># Step 7 — Auto-fix loop</span>
+Spawn a THIRD agent context -- not you (the implementer), not the reviewer.</pre>
+</div>
+<p>Three roles, three <strong>independent contexts</strong>: the implementer writes code, the reviewer <strong>sees only the diff</strong> (no shared context with the implementer), the fixer is a <strong>third</strong> fresh context. The reviewer is "fail-closed" — an unparseable response is judged a failure, never waved through. An approved commit gets a <span class="mono">[verified]</span> prefix, marking "an independent reviewer approved it." This "independence" is the engineering countermeasure to <span class="badge constraint">F·error accumulation</span> and <strong>sycophantic self-endorsement</strong> — it doesn't rely on writing "don't be sycophantic" in a prompt, but on <strong>structural context isolation</strong>.</p>
+
+<h2>Two-stage review: spec compliance + code quality</h2>
+<p>The <span class="mono">subagent-driven-development</span> skill splits review into two stages, each an independent reviewer:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">optional-skills/…/subagent-driven-development/SKILL.md</span><span class="ln">20 / 92-148 / 246-253 · excerpt</span></div>
+  <pre><span class="cm"># Core principle</span>
+Fresh subagent per task + two-stage review (spec then quality).
+
+<span class="cm"># Step 2 — Spec Compliance Reviewer</span>
+OUTPUT: PASS or list of specific spec gaps to fix.
+
+<span class="cm"># Step 3 — Code Quality Reviewer</span>
+Verdict: APPROVED or REQUEST_CHANGES.
+
+<span class="cm"># Why two-stage: catches issues before they compound across tasks.</span></pre>
+</div>
+<p>First check <strong>spec compliance</strong> (PASS / list gaps), then <strong>code quality</strong> (APPROVED / REQUEST_CHANGES). Why spend these extra verification calls? The skill says it plainly: <strong>"catch issues before they compound across tasks."</strong> This is exactly the engineering of the <strong>generation-verification gap</strong>: verifying a result is <strong>cheaper</strong> than generating it from scratch, and the extra review calls buy you not having to debug "snowballing" compound errors later. A direct countermeasure to <span class="badge constraint">F·error accumulation</span>.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><strong>Plan</strong>: the <span class="mono">plan</span> skill — pure planning, no execution, writes a markdown plan to .hermes/plans/</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><strong>Execute</strong>: <span class="mono">subagent-driven-development</span> spawns a fresh implementer subagent per task (delegate_task isolation)</span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><strong>Two-stage review</strong>: spec-compliance reviewer (PASS/gaps) → code-quality reviewer (APPROVED/REQUEST_CHANGES), each an independent context</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><strong>Independent review + fix</strong>: <span class="mono">requesting-code-review</span>'s reviewer sees only the diff, the fixer is a third context → commit gets [verified]</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">throughout, delegate_task's <strong>context isolation</strong> manufactures "fresh context"; the core builds in no plan/execute/review state machine</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "generator-verifier separation"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: the delegation tool's <strong>"self-reports, verify yourself"</strong> instruction (the only built-in), the <span class="mono">plan</span> skill (pure planning), <span class="mono">subagent-driven-development</span> (execution + two-stage review), <span class="mono">requesting-code-review</span> (independent reviewer + auto-fix). Cross-chapter teamwork: every "fresh context" is manufactured by <strong>delegate_task's context isolation</strong> (ch.13); these workflows are <strong>skills</strong> (ch.9 procedural memory), not core built-ins — exactly the <strong>narrow waist</strong> (ch.4); <span class="mono">background_review.py</span> is the "fork after each turn to evaluate saving a skill/memory" self-improvement (ch.9), <strong>not</strong> delegation review — don't conflate them.
+  <div class="collab-sub">② Data-flow timing</div>
+  the plan skill produces a plan → subagent-driven-development spawns an implementer subagent to execute → spec-compliance reviewer (independent context, implementation vs spec) → code-quality reviewer (independent context) → requesting-code-review spawns a reviewer (diff only) → on failure a third context fixes → [verified] commit.
+  <div class="collab-sub">③ The key point</div>
+  Hermes doesn't make planning/execution/review a built-in delegation state machine — it uses <strong>three skills to orchestrate delegate_task's isolation primitive</strong>. The core stays narrow: it offers just one primitive ("an isolated subagent"); the complex multi-agent workflow <strong>evolves at the edges (skills)</strong>, replaceable and extensible, while the core stays put.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>generator-verifier separation rests on "independent context," and the workflow orchestrates the delegation primitive via skills (narrow waist)</strong>. It treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·error accumulation</span> — a model has a confirmation bias toward its own output and is prone to sycophantic self-endorsement; use a <strong>verifier in an independent context</strong> (not "don't be sycophantic" in a prompt, but structural isolation) + two-stage review to "catch issues before they compound";
+  <span class="badge constraint">C·hallucination</span> — a subagent may sincerely misreport "success," so the built-in "self-reports, verify yourself" requires a verifiable handle. The anti-pattern: letting the generator <strong>review itself</strong> (blind spots + sycophancy); or <strong>baking planning/review into the core</strong> (against the narrow waist — complex workflows should evolve in the skill layer). Note: <strong>the core prompt has no explicit anti-sycophancy instruction</strong>; the sycophancy countermeasure is entirely the "independent verifier + fresh context" architecture.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>No built-in review in the delegation layer</strong>: planning/execution/review aren't a delegate_task state machine, but <strong>three skills</strong> (plan / subagent-driven-development / requesting-code-review) orchestrating delegate_task's isolation.</li>
+    <li><strong>The only built-in verification leaning</strong>: the tool description's "Subagent summaries are SELF-REPORTS... verify it yourself," requiring a verifiable handle (URL/ID/path/HTTP status).</li>
+    <li><strong>Core principle</strong>: <span class="inline">No agent should verify its own work. Fresh context finds what you miss</span> — implementer/reviewer/fixer are three independent contexts.</li>
+    <li><strong>Two-stage review</strong>: spec compliance (PASS/gaps) + code quality (APPROVED/REQUEST_CHANGES), "catch before they compound" — the generation-verification gap engineered.</li>
+    <li><strong>Sycophancy countered structurally</strong>: the core prompt has no anti-sycophancy instruction; it relies on the "independent verifier + fresh context" isolation to resist self-endorsement.</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Are Hermes's 'plan then execute' and 'independent review' workflows built into the delegate_task tool?</div>
+  <ol class="opts">
+    <li>Yes, delegate_task has a built-in plan/execute/review state machine</li>
+    <li>No — the delegation layer only has leaf/orchestrator roles; planning/review are three skills (plan, subagent-driven-development, requesting-code-review) orchestrating delegate_task's isolation</li>
+    <li>Hermes doesn't support review</li>
+    <li>Yes, but only in orchestrator mode</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. delegate_task only has the role enum [leaf,orchestrator], no plan/execute/verify state machine. Planning/execution/review are implemented by three skills (procedural memory, ch.9) orchestrating delegate_task's context isolation — the narrow waist (ch.4): the core provides the isolation primitive, complex workflows evolve in edge skills.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. Hermes has no anti-sycophancy prompt instruction — so what counters sycophantic self-endorsement?</div>
+  <ol class="opts">
+    <li>By manual user checks</li>
+    <li>By structure — verifiers in independent contexts (reviewer sees only the diff with no shared context, fixer is a third context), using isolation to offset self-agreement</li>
+    <li>By a bigger model</li>
+    <li>By writing 'don't be sycophantic' in the prompt</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. The core prompt indeed has no anti-sycophancy instruction (grep finds none). A model has confirmation bias toward its own output and is prone to sycophancy, so it relies on the 'independent-context verifier' structure: the reviewer sees only the diff with no shared implementer context, the fixer is a third fresh context. Not 'don't be sycophantic,' but structural isolation.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>The 'generation-verification gap' — verifying a result is cheaper than generating it from scratch — is the cost logic of subagent-driven-development's two-stage review. Combined with 'No agent should verify its own work,' explain why Hermes would rather spend extra review-subagent calls to have an independent context verify?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="footnav"><a class="prev" href="13-delegation.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">委派与子代理</span><span class="lang-en">Delegation &amp; subagents</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
+</div>
+<script>
+function havgSetLang(l){
+  l=(l==='en')?'en':'zh';
+  var d=document.documentElement;
+  d.dataset.lang=l; d.lang=(l==='en'?'en':'zh-CN');
+  try{localStorage.setItem('havg-lang',l);}catch(e){}
+}
+function havgToggleLang(){
+  havgSetLang(document.documentElement.dataset.lang==='en'?'zh':'en');
+}
+</script>
+</body></html>

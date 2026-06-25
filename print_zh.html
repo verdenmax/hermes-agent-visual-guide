@@ -346,6 +346,7 @@ details[open] > summary { list-style: none; }
   <li>记忆：MEMORY / USER</li>
   <li>跨会话搜索：FTS5</li>
   <li>委派与子代理</li>
+  <li>审查与验证分离</li>
 </ol></div>
 <section class="lesson-print">
 <h1>Hermes 是什么</h1>
@@ -2394,6 +2395,145 @@ the agent is idle and forge a fresh user/internal turn from each event:
   <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
   <ul>
     <li>委派（上下文隔离）和第 15 章的上下文压缩，都是对抗「上下文有限」的手段，但思路不同。它们各自如何腾出/保护父代理的上下文空间？为什么委派把复杂度「隔离到边缘」而不做进核心？</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>审查与验证分离</h1>
+
+<p class="lead">
+第 13 章给了你一把「上下文隔离的锤子」——<span class="mono">delegate_task</span>。但「先规划后执行」「让独立的人审查」这些复杂工作流，Hermes 的委派层<strong>并没有内建</strong>。这恰恰是本章最值得讲的设计取舍：Hermes <strong>不</strong>把规划/执行/审查做进核心，而是用<strong>技能编排 delegate_task 的隔离能力</strong>，在边缘搭出「生成者-验证者分离」。核心只提供一条原语（隔离的子代理），复杂度留给技能——这是窄腰哲学（第 4 章）在多代理协作上的体现。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 同行评审 / 第三方审计</div>
+  没有哪个作者该<strong>自己审自己的论文</strong>——他对自己的疏漏有盲点。学术界的办法是<strong>同行评审</strong>：找一个<strong>没参与写作</strong>的人，只给他论文（不给你的草稿笔记、不给你的辩解），让他用<strong>全新的眼睛</strong>挑错。代码也一样：实现者、审查者、修复者是<strong>三个独立的人</strong>，各自<strong>全新的上下文</strong>。Hermes 把这套「独立验证」用 <span class="mono">delegate_task</span> 的上下文隔离实现——审查者拿到的<strong>只有 diff</strong>，<strong>不</strong>共享实现者的上下文。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 生成-验证分离的核心是「独立 context」</div>
+  一条原则统领本章：<strong>没有 agent 应该验证自己的工作</strong>（<span class="inline">No agent should verify its own work</span>）。为什么？模型对自己刚生成的东西有<strong>确认偏误</strong>，还容易<strong>谄媚附和</strong>。对策是<strong>用全新的 context 来验证</strong>——验证者不知道生成者「想证明什么」，只看结果。Hermes 没有把这做成委派工具的内建流程，而是<strong>三个技能</strong>各司其职：<span class="mono">plan</span>（纯规划）、<span class="mono">subagent-driven-development</span>（执行 + 两阶段审查）、<span class="mono">requesting-code-review</span>（独立审查 + 自动修复）。其中<strong>执行/审查两个</strong>技能<strong>调用 delegate_task 的隔离能力</strong>制造「全新 context」（<span class="mono">plan</span> 只产出计划、本身不委派）。
+</div>
+
+<h2>Hermes 唯一内建的验证倾向：子代理自报不可全信</h2>
+<p>委派工具<strong>本身</strong>只内建了一条验证指令——提醒父代理：子代理的摘要是<strong>自报</strong>，不是已核实的事实：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">2923-2929 · 节选（工具描述）</span></div>
+  <pre>- Subagent summaries are SELF-REPORTS, not verified facts. A subagent
+  that claims "uploaded successfully" or "file written" may be wrong.
+  For operations with external side-effects (HTTP POST/PUT, remote
+  writes, file creation at shared paths, publishing), require the subagent to return a
+  verifiable handle (URL, ID, absolute path, HTTP status) and verify it
+  yourself -- fetch the URL, stat the file, read back the content --
+  before telling the user the operation succeeded.</pre>
+</div>
+<p>这条指令对抗 <span class="badge constraint">C·幻觉</span>——子代理可能<strong>真诚地</strong>报告「上传成功」，但其实没有。所以涉及外部副作用时，要求子代理返回一个<strong>可验证的把手</strong>（URL / ID / 路径 / HTTP 状态），父代理<strong>自己去验</strong>（拉取 URL、stat 文件、读回内容）。这是委派层<strong>唯一</strong>的内建验证倾向；更复杂的「独立审查」流程，则交给技能。</p>
+
+<h2>核心原则：没有 agent 该验证自己的工作</h2>
+<p>真正的「独立审查」在 <span class="mono">requesting-code-review</span> 技能里。它的核心原则只有一句话，却是整套设计的地基：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">skills/…/requesting-code-review/SKILL.md</span><span class="ln">19 / 125-198 · 节选</span></div>
+  <pre><span class="cm"># Core principle</span>
+No agent should verify its own work. Fresh context finds what you miss.
+
+<span class="cm"># Step 5 — Independent reviewer subagent</span>
+The reviewer gets ONLY the diff and static scan results.
+No shared context with the implementer. Fail-closed.
+
+<span class="cm"># Step 7 — Auto-fix loop</span>
+Spawn a THIRD agent context -- not you (the implementer), not the reviewer.</pre>
+</div>
+<p>三个角色、三个<strong>独立 context</strong>：实现者写代码、审查者<strong>只看 diff</strong>（不共享实现者上下文）、修复者是<strong>第三个</strong>全新 context。审查者「fail-closed」——解析不了的回复一律判失败，绝不放水。通过的提交打上 <span class="mono">[verified]</span> 前缀，标明「一个独立审查者批准了它」。这套「独立性」正是对 <span class="badge constraint">F·误差累积</span> 与<strong>谄媚自我背书</strong>的工程对策——它不靠在 prompt 里写「别谄媚」，而靠<strong>结构上的 context 隔离</strong>。</p>
+
+<h2>两阶段审查：spec 合规 + 代码质量</h2>
+<p><span class="mono">subagent-driven-development</span> 技能把审查拆成两阶段，每阶段一个独立 reviewer：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">optional-skills/…/subagent-driven-development/SKILL.md</span><span class="ln">20 / 92-148 / 246-253 · 节选</span></div>
+  <pre><span class="cm"># Core principle</span>
+Fresh subagent per task + two-stage review (spec then quality).
+
+<span class="cm"># Step 2 — Spec Compliance Reviewer</span>
+OUTPUT: PASS or list of specific spec gaps to fix.
+
+<span class="cm"># Step 3 — Code Quality Reviewer</span>
+Verdict: APPROVED or REQUEST_CHANGES.
+
+<span class="cm"># Why two-stage: catches issues before they compound across tasks.</span></pre>
+</div>
+<p>先查<strong>是否符合 spec</strong>（PASS / 列出差距），再查<strong>代码质量</strong>（APPROVED / REQUEST_CHANGES）。为什么值得多花这些验证调用？技能里写得很实在：<strong>「在错误跨任务累积之前抓住它们」</strong>——这正是<strong>生成-验证差</strong>的工程化：验证一个结果比从头生成它<strong>便宜</strong>，多花的审查调用，换来的是不必事后调试「滚雪球式」的复合错误。这是对 <span class="badge constraint">F·误差累积</span> 的直接对策。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><strong>规划</strong>：<span class="mono">plan</span> 技能——纯规划、禁止执行，产出 markdown 计划到 .hermes/plans/</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><strong>执行</strong>：<span class="mono">subagent-driven-development</span> 每个任务派 fresh implementer 子代理（delegate_task 隔离）</span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><strong>两阶段审查</strong>：spec 合规 reviewer（PASS/gaps）→ 代码质量 reviewer（APPROVED/REQUEST_CHANGES），各自独立 context</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><strong>独立审查 + 修复</strong>：<span class="mono">requesting-code-review</span> 审查者只看 diff、修复者是第三个 context → 提交打 [verified]</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">全程靠 delegate_task 的<strong>上下文隔离</strong>制造「全新 context」，核心不内建任何 plan/execute/review 状态机</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「生成-验证分离」</div>
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章核心：委派工具的<strong>「self-reports, verify yourself」</strong>指令（唯一内建）、<span class="mono">plan</span> 技能（纯规划）、<span class="mono">subagent-driven-development</span>（执行 + 两阶段审查）、<span class="mono">requesting-code-review</span>（独立 reviewer + auto-fix）。跨章节配合：所有「独立 context」都靠 <strong>delegate_task 的上下文隔离</strong>（第 13 章）制造；这些工作流是<strong>技能</strong>（第 9 章程序性记忆），而非核心内建——正是<strong>窄腰</strong>（第 4 章）；<span class="mono">background_review.py</span> 是「每轮后 fork 评估存不存技能/记忆」的自改进（第 9 章），<strong>不是</strong>委派审查，别混用。
+  <div class="collab-sub">② 数据流时序</div>
+  plan 技能产出计划 → subagent-driven-development 派 implementer 子代理执行 → spec 合规 reviewer（独立 context，只看实现 vs spec）→ 代码质量 reviewer（独立 context）→ requesting-code-review 派审查者（只看 diff）→ 不通过则第三个 context 修复 → [verified] 提交。
+  <div class="collab-sub">③ 关键点</div>
+  Hermes 没把「规划/执行/审查」做成委派的内建状态机，而是用<strong>三个技能编排 delegate_task 的隔离原语</strong>。核心保持窄：只提供「隔离的子代理」一条原语；复杂的多代理工作流<strong>在边缘（技能）演化</strong>，可被替换、可被扩展，而核心不动。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线：<strong>生成-验证分离靠「独立 context」，工作流用技能编排委派原语（窄腰）</strong>。它治两条 LLM 固有约束：
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·误差累积</span>——模型对自己的输出有确认偏误、易谄媚自我背书；用<strong>独立 context 的验证者</strong>（不靠 prompt 写「别谄媚」，靠结构隔离）+ 两阶段审查「在错误复合前抓住」；
+  <span class="badge constraint">C·幻觉</span>——子代理可能真诚地误报「成功」，故内建「self-reports, verify yourself」要求可验证把手。反模式：让生成者<strong>自己审自己</strong>（盲点 + 谄媚）；或把规划/审查<strong>硬塞进核心</strong>（违背窄腰，复杂工作流应在技能层演化）。注：<strong>核心 prompt 并无显式 anti-sycophancy 指令</strong>，谄媚对策完全靠「独立验证者 + fresh context」的架构。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>委派层无内建审查</strong>：规划/执行/审查不是 delegate_task 的内建状态机，而是<strong>三个技能</strong>（plan / subagent-driven-development / requesting-code-review）编排 delegate_task 隔离能力。</li>
+    <li><strong>唯一内建验证倾向</strong>：工具描述的「Subagent summaries are SELF-REPORTS... verify it yourself」，要求可验证把手（URL/ID/路径/HTTP 状态）。</li>
+    <li><strong>核心原则</strong>：<span class="inline">No agent should verify its own work. Fresh context finds what you miss</span>——实现/审查/修复三个独立 context。</li>
+    <li><strong>两阶段审查</strong>：spec 合规（PASS/gaps）+ 代码质量（APPROVED/REQUEST_CHANGES），「在错误复合前抓住」——生成-验证差的工程化。</li>
+    <li><strong>谄媚对策靠结构</strong>：核心 prompt 无 anti-sycophancy 指令；靠「独立验证者 + fresh context」的 context 隔离对抗自我背书。</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. Hermes 的「先规划后执行」「独立审查」工作流，是 delegate_task 工具内建的吗？</div>
+  <ol class="opts">
+    <li>是，delegate_task 内置 plan/execute/review 状态机</li>
+    <li>不是——委派层只有 leaf/orchestrator 两角色；规划/审查是 plan、subagent-driven-development、requesting-code-review 三个技能编排 delegate_task 的隔离能力</li>
+    <li>Hermes 不支持审查</li>
+    <li>是，但只在 orchestrator 模式</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。delegate_task 只有 role enum [leaf,orchestrator]，无 plan/execute/verify 状态机。规划/执行/审查由三个技能（程序性记忆，第9章）编排 delegate_task 的上下文隔离实现——这正是窄腰（第4章）：核心提供隔离原语，复杂工作流在边缘技能演化。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. Hermes 没有反谄媚的 prompt 指令——那它靠什么对抗谄媚自我背书？</div>
+  <ol class="opts">
+    <li>靠用户手动检查</li>
+    <li>靠结构——独立 context 的验证者（审查者只看 diff、不共享实现者上下文，修复者是第三个 context），用 context 隔离抵消自我附和</li>
+    <li>靠更大的模型</li>
+    <li>靠在 prompt 里写「别谄媚」</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。核心 prompt 确无 anti-sycophancy 指令（grep 零命中）。模型对自己输出有确认偏误、易谄媚，所以靠『独立 context 的验证者』结构对抗：审查者只看 diff、不共享实现者上下文，修复者是第三个 fresh context。不靠写「别谄媚」，靠结构隔离。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>「生成-验证差」——验证一个结果比从头生成它便宜——是 subagent-driven-development 两阶段审查的成本逻辑。结合「No agent should verify its own work」，解释为什么 Hermes 宁愿多花几次审查子代理调用，也要让独立 context 来验证？</li>
   </ul>
 </div>
 </div>

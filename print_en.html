@@ -346,6 +346,7 @@ details[open] > summary { list-style: none; }
   <li>Memory: MEMORY / USER</li>
   <li>Cross-session search: FTS5</li>
   <li>Delegation & subagents</li>
+  <li>Review & verification</li>
 </ol></div>
 <section class="lesson-print">
 <h1>What is Hermes</h1>
@@ -2456,6 +2457,145 @@ the agent is idle and forge a fresh user/internal turn from each event:
   <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
   <ul>
     <li>Delegation (context isolation) and ch.15's context compression both fight 'limited context' but differently. How does each free/protect the parent's context space? Why does delegation 'isolate complexity to the edges' rather than bake it into the core?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Review & verification</h1>
+
+<p class="lead">
+Ch.13 gave you a "context-isolation hammer" — <span class="mono">delegate_task</span>. But complex workflows like "plan first, execute later" and "have an independent party review" are <strong>not built into</strong> Hermes's delegation layer. That is exactly this chapter's notable trade-off: Hermes does <strong>not</strong> bake planning/execution/review into the core — it uses <strong>skills to orchestrate delegate_task's isolation</strong>, building "generator-verifier separation" at the edges. The core provides just one primitive (an isolated subagent); the complexity lives in skills — the narrow-waist philosophy (ch.4) applied to multi-agent collaboration.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · peer review / third-party audit</div>
+  No author should <strong>review their own paper</strong> — they have blind spots about their own oversights. Academia's answer is <strong>peer review</strong>: find someone who <strong>wasn't involved</strong> in the writing, give them only the paper (not your draft notes, not your rationalizations), and let <strong>fresh eyes</strong> find the flaws. Code is the same: implementer, reviewer, fixer are <strong>three separate people</strong>, each with a <strong>fresh context</strong>. Hermes implements this "independent verification" via <span class="mono">delegate_task</span>'s context isolation — the reviewer gets <strong>only the diff</strong>, with <strong>no</strong> shared context with the implementer.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · generator-verifier separation rests on "independent context"</div>
+  One principle governs this chapter: <strong>no agent should verify its own work</strong> (<span class="inline">No agent should verify its own work</span>). Why? A model has a <strong>confirmation bias</strong> about what it just generated, and is prone to <strong>sycophantic agreement</strong>. The countermeasure is <strong>verifying with a fresh context</strong> — the verifier doesn't know what the generator "wanted to prove," it only sees the result. Hermes doesn't make this a built-in flow of the delegation tool — instead <strong>three skills</strong> each play a part: <span class="mono">plan</span> (pure planning), <span class="mono">subagent-driven-development</span> (execution + two-stage review), <span class="mono">requesting-code-review</span> (independent review + auto-fix). The <strong>execution/review two</strong> of them <strong>call delegate_task's isolation</strong> to manufacture a "fresh context" (<span class="mono">plan</span> only produces a plan and doesn't delegate).
+</div>
+
+<h2>Hermes's only built-in verification leaning: subagent self-reports aren't trustworthy</h2>
+<p>The delegation tool <strong>itself</strong> builds in just one verification instruction — reminding the parent that a subagent's summary is a <strong>self-report</strong>, not a verified fact:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">2923-2929 · excerpt (tool description)</span></div>
+  <pre>- Subagent summaries are SELF-REPORTS, not verified facts. A subagent
+  that claims "uploaded successfully" or "file written" may be wrong.
+  For operations with external side-effects (HTTP POST/PUT, remote
+  writes, file creation at shared paths, publishing), require the subagent to return a
+  verifiable handle (URL, ID, absolute path, HTTP status) and verify it
+  yourself -- fetch the URL, stat the file, read back the content --
+  before telling the user the operation succeeded.</pre>
+</div>
+<p>This instruction treats <span class="badge constraint">C·hallucination</span> — a subagent may <strong>sincerely</strong> report "uploaded successfully" when it didn't. So for external side-effects, require the subagent to return a <strong>verifiable handle</strong> (URL / ID / path / HTTP status), and the parent <strong>verifies it itself</strong> (fetch the URL, stat the file, read it back). This is the delegation layer's <strong>only</strong> built-in verification leaning; the more complex "independent review" flow is left to skills.</p>
+
+<h2>The core principle: no agent should verify its own work</h2>
+<p>The real "independent review" lives in the <span class="mono">requesting-code-review</span> skill. Its core principle is a single sentence, yet it's the foundation of the whole design:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">skills/…/requesting-code-review/SKILL.md</span><span class="ln">19 / 125-198 · excerpt</span></div>
+  <pre><span class="cm"># Core principle</span>
+No agent should verify its own work. Fresh context finds what you miss.
+
+<span class="cm"># Step 5 — Independent reviewer subagent</span>
+The reviewer gets ONLY the diff and static scan results.
+No shared context with the implementer. Fail-closed.
+
+<span class="cm"># Step 7 — Auto-fix loop</span>
+Spawn a THIRD agent context -- not you (the implementer), not the reviewer.</pre>
+</div>
+<p>Three roles, three <strong>independent contexts</strong>: the implementer writes code, the reviewer <strong>sees only the diff</strong> (no shared context with the implementer), the fixer is a <strong>third</strong> fresh context. The reviewer is "fail-closed" — an unparseable response is judged a failure, never waved through. An approved commit gets a <span class="mono">[verified]</span> prefix, marking "an independent reviewer approved it." This "independence" is the engineering countermeasure to <span class="badge constraint">F·error accumulation</span> and <strong>sycophantic self-endorsement</strong> — it doesn't rely on writing "don't be sycophantic" in a prompt, but on <strong>structural context isolation</strong>.</p>
+
+<h2>Two-stage review: spec compliance + code quality</h2>
+<p>The <span class="mono">subagent-driven-development</span> skill splits review into two stages, each an independent reviewer:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">optional-skills/…/subagent-driven-development/SKILL.md</span><span class="ln">20 / 92-148 / 246-253 · excerpt</span></div>
+  <pre><span class="cm"># Core principle</span>
+Fresh subagent per task + two-stage review (spec then quality).
+
+<span class="cm"># Step 2 — Spec Compliance Reviewer</span>
+OUTPUT: PASS or list of specific spec gaps to fix.
+
+<span class="cm"># Step 3 — Code Quality Reviewer</span>
+Verdict: APPROVED or REQUEST_CHANGES.
+
+<span class="cm"># Why two-stage: catches issues before they compound across tasks.</span></pre>
+</div>
+<p>First check <strong>spec compliance</strong> (PASS / list gaps), then <strong>code quality</strong> (APPROVED / REQUEST_CHANGES). Why spend these extra verification calls? The skill says it plainly: <strong>"catch issues before they compound across tasks."</strong> This is exactly the engineering of the <strong>generation-verification gap</strong>: verifying a result is <strong>cheaper</strong> than generating it from scratch, and the extra review calls buy you not having to debug "snowballing" compound errors later. A direct countermeasure to <span class="badge constraint">F·error accumulation</span>.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><strong>Plan</strong>: the <span class="mono">plan</span> skill — pure planning, no execution, writes a markdown plan to .hermes/plans/</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><strong>Execute</strong>: <span class="mono">subagent-driven-development</span> spawns a fresh implementer subagent per task (delegate_task isolation)</span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><strong>Two-stage review</strong>: spec-compliance reviewer (PASS/gaps) → code-quality reviewer (APPROVED/REQUEST_CHANGES), each an independent context</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><strong>Independent review + fix</strong>: <span class="mono">requesting-code-review</span>'s reviewer sees only the diff, the fixer is a third context → commit gets [verified]</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">throughout, delegate_task's <strong>context isolation</strong> manufactures "fresh context"; the core builds in no plan/execute/review state machine</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "generator-verifier separation"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: the delegation tool's <strong>"self-reports, verify yourself"</strong> instruction (the only built-in), the <span class="mono">plan</span> skill (pure planning), <span class="mono">subagent-driven-development</span> (execution + two-stage review), <span class="mono">requesting-code-review</span> (independent reviewer + auto-fix). Cross-chapter teamwork: every "fresh context" is manufactured by <strong>delegate_task's context isolation</strong> (ch.13); these workflows are <strong>skills</strong> (ch.9 procedural memory), not core built-ins — exactly the <strong>narrow waist</strong> (ch.4); <span class="mono">background_review.py</span> is the "fork after each turn to evaluate saving a skill/memory" self-improvement (ch.9), <strong>not</strong> delegation review — don't conflate them.
+  <div class="collab-sub">② Data-flow timing</div>
+  the plan skill produces a plan → subagent-driven-development spawns an implementer subagent to execute → spec-compliance reviewer (independent context, implementation vs spec) → code-quality reviewer (independent context) → requesting-code-review spawns a reviewer (diff only) → on failure a third context fixes → [verified] commit.
+  <div class="collab-sub">③ The key point</div>
+  Hermes doesn't make planning/execution/review a built-in delegation state machine — it uses <strong>three skills to orchestrate delegate_task's isolation primitive</strong>. The core stays narrow: it offers just one primitive ("an isolated subagent"); the complex multi-agent workflow <strong>evolves at the edges (skills)</strong>, replaceable and extensible, while the core stays put.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>generator-verifier separation rests on "independent context," and the workflow orchestrates the delegation primitive via skills (narrow waist)</strong>. It treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·error accumulation</span> — a model has a confirmation bias toward its own output and is prone to sycophantic self-endorsement; use a <strong>verifier in an independent context</strong> (not "don't be sycophantic" in a prompt, but structural isolation) + two-stage review to "catch issues before they compound";
+  <span class="badge constraint">C·hallucination</span> — a subagent may sincerely misreport "success," so the built-in "self-reports, verify yourself" requires a verifiable handle. The anti-pattern: letting the generator <strong>review itself</strong> (blind spots + sycophancy); or <strong>baking planning/review into the core</strong> (against the narrow waist — complex workflows should evolve in the skill layer). Note: <strong>the core prompt has no explicit anti-sycophancy instruction</strong>; the sycophancy countermeasure is entirely the "independent verifier + fresh context" architecture.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>No built-in review in the delegation layer</strong>: planning/execution/review aren't a delegate_task state machine, but <strong>three skills</strong> (plan / subagent-driven-development / requesting-code-review) orchestrating delegate_task's isolation.</li>
+    <li><strong>The only built-in verification leaning</strong>: the tool description's "Subagent summaries are SELF-REPORTS... verify it yourself," requiring a verifiable handle (URL/ID/path/HTTP status).</li>
+    <li><strong>Core principle</strong>: <span class="inline">No agent should verify its own work. Fresh context finds what you miss</span> — implementer/reviewer/fixer are three independent contexts.</li>
+    <li><strong>Two-stage review</strong>: spec compliance (PASS/gaps) + code quality (APPROVED/REQUEST_CHANGES), "catch before they compound" — the generation-verification gap engineered.</li>
+    <li><strong>Sycophancy countered structurally</strong>: the core prompt has no anti-sycophancy instruction; it relies on the "independent verifier + fresh context" isolation to resist self-endorsement.</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Are Hermes's 'plan then execute' and 'independent review' workflows built into the delegate_task tool?</div>
+  <ol class="opts">
+    <li>Yes, delegate_task has a built-in plan/execute/review state machine</li>
+    <li>No — the delegation layer only has leaf/orchestrator roles; planning/review are three skills (plan, subagent-driven-development, requesting-code-review) orchestrating delegate_task's isolation</li>
+    <li>Hermes doesn't support review</li>
+    <li>Yes, but only in orchestrator mode</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. delegate_task only has the role enum [leaf,orchestrator], no plan/execute/verify state machine. Planning/execution/review are implemented by three skills (procedural memory, ch.9) orchestrating delegate_task's context isolation — the narrow waist (ch.4): the core provides the isolation primitive, complex workflows evolve in edge skills.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. Hermes has no anti-sycophancy prompt instruction — so what counters sycophantic self-endorsement?</div>
+  <ol class="opts">
+    <li>By manual user checks</li>
+    <li>By structure — verifiers in independent contexts (reviewer sees only the diff with no shared context, fixer is a third context), using isolation to offset self-agreement</li>
+    <li>By a bigger model</li>
+    <li>By writing 'don't be sycophantic' in the prompt</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. The core prompt indeed has no anti-sycophancy instruction (grep finds none). A model has confirmation bias toward its own output and is prone to sycophancy, so it relies on the 'independent-context verifier' structure: the reviewer sees only the diff with no shared implementer context, the fixer is a third fresh context. Not 'don't be sycophantic,' but structural isolation.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>The 'generation-verification gap' — verifying a result is cheaper than generating it from scratch — is the cost logic of subagent-driven-development's two-stage review. Combined with 'No agent should verify its own work,' explain why Hermes would rather spend extra review-subagent calls to have an independent context verify?</li>
   </ul>
 </div>
 </div>

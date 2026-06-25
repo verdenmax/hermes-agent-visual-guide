@@ -483,6 +483,40 @@ QUIZZES = {
              "en": "Delegation (context isolation) and ch.15's context compression both fight 'limited context' but differently. How does each free/protect the parent's context space? Why does delegation 'isolate complexity to the edges' rather than bake it into the core?"},
         ],
     },
+    "14-review-verification.html": {
+        "mcq": [
+            {
+                "q": {"zh": "Hermes 的「先规划后执行」「独立审查」工作流，是 delegate_task 工具内建的吗？",
+                      "en": "Are Hermes's 'plan then execute' and 'independent review' workflows built into the delegate_task tool?"},
+                "opts": [
+                    {"zh": "是，delegate_task 内置 plan/execute/review 状态机", "en": "Yes, delegate_task has a built-in plan/execute/review state machine"},
+                    {"zh": "不是——委派层只有 leaf/orchestrator 两角色；规划/审查是 plan、subagent-driven-development、requesting-code-review 三个技能编排 delegate_task 的隔离能力", "en": "No — the delegation layer only has leaf/orchestrator roles; planning/review are three skills (plan, subagent-driven-development, requesting-code-review) orchestrating delegate_task's isolation"},
+                    {"zh": "是，但只在 orchestrator 模式", "en": "Yes, but only in orchestrator mode"},
+                    {"zh": "Hermes 不支持审查", "en": "Hermes doesn't support review"},
+                ],
+                "answer": 1,
+                "why": {"zh": "delegate_task 只有 role enum [leaf,orchestrator]，无 plan/execute/verify 状态机。规划/执行/审查由三个技能（程序性记忆，第9章）编排 delegate_task 的上下文隔离实现——这正是窄腰（第4章）：核心提供隔离原语，复杂工作流在边缘技能演化。",
+                        "en": "delegate_task only has the role enum [leaf,orchestrator], no plan/execute/verify state machine. Planning/execution/review are implemented by three skills (procedural memory, ch.9) orchestrating delegate_task's context isolation — the narrow waist (ch.4): the core provides the isolation primitive, complex workflows evolve in edge skills."},
+            },
+            {
+                "q": {"zh": "Hermes 没有反谄媚的 prompt 指令——那它靠什么对抗谄媚自我背书？",
+                      "en": "Hermes has no anti-sycophancy prompt instruction — so what counters sycophantic self-endorsement?"},
+                "opts": [
+                    {"zh": "靠在 prompt 里写「别谄媚」", "en": "By writing 'don't be sycophantic' in the prompt"},
+                    {"zh": "靠结构——独立 context 的验证者（审查者只看 diff、不共享实现者上下文，修复者是第三个 context），用 context 隔离抵消自我附和", "en": "By structure — verifiers in independent contexts (reviewer sees only the diff with no shared context, fixer is a third context), using isolation to offset self-agreement"},
+                    {"zh": "靠用户手动检查", "en": "By manual user checks"},
+                    {"zh": "靠更大的模型", "en": "By a bigger model"},
+                ],
+                "answer": 1,
+                "why": {"zh": "核心 prompt 确无 anti-sycophancy 指令（grep 零命中）。模型对自己输出有确认偏误、易谄媚，所以靠『独立 context 的验证者』结构对抗：审查者只看 diff、不共享实现者上下文，修复者是第三个 fresh context。不靠写「别谄媚」，靠结构隔离。",
+                        "en": "The core prompt indeed has no anti-sycophancy instruction (grep finds none). A model has confirmation bias toward its own output and is prone to sycophancy, so it relies on the 'independent-context verifier' structure: the reviewer sees only the diff with no shared implementer context, the fixer is a third fresh context. Not 'don't be sycophantic,' but structural isolation."},
+            },
+        ],
+        "open": [
+            {"zh": "「生成-验证差」——验证一个结果比从头生成它便宜——是 subagent-driven-development 两阶段审查的成本逻辑。结合「No agent should verify its own work」，解释为什么 Hermes 宁愿多花几次审查子代理调用，也要让独立 context 来验证？",
+             "en": "The 'generation-verification gap' — verifying a result is cheaper than generating it from scratch — is the cost logic of subagent-driven-development's two-stage review. Combined with 'No agent should verify its own work,' explain why Hermes would rather spend extra review-subagent calls to have an independent context verify?"},
+        ],
+    },
 }
 
 

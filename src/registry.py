@@ -23,4 +23,5 @@ CONTENT = {
     "11-memory.html": part3.LESSON_11,
     "12-session-search.html": part3.LESSON_12,
     "13-delegation.html": part4.LESSON_13,
+    "14-review-verification.html": part4.LESSON_14,
 }

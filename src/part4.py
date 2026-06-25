@@ -213,3 +213,208 @@ the agent is idle and forge a fresh user/internal turn from each event:
 </div>
 """,
 }
+
+LESSON_14 = {
+    "zh": r"""
+<p class="lead">
+第 13 章给了你一把「上下文隔离的锤子」——<span class="mono">delegate_task</span>。但「先规划后执行」「让独立的人审查」这些复杂工作流，Hermes 的委派层<strong>并没有内建</strong>。这恰恰是本章最值得讲的设计取舍：Hermes <strong>不</strong>把规划/执行/审查做进核心，而是用<strong>技能编排 delegate_task 的隔离能力</strong>，在边缘搭出「生成者-验证者分离」。核心只提供一条原语（隔离的子代理），复杂度留给技能——这是窄腰哲学（第 4 章）在多代理协作上的体现。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 同行评审 / 第三方审计</div>
+  没有哪个作者该<strong>自己审自己的论文</strong>——他对自己的疏漏有盲点。学术界的办法是<strong>同行评审</strong>：找一个<strong>没参与写作</strong>的人，只给他论文（不给你的草稿笔记、不给你的辩解），让他用<strong>全新的眼睛</strong>挑错。代码也一样：实现者、审查者、修复者是<strong>三个独立的人</strong>，各自<strong>全新的上下文</strong>。Hermes 把这套「独立验证」用 <span class="mono">delegate_task</span> 的上下文隔离实现——审查者拿到的<strong>只有 diff</strong>，<strong>不</strong>共享实现者的上下文。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 生成-验证分离的核心是「独立 context」</div>
+  一条原则统领本章：<strong>没有 agent 应该验证自己的工作</strong>（<span class="inline">No agent should verify its own work</span>）。为什么？模型对自己刚生成的东西有<strong>确认偏误</strong>，还容易<strong>谄媚附和</strong>。对策是<strong>用全新的 context 来验证</strong>——验证者不知道生成者「想证明什么」，只看结果。Hermes 没有把这做成委派工具的内建流程，而是<strong>三个技能</strong>各司其职：<span class="mono">plan</span>（纯规划）、<span class="mono">subagent-driven-development</span>（执行 + 两阶段审查）、<span class="mono">requesting-code-review</span>（独立审查 + 自动修复）。其中<strong>执行/审查两个</strong>技能<strong>调用 delegate_task 的隔离能力</strong>制造「全新 context」（<span class="mono">plan</span> 只产出计划、本身不委派）。
+</div>
+
+<h2>Hermes 唯一内建的验证倾向：子代理自报不可全信</h2>
+<p>委派工具<strong>本身</strong>只内建了一条验证指令——提醒父代理：子代理的摘要是<strong>自报</strong>，不是已核实的事实：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">2923-2929 · 节选（工具描述）</span></div>
+  <pre>- Subagent summaries are SELF-REPORTS, not verified facts. A subagent
+  that claims "uploaded successfully" or "file written" may be wrong.
+  For operations with external side-effects (HTTP POST/PUT, remote
+  writes, file creation at shared paths, publishing), require the subagent to return a
+  verifiable handle (URL, ID, absolute path, HTTP status) and verify it
+  yourself -- fetch the URL, stat the file, read back the content --
+  before telling the user the operation succeeded.</pre>
+</div>
+<p>这条指令对抗 <span class="badge constraint">C·幻觉</span>——子代理可能<strong>真诚地</strong>报告「上传成功」，但其实没有。所以涉及外部副作用时，要求子代理返回一个<strong>可验证的把手</strong>（URL / ID / 路径 / HTTP 状态），父代理<strong>自己去验</strong>（拉取 URL、stat 文件、读回内容）。这是委派层<strong>唯一</strong>的内建验证倾向；更复杂的「独立审查」流程，则交给技能。</p>
+
+<h2>核心原则：没有 agent 该验证自己的工作</h2>
+<p>真正的「独立审查」在 <span class="mono">requesting-code-review</span> 技能里。它的核心原则只有一句话，却是整套设计的地基：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">skills/…/requesting-code-review/SKILL.md</span><span class="ln">19 / 125-198 · 节选</span></div>
+  <pre><span class="cm"># Core principle</span>
+No agent should verify its own work. Fresh context finds what you miss.
+
+<span class="cm"># Step 5 — Independent reviewer subagent</span>
+The reviewer gets ONLY the diff and static scan results.
+No shared context with the implementer. Fail-closed.
+
+<span class="cm"># Step 7 — Auto-fix loop</span>
+Spawn a THIRD agent context -- not you (the implementer), not the reviewer.</pre>
+</div>
+<p>三个角色、三个<strong>独立 context</strong>：实现者写代码、审查者<strong>只看 diff</strong>（不共享实现者上下文）、修复者是<strong>第三个</strong>全新 context。审查者「fail-closed」——解析不了的回复一律判失败，绝不放水。通过的提交打上 <span class="mono">[verified]</span> 前缀，标明「一个独立审查者批准了它」。这套「独立性」正是对 <span class="badge constraint">F·误差累积</span> 与<strong>谄媚自我背书</strong>的工程对策——它不靠在 prompt 里写「别谄媚」，而靠<strong>结构上的 context 隔离</strong>。</p>
+
+<h2>两阶段审查：spec 合规 + 代码质量</h2>
+<p><span class="mono">subagent-driven-development</span> 技能把审查拆成两阶段，每阶段一个独立 reviewer：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">optional-skills/…/subagent-driven-development/SKILL.md</span><span class="ln">20 / 92-148 / 246-253 · 节选</span></div>
+  <pre><span class="cm"># Core principle</span>
+Fresh subagent per task + two-stage review (spec then quality).
+
+<span class="cm"># Step 2 — Spec Compliance Reviewer</span>
+OUTPUT: PASS or list of specific spec gaps to fix.
+
+<span class="cm"># Step 3 — Code Quality Reviewer</span>
+Verdict: APPROVED or REQUEST_CHANGES.
+
+<span class="cm"># Why two-stage: catches issues before they compound across tasks.</span></pre>
+</div>
+<p>先查<strong>是否符合 spec</strong>（PASS / 列出差距），再查<strong>代码质量</strong>（APPROVED / REQUEST_CHANGES）。为什么值得多花这些验证调用？技能里写得很实在：<strong>「在错误跨任务累积之前抓住它们」</strong>——这正是<strong>生成-验证差</strong>的工程化：验证一个结果比从头生成它<strong>便宜</strong>，多花的审查调用，换来的是不必事后调试「滚雪球式」的复合错误。这是对 <span class="badge constraint">F·误差累积</span> 的直接对策。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><strong>规划</strong>：<span class="mono">plan</span> 技能——纯规划、禁止执行，产出 markdown 计划到 .hermes/plans/</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><strong>执行</strong>：<span class="mono">subagent-driven-development</span> 每个任务派 fresh implementer 子代理（delegate_task 隔离）</span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><strong>两阶段审查</strong>：spec 合规 reviewer（PASS/gaps）→ 代码质量 reviewer（APPROVED/REQUEST_CHANGES），各自独立 context</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><strong>独立审查 + 修复</strong>：<span class="mono">requesting-code-review</span> 审查者只看 diff、修复者是第三个 context → 提交打 [verified]</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">全程靠 delegate_task 的<strong>上下文隔离</strong>制造「全新 context」，核心不内建任何 plan/execute/review 状态机</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「生成-验证分离」</div>
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章核心：委派工具的<strong>「self-reports, verify yourself」</strong>指令（唯一内建）、<span class="mono">plan</span> 技能（纯规划）、<span class="mono">subagent-driven-development</span>（执行 + 两阶段审查）、<span class="mono">requesting-code-review</span>（独立 reviewer + auto-fix）。跨章节配合：所有「独立 context」都靠 <strong>delegate_task 的上下文隔离</strong>（第 13 章）制造；这些工作流是<strong>技能</strong>（第 9 章程序性记忆），而非核心内建——正是<strong>窄腰</strong>（第 4 章）；<span class="mono">background_review.py</span> 是「每轮后 fork 评估存不存技能/记忆」的自改进（第 9 章），<strong>不是</strong>委派审查，别混用。
+  <div class="collab-sub">② 数据流时序</div>
+  plan 技能产出计划 → subagent-driven-development 派 implementer 子代理执行 → spec 合规 reviewer（独立 context，只看实现 vs spec）→ 代码质量 reviewer（独立 context）→ requesting-code-review 派审查者（只看 diff）→ 不通过则第三个 context 修复 → [verified] 提交。
+  <div class="collab-sub">③ 关键点</div>
+  Hermes 没把「规划/执行/审查」做成委派的内建状态机，而是用<strong>三个技能编排 delegate_task 的隔离原语</strong>。核心保持窄：只提供「隔离的子代理」一条原语；复杂的多代理工作流<strong>在边缘（技能）演化</strong>，可被替换、可被扩展，而核心不动。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线：<strong>生成-验证分离靠「独立 context」，工作流用技能编排委派原语（窄腰）</strong>。它治两条 LLM 固有约束：
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·误差累积</span>——模型对自己的输出有确认偏误、易谄媚自我背书；用<strong>独立 context 的验证者</strong>（不靠 prompt 写「别谄媚」，靠结构隔离）+ 两阶段审查「在错误复合前抓住」；
+  <span class="badge constraint">C·幻觉</span>——子代理可能真诚地误报「成功」，故内建「self-reports, verify yourself」要求可验证把手。反模式：让生成者<strong>自己审自己</strong>（盲点 + 谄媚）；或把规划/审查<strong>硬塞进核心</strong>（违背窄腰，复杂工作流应在技能层演化）。注：<strong>核心 prompt 并无显式 anti-sycophancy 指令</strong>，谄媚对策完全靠「独立验证者 + fresh context」的架构。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>委派层无内建审查</strong>：规划/执行/审查不是 delegate_task 的内建状态机，而是<strong>三个技能</strong>（plan / subagent-driven-development / requesting-code-review）编排 delegate_task 隔离能力。</li>
+    <li><strong>唯一内建验证倾向</strong>：工具描述的「Subagent summaries are SELF-REPORTS... verify it yourself」，要求可验证把手（URL/ID/路径/HTTP 状态）。</li>
+    <li><strong>核心原则</strong>：<span class="inline">No agent should verify its own work. Fresh context finds what you miss</span>——实现/审查/修复三个独立 context。</li>
+    <li><strong>两阶段审查</strong>：spec 合规（PASS/gaps）+ 代码质量（APPROVED/REQUEST_CHANGES），「在错误复合前抓住」——生成-验证差的工程化。</li>
+    <li><strong>谄媚对策靠结构</strong>：核心 prompt 无 anti-sycophancy 指令；靠「独立验证者 + fresh context」的 context 隔离对抗自我背书。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">
+Ch.13 gave you a "context-isolation hammer" — <span class="mono">delegate_task</span>. But complex workflows like "plan first, execute later" and "have an independent party review" are <strong>not built into</strong> Hermes's delegation layer. That is exactly this chapter's notable trade-off: Hermes does <strong>not</strong> bake planning/execution/review into the core — it uses <strong>skills to orchestrate delegate_task's isolation</strong>, building "generator-verifier separation" at the edges. The core provides just one primitive (an isolated subagent); the complexity lives in skills — the narrow-waist philosophy (ch.4) applied to multi-agent collaboration.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · peer review / third-party audit</div>
+  No author should <strong>review their own paper</strong> — they have blind spots about their own oversights. Academia's answer is <strong>peer review</strong>: find someone who <strong>wasn't involved</strong> in the writing, give them only the paper (not your draft notes, not your rationalizations), and let <strong>fresh eyes</strong> find the flaws. Code is the same: implementer, reviewer, fixer are <strong>three separate people</strong>, each with a <strong>fresh context</strong>. Hermes implements this "independent verification" via <span class="mono">delegate_task</span>'s context isolation — the reviewer gets <strong>only the diff</strong>, with <strong>no</strong> shared context with the implementer.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · generator-verifier separation rests on "independent context"</div>
+  One principle governs this chapter: <strong>no agent should verify its own work</strong> (<span class="inline">No agent should verify its own work</span>). Why? A model has a <strong>confirmation bias</strong> about what it just generated, and is prone to <strong>sycophantic agreement</strong>. The countermeasure is <strong>verifying with a fresh context</strong> — the verifier doesn't know what the generator "wanted to prove," it only sees the result. Hermes doesn't make this a built-in flow of the delegation tool — instead <strong>three skills</strong> each play a part: <span class="mono">plan</span> (pure planning), <span class="mono">subagent-driven-development</span> (execution + two-stage review), <span class="mono">requesting-code-review</span> (independent review + auto-fix). The <strong>execution/review two</strong> of them <strong>call delegate_task's isolation</strong> to manufacture a "fresh context" (<span class="mono">plan</span> only produces a plan and doesn't delegate).
+</div>
+
+<h2>Hermes's only built-in verification leaning: subagent self-reports aren't trustworthy</h2>
+<p>The delegation tool <strong>itself</strong> builds in just one verification instruction — reminding the parent that a subagent's summary is a <strong>self-report</strong>, not a verified fact:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">2923-2929 · excerpt (tool description)</span></div>
+  <pre>- Subagent summaries are SELF-REPORTS, not verified facts. A subagent
+  that claims "uploaded successfully" or "file written" may be wrong.
+  For operations with external side-effects (HTTP POST/PUT, remote
+  writes, file creation at shared paths, publishing), require the subagent to return a
+  verifiable handle (URL, ID, absolute path, HTTP status) and verify it
+  yourself -- fetch the URL, stat the file, read back the content --
+  before telling the user the operation succeeded.</pre>
+</div>
+<p>This instruction treats <span class="badge constraint">C·hallucination</span> — a subagent may <strong>sincerely</strong> report "uploaded successfully" when it didn't. So for external side-effects, require the subagent to return a <strong>verifiable handle</strong> (URL / ID / path / HTTP status), and the parent <strong>verifies it itself</strong> (fetch the URL, stat the file, read it back). This is the delegation layer's <strong>only</strong> built-in verification leaning; the more complex "independent review" flow is left to skills.</p>
+
+<h2>The core principle: no agent should verify its own work</h2>
+<p>The real "independent review" lives in the <span class="mono">requesting-code-review</span> skill. Its core principle is a single sentence, yet it's the foundation of the whole design:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">skills/…/requesting-code-review/SKILL.md</span><span class="ln">19 / 125-198 · excerpt</span></div>
+  <pre><span class="cm"># Core principle</span>
+No agent should verify its own work. Fresh context finds what you miss.
+
+<span class="cm"># Step 5 — Independent reviewer subagent</span>
+The reviewer gets ONLY the diff and static scan results.
+No shared context with the implementer. Fail-closed.
+
+<span class="cm"># Step 7 — Auto-fix loop</span>
+Spawn a THIRD agent context -- not you (the implementer), not the reviewer.</pre>
+</div>
+<p>Three roles, three <strong>independent contexts</strong>: the implementer writes code, the reviewer <strong>sees only the diff</strong> (no shared context with the implementer), the fixer is a <strong>third</strong> fresh context. The reviewer is "fail-closed" — an unparseable response is judged a failure, never waved through. An approved commit gets a <span class="mono">[verified]</span> prefix, marking "an independent reviewer approved it." This "independence" is the engineering countermeasure to <span class="badge constraint">F·error accumulation</span> and <strong>sycophantic self-endorsement</strong> — it doesn't rely on writing "don't be sycophantic" in a prompt, but on <strong>structural context isolation</strong>.</p>
+
+<h2>Two-stage review: spec compliance + code quality</h2>
+<p>The <span class="mono">subagent-driven-development</span> skill splits review into two stages, each an independent reviewer:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">optional-skills/…/subagent-driven-development/SKILL.md</span><span class="ln">20 / 92-148 / 246-253 · excerpt</span></div>
+  <pre><span class="cm"># Core principle</span>
+Fresh subagent per task + two-stage review (spec then quality).
+
+<span class="cm"># Step 2 — Spec Compliance Reviewer</span>
+OUTPUT: PASS or list of specific spec gaps to fix.
+
+<span class="cm"># Step 3 — Code Quality Reviewer</span>
+Verdict: APPROVED or REQUEST_CHANGES.
+
+<span class="cm"># Why two-stage: catches issues before they compound across tasks.</span></pre>
+</div>
+<p>First check <strong>spec compliance</strong> (PASS / list gaps), then <strong>code quality</strong> (APPROVED / REQUEST_CHANGES). Why spend these extra verification calls? The skill says it plainly: <strong>"catch issues before they compound across tasks."</strong> This is exactly the engineering of the <strong>generation-verification gap</strong>: verifying a result is <strong>cheaper</strong> than generating it from scratch, and the extra review calls buy you not having to debug "snowballing" compound errors later. A direct countermeasure to <span class="badge constraint">F·error accumulation</span>.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><strong>Plan</strong>: the <span class="mono">plan</span> skill — pure planning, no execution, writes a markdown plan to .hermes/plans/</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><strong>Execute</strong>: <span class="mono">subagent-driven-development</span> spawns a fresh implementer subagent per task (delegate_task isolation)</span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><strong>Two-stage review</strong>: spec-compliance reviewer (PASS/gaps) → code-quality reviewer (APPROVED/REQUEST_CHANGES), each an independent context</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><strong>Independent review + fix</strong>: <span class="mono">requesting-code-review</span>'s reviewer sees only the diff, the fixer is a third context → commit gets [verified]</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">throughout, delegate_task's <strong>context isolation</strong> manufactures "fresh context"; the core builds in no plan/execute/review state machine</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "generator-verifier separation"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: the delegation tool's <strong>"self-reports, verify yourself"</strong> instruction (the only built-in), the <span class="mono">plan</span> skill (pure planning), <span class="mono">subagent-driven-development</span> (execution + two-stage review), <span class="mono">requesting-code-review</span> (independent reviewer + auto-fix). Cross-chapter teamwork: every "fresh context" is manufactured by <strong>delegate_task's context isolation</strong> (ch.13); these workflows are <strong>skills</strong> (ch.9 procedural memory), not core built-ins — exactly the <strong>narrow waist</strong> (ch.4); <span class="mono">background_review.py</span> is the "fork after each turn to evaluate saving a skill/memory" self-improvement (ch.9), <strong>not</strong> delegation review — don't conflate them.
+  <div class="collab-sub">② Data-flow timing</div>
+  the plan skill produces a plan → subagent-driven-development spawns an implementer subagent to execute → spec-compliance reviewer (independent context, implementation vs spec) → code-quality reviewer (independent context) → requesting-code-review spawns a reviewer (diff only) → on failure a third context fixes → [verified] commit.
+  <div class="collab-sub">③ The key point</div>
+  Hermes doesn't make planning/execution/review a built-in delegation state machine — it uses <strong>three skills to orchestrate delegate_task's isolation primitive</strong>. The core stays narrow: it offers just one primitive ("an isolated subagent"); the complex multi-agent workflow <strong>evolves at the edges (skills)</strong>, replaceable and extensible, while the core stays put.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>generator-verifier separation rests on "independent context," and the workflow orchestrates the delegation primitive via skills (narrow waist)</strong>. It treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·error accumulation</span> — a model has a confirmation bias toward its own output and is prone to sycophantic self-endorsement; use a <strong>verifier in an independent context</strong> (not "don't be sycophantic" in a prompt, but structural isolation) + two-stage review to "catch issues before they compound";
+  <span class="badge constraint">C·hallucination</span> — a subagent may sincerely misreport "success," so the built-in "self-reports, verify yourself" requires a verifiable handle. The anti-pattern: letting the generator <strong>review itself</strong> (blind spots + sycophancy); or <strong>baking planning/review into the core</strong> (against the narrow waist — complex workflows should evolve in the skill layer). Note: <strong>the core prompt has no explicit anti-sycophancy instruction</strong>; the sycophancy countermeasure is entirely the "independent verifier + fresh context" architecture.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>No built-in review in the delegation layer</strong>: planning/execution/review aren't a delegate_task state machine, but <strong>three skills</strong> (plan / subagent-driven-development / requesting-code-review) orchestrating delegate_task's isolation.</li>
+    <li><strong>The only built-in verification leaning</strong>: the tool description's "Subagent summaries are SELF-REPORTS... verify it yourself," requiring a verifiable handle (URL/ID/path/HTTP status).</li>
+    <li><strong>Core principle</strong>: <span class="inline">No agent should verify its own work. Fresh context finds what you miss</span> — implementer/reviewer/fixer are three independent contexts.</li>
+    <li><strong>Two-stage review</strong>: spec compliance (PASS/gaps) + code quality (APPROVED/REQUEST_CHANGES), "catch before they compound" — the generation-verification gap engineered.</li>
+    <li><strong>Sycophancy countered structurally</strong>: the core prompt has no anti-sycophancy instruction; it relies on the "independent verifier + fresh context" isolation to resist self-endorsement.</li>
+  </ul>
+</div>
+""",
+}
