@@ -279,6 +279,40 @@ QUIZZES = {
              "en": "When does role-alternation repair (repair_message_sequence) run, and why must it tidy the live messages in place rather than rebuild the whole context? How does that echo ch.6's caching discipline?"},
         ],
     },
+    "08-tool-system.html": {
+        "mcq": [
+            {
+                "q": {"zh": "为什么 Hermes 里「给核心加一个工具」是门槛最高的决定？",
+                      "en": "Why is 'adding a tool to the core' the highest-bar decision in Hermes?"},
+                "opts": [
+                    {"zh": "因为要写很多代码", "en": "Because it takes a lot of code"},
+                    {"zh": "因为每个工具的 schema 每一次 API 调用都要发送一遍，工具越多固定开销越高、越挤占注意力", "en": "Because every tool's schema is sent on every API call — more tools mean higher fixed cost and more crowded attention"},
+                    {"zh": "因为工具名不能重复", "en": "Because tool names must be unique"},
+                    {"zh": "因为要改 system prompt", "en": "Because it changes the system prompt"},
+                ],
+                "answer": 1,
+                "why": {"zh": "工具 schema 随每次请求发出，是固定开销 + 注意力成本。所以新能力优先爬 Footprint Ladder（扩展现有 > CLI+技能 > check_fn 门控 > 插件 > MCP），核心工具是最后一档。",
+                        "en": "Tool schemas ship with every request — a fixed cost plus attention cost. So new capability climbs the Footprint Ladder (extend existing > CLI+skill > check_fn-gated > plugin > MCP), with a core tool the last resort."},
+            },
+            {
+                "q": {"zh": "本轮同时调了 execute_code 和 read_file 两个工具，迭代预算会被退还吗？",
+                      "en": "This turn called both execute_code and read_file — is the iteration budget refunded?"},
+                "opts": [
+                    {"zh": "会，只要有 execute_code 就退", "en": "Yes, any execute_code triggers a refund"},
+                    {"zh": "不会——只有本轮 _tc_names 恰好 == {'execute_code'}（纯程序化调用）才退，混入别的工具就不退", "en": "No — refund only when _tc_names == {'execute_code'} exactly (purely programmatic); mixing any other tool blocks it"},
+                    {"zh": "会，退两格", "en": "Yes, two slots back"},
+                    {"zh": "永远不退", "en": "Never refunded"},
+                ],
+                "answer": 1,
+                "why": {"zh": "退还条件是集合严格相等 _tc_names == {'execute_code'}；混入 read_file 后集合 != {'execute_code'}，不退。这防止用 execute_code 夹带别的工具来无限续命。",
+                        "en": "The refund requires set equality _tc_names == {'execute_code'}; mixing in read_file makes the set unequal, so no refund. This prevents smuggling other tools inside execute_code to live forever."},
+            },
+        ],
+        "open": [
+            {"zh": "check_fn 门控如何做到「前置条件不满足的工具零足迹」、又为什么要给结果加 ~30s TTL 缓存？这与第 6 章「会话中途绝不换 toolset」的缓存铁律是怎样配合的？",
+             "en": "How does check_fn gating give an unmet-prerequisite tool 'zero footprint', and why cache the result with a ~30s TTL? How does this cooperate with ch.6's 'never swap toolsets mid-session' caching rule?"},
+        ],
+    },
 }
 
 

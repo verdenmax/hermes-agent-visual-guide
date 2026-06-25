@@ -602,3 +602,234 @@ Hermes speaks to Anthropic, OpenAI Codex, Gemini, AWS Bedrock, and twenty-odd Op
 </div>
 """,
 }
+
+LESSON_08 = {
+    "zh": r"""
+<p class="lead">
+工具是 agent「动手」的能力——读文件、跑终端、搜网页、调浏览器。本章讲清一个工具<strong>如何从一个 Python 文件变成模型能调用的能力</strong>：注册表自动发现、<span class="mono">check_fn</span> 服务门控、按 toolset 过滤组装 schema、统一 JSON 返回 + 错误净化、以及 <span class="mono">execute_code</span> 退还预算。还要回答一个贯穿全书的问题——<strong>为什么每加一个核心工具都要如此谨慎</strong>：因为<strong>每个工具的 schema，每一次 API 调用都要发送一遍</strong>。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 机场安检 + 登机口</div>
+  把工具集想成一座机场。每个航班（工具）要开放登机，得先过两道关：<strong>安检</strong>（<span class="mono">check_fn</span>）——没配齐前置条件（API key、playwright、docker）的航班<strong>根本不出现在航班表上</strong>；<strong>登机口分配</strong>（toolset 过滤）——只有这个平台启用的 toolset 里的工具才会摆上台面。乘客（模型）看到的航班表（tool schema），是<strong>每次都要重新打印发给塔台</strong>的——所以航班越多，每次通讯越贵。这就是为什么「再开一条核心航线」要慎之又慎。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 能力在边缘，核心窄腰</div>
+  Hermes 的核心工具集<strong>刻意保持很窄</strong>（第 4 章的「窄腰」）。原因很硬核：每个工具的 JSON schema 都会<strong>随每一次 API 调用一起发出去</strong>——工具越多，固定开销越高，还会挤占模型注意力。所以新能力的优先级是「<strong>Footprint Ladder</strong>」：扩展现有 &gt; CLI 命令 + 技能 &gt; <span class="mono">check_fn</span> 门控工具 &gt; 插件 &gt; MCP server &gt; <strong>最后才是</strong>新核心工具。注册一个工具只要两件事：写 <span class="mono">tools/your_tool.py</span> 调 <span class="mono">registry.register(name, toolset, schema, handler, check_fn=...)</span>，再把工具名放进某个 toolset——但「该不该放进核心」永远是最贵的决定。
+</div>
+
+<h2>门控：check_fn 让工具「条件不满足就不出现」</h2>
+<p>组装发给模型的 schema 列表时，注册表会对每个工具跑一遍它声明的 <span class="mono">check_fn</span>。返回 <span class="kw">False</span> 的工具<strong>直接被跳过、不进 schema</strong>——条件不满足时它的足迹是<strong>零</strong>：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">337-384 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">get_definitions</span>(self, tool_names):
+    result = []
+    check_results = {}                                <span class="cm"># 同一遍组装内的 per-call 缓存</span>
+    <span class="kw">for</span> name <span class="kw">in</span> <span class="fn">sorted</span>(tool_names):
+        entry = entries_by_name.get(name)
+        <span class="kw">if</span> entry.check_fn:                            <span class="cm"># 工具声明了前置条件</span>
+            <span class="kw">if</span> entry.check_fn <span class="kw">not</span> <span class="kw">in</span> check_results:
+                check_results[entry.check_fn] = _check_fn_cached(entry.check_fn)  <span class="cm"># 结果缓存 ~30s</span>
+            <span class="kw">if</span> <span class="kw">not</span> check_results[entry.check_fn]:
+                <span class="kw">continue</span>                            <span class="cm"># 条件不满足 → 不进 schema（零足迹）</span>
+        schema_with_name = {**entry.schema, <span class="st">"name"</span>: entry.name}
+        result.append({<span class="st">"type"</span>: <span class="st">"function"</span>, <span class="st">"function"</span>: schema_with_name})
+    <span class="kw">return</span> result</pre>
+</div>
+<p>这里有两层巧思。其一，<span class="mono">check_fn</span> 的结果用 <span class="mono">_check_fn_cached</span> 缓存约 <strong>30 秒</strong>——因为像「探测 docker / 探测 playwright / 探测 API key」这种检查有成本，30 秒 TTL 让你 <span class="mono">hermes tools enable foo</span> 后近实时生效，又不必每次调用都重新探测。其二，<strong>门控让工具集对一个会话保持稳定</strong>：Home Assistant 的工具只在配了 token 时出现，否则连 schema 都不占——这正服务第 6 章的缓存铁律（工具 schema 也是前缀的一部分，<strong>会话中途绝不换 toolset</strong>）。更上一层，<span class="mono">get_tool_definitions</span>（<span class="mono">model_tools.py:276</span>）先按 <span class="mono">enabled/disabled toolsets</span> 过滤，且结果<strong>按 config.yaml 的 mtime+size 记忆化</strong>——配置不变就不重算。</p>
+
+<h2>分派：统一 JSON 返回 + 错误净化</h2>
+<p>模型回来一个 tool_call，<span class="mono">dispatch</span> 按名字找到 handler 执行。所有 handler 都<strong>返回 JSON 字符串</strong>，而所有异常都被<strong>统一</strong>包成 <span class="mono">{"error": ...}</span>——而且要先<strong>净化</strong>：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">390-416 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">dispatch</span>(self, name, args, **kwargs):
+    entry = self.get_entry(name)
+    <span class="kw">if</span> <span class="kw">not</span> entry:
+        <span class="kw">return</span> json.dumps({<span class="st">"error"</span>: <span class="st">f"Unknown tool: {name}"</span>})
+    <span class="kw">try</span>:
+        <span class="kw">return</span> entry.handler(args, **kwargs)         <span class="cm"># handler 必返回 JSON string</span>
+    <span class="kw">except</span> Exception <span class="kw">as</span> e:
+        raw = <span class="st">f"Tool execution failed: {type(e).__name__}: {e}"</span>
+        <span class="cm"># 经 _sanitize_tool_error 净化：异常串里的框架 token / CDATA /</span>
+        <span class="cm"># 围栏不能作为结构噪声到达模型</span>
+        sanitized = _sanitize_tool_error(raw)
+        <span class="kw">return</span> json.dumps({<span class="st">"error"</span>: sanitized})</pre>
+</div>
+<p>这段的关键不是「捕获异常」，而是<strong>净化</strong>。工具的输出——无论成功结果还是报错串——对模型来说都是<strong>数据</strong>，不是指令。可异常消息里可能<strong>偶然</strong>带上模型框架的特殊 token、CDATA、代码围栏；若原样塞回去，模型可能把它们当成<strong>结构信号</strong>误解析。<span class="mono">_sanitize_tool_error</span> 把这些剥掉，让报错老老实实当数据。这正对应 <span class="badge constraint">D·指令=数据</span>——模型分不清「指令」和「数据」，所以喂回去的工具输出必须<strong>先消毒</strong>。</p>
+
+<h2>预算：execute_code 退还迭代</h2>
+<p>第 5 章讲过迭代预算（parent 90 / subagent 50），每轮工具调用消耗一格。但有一个例外——<span class="mono">execute_code</span>（程序化工具调用）是 RPC 式的廉价调用，不该吃预算。所以本轮<strong>若且仅若所有 tool_call 都是 execute_code</strong>，就退还一格：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py</span><span class="ln">4117-4122 · 节选</span></div>
+  <pre><span class="cm"># Refund the iteration if the ONLY tool(s) called were execute_code.</span>
+_tc_names = {tc.function.name <span class="kw">for</span> tc <span class="kw">in</span> assistant_message.tool_calls}
+<span class="kw">if</span> _tc_names == {<span class="st">"execute_code"</span>}:
+    agent.iteration_budget.refund()</pre>
+</div>
+<p>注意那个 <span class="mono">== {"execute_code"}</span> 的严格相等：只要本轮<strong>混进</strong>了任何别的工具，就<strong>不退</strong>。这保证退还只发生在「纯程序化调用」的轮次，不会被人钻空子用 execute_code 夹带别的工具来无限续命。预算（第 5 章）、门控（本章）、缓存（第 6 章）三者合起来，才让一个能自由调工具的 agent <strong>既强大又不失控</strong>。</p>
+
+<h2>一个工具的一生</h2>
+<div class="flow">
+  <div class="node"><div class="nt">register</div><div class="nd">import 时登记 name/toolset/schema/handler/check_fn</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">toolset 过滤</div><div class="nd">get_tool_definitions 按 enabled 筛选</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">check_fn 门控</div><div class="nd">条件不满足就不进 schema</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">schema 随每次 API 调用发出</div><div class="nd">工具越多越贵</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">模型回 tool_call</div><div class="nd">dispatch 执行 + 错误净化</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">结果 append 为 tool 消息</div><div class="nd">进可见上下文，不改前缀</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">（若全是 execute_code）refund</div><div class="nd">退还一格预算</div></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「能力在边缘、核心窄腰」</div>
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章五件：<strong>registry.register</strong>（自动发现注册）、<strong>get_definitions</strong>（check_fn 门控）、<strong>get_tool_definitions</strong>（toolset 过滤 + 记忆化）、<strong>dispatch</strong>（统一 JSON + 错误净化）、<strong>iteration_budget.refund</strong>（execute_code 退还）。跨章节配合：工具发现链承接<strong>窄腰</strong>（第 4 章 registry → toolset → get_tool_definitions）；工具结果作为 <strong>tool 消息 append</strong> 进可见上下文、<strong>不改前缀</strong>（第 6 章缓存）；<span class="mono">check_fn</span> 门控让工具集<strong>会话内稳定</strong>＝不中途换 toolset（第 6 章铁律）；预算退还呼应<strong>迭代预算</strong>（第 5 章）；<span class="mono">delegate_task</span> 是一个「会生孩子」的特殊工具（第 13 章委派）。
+  <div class="collab-sub">② 数据流时序</div>
+  register（import 时）→ get_tool_definitions 按 enabled toolsets 过滤 → get_definitions 跑 check_fn 门控 + dynamic overrides → schema 随每次 API 调用发出 → 模型回 tool_call → handle_function_call → dispatch（异常净化）→ 返回 JSON string → 作为 tool 消息 append → （若本轮全是 execute_code）refund 预算。
+  <div class="collab-sub">③ 关键点</div>
+  每个工具 schema <strong>每次调用都发送</strong>——所以「加核心工具」成本最高、门槛最高。门控 + toolset 让「昂贵的核心面」保持窄，能力尽量<strong>下沉到边缘</strong>（CLI / skill / 插件 / MCP），这就是窄腰哲学在工具层的落地。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线：<strong>能力在边缘 + 核心窄腰 + 工具调用 append-only 不破缓存</strong>。它治三条 LLM 固有约束：
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span>——工具太多会挤占上下文与注意力，所以核心窄腰 + check_fn 门控，只让真正需要的工具上台；
+  <span class="badge constraint">D·指令=数据</span>——工具结果是<strong>数据</strong>：dispatch 把异常串里的框架 token / CDATA / 围栏<strong>净化</strong>掉，别让模型误当成结构信号；
+  <span class="badge constraint">E·结构化输出脆弱</span>——工具 schema 即 function calling，统一成 OpenAI 格式由各 adapter 翻译（第 7 章）。反模式：动不动就给核心加一个工具——每个都要在每次 API 调用里付费，正确做法是先爬一遍 Footprint Ladder。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>注册即发现</strong>：<span class="mono">tools/*.py</span> 里的 <span class="mono">registry.register(...)</span> 自动被导入；但「放进哪个 toolset」是手动、刻意的一步。</li>
+    <li><strong>check_fn 门控</strong>：前置条件不满足的工具<strong>不进 schema</strong>（零足迹），结果缓存 ~30s；让工具集对一个会话稳定（守缓存）。</li>
+    <li><strong>统一返回 + 错误净化</strong>：handler 必返回 JSON string，异常统一包成 <span class="mono">{"error":...}</span> 并经 <span class="mono">_sanitize_tool_error</span> 消毒（约束 D）。</li>
+    <li><strong>execute_code 退还预算</strong>：仅当本轮 <span class="mono">_tc_names == {"execute_code"}</span> 才 refund；夹带别的工具就不退。</li>
+    <li><strong>每个 schema 每次都发</strong>：加核心工具门槛最高；能力优先下沉边缘（Footprint Ladder：CLI/skill/插件/MCP &gt; 核心工具）。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">
+Tools are how an agent "acts" — read files, run a terminal, search the web, drive a browser. This chapter shows how a tool <strong>goes from one Python file to a capability the model can call</strong>: registry auto-discovery, <span class="mono">check_fn</span> service gating, toolset-filtered schema assembly, a unified JSON return + error sanitizing, and <span class="mono">execute_code</span> refunding budget. It also answers a question that runs through the whole book — <strong>why adding a core tool is treated so carefully</strong>: because <strong>every tool's schema is sent on every single API call</strong>.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · airport security + gate assignment</div>
+  Picture the toolset as an airport. For a flight (tool) to board, it clears two gates: <strong>security</strong> (<span class="mono">check_fn</span>) — a flight without its prerequisites (API key, playwright, docker) <strong>never even appears on the board</strong>; and <strong>gate assignment</strong> (toolset filtering) — only tools in this platform's enabled toolset make it onto the floor. The board the passenger (model) sees (the tool schema) is <strong>reprinted and sent to the tower every time</strong> — so the more flights, the costlier each transmission. That's why "opening another core route" is weighed so carefully.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · capability at the edges, a narrow-waist core</div>
+  Hermes keeps its core toolset <strong>deliberately narrow</strong> (ch.4's "narrow waist"). The reason is hard: every tool's JSON schema <strong>ships with every API call</strong> — more tools mean higher fixed overhead and more crowded attention. So new capability follows the "<strong>Footprint Ladder</strong>": extend existing &gt; CLI command + skill &gt; <span class="mono">check_fn</span>-gated tool &gt; plugin &gt; MCP server &gt; <strong>only last</strong>, a new core tool. Registering a tool takes two things: write <span class="mono">tools/your_tool.py</span> calling <span class="mono">registry.register(name, toolset, schema, handler, check_fn=...)</span>, then put the tool name into a toolset — but "should it go in the core" is always the most expensive decision.
+</div>
+
+<h2>Gating: check_fn makes a tool "vanish when prerequisites are unmet"</h2>
+<p>When assembling the schema list sent to the model, the registry runs each tool's declared <span class="mono">check_fn</span>. A tool returning <span class="kw">False</span> is <strong>skipped outright — never entering the schema</strong>; when its condition is unmet, its footprint is <strong>zero</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">337-384 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">get_definitions</span>(self, tool_names):
+    result = []
+    check_results = {}                                <span class="cm"># per-call cache within one assembly pass</span>
+    <span class="kw">for</span> name <span class="kw">in</span> <span class="fn">sorted</span>(tool_names):
+        entry = entries_by_name.get(name)
+        <span class="kw">if</span> entry.check_fn:                            <span class="cm"># tool declared a prerequisite</span>
+            <span class="kw">if</span> entry.check_fn <span class="kw">not</span> <span class="kw">in</span> check_results:
+                check_results[entry.check_fn] = _check_fn_cached(entry.check_fn)  <span class="cm"># cached ~30s</span>
+            <span class="kw">if</span> <span class="kw">not</span> check_results[entry.check_fn]:
+                <span class="kw">continue</span>                            <span class="cm"># unmet -> not in schema (zero footprint)</span>
+        schema_with_name = {**entry.schema, <span class="st">"name"</span>: entry.name}
+        result.append({<span class="st">"type"</span>: <span class="st">"function"</span>, <span class="st">"function"</span>: schema_with_name})
+    <span class="kw">return</span> result</pre>
+</div>
+<p>Two bits of cleverness. First, the <span class="mono">check_fn</span> result is cached by <span class="mono">_check_fn_cached</span> for about <strong>30 seconds</strong> — because checks like "probe docker / probe playwright / probe an API key" cost something, the 30s TTL lets <span class="mono">hermes tools enable foo</span> take effect in near-real-time without re-probing on every call. Second, <strong>gating keeps the toolset stable for a session</strong>: Home Assistant tools appear only when a token is configured, otherwise they don't even occupy a schema — which serves ch.6's caching rule (the tool schema is part of the prefix too, so <strong>never swap toolsets mid-session</strong>). One level up, <span class="mono">get_tool_definitions</span> (<span class="mono">model_tools.py:276</span>) first filters by <span class="mono">enabled/disabled toolsets</span>, and the result is <strong>memoized on config.yaml's mtime+size</strong> — no recompute if config is unchanged.</p>
+
+<h2>Dispatch: a unified JSON return + error sanitizing</h2>
+<p>The model returns a tool_call; <span class="mono">dispatch</span> finds the handler by name and runs it. Every handler <strong>returns a JSON string</strong>, and every exception is <strong>uniformly</strong> wrapped into <span class="mono">{"error": ...}</span> — after being <strong>sanitized</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">390-416 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">dispatch</span>(self, name, args, **kwargs):
+    entry = self.get_entry(name)
+    <span class="kw">if</span> <span class="kw">not</span> entry:
+        <span class="kw">return</span> json.dumps({<span class="st">"error"</span>: <span class="st">f"Unknown tool: {name}"</span>})
+    <span class="kw">try</span>:
+        <span class="kw">return</span> entry.handler(args, **kwargs)         <span class="cm"># handler must return a JSON string</span>
+    <span class="kw">except</span> Exception <span class="kw">as</span> e:
+        raw = <span class="st">f"Tool execution failed: {type(e).__name__}: {e}"</span>
+        <span class="cm"># sanitize: framing tokens / CDATA / fences in the exception</span>
+        <span class="cm"># string must not reach the model as structural noise</span>
+        sanitized = _sanitize_tool_error(raw)
+        <span class="kw">return</span> json.dumps({<span class="st">"error"</span>: sanitized})</pre>
+</div>
+<p>The point here isn't "catch the exception" — it's <strong>sanitizing</strong>. A tool's output — success result or error string alike — is <strong>data</strong> to the model, not instruction. Yet an exception message might <strong>accidentally</strong> carry the model framework's special tokens, CDATA, or code fences; fed back verbatim, the model could misparse them as <strong>structural signals</strong>. <span class="mono">_sanitize_tool_error</span> strips those so the error stays honest data. This maps to <span class="badge constraint">D·instr=data</span> — the model can't tell "instructions" from "data," so tool output fed back must be <strong>disinfected first</strong>.</p>
+
+<h2>Budget: execute_code refunds an iteration</h2>
+<p>Ch.5 covered the iteration budget (parent 90 / subagent 50), where each tool turn spends one slot. But there's an exception — <span class="mono">execute_code</span> (programmatic tool calling) is a cheap RPC-style call that shouldn't eat the budget. So <strong>if and only if every tool_call this turn is execute_code</strong>, one slot is refunded:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py</span><span class="ln">4117-4122 · excerpt</span></div>
+  <pre><span class="cm"># Refund the iteration if the ONLY tool(s) called were execute_code.</span>
+_tc_names = {tc.function.name <span class="kw">for</span> tc <span class="kw">in</span> assistant_message.tool_calls}
+<span class="kw">if</span> _tc_names == {<span class="st">"execute_code"</span>}:
+    agent.iteration_budget.refund()</pre>
+</div>
+<p>Note the strict equality <span class="mono">== {"execute_code"}</span>: if any other tool is <strong>mixed in</strong> this turn, there's <strong>no refund</strong>. This ensures refunds only happen on "purely programmatic" turns and can't be gamed by smuggling other tools inside execute_code to live forever. Budget (ch.5), gating (this chapter), and caching (ch.6) together let an agent that calls tools freely stay <strong>both powerful and under control</strong>.</p>
+
+<h2>The life of a tool</h2>
+<div class="flow">
+  <div class="node"><div class="nt">register</div><div class="nd">at import: name/toolset/schema/handler/check_fn</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">toolset filter</div><div class="nd">get_tool_definitions filters by enabled</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">check_fn gate</div><div class="nd">unmet -> not in schema</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">schema ships on every API call</div><div class="nd">more tools, costlier</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">model returns tool_call</div><div class="nd">dispatch runs + error sanitize</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">result appended as tool message</div><div class="nd">into visible context, prefix unchanged</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">(if all execute_code) refund</div><div class="nd">one budget slot back</div></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "capability at the edges, narrow-waist core"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  This chapter's five: <strong>registry.register</strong> (auto-discovery), <strong>get_definitions</strong> (check_fn gating), <strong>get_tool_definitions</strong> (toolset filter + memoization), <strong>dispatch</strong> (unified JSON + error sanitizing), <strong>iteration_budget.refund</strong> (execute_code refund). Cross-chapter teamwork: the discovery chain carries the <strong>narrow waist</strong> (ch.4: registry → toolset → get_tool_definitions); tool results <strong>append as tool messages</strong> into visible context and <strong>don't touch the prefix</strong> (ch.6 caching); <span class="mono">check_fn</span> gating keeps the toolset <strong>stable within a session</strong> = no mid-session toolset swap (ch.6 rule); the refund echoes the <strong>iteration budget</strong> (ch.5); <span class="mono">delegate_task</span> is a "child-spawning" special tool (ch.13 delegation).
+  <div class="collab-sub">② Data-flow timing</div>
+  register (at import) → get_tool_definitions filters by enabled toolsets → get_definitions runs check_fn gating + dynamic overrides → schema ships on every API call → model returns tool_call → handle_function_call → dispatch (exception sanitize) → returns a JSON string → appended as a tool message → (if all execute_code this turn) refund budget.
+  <div class="collab-sub">③ The key point</div>
+  Every tool schema <strong>ships on every call</strong> — so "adding a core tool" is the costliest, highest-bar move. Gating + toolsets keep the "expensive core surface" narrow, pushing capability <strong>to the edges</strong> (CLI / skill / plugin / MCP). That's the narrow-waist philosophy landing at the tool layer.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>capability at the edges + a narrow-waist core + append-only tool calls that don't break the cache</strong>. It treats three inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> — too many tools crowd context and attention, so a narrow core + check_fn gating lets only the truly needed tools onto the stage;
+  <span class="badge constraint">D·instr=data</span> — tool results are <strong>data</strong>: dispatch <strong>sanitizes</strong> framing tokens / CDATA / fences out of exception strings so the model can't misread them as structural signals;
+  <span class="badge constraint">E·brittle structured output</span> — a tool schema is function calling, unified into OpenAI format and translated by each adapter (ch.7). The anti-pattern: reflexively adding a tool to the core — each one is paid for on every API call; the right move is to climb the Footprint Ladder first.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Register = discover</strong>: <span class="mono">registry.register(...)</span> in any <span class="mono">tools/*.py</span> is auto-imported; but "which toolset to put it in" is a manual, deliberate step.</li>
+    <li><strong>check_fn gating</strong>: tools with unmet prerequisites <strong>don't enter the schema</strong> (zero footprint), results cached ~30s; keeps the toolset stable for a session (guards the cache).</li>
+    <li><strong>Unified return + error sanitize</strong>: handlers must return a JSON string; exceptions are uniformly wrapped into <span class="mono">{"error":...}</span> and run through <span class="mono">_sanitize_tool_error</span> (constraint D).</li>
+    <li><strong>execute_code refunds budget</strong>: only when <span class="mono">_tc_names == {"execute_code"}</span> this turn; smuggle another tool and there's no refund.</li>
+    <li><strong>Every schema ships every time</strong>: adding a core tool has the highest bar; push capability to the edges first (Footprint Ladder: CLI/skill/plugin/MCP &gt; core tool).</li>
+  </ul>
+</div>
+""",
+}

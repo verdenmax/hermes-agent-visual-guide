@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var l=localStorage.getItem('havg-lang');if(l==='en'){document.documentElement.dataset.lang='en';document.documentElement.lang='en';}}catch(e){}</script>
+<title>08 · 工具系统：注册·门控·分派·预算 / Tool system · Hermes Agent 设计图解</title>
+<meta name="description" content="第二部分 · Agent 核心｜工具系统：注册·门控·分派·预算 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="theme-color" content="#c2630e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAzMiAzMic+PHJlY3Qgd2lkdGg9JzMyJyBoZWlnaHQ9JzMyJyByeD0nNycgZmlsbD0nI2M4YTAyYycvPjx0ZXh0IHg9JzE2JyB5PScyMicgZm9udC1mYW1pbHk9J3N5c3RlbS11aSxzYW5zLXNlcmlmJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nODAwJyBmaWxsPScjZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz7imKQ8L3RleHQ+PC9zdmc+">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Hermes Agent 设计图解">
+<meta property="og:title" content="08 · 工具系统：注册·门控·分派·预算 / Tool system · Hermes Agent 设计图解">
+<meta property="og:description" content="第二部分 · Agent 核心｜工具系统：注册·门控·分派·预算 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="08 · 工具系统：注册·门控·分派·预算 / Tool system · Hermes Agent 设计图解">
+<meta name="twitter:description" content="第二部分 · Agent 核心｜工具系统：注册·门控·分派·预算 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --ink: #1d2129;
+  --muted: #5b6470; --faint: #8a939f; --line: #e1e5ea;
+  --accent: #c8a02c; --accent-soft: #faf1d6; --accent-ink: #8a6d12;
+  --blue: #2563eb; --blue-soft: #e7efff; --amber: #b4690e; --amber-soft: #fdf1dd;
+  --purple: #7c3aed; --purple-soft: #f0e9ff; --red: #d23f3f; --red-soft: #fbe6e6;
+  --code-bg: #0f172a; --code-ink: #e2e8f0; --code-line: #1e293b;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232c; --ink: #e6edf3;
+    --muted: #9aa6b2; --faint: #6e7a86; --line: #2a323c;
+    --accent: #e3c05a; --accent-soft: #2e2510; --accent-ink: #f0d488;
+    --blue: #6ea8fe; --blue-soft: #16243f; --amber: #e0a44a; --amber-soft: #33270f;
+    --purple: #b794f6; --purple-soft: #271a40; --red: #f08080; --red-soft: #3a1a1a;
+    --code-bg: #0a0f1a; --code-ink: #d8e2f0; --code-line: #14202f;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+html { scroll-behavior: smooth; overflow-x: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+code, .mono { font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; overflow-wrap: break-word; }
+
+/* ---- top progress bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 50; background: var(--panel);
+  border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
+}
+.topbar-inner {
+  max-width: 960px; margin: 0 auto; padding: .7rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.topbar .home { font-size: .82rem; color: var(--muted); font-weight: 600; display:flex; gap:.5rem; align-items:center; }
+.topbar .home b { color: var(--accent); }
+.topbar .pill { font-size: .72rem; color: var(--muted); background: var(--panel-2);
+  padding: .2rem .6rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.progress { height: 3px; background: var(--panel-2); }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--blue)); }
+
+.wrap { max-width: 820px; margin: 0 auto; padding: 2.4rem 1.25rem 5rem; }
+
+/* ---- hero ---- */
+.hero { margin-bottom: 2rem; }
+.hero .part { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: .55rem; }
+.hero h1 { font-size: 2.05rem; line-height: 1.2; letter-spacing: -.01em; font-weight: 750; }
+.hero .lead { margin-top: .9rem; font-size: 1.06rem; color: var(--muted); }
+
+h2 { font-size: 1.32rem; margin: 2.4rem 0 .9rem; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: .55rem; }
+h2::before { content: ""; width: 4px; height: 1.05em; background: var(--accent); border-radius: 3px; display: inline-block; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+p { margin: .7rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .3rem 0; }
+strong { color: var(--ink); font-weight: 680; }
+.inline { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: .08em .4em; font-size: .9em; color: var(--accent-ink); }
+
+/* ---- callout cards ---- */
+.card { border-radius: var(--radius); padding: 1.05rem 1.2rem; margin: 1.2rem 0;
+  border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.card .tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.card.macro { border-left: 4px solid var(--blue); }
+.card.macro .tag { color: var(--blue); }
+.card.detail { border-left: 4px solid var(--purple); }
+.card.detail .tag { color: var(--purple); }
+.card.analogy { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+.card.analogy .tag { color: var(--amber); }
+.card.key { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.key .tag { color: var(--accent-ink); }
+.card.warn { border-left: 4px solid var(--red); background: var(--red-soft); }
+.card.warn .tag { color: var(--red); }
+.card.spark { border-left: 4px solid #e0a000;
+  background: linear-gradient(100deg, rgba(224,160,0,.12), transparent 70%); }
+.card.spark .tag { color: #c98a00; }
+@media (prefers-color-scheme: dark) { .card.spark .tag { color: #f0c050; } }
+
+/* ---- code file callout ---- */
+.codefile { margin: 1.2rem 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  box-shadow: var(--shadow); }
+.codefile .cf-head { display: flex; align-items: center; gap: .55rem; padding: .5rem .85rem;
+  background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: .8rem; }
+.codefile .cf-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink:0; }
+.codefile .cf-head .path { font-family: ui-monospace, monospace; color: var(--ink); font-weight: 600; }
+.codefile .cf-head .ln { margin-left: auto; color: var(--faint); font-size: .72rem; }
+.codefile pre { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem;
+  overflow-x: auto; font-size: .82rem; line-height: 1.6; }
+.codefile pre .cm { color: #7d8aa3; }
+.codefile pre .kw { color: #c792ea; }
+.codefile pre .fn { color: #82aaff; }
+.codefile pre .st { color: #c3e88d; }
+.codefile pre .nb { color: #f78c6c; }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem; border-radius: 12px;
+  overflow-x: auto; font-size: .83rem; line-height: 1.6; margin: 1.1rem 0; box-shadow: var(--shadow); }
+pre.code .cm { color: #7d8aa3; } pre.code .kw { color: #c792ea; }
+pre.code .fn { color: #82aaff; } pre.code .st { color: #c3e88d; } pre.code .nb { color: #f78c6c; }
+
+/* ---- collapsible accordion (details/summary) ---- */
+.accordion { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  margin: .7rem 0; box-shadow: var(--shadow); overflow: hidden; }
+.accordion > summary { cursor: pointer; padding: .85rem 1.1rem; font-weight: 650; font-size: .96rem;
+  list-style: none; display: flex; align-items: center; gap: .6rem; user-select: none; }
+.accordion > summary::-webkit-details-marker { display: none; }
+.accordion > summary::after { content: "▶"; font-size: .68rem; color: var(--accent);
+  margin-left: auto; transition: transform .15s ease; }
+.accordion[open] > summary::after { transform: rotate(90deg); }
+.accordion > summary:hover { background: var(--panel-2); }
+.accordion[open] > summary { border-bottom: 1px solid var(--line); }
+.accordion .badge-num { background: var(--accent-soft); color: var(--accent-ink);
+  width: 1.6rem; height: 1.6rem; border-radius: 7px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: .82rem; font-weight: 700; flex-shrink: 0; }
+.accordion .hint { font-size: .72rem; color: var(--faint); font-weight: 400; }
+.acc-body { padding: .9rem 1.1rem 1.1rem; }
+.acc-intro { color: var(--muted); font-size: .9rem; margin: .2rem 0 .4rem; }
+.qa { margin: 1rem 0; }
+.qa:first-child { margin-top: .3rem; }
+.qa .q { font-weight: 680; font-size: .9rem; display: flex; gap: .45rem; align-items: center; margin-bottom: .3rem; }
+.qa .a { color: var(--muted); font-size: .9rem; }
+.qa .a strong { color: var(--ink); }
+.qa pre.code { margin: .5rem 0 0; font-size: .78rem; }
+
+/* ---- flow diagram ---- */
+.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 1.3rem 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.2rem 1rem; box-shadow: var(--shadow); }
+.flow .node { flex: 1 1 0; min-width: 110px; text-align: center; padding: .7rem .5rem;
+  border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.flow .node .nt { font-weight: 700; font-size: .92rem; }
+.flow .node .nd { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+.flow .node.hl { background: var(--accent-soft); border-color: var(--accent); }
+.flow .arrow { align-self: center; color: var(--faint); font-size: 1.3rem; padding: 0 .35rem; }
+
+/* vertical flow */
+.vflow { margin: 1.3rem 0; }
+.vflow .step { display: flex; gap: .9rem; position: relative; padding-bottom: 1.1rem; }
+.vflow .step:not(:last-child)::before { content:""; position:absolute; left: 15px; top: 34px; bottom: -2px;
+  width: 2px; background: var(--line); }
+.vflow .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; z-index:1; }
+.vflow .sc h4 { margin: .25rem 0 .2rem; font-size: 1rem; }
+.vflow .sc p { margin: .15rem 0; font-size: .92rem; color: var(--muted); }
+.vflow .sc .mono { font-size: .8rem; color: var(--accent-ink); }
+
+/* layered architecture */
+.layers { margin: 1.3rem 0; display: flex; flex-direction: column; gap: .55rem; }
+.layer { border-radius: 12px; padding: .85rem 1.1rem; border: 1px solid var(--line); background: var(--panel);
+  box-shadow: var(--shadow); }
+.layer .lh { display: flex; align-items: center; gap: .6rem; }
+.layer .lh .badge { font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; }
+.layer .lh .name { font-weight: 700; font-family: ui-monospace, monospace; }
+.layer .ld { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
+.layer.l-core { border-left: 4px solid var(--accent); } .layer.l-core .badge { background: var(--accent-soft); color: var(--accent-ink); }
+.layer.l-main { border-left: 4px solid var(--blue); } .layer.l-main .badge { background: var(--blue-soft); color: var(--blue); }
+.layer.l-part { border-left: 4px solid var(--purple); } .layer.l-part .badge { background: var(--purple-soft); color: var(--purple); }
+.layer.l-app { border-left: 4px solid var(--amber); } .layer.l-app .badge { background: var(--amber-soft); color: var(--amber); }
+
+/* two-column compare */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0; }
+@media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+.col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; box-shadow: var(--shadow); min-width: 0; }
+.col h4 { margin: 0 0 .4rem; font-size: .95rem; }
+
+table.t { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .9rem;
+  background: var(--panel); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+table.t th, table.t td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--line); }
+table.t th { background: var(--panel-2); font-size: .8rem; letter-spacing: .02em; }
+table.t tr:last-child td { border-bottom: none; }
+table.t td.mono, table.t td .mono { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--accent-ink); }
+@media (max-width: 640px) {
+  /* Wide multi-column tables: scroll within their own box instead of
+     forcing page-level horizontal overflow (which clipped right columns). */
+  table.t { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.t th, table.t td { padding: .5rem .6rem; }
+}
+.selftest { margin: 2.2rem 0 0; border-top: 2px dashed var(--line); padding-top: 1.2rem; }
+.selftest > h2 { margin-top: .2rem; }
+.quiz { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+  border-radius: 12px; padding: .9rem 1.1rem; margin: 1rem 0; box-shadow: var(--shadow); }
+.quiz .qn { font-weight: 650; }
+.quiz ol.opts { list-style: upper-alpha; margin: .55rem 0 .6rem 1.5rem; padding: 0; }
+.quiz ol.opts li { margin: .3rem 0; padding-left: .15rem; }
+.quiz details.accordion { margin: .5rem 0 0; }
+.selftest code { font-family: ui-monospace, monospace; font-size: .9em; color: var(--accent-ink);
+  background: var(--accent-soft); padding: 0 .28em; border-radius: 4px; }
+
+/* footer nav */
+.footnav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem;
+  padding-top: 1.4rem; border-top: 1px solid var(--line); }
+.footnav a { flex: 1; padding: .85rem 1.1rem; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow); transition: .15s; }
+.footnav a:hover { border-color: var(--accent); transform: translateY(-1px); }
+.footnav a.next { text-align: right; }
+.footnav .dir { font-size: .72rem; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.footnav .ttl { font-weight: 700; color: var(--ink); margin-top: .15rem; }
+.footnav a.disabled { opacity: .35; pointer-events: none; }
+
+/* index page */
+.toc { display: grid; gap: .7rem; margin-top: 1.6rem; }
+.toc-part { font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--accent); margin: 1.4rem 0 .2rem; }
+.toc a { display: flex; align-items: center; gap: .9rem; padding: .85rem 1.05rem; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); transition: .15s; }
+.toc a:hover { border-color: var(--accent); transform: translateX(3px); }
+.toc .n { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+.toc .tt { font-weight: 650; color: var(--ink); }
+.toc .ts { font-size: .8rem; color: var(--muted); margin-left: auto; text-align: right; }
+.toc-search { position: relative; margin: 1.6rem 0 -.4rem; }
+.toc-search input { width: 100%; box-sizing: border-box; padding: .75rem 2.8rem .75rem 1rem;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font-size: .98rem; box-shadow: var(--shadow); }
+.toc-search input:focus { outline: none; border-color: var(--accent); }
+.toc-search .qcount { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  color: var(--faint); font-size: .8rem; pointer-events: none; }
+.toc a.hide, .toc .toc-part.hide { display: none; }
+.toc-empty { display: none; color: var(--muted); padding: 1rem; text-align: center; }
+.toc-empty.show { display: block; }
+.hero.index h1 { font-size: 2.3rem; }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:1rem; font-size:.8rem; color:var(--muted); }
+.legend span { display:flex; align-items:center; gap:.4rem; }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+.pdf-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1.1rem;
+  background:var(--accent); color:#fff; border-radius:10px; font-size:.9rem; font-weight:650;
+  box-shadow:var(--shadow); transition:.15s; }
+.pdf-btn:hover { background:var(--accent-ink); transform:translateY(-1px); }
+
+/* ---- bilingual language switch ----
+   Contract: <html> must carry data-lang="zh" (default) or "en".
+   page()/index_page() hard-code data-lang="zh"; LANG_BOOT may switch to "en". */
+html[data-lang="en"] .lang-zh { display: none !important; }
+html[data-lang="zh"] .lang-en { display: none !important; }
+.langtoggle { font-size:.72rem; font-weight:700; color:var(--accent-ink);
+  background:var(--accent-soft); border:1px solid var(--accent); border-radius:999px;
+  padding:.22rem .7rem; cursor:pointer; line-height:1.4; white-space:nowrap; }
+.langtoggle:hover { background:var(--accent); color:#fff; }
+
+/* ---- schematic: cell strips (token sequences / quant blocks / KV columns) ---- */
+.cellgroup { margin: 1.2rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.cellgroup .cg-cap { font-size: .82rem; color: var(--muted); margin-bottom: .55rem; }
+.cellgroup .cg-cap b { color: var(--ink); }
+.cells { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.cells + .cells { margin-top: .5rem; }
+.cell { min-width: 2.1rem; padding: .38rem .5rem; text-align: center; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: .78rem;
+  font-family: ui-monospace, monospace; white-space: nowrap; }
+.cell.scale { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); font-weight: 700; }
+.cell.hl    { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cell.q     { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.cell.dim   { opacity: .45; }
+.cells .lab { font-size: .76rem; color: var(--faint); padding: 0 .35rem; }
+.cells .sep { color: var(--faint); padding: 0 .1rem; }
+
+/* ---- schematic: timeline lanes (prefill vs decode, step-by-step) ---- */
+.timeline { margin: 1.2rem 0; display: flex; flex-direction: column; gap: .5rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.timeline .lane { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.timeline .lane-label { min-width: 6rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.timeline .tslot { padding: .4rem .6rem; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--line); font-size: .78rem; text-align: center; font-family: ui-monospace, monospace; }
+.timeline .tslot.span { flex: 1; min-width: 8rem; background: var(--blue-soft); border-color: var(--blue);
+  color: var(--blue); font-weight: 700; }
+.timeline .tslot.now { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+/* ---- worked-example trace: one concrete input, stepped through ---- */
+.trace { margin: 1.3rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.trace .tcap { font-size: .82rem; color: var(--muted); margin-bottom: .7rem; }
+.trace .tcap b { color: var(--accent-ink); }
+.trace .stations { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.trace .stn { flex: 1 1 0; min-width: 116px; border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem; background: var(--bg); }
+.trace .stn h5 { margin: 0 0 .45rem; font-size: .8rem; color: var(--ink); }
+.trace .cellrow { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.trace .vc { min-width: 2.1rem; padding: .32rem .45rem; text-align: center; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); font: 600 .76rem ui-monospace, monospace; white-space: nowrap; }
+.trace .vc.hot  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.trace .vc.blue { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.trace .vc.dim  { opacity: .42; }
+.trace .tlab { font-size: .68rem; color: var(--faint); margin-top: .35rem; }
+.trace .op { align-self: center; color: var(--accent); font: 700 .72rem ui-monospace, monospace;
+  padding: 0 .5rem; text-align: center; white-space: nowrap; }
+.trace svg { max-width: 100%; height: auto; display: block; margin: .3rem auto; }
+@media (max-width: 640px) { .trace .stations { flex-direction: column; } .trace .op { padding: .3rem 0; } }
+/* 🧩 collaboration-mechanism card */
+.card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
+.card.collab .tag { color: var(--blue); }
+.card.collab .collab-sub { font-weight:700; font-size:.82rem; margin:.85rem 0 .3rem; color:var(--ink); }
+/* 🎯 design-tradeoff card */
+.card.design { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.design .tag { color: var(--accent-ink); }
+/* A-G constraint back-reference badge */
+.badge.constraint { display:inline-block; font-size:.7rem; font-weight:700;
+  padding:.1rem .45rem; border-radius:999px; background:var(--purple-soft);
+  color:var(--purple); border:1px solid var(--purple); margin:0 .15rem; white-space:nowrap; }
+</style>
+</head><body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
+    <span class="pill"><span class="lang-zh">第二部分 · Agent 核心</span><span class="lang-en">Part 2 · The Agent Core</span></span>
+    <span class="pill">08 / 08</span>
+    <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
+  </div>
+  <div class="progress"><span style="width:100%"></span></div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="part"><span class="lang-zh">第二部分 · Agent 核心</span><span class="lang-en">Part 2 · The Agent Core</span></div>
+    <h1><span class="lang-zh">工具系统：注册·门控·分派·预算</span><span class="lang-en">Tool system</span></h1>
+  </div>
+  <div class="lang-zh">
+<p class="lead">
+工具是 agent「动手」的能力——读文件、跑终端、搜网页、调浏览器。本章讲清一个工具<strong>如何从一个 Python 文件变成模型能调用的能力</strong>：注册表自动发现、<span class="mono">check_fn</span> 服务门控、按 toolset 过滤组装 schema、统一 JSON 返回 + 错误净化、以及 <span class="mono">execute_code</span> 退还预算。还要回答一个贯穿全书的问题——<strong>为什么每加一个核心工具都要如此谨慎</strong>：因为<strong>每个工具的 schema，每一次 API 调用都要发送一遍</strong>。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 机场安检 + 登机口</div>
+  把工具集想成一座机场。每个航班（工具）要开放登机，得先过两道关：<strong>安检</strong>（<span class="mono">check_fn</span>）——没配齐前置条件（API key、playwright、docker）的航班<strong>根本不出现在航班表上</strong>；<strong>登机口分配</strong>（toolset 过滤）——只有这个平台启用的 toolset 里的工具才会摆上台面。乘客（模型）看到的航班表（tool schema），是<strong>每次都要重新打印发给塔台</strong>的——所以航班越多，每次通讯越贵。这就是为什么「再开一条核心航线」要慎之又慎。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 能力在边缘，核心窄腰</div>
+  Hermes 的核心工具集<strong>刻意保持很窄</strong>（第 4 章的「窄腰」）。原因很硬核：每个工具的 JSON schema 都会<strong>随每一次 API 调用一起发出去</strong>——工具越多，固定开销越高，还会挤占模型注意力。所以新能力的优先级是「<strong>Footprint Ladder</strong>」：扩展现有 &gt; CLI 命令 + 技能 &gt; <span class="mono">check_fn</span> 门控工具 &gt; 插件 &gt; MCP server &gt; <strong>最后才是</strong>新核心工具。注册一个工具只要两件事：写 <span class="mono">tools/your_tool.py</span> 调 <span class="mono">registry.register(name, toolset, schema, handler, check_fn=...)</span>，再把工具名放进某个 toolset——但「该不该放进核心」永远是最贵的决定。
+</div>
+
+<h2>门控：check_fn 让工具「条件不满足就不出现」</h2>
+<p>组装发给模型的 schema 列表时，注册表会对每个工具跑一遍它声明的 <span class="mono">check_fn</span>。返回 <span class="kw">False</span> 的工具<strong>直接被跳过、不进 schema</strong>——条件不满足时它的足迹是<strong>零</strong>：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">337-384 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">get_definitions</span>(self, tool_names):
+    result = []
+    check_results = {}                                <span class="cm"># 同一遍组装内的 per-call 缓存</span>
+    <span class="kw">for</span> name <span class="kw">in</span> <span class="fn">sorted</span>(tool_names):
+        entry = entries_by_name.get(name)
+        <span class="kw">if</span> entry.check_fn:                            <span class="cm"># 工具声明了前置条件</span>
+            <span class="kw">if</span> entry.check_fn <span class="kw">not</span> <span class="kw">in</span> check_results:
+                check_results[entry.check_fn] = _check_fn_cached(entry.check_fn)  <span class="cm"># 结果缓存 ~30s</span>
+            <span class="kw">if</span> <span class="kw">not</span> check_results[entry.check_fn]:
+                <span class="kw">continue</span>                            <span class="cm"># 条件不满足 → 不进 schema（零足迹）</span>
+        schema_with_name = {**entry.schema, <span class="st">"name"</span>: entry.name}
+        result.append({<span class="st">"type"</span>: <span class="st">"function"</span>, <span class="st">"function"</span>: schema_with_name})
+    <span class="kw">return</span> result</pre>
+</div>
+<p>这里有两层巧思。其一，<span class="mono">check_fn</span> 的结果用 <span class="mono">_check_fn_cached</span> 缓存约 <strong>30 秒</strong>——因为像「探测 docker / 探测 playwright / 探测 API key」这种检查有成本，30 秒 TTL 让你 <span class="mono">hermes tools enable foo</span> 后近实时生效，又不必每次调用都重新探测。其二，<strong>门控让工具集对一个会话保持稳定</strong>：Home Assistant 的工具只在配了 token 时出现，否则连 schema 都不占——这正服务第 6 章的缓存铁律（工具 schema 也是前缀的一部分，<strong>会话中途绝不换 toolset</strong>）。更上一层，<span class="mono">get_tool_definitions</span>（<span class="mono">model_tools.py:276</span>）先按 <span class="mono">enabled/disabled toolsets</span> 过滤，且结果<strong>按 config.yaml 的 mtime+size 记忆化</strong>——配置不变就不重算。</p>
+
+<h2>分派：统一 JSON 返回 + 错误净化</h2>
+<p>模型回来一个 tool_call，<span class="mono">dispatch</span> 按名字找到 handler 执行。所有 handler 都<strong>返回 JSON 字符串</strong>，而所有异常都被<strong>统一</strong>包成 <span class="mono">{"error": ...}</span>——而且要先<strong>净化</strong>：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">390-416 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">dispatch</span>(self, name, args, **kwargs):
+    entry = self.get_entry(name)
+    <span class="kw">if</span> <span class="kw">not</span> entry:
+        <span class="kw">return</span> json.dumps({<span class="st">"error"</span>: <span class="st">f"Unknown tool: {name}"</span>})
+    <span class="kw">try</span>:
+        <span class="kw">return</span> entry.handler(args, **kwargs)         <span class="cm"># handler 必返回 JSON string</span>
+    <span class="kw">except</span> Exception <span class="kw">as</span> e:
+        raw = <span class="st">f"Tool execution failed: {type(e).__name__}: {e}"</span>
+        <span class="cm"># 经 _sanitize_tool_error 净化：异常串里的框架 token / CDATA /</span>
+        <span class="cm"># 围栏不能作为结构噪声到达模型</span>
+        sanitized = _sanitize_tool_error(raw)
+        <span class="kw">return</span> json.dumps({<span class="st">"error"</span>: sanitized})</pre>
+</div>
+<p>这段的关键不是「捕获异常」，而是<strong>净化</strong>。工具的输出——无论成功结果还是报错串——对模型来说都是<strong>数据</strong>，不是指令。可异常消息里可能<strong>偶然</strong>带上模型框架的特殊 token、CDATA、代码围栏；若原样塞回去，模型可能把它们当成<strong>结构信号</strong>误解析。<span class="mono">_sanitize_tool_error</span> 把这些剥掉，让报错老老实实当数据。这正对应 <span class="badge constraint">D·指令=数据</span>——模型分不清「指令」和「数据」，所以喂回去的工具输出必须<strong>先消毒</strong>。</p>
+
+<h2>预算：execute_code 退还迭代</h2>
+<p>第 5 章讲过迭代预算（parent 90 / subagent 50），每轮工具调用消耗一格。但有一个例外——<span class="mono">execute_code</span>（程序化工具调用）是 RPC 式的廉价调用，不该吃预算。所以本轮<strong>若且仅若所有 tool_call 都是 execute_code</strong>，就退还一格：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py</span><span class="ln">4117-4122 · 节选</span></div>
+  <pre><span class="cm"># Refund the iteration if the ONLY tool(s) called were execute_code.</span>
+_tc_names = {tc.function.name <span class="kw">for</span> tc <span class="kw">in</span> assistant_message.tool_calls}
+<span class="kw">if</span> _tc_names == {<span class="st">"execute_code"</span>}:
+    agent.iteration_budget.refund()</pre>
+</div>
+<p>注意那个 <span class="mono">== {"execute_code"}</span> 的严格相等：只要本轮<strong>混进</strong>了任何别的工具，就<strong>不退</strong>。这保证退还只发生在「纯程序化调用」的轮次，不会被人钻空子用 execute_code 夹带别的工具来无限续命。预算（第 5 章）、门控（本章）、缓存（第 6 章）三者合起来，才让一个能自由调工具的 agent <strong>既强大又不失控</strong>。</p>
+
+<h2>一个工具的一生</h2>
+<div class="flow">
+  <div class="node"><div class="nt">register</div><div class="nd">import 时登记 name/toolset/schema/handler/check_fn</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">toolset 过滤</div><div class="nd">get_tool_definitions 按 enabled 筛选</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">check_fn 门控</div><div class="nd">条件不满足就不进 schema</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">schema 随每次 API 调用发出</div><div class="nd">工具越多越贵</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">模型回 tool_call</div><div class="nd">dispatch 执行 + 错误净化</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">结果 append 为 tool 消息</div><div class="nd">进可见上下文，不改前缀</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">（若全是 execute_code）refund</div><div class="nd">退还一格预算</div></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「能力在边缘、核心窄腰」</div>
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章五件：<strong>registry.register</strong>（自动发现注册）、<strong>get_definitions</strong>（check_fn 门控）、<strong>get_tool_definitions</strong>（toolset 过滤 + 记忆化）、<strong>dispatch</strong>（统一 JSON + 错误净化）、<strong>iteration_budget.refund</strong>（execute_code 退还）。跨章节配合：工具发现链承接<strong>窄腰</strong>（第 4 章 registry → toolset → get_tool_definitions）；工具结果作为 <strong>tool 消息 append</strong> 进可见上下文、<strong>不改前缀</strong>（第 6 章缓存）；<span class="mono">check_fn</span> 门控让工具集<strong>会话内稳定</strong>＝不中途换 toolset（第 6 章铁律）；预算退还呼应<strong>迭代预算</strong>（第 5 章）；<span class="mono">delegate_task</span> 是一个「会生孩子」的特殊工具（第 13 章委派）。
+  <div class="collab-sub">② 数据流时序</div>
+  register（import 时）→ get_tool_definitions 按 enabled toolsets 过滤 → get_definitions 跑 check_fn 门控 + dynamic overrides → schema 随每次 API 调用发出 → 模型回 tool_call → handle_function_call → dispatch（异常净化）→ 返回 JSON string → 作为 tool 消息 append → （若本轮全是 execute_code）refund 预算。
+  <div class="collab-sub">③ 关键点</div>
+  每个工具 schema <strong>每次调用都发送</strong>——所以「加核心工具」成本最高、门槛最高。门控 + toolset 让「昂贵的核心面」保持窄，能力尽量<strong>下沉到边缘</strong>（CLI / skill / 插件 / MCP），这就是窄腰哲学在工具层的落地。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线：<strong>能力在边缘 + 核心窄腰 + 工具调用 append-only 不破缓存</strong>。它治三条 LLM 固有约束：
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span>——工具太多会挤占上下文与注意力，所以核心窄腰 + check_fn 门控，只让真正需要的工具上台；
+  <span class="badge constraint">D·指令=数据</span>——工具结果是<strong>数据</strong>：dispatch 把异常串里的框架 token / CDATA / 围栏<strong>净化</strong>掉，别让模型误当成结构信号；
+  <span class="badge constraint">E·结构化输出脆弱</span>——工具 schema 即 function calling，统一成 OpenAI 格式由各 adapter 翻译（第 7 章）。反模式：动不动就给核心加一个工具——每个都要在每次 API 调用里付费，正确做法是先爬一遍 Footprint Ladder。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>注册即发现</strong>：<span class="mono">tools/*.py</span> 里的 <span class="mono">registry.register(...)</span> 自动被导入；但「放进哪个 toolset」是手动、刻意的一步。</li>
+    <li><strong>check_fn 门控</strong>：前置条件不满足的工具<strong>不进 schema</strong>（零足迹），结果缓存 ~30s；让工具集对一个会话稳定（守缓存）。</li>
+    <li><strong>统一返回 + 错误净化</strong>：handler 必返回 JSON string，异常统一包成 <span class="mono">{"error":...}</span> 并经 <span class="mono">_sanitize_tool_error</span> 消毒（约束 D）。</li>
+    <li><strong>execute_code 退还预算</strong>：仅当本轮 <span class="mono">_tc_names == {"execute_code"}</span> 才 refund；夹带别的工具就不退。</li>
+    <li><strong>每个 schema 每次都发</strong>：加核心工具门槛最高；能力优先下沉边缘（Footprint Ladder：CLI/skill/插件/MCP &gt; 核心工具）。</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. 为什么 Hermes 里「给核心加一个工具」是门槛最高的决定？</div>
+  <ol class="opts">
+    <li>因为要改 system prompt</li>
+    <li>因为每个工具的 schema 每一次 API 调用都要发送一遍，工具越多固定开销越高、越挤占注意力</li>
+    <li>因为要写很多代码</li>
+    <li>因为工具名不能重复</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。工具 schema 随每次请求发出，是固定开销 + 注意力成本。所以新能力优先爬 Footprint Ladder（扩展现有 > CLI+技能 > check_fn 门控 > 插件 > MCP），核心工具是最后一档。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. 本轮同时调了 execute_code 和 read_file 两个工具，迭代预算会被退还吗？</div>
+  <ol class="opts">
+    <li>永远不退</li>
+    <li>会，只要有 execute_code 就退</li>
+    <li>会，退两格</li>
+    <li>不会——只有本轮 _tc_names 恰好 == {'execute_code'}（纯程序化调用）才退，混入别的工具就不退</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：D</strong>。退还条件是集合严格相等 _tc_names == {'execute_code'}；混入 read_file 后集合 != {'execute_code'}，不退。这防止用 execute_code 夹带别的工具来无限续命。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>check_fn 门控如何做到「前置条件不满足的工具零足迹」、又为什么要给结果加 ~30s TTL 缓存？这与第 6 章「会话中途绝不换 toolset」的缓存铁律是怎样配合的？</li>
+  </ul>
+</div>
+</div></div>
+  <div class="lang-en">
+<p class="lead">
+Tools are how an agent "acts" — read files, run a terminal, search the web, drive a browser. This chapter shows how a tool <strong>goes from one Python file to a capability the model can call</strong>: registry auto-discovery, <span class="mono">check_fn</span> service gating, toolset-filtered schema assembly, a unified JSON return + error sanitizing, and <span class="mono">execute_code</span> refunding budget. It also answers a question that runs through the whole book — <strong>why adding a core tool is treated so carefully</strong>: because <strong>every tool's schema is sent on every single API call</strong>.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · airport security + gate assignment</div>
+  Picture the toolset as an airport. For a flight (tool) to board, it clears two gates: <strong>security</strong> (<span class="mono">check_fn</span>) — a flight without its prerequisites (API key, playwright, docker) <strong>never even appears on the board</strong>; and <strong>gate assignment</strong> (toolset filtering) — only tools in this platform's enabled toolset make it onto the floor. The board the passenger (model) sees (the tool schema) is <strong>reprinted and sent to the tower every time</strong> — so the more flights, the costlier each transmission. That's why "opening another core route" is weighed so carefully.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · capability at the edges, a narrow-waist core</div>
+  Hermes keeps its core toolset <strong>deliberately narrow</strong> (ch.4's "narrow waist"). The reason is hard: every tool's JSON schema <strong>ships with every API call</strong> — more tools mean higher fixed overhead and more crowded attention. So new capability follows the "<strong>Footprint Ladder</strong>": extend existing &gt; CLI command + skill &gt; <span class="mono">check_fn</span>-gated tool &gt; plugin &gt; MCP server &gt; <strong>only last</strong>, a new core tool. Registering a tool takes two things: write <span class="mono">tools/your_tool.py</span> calling <span class="mono">registry.register(name, toolset, schema, handler, check_fn=...)</span>, then put the tool name into a toolset — but "should it go in the core" is always the most expensive decision.
+</div>
+
+<h2>Gating: check_fn makes a tool "vanish when prerequisites are unmet"</h2>
+<p>When assembling the schema list sent to the model, the registry runs each tool's declared <span class="mono">check_fn</span>. A tool returning <span class="kw">False</span> is <strong>skipped outright — never entering the schema</strong>; when its condition is unmet, its footprint is <strong>zero</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">337-384 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">get_definitions</span>(self, tool_names):
+    result = []
+    check_results = {}                                <span class="cm"># per-call cache within one assembly pass</span>
+    <span class="kw">for</span> name <span class="kw">in</span> <span class="fn">sorted</span>(tool_names):
+        entry = entries_by_name.get(name)
+        <span class="kw">if</span> entry.check_fn:                            <span class="cm"># tool declared a prerequisite</span>
+            <span class="kw">if</span> entry.check_fn <span class="kw">not</span> <span class="kw">in</span> check_results:
+                check_results[entry.check_fn] = _check_fn_cached(entry.check_fn)  <span class="cm"># cached ~30s</span>
+            <span class="kw">if</span> <span class="kw">not</span> check_results[entry.check_fn]:
+                <span class="kw">continue</span>                            <span class="cm"># unmet -> not in schema (zero footprint)</span>
+        schema_with_name = {**entry.schema, <span class="st">"name"</span>: entry.name}
+        result.append({<span class="st">"type"</span>: <span class="st">"function"</span>, <span class="st">"function"</span>: schema_with_name})
+    <span class="kw">return</span> result</pre>
+</div>
+<p>Two bits of cleverness. First, the <span class="mono">check_fn</span> result is cached by <span class="mono">_check_fn_cached</span> for about <strong>30 seconds</strong> — because checks like "probe docker / probe playwright / probe an API key" cost something, the 30s TTL lets <span class="mono">hermes tools enable foo</span> take effect in near-real-time without re-probing on every call. Second, <strong>gating keeps the toolset stable for a session</strong>: Home Assistant tools appear only when a token is configured, otherwise they don't even occupy a schema — which serves ch.6's caching rule (the tool schema is part of the prefix too, so <strong>never swap toolsets mid-session</strong>). One level up, <span class="mono">get_tool_definitions</span> (<span class="mono">model_tools.py:276</span>) first filters by <span class="mono">enabled/disabled toolsets</span>, and the result is <strong>memoized on config.yaml's mtime+size</strong> — no recompute if config is unchanged.</p>
+
+<h2>Dispatch: a unified JSON return + error sanitizing</h2>
+<p>The model returns a tool_call; <span class="mono">dispatch</span> finds the handler by name and runs it. Every handler <strong>returns a JSON string</strong>, and every exception is <strong>uniformly</strong> wrapped into <span class="mono">{"error": ...}</span> — after being <strong>sanitized</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">390-416 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">dispatch</span>(self, name, args, **kwargs):
+    entry = self.get_entry(name)
+    <span class="kw">if</span> <span class="kw">not</span> entry:
+        <span class="kw">return</span> json.dumps({<span class="st">"error"</span>: <span class="st">f"Unknown tool: {name}"</span>})
+    <span class="kw">try</span>:
+        <span class="kw">return</span> entry.handler(args, **kwargs)         <span class="cm"># handler must return a JSON string</span>
+    <span class="kw">except</span> Exception <span class="kw">as</span> e:
+        raw = <span class="st">f"Tool execution failed: {type(e).__name__}: {e}"</span>
+        <span class="cm"># sanitize: framing tokens / CDATA / fences in the exception</span>
+        <span class="cm"># string must not reach the model as structural noise</span>
+        sanitized = _sanitize_tool_error(raw)
+        <span class="kw">return</span> json.dumps({<span class="st">"error"</span>: sanitized})</pre>
+</div>
+<p>The point here isn't "catch the exception" — it's <strong>sanitizing</strong>. A tool's output — success result or error string alike — is <strong>data</strong> to the model, not instruction. Yet an exception message might <strong>accidentally</strong> carry the model framework's special tokens, CDATA, or code fences; fed back verbatim, the model could misparse them as <strong>structural signals</strong>. <span class="mono">_sanitize_tool_error</span> strips those so the error stays honest data. This maps to <span class="badge constraint">D·instr=data</span> — the model can't tell "instructions" from "data," so tool output fed back must be <strong>disinfected first</strong>.</p>
+
+<h2>Budget: execute_code refunds an iteration</h2>
+<p>Ch.5 covered the iteration budget (parent 90 / subagent 50), where each tool turn spends one slot. But there's an exception — <span class="mono">execute_code</span> (programmatic tool calling) is a cheap RPC-style call that shouldn't eat the budget. So <strong>if and only if every tool_call this turn is execute_code</strong>, one slot is refunded:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py</span><span class="ln">4117-4122 · excerpt</span></div>
+  <pre><span class="cm"># Refund the iteration if the ONLY tool(s) called were execute_code.</span>
+_tc_names = {tc.function.name <span class="kw">for</span> tc <span class="kw">in</span> assistant_message.tool_calls}
+<span class="kw">if</span> _tc_names == {<span class="st">"execute_code"</span>}:
+    agent.iteration_budget.refund()</pre>
+</div>
+<p>Note the strict equality <span class="mono">== {"execute_code"}</span>: if any other tool is <strong>mixed in</strong> this turn, there's <strong>no refund</strong>. This ensures refunds only happen on "purely programmatic" turns and can't be gamed by smuggling other tools inside execute_code to live forever. Budget (ch.5), gating (this chapter), and caching (ch.6) together let an agent that calls tools freely stay <strong>both powerful and under control</strong>.</p>
+
+<h2>The life of a tool</h2>
+<div class="flow">
+  <div class="node"><div class="nt">register</div><div class="nd">at import: name/toolset/schema/handler/check_fn</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">toolset filter</div><div class="nd">get_tool_definitions filters by enabled</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">check_fn gate</div><div class="nd">unmet -> not in schema</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">schema ships on every API call</div><div class="nd">more tools, costlier</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">model returns tool_call</div><div class="nd">dispatch runs + error sanitize</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">result appended as tool message</div><div class="nd">into visible context, prefix unchanged</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">(if all execute_code) refund</div><div class="nd">one budget slot back</div></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "capability at the edges, narrow-waist core"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  This chapter's five: <strong>registry.register</strong> (auto-discovery), <strong>get_definitions</strong> (check_fn gating), <strong>get_tool_definitions</strong> (toolset filter + memoization), <strong>dispatch</strong> (unified JSON + error sanitizing), <strong>iteration_budget.refund</strong> (execute_code refund). Cross-chapter teamwork: the discovery chain carries the <strong>narrow waist</strong> (ch.4: registry → toolset → get_tool_definitions); tool results <strong>append as tool messages</strong> into visible context and <strong>don't touch the prefix</strong> (ch.6 caching); <span class="mono">check_fn</span> gating keeps the toolset <strong>stable within a session</strong> = no mid-session toolset swap (ch.6 rule); the refund echoes the <strong>iteration budget</strong> (ch.5); <span class="mono">delegate_task</span> is a "child-spawning" special tool (ch.13 delegation).
+  <div class="collab-sub">② Data-flow timing</div>
+  register (at import) → get_tool_definitions filters by enabled toolsets → get_definitions runs check_fn gating + dynamic overrides → schema ships on every API call → model returns tool_call → handle_function_call → dispatch (exception sanitize) → returns a JSON string → appended as a tool message → (if all execute_code this turn) refund budget.
+  <div class="collab-sub">③ The key point</div>
+  Every tool schema <strong>ships on every call</strong> — so "adding a core tool" is the costliest, highest-bar move. Gating + toolsets keep the "expensive core surface" narrow, pushing capability <strong>to the edges</strong> (CLI / skill / plugin / MCP). That's the narrow-waist philosophy landing at the tool layer.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>capability at the edges + a narrow-waist core + append-only tool calls that don't break the cache</strong>. It treats three inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> — too many tools crowd context and attention, so a narrow core + check_fn gating lets only the truly needed tools onto the stage;
+  <span class="badge constraint">D·instr=data</span> — tool results are <strong>data</strong>: dispatch <strong>sanitizes</strong> framing tokens / CDATA / fences out of exception strings so the model can't misread them as structural signals;
+  <span class="badge constraint">E·brittle structured output</span> — a tool schema is function calling, unified into OpenAI format and translated by each adapter (ch.7). The anti-pattern: reflexively adding a tool to the core — each one is paid for on every API call; the right move is to climb the Footprint Ladder first.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Register = discover</strong>: <span class="mono">registry.register(...)</span> in any <span class="mono">tools/*.py</span> is auto-imported; but "which toolset to put it in" is a manual, deliberate step.</li>
+    <li><strong>check_fn gating</strong>: tools with unmet prerequisites <strong>don't enter the schema</strong> (zero footprint), results cached ~30s; keeps the toolset stable for a session (guards the cache).</li>
+    <li><strong>Unified return + error sanitize</strong>: handlers must return a JSON string; exceptions are uniformly wrapped into <span class="mono">{"error":...}</span> and run through <span class="mono">_sanitize_tool_error</span> (constraint D).</li>
+    <li><strong>execute_code refunds budget</strong>: only when <span class="mono">_tc_names == {"execute_code"}</span> this turn; smuggle another tool and there's no refund.</li>
+    <li><strong>Every schema ships every time</strong>: adding a core tool has the highest bar; push capability to the edges first (Footprint Ladder: CLI/skill/plugin/MCP &gt; core tool).</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Why is 'adding a tool to the core' the highest-bar decision in Hermes?</div>
+  <ol class="opts">
+    <li>Because it changes the system prompt</li>
+    <li>Because every tool's schema is sent on every API call — more tools mean higher fixed cost and more crowded attention</li>
+    <li>Because it takes a lot of code</li>
+    <li>Because tool names must be unique</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. Tool schemas ship with every request — a fixed cost plus attention cost. So new capability climbs the Footprint Ladder (extend existing > CLI+skill > check_fn-gated > plugin > MCP), with a core tool the last resort.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. This turn called both execute_code and read_file — is the iteration budget refunded?</div>
+  <ol class="opts">
+    <li>Never refunded</li>
+    <li>Yes, any execute_code triggers a refund</li>
+    <li>Yes, two slots back</li>
+    <li>No — refund only when _tc_names == {'execute_code'} exactly (purely programmatic); mixing any other tool blocks it</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. The refund requires set equality _tc_names == {'execute_code'}; mixing in read_file makes the set unequal, so no refund. This prevents smuggling other tools inside execute_code to live forever.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>How does check_fn gating give an unmet-prerequisite tool 'zero footprint', and why cache the result with a ~30s TTL? How does this cooperate with ch.6's 'never swap toolsets mid-session' caching rule?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="footnav"><a class="prev" href="07-message-flow-providers.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">消息流与 provider 适配</span><span class="lang-en">Message flow &amp; providers</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
+</div>
+<script>
+function havgSetLang(l){
+  l=(l==='en')?'en':'zh';
+  var d=document.documentElement;
+  d.dataset.lang=l; d.lang=(l==='en'?'en':'zh-CN');
+  try{localStorage.setItem('havg-lang',l);}catch(e){}
+}
+function havgToggleLang(){
+  havgSetLang(document.documentElement.dataset.lang==='en'?'zh':'en');
+}
+</script>
+</body></html>
