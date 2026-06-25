@@ -440,3 +440,232 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
 </div>
 """,
 }
+
+LESSON_19 = {
+    "zh": r"""
+<p class="lead">输入 <span class="mono">hermes --tui</span>,你看到一个漂亮的终端界面。它其实是<strong>两个进程</strong>:一个 Node(Ink/React)负责画屏幕,一个 Python(tui_gateway)负责跑 agent,两者靠 stdio 上<strong>换行分隔的 JSON-RPC</strong> 对话。更妙的是:网页版仪表盘的聊天页,<strong>不是重写一遍</strong>,而是把同一个 <span class="mono">hermes --tui</span> 经 PTY 投进浏览器。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 剧院的后台与台前</div>
+  后台(Python)管演员、剧本、调度;台前(Ink)管灯光、布景、把戏呈现给观众。两边靠一根<strong>提词线</strong>(stdio 上的 JSON-RPC)协调:台前喊「观众提交了台词」(<span class="mono">prompt.submit</span>),后台一句句把演员的台词喂回来(<span class="mono">message.delta</span>)。换个剧场(浏览器)?<strong>不重排戏</strong>——直接把整台演出(<span class="mono">hermes --tui</span>)投影上去。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 一套核心,多个前端</div>
+  <strong>TypeScript 拥有屏幕,Python 拥有会话/工具/模型调用</strong>,中间是一层换行分隔的 JSON-RPC。同一个 Python 后端(就是 AIAgent 核心)既服务 Ink 终端界面、又服务浏览器里嵌入的 PTY、还服务 Electron 桌面 App。前端易变、迭代快;核心稳定。各用各的生态,互不拖累。
+</div>
+
+<h2>JSON-RPC:前后端的唯一桥</h2>
+<p>Python 侧用一个极简的装饰器把函数注册成「可远程调用的方法」,再统一分派:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tui_gateway/server.py</span><span class="ln">959-995 · 简化</span></div>
+  <pre><span class="kw">def</span> <span class="fn">method</span>(name):
+    <span class="kw">def</span> <span class="fn">dec</span>(fn):
+        _methods[name] = fn          <span class="cm"># 注册进全局方法表</span>
+        <span class="kw">return</span> fn
+    <span class="kw">return</span> dec
+
+<span class="kw">def</span> <span class="fn">handle_request</span>(req):
+    rid, m, params = _normalize_request(req)   <span class="cm"># 校验 + 解包</span>
+    fn = _methods.get(m)
+    <span class="kw">if</span> <span class="kw">not</span> fn:
+        <span class="kw">return</span> _err(rid, -32601, <span class="st">f"unknown method: {m}"</span>)
+    <span class="kw">return</span> fn(rid, params)            <span class="cm"># 分派到注册的 handler</span></pre>
+</div>
+<p>每个能被前端调用的能力,只要挂一个 <span class="mono">@method("名字")</span>。<span class="mono">handle_request</span> 收到一帧 JSON-RPC,校验后按方法名查表、分派。错误也走标准的 JSON-RPC 错误信封(<span class="mono">-32601 unknown method</span>)——前端永远拿到结构化的 <span class="mono">result</span> 或 <span class="mono">error</span>,而不是去解析一段自由文本。</p>
+
+<h2>流式回推:一个 token 一个事件</h2>
+<p>用户提交后,agent 的回复要<strong>一边生成一边显示</strong>。这靠服务器主动推 <span class="mono">event</span> 帧:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tui_gateway/server.py</span><span class="ln">6828 / 887-891 / 7228 · 节选</span></div>
+  <pre><span class="nd">@method</span>(<span class="st">"prompt.submit"</span>)       <span class="cm"># 前端提交一条消息</span>
+<span class="kw">def</span> <span class="fn">_</span>(rid, params):
+    sid, text = params.get(<span class="st">"session_id"</span>), params.get(<span class="st">"text"</span>)
+    <span class="kw">if</span> session.get(<span class="st">"running"</span>):
+        <span class="kw">return</span> _err(rid, 4009, <span class="st">"session busy"</span>)
+    ...
+
+<span class="kw">def</span> <span class="fn">_emit</span>(event, sid, payload=None):
+    params = {<span class="st">"type"</span>: event, <span class="st">"session_id"</span>: sid, <span class="st">"payload"</span>: payload}
+    write_json({<span class="st">"jsonrpc"</span>: <span class="st">"2.0"</span>, <span class="st">"method"</span>: <span class="st">"event"</span>, <span class="st">"params"</span>: params})
+
+<span class="kw">def</span> <span class="fn">_stream</span>(delta):                            <span class="cm"># 作为 stream_callback 传给 AIAgent</span>
+    _emit(<span class="st">"message.delta"</span>, sid, {<span class="st">"text"</span>: delta})   <span class="cm"># 每个流式分块推一帧</span></pre>
+</div>
+<p>请求/响应只是一半;另一半是<strong>服务器→前端的事件流</strong>。agent 每吐出一段文本(delta),Python 就 <span class="mono">_emit("message.delta")</span> 推一帧,Ink 收到后把它追加进 transcript——这就是你看到的「逐字蹦出来」。同一套事件机制还推 <span class="mono">tool.start/progress/complete</span>、审批请求等。</p>
+
+<h2>仪表盘:不重写,直接嵌</h2>
+<p>网页仪表盘的「聊天」页,没有用 React 重写一遍 transcript/输入框,而是把整个 <span class="mono">hermes --tui</span> 经 PTY 桥进浏览器:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/web_server.py</span><span class="ln">11505-11625 · 简化</span></div>
+  <pre><span class="nd">@app.websocket</span>(<span class="st">"/api/pty"</span>)
+<span class="kw">async def</span> <span class="fn">pty_ws</span>(ws):
+    bridge = PtyBridge.spawn(argv, cwd=cwd, env=env)  <span class="cm"># spawn 同一个 hermes --tui</span>
+
+    <span class="kw">async def</span> <span class="fn">pump_pty_to_ws</span>():        <span class="cm"># PTY → 浏览器</span>
+        <span class="kw">while</span> <span class="kw">True</span>:
+            chunk = <span class="kw">await</span> loop.run_in_executor(<span class="kw">None</span>, bridge.read, ...)
+            <span class="kw">if</span> chunk <span class="kw">is</span> <span class="kw">None</span>: <span class="kw">return</span>      <span class="cm"># EOF</span>
+            <span class="kw">await</span> ws.send_bytes(chunk)
+
+    <span class="kw">while</span> <span class="kw">True</span>:                        <span class="cm"># 浏览器 → PTY</span>
+        msg = <span class="kw">await</span> ws.receive()
+        raw = msg.get(<span class="st">"bytes"</span>)
+        match = _RESIZE_RE.match(raw)       <span class="cm"># resize escape 本地拦截</span>
+        ...                                 <span class="cm"># 否则原样写进 PTY</span></pre>
+</div>
+<p>浏览器端是 xterm.js,服务端 <span class="mono">spawn</span> 出和命令行<strong>一模一样</strong>的 <span class="mono">hermes --tui</span>,两个方向<strong>原样转发字节</strong>:PTY 输出 → <span class="mono">ws.send_bytes</span> → xterm.js 渲染;键盘输入 → PTY。只有 <span class="mono">\x1b[RESIZE:...]</span> 这样的尺寸转义在服务端本地拦截、用 <span class="mono">TIOCSWINSZ</span> 调整窗口。(PTY 桥本身也是窄腰:POSIX 用 <span class="mono">pty_bridge</span>(fcntl/termios)、Windows 用 <span class="mono">win_pty_bridge</span>(ConPTY),但 <span class="mono">spawn/read/write/resize/close</span> 是同一套公共接口,<span class="mono">/api/pty</span> handler 无需任何平台分支。)<strong>你给 Ink 加的任何新功能,仪表盘里自动就有了。</strong></p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">用户在 Ink 界面输入 → 前端发 <span class="mono">prompt.submit</span> JSON-RPC 帧</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">Python <span class="mono">handle_request</span> 查 <span class="mono">_methods</span> 表、分派到 handler</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">handler 跑 AIAgent(第 7 章核心循环),逐 token <span class="mono">_emit("message.delta")</span></span></div>
+  <div class="step"><span class="num">4</span><span class="sc">Ink 收到事件流,追加进 transcript 渲染(逐字显示)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">仪表盘:xterm.js ⟷ <span class="mono">/api/pty</span> WebSocket ⟷ PtyBridge ⟷ 同一个 <span class="mono">hermes --tui</span></span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「一套核心多前端」</div>
+  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
+  本章核心:<strong>method 装饰器</strong>(RPC 注册)、<strong>handle_request</strong>(分派)、<strong>_emit/write_json</strong>(事件回推)、<strong>PtyBridge</strong>(PTY 桥)。跨章节配合:JSON-RPC 后面跑的就是 <strong>AIAgent 核心循环</strong>(第 7 章)——TUI 只是它的一个前端;<span class="mono">prompt.submit</span> 的 busy 检查与<strong>网关守卫</strong>(第 18 章)同理(运行时拒新输入);仪表盘<strong>嵌入复用</strong>同一个 hermes --tui = 不重写 = <strong>窄腰</strong>(第 4 章);Electron 桌面 App 是<strong>另一个 JSON-RPC 前端</strong>(同一个 tui_gateway 后端,自带 composer)。
+  <div class="collab-sub">② 数据流时序</div>
+  Ink 输入 → JSON-RPC <span class="mono">prompt.submit</span> → <span class="mono">handle_request</span> 分派 → AIAgent 跑 → <span class="mono">_emit("message.delta")</span> 流式 → Ink 渲染。仪表盘旁路:xterm.js ⟷ WS <span class="mono">/api/pty</span> ⟷ <span class="mono">PtyBridge.spawn</span> ⟷ <span class="mono">hermes --tui</span> 子进程(原样转发字节)。
+  <div class="collab-sub">③ 关键点</div>
+  一套 agent 核心(Python)+ 多个前端(Ink TUI / 浏览器 PTY / Electron 桌面)靠 <strong>stdio JSON-RPC</strong> 解耦;仪表盘<strong>嵌入</strong>同一个 hermes --tui 而非重写;前端易变、核心稳定,各自独立迭代。给 Ink 加功能,仪表盘自动继承。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>一套 agent 核心 + JSON-RPC 解耦多前端 + 嵌入复用 = 多端一致、不重复造轮子(窄腰)</strong>。它主要治一条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——同一个 agent 要在命令行、TUI、网关、桌面 App、网页仪表盘多端出现。把 agent 核心收进 Python 后端、用稳定的 JSON-RPC 信封暴露,前端就能<strong>各用各的技术栈独立演进</strong>(Ink 用 React、桌面用 Electron、仪表盘用 xterm.js),而核心只维护一份。Node 前端崩了不会拖垮 Python agent,反之亦然——<strong>进程隔离</strong>也是运维健壮性。</p>
+  <p style="margin:.5rem 0 0">它也是<strong>窄腰</strong>(第 4 章):聊天体验(transcript/输入/PTY 终端)只在 Ink 里实现<strong>一次</strong>,仪表盘靠 PTY 嵌入复用。反模式:为浏览器用 React <strong>重写一遍</strong> transcript 和 composer——两套实现注定漂移,改一个忘一个。AGENTS.md 为此立了硬规矩:「Do not re-implement the primary chat experience in React」。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>两进程模型</strong>:Node(Ink 渲染屏幕)⟷ stdio JSON-RPC ⟷ Python(tui_gateway 跑 AIAgent)。TS 拥有屏幕,Python 拥有会话/工具/模型。</li>
+    <li><strong>JSON-RPC 桥</strong>:<span class="mono">@method("名字")</span> 注册、<span class="mono">handle_request</span> 分派、标准 result/error 信封;前端拿结构化数据而非自由文本。</li>
+    <li><strong>流式事件</strong>:<span class="mono">_emit("message.delta")</span> 逐 token 推回,Ink 追加 transcript(逐字显示);tool.start/complete 同机制。</li>
+    <li><strong>仪表盘嵌入</strong>:<span class="mono">/api/pty</span> WebSocket 把同一个 <span class="mono">hermes --tui</span> 经 PTY 投进 xterm.js,双向转发字节,resize 转义本地拦截。</li>
+    <li><strong>窄腰复用</strong>:聊天面只实现一次(Ink),仪表盘嵌入继承;<strong>不</strong>用 React 重写——给 Ink 加功能,仪表盘自动有(第 4 章)。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">Type <span class="mono">hermes --tui</span> and you see a slick terminal UI. It's really <strong>two processes</strong>: a Node (Ink/React) one paints the screen, a Python (tui_gateway) one runs the agent, and they talk over <strong>newline-delimited JSON-RPC</strong> on stdio. Better still: the web dashboard's chat page <strong>isn't a rewrite</strong> — it pipes the same <span class="mono">hermes --tui</span> into the browser through a PTY.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · a theatre's backstage and stage</div>
+  Backstage (Python) runs the actors, the script, the cues; the stage (Ink) runs the lights, the set, presenting the play to the audience. The two coordinate via a <strong>prompter line</strong> (JSON-RPC over stdio): the stage calls "the audience submitted a line" (<span class="mono">prompt.submit</span>), backstage feeds the actor's lines back word by word (<span class="mono">message.delta</span>). A different venue (the browser)? <strong>Don't re-stage the play</strong> — just project the whole performance (<span class="mono">hermes --tui</span>) onto it.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · one core, many frontends</div>
+  <strong>TypeScript owns the screen, Python owns sessions/tools/model calls</strong>, with a layer of newline-delimited JSON-RPC between them. The same Python backend (the AIAgent core) serves the Ink terminal UI, the PTY embedded in the browser, and the Electron desktop app. Frontends are volatile and iterate fast; the core is stable. Each uses its own ecosystem without dragging the other down.
+</div>
+
+<h2>JSON-RPC: the one bridge between front and back</h2>
+<p>On the Python side, a tiny decorator registers a function as a "remotely callable method," then a single dispatcher routes calls:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tui_gateway/server.py</span><span class="ln">959-995 · simplified</span></div>
+  <pre><span class="kw">def</span> <span class="fn">method</span>(name):
+    <span class="kw">def</span> <span class="fn">dec</span>(fn):
+        _methods[name] = fn          <span class="cm"># register into the global method table</span>
+        <span class="kw">return</span> fn
+    <span class="kw">return</span> dec
+
+<span class="kw">def</span> <span class="fn">handle_request</span>(req):
+    rid, m, params = _normalize_request(req)   <span class="cm"># validate + unpack</span>
+    fn = _methods.get(m)
+    <span class="kw">if</span> <span class="kw">not</span> fn:
+        <span class="kw">return</span> _err(rid, -32601, <span class="st">f"unknown method: {m}"</span>)
+    <span class="kw">return</span> fn(rid, params)            <span class="cm"># dispatch to the registered handler</span></pre>
+</div>
+<p>Any capability the frontend can call just hangs a <span class="mono">@method("name")</span> on a function. <span class="mono">handle_request</span> receives one JSON-RPC frame, validates it, looks up the method by name, and dispatches. Errors ride the standard JSON-RPC error envelope (<span class="mono">-32601 unknown method</span>) — the frontend always gets a structured <span class="mono">result</span> or <span class="mono">error</span>, never has to parse free text.</p>
+
+<h2>Streaming back: one token, one event</h2>
+<p>After the user submits, the agent's reply must <strong>display as it's generated</strong>. The server actively pushes <span class="mono">event</span> frames:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tui_gateway/server.py</span><span class="ln">6828 / 887-891 / 7228 · excerpt</span></div>
+  <pre><span class="nd">@method</span>(<span class="st">"prompt.submit"</span>)       <span class="cm"># the frontend submits a message</span>
+<span class="kw">def</span> <span class="fn">_</span>(rid, params):
+    sid, text = params.get(<span class="st">"session_id"</span>), params.get(<span class="st">"text"</span>)
+    <span class="kw">if</span> session.get(<span class="st">"running"</span>):
+        <span class="kw">return</span> _err(rid, 4009, <span class="st">"session busy"</span>)
+    ...
+
+<span class="kw">def</span> <span class="fn">_emit</span>(event, sid, payload=None):
+    params = {<span class="st">"type"</span>: event, <span class="st">"session_id"</span>: sid, <span class="st">"payload"</span>: payload}
+    write_json({<span class="st">"jsonrpc"</span>: <span class="st">"2.0"</span>, <span class="st">"method"</span>: <span class="st">"event"</span>, <span class="st">"params"</span>: params})
+
+<span class="kw">def</span> <span class="fn">_stream</span>(delta):                            <span class="cm"># passed to AIAgent as stream_callback</span>
+    _emit(<span class="st">"message.delta"</span>, sid, {<span class="st">"text"</span>: delta})   <span class="cm"># push one frame per streamed chunk</span></pre>
+</div>
+<p>Request/response is only half; the other half is the <strong>server→frontend event stream</strong>. Every chunk (delta) the agent emits, Python <span class="mono">_emit("message.delta")</span> pushes a frame, and Ink appends it to the transcript — that's the "characters popping out" you see. The same event mechanism also pushes <span class="mono">tool.start/progress/complete</span>, approval requests, and more.</p>
+
+<h2>The dashboard: don't rewrite, embed</h2>
+<p>The web dashboard's "chat" page doesn't re-implement the transcript/composer in React; it bridges the whole <span class="mono">hermes --tui</span> into the browser via a PTY:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/web_server.py</span><span class="ln">11505-11625 · simplified</span></div>
+  <pre><span class="nd">@app.websocket</span>(<span class="st">"/api/pty"</span>)
+<span class="kw">async def</span> <span class="fn">pty_ws</span>(ws):
+    bridge = PtyBridge.spawn(argv, cwd=cwd, env=env)  <span class="cm"># spawn the same hermes --tui</span>
+
+    <span class="kw">async def</span> <span class="fn">pump_pty_to_ws</span>():        <span class="cm"># PTY → browser</span>
+        <span class="kw">while</span> <span class="kw">True</span>:
+            chunk = <span class="kw">await</span> loop.run_in_executor(<span class="kw">None</span>, bridge.read, ...)
+            <span class="kw">if</span> chunk <span class="kw">is</span> <span class="kw">None</span>: <span class="kw">return</span>      <span class="cm"># EOF</span>
+            <span class="kw">await</span> ws.send_bytes(chunk)
+
+    <span class="kw">while</span> <span class="kw">True</span>:                        <span class="cm"># browser → PTY</span>
+        msg = <span class="kw">await</span> ws.receive()
+        raw = msg.get(<span class="st">"bytes"</span>)
+        match = _RESIZE_RE.match(raw)       <span class="cm"># resize escape intercepted locally</span>
+        ...                                 <span class="cm"># otherwise written straight to the PTY</span></pre>
+</div>
+<p>The browser side is xterm.js; the server <span class="mono">spawn</span>s the <strong>exact same</strong> <span class="mono">hermes --tui</span> as the CLI, forwarding bytes <strong>verbatim</strong> in both directions: PTY output → <span class="mono">ws.send_bytes</span> → xterm.js renders; keystrokes → PTY. Only sizing escapes like <span class="mono">\x1b[RESIZE:...]</span> are intercepted server-side and applied with <span class="mono">TIOCSWINSZ</span>. (The PTY bridge is itself a narrow waist: POSIX uses <span class="mono">pty_bridge</span> (fcntl/termios), Windows uses <span class="mono">win_pty_bridge</span> (ConPTY), but <span class="mono">spawn/read/write/resize/close</span> is one shared interface, so the <span class="mono">/api/pty</span> handler needs no platform branches.) <strong>Any new feature you add to Ink shows up in the dashboard automatically.</strong></p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">user types in the Ink UI → frontend sends a <span class="mono">prompt.submit</span> JSON-RPC frame</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">Python <span class="mono">handle_request</span> looks up the <span class="mono">_methods</span> table, dispatches to the handler</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">the handler runs AIAgent (ch.7 core loop), <span class="mono">_emit("message.delta")</span> token by token</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">Ink receives the event stream, appends to the transcript (character by character)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">dashboard: xterm.js ⟷ <span class="mono">/api/pty</span> WebSocket ⟷ PtyBridge ⟷ the same <span class="mono">hermes --tui</span></span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "one core, many frontends"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: the <strong>method decorator</strong> (RPC registration), <strong>handle_request</strong> (dispatch), <strong>_emit/write_json</strong> (event push), <strong>PtyBridge</strong> (the PTY bridge). Cross-chapter teamwork: behind the JSON-RPC runs the <strong>AIAgent core loop</strong> (ch.7) — the TUI is just one of its frontends; <span class="mono">prompt.submit</span>'s busy check is the same idea as the <strong>gateway guards</strong> (ch.18, rejecting new input mid-run); the dashboard <strong>embeds and reuses</strong> the same hermes --tui = no rewrite = the <strong>narrow waist</strong> (ch.4); the Electron desktop app is <strong>another JSON-RPC frontend</strong> (same tui_gateway backend, its own composer).
+  <div class="collab-sub">② Data-flow timing</div>
+  Ink input → JSON-RPC <span class="mono">prompt.submit</span> → <span class="mono">handle_request</span> dispatch → AIAgent runs → <span class="mono">_emit("message.delta")</span> streaming → Ink renders. Dashboard bypass: xterm.js ⟷ WS <span class="mono">/api/pty</span> ⟷ <span class="mono">PtyBridge.spawn</span> ⟷ <span class="mono">hermes --tui</span> child (verbatim byte forwarding).
+  <div class="collab-sub">③ The key point</div>
+  One agent core (Python) + many frontends (Ink TUI / browser PTY / Electron desktop) decoupled by <strong>stdio JSON-RPC</strong>; the dashboard <strong>embeds</strong> the same hermes --tui rather than rewriting it; frontends are volatile, the core is stable, each iterating independently. Add a feature to Ink, the dashboard inherits it.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>one agent core + JSON-RPC-decoupled frontends + embed-and-reuse = consistent across surfaces, no reinventing the wheel (narrow waist)</strong>. It mainly treats one inherent LLM constraint:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — the same agent must appear on the CLI, the TUI, the gateway, the desktop app, and the web dashboard. Tucking the agent core into a Python backend exposed via a stable JSON-RPC envelope lets each frontend <strong>evolve in its own stack independently</strong> (Ink in React, desktop in Electron, dashboard in xterm.js) while the core is maintained once. A crashing Node frontend won't take down the Python agent, and vice versa — <strong>process isolation</strong> is operational robustness too.</p>
+  <p style="margin:.5rem 0 0">It's also the <strong>narrow waist</strong> (ch.4): the chat experience (transcript/input/PTY terminal) is implemented <strong>once</strong> in Ink, and the dashboard reuses it by embedding via PTY. The anti-pattern: <strong>rewriting</strong> the transcript and composer in React for the browser — two implementations doomed to drift, fix one forget the other. AGENTS.md makes this a hard rule: "Do not re-implement the primary chat experience in React."</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Two-process model</strong>: Node (Ink paints the screen) ⟷ stdio JSON-RPC ⟷ Python (tui_gateway runs AIAgent). TS owns the screen, Python owns sessions/tools/model.</li>
+    <li><strong>JSON-RPC bridge</strong>: <span class="mono">@method("name")</span> registers, <span class="mono">handle_request</span> dispatches, standard result/error envelope; the frontend gets structured data, not free text.</li>
+    <li><strong>Streaming events</strong>: <span class="mono">_emit("message.delta")</span> pushes token by token, Ink appends to the transcript (character by character); tool.start/complete use the same mechanism.</li>
+    <li><strong>Dashboard embed</strong>: the <span class="mono">/api/pty</span> WebSocket pipes the same <span class="mono">hermes --tui</span> into xterm.js via a PTY, forwarding bytes both ways, intercepting resize escapes locally.</li>
+    <li><strong>Narrow-waist reuse</strong>: the chat surface is built once (Ink), the dashboard inherits it by embedding; <strong>no</strong> React rewrite — add a feature to Ink, the dashboard has it (ch.4).</li>
+  </ul>
+</div>
+"""
+}

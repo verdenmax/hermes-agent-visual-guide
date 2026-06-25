@@ -29,4 +29,5 @@ CONTENT = {
     "16-terminal-backends.html": part4.LESSON_16,
     "17-gateway-adapters.html": part5.LESSON_17,
     "18-gateway-guards.html": part5.LESSON_18,
+    "19-tui-desktop.html": part5.LESSON_19,
 }

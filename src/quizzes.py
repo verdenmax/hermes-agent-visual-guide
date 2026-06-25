@@ -653,6 +653,40 @@ QUIZZES = {
              "en": "When bypassing a control command, the code deliberately dispatches inline rather than via _process_message_background. Why? And how does the discipline of 'control commands never enter conversation history' echo the book's throughline that 'per-conversation prompt caching is sacred'?"},
         ],
     },
+    "19-tui-desktop.html": {
+        "mcq": [
+            {
+                "q": {"zh": "运行 hermes --tui 时,背后其实是几个进程、它们怎么通信?",
+                      "en": "When you run hermes --tui, how many processes are behind it and how do they talk?"},
+                "opts": [
+                    {"zh": "一个进程,全在 Python 里", "en": "One process, all in Python"},
+                    {"zh": "两个进程:Node(Ink 画屏幕) + Python(tui_gateway 跑 AIAgent),靠 stdio 上换行分隔的 JSON-RPC 对话", "en": "Two processes: Node (Ink paints the screen) + Python (tui_gateway runs AIAgent), talking over newline-delimited JSON-RPC on stdio"},
+                    {"zh": "两个进程,但用 HTTP REST 通信", "en": "Two processes, but talking over HTTP REST"},
+                    {"zh": "三个进程", "en": "Three processes"},
+                ],
+                "answer": 1,
+                "why": {"zh": "TypeScript 拥有屏幕(Ink/React 渲染 transcript/输入),Python 拥有会话/工具/模型(AIAgent),中间是一层换行分隔的 JSON-RPC over stdio。前端易变、核心稳定,各用各的生态独立迭代。",
+                        "en": "TypeScript owns the screen (Ink/React renders transcript/input), Python owns sessions/tools/model (AIAgent), with newline-delimited JSON-RPC over stdio between them. Frontends are volatile, the core stable, each iterating in its own ecosystem."},
+            },
+            {
+                "q": {"zh": "网页仪表盘的「聊天」页,是用 React 重写了一遍 transcript/输入框,还是别的做法?",
+                      "en": "The web dashboard's 'chat' page — did it rewrite the transcript/composer in React, or something else?"},
+                "opts": [
+                    {"zh": "用 React 重写了一遍", "en": "Rewrote it in React"},
+                    {"zh": "嵌入——把同一个 hermes --tui 经 PTY 投进浏览器 xterm.js,双向原样转发字节;给 Ink 加功能仪表盘自动就有", "en": "Embedded — it pipes the same hermes --tui into the browser's xterm.js via a PTY, forwarding bytes verbatim both ways; add a feature to Ink and the dashboard has it"},
+                    {"zh": "用截图轮询显示", "en": "Polls screenshots"},
+                    {"zh": "用 iframe 套了个网页版", "en": "Wraps a web version in an iframe"},
+                ],
+                "answer": 1,
+                "why": {"zh": "AGENTS.md 立了硬规矩:「Do not re-implement the primary chat experience in React」。仪表盘经 /api/pty WebSocket 把同一个 hermes --tui 经 PTY 投进 xterm.js,聊天面只在 Ink 实现一次、仪表盘嵌入复用——这是窄腰。",
+                        "en": "AGENTS.md makes it a hard rule: 'Do not re-implement the primary chat experience in React.' The dashboard pipes the same hermes --tui into xterm.js via the /api/pty WebSocket; the chat surface is built once in Ink and reused by embedding — the narrow waist."},
+            },
+        ],
+        "open": [
+            {"zh": "为什么 Hermes 把 agent 核心收进 Python 后端、用稳定的 JSON-RPC 信封暴露给前端,而不是 CLI/TUI/桌面/仪表盘各写一套 agent 逻辑?这跟「窄腰」和多端运维(约束 G)是什么关系?",
+             "en": "Why does Hermes tuck the agent core into a Python backend exposed via a stable JSON-RPC envelope, rather than each surface (CLI/TUI/desktop/dashboard) writing its own agent logic? How does this relate to the 'narrow waist' and multi-surface ops (constraint G)?"},
+        ],
+    },
 }
 
 

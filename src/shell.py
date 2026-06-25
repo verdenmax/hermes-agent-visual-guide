@@ -82,6 +82,8 @@ PAGES = [
      "第五部分 · 多端与网关", "Part 5 · Surfaces & Gateway"),
     ("18-gateway-guards.html", "网关消息守卫", "Gateway message guards",
      "第五部分 · 多端与网关", "Part 5 · Surfaces & Gateway"),
+    ("19-tui-desktop.html", "TUI 与桌面", "TUI & desktop",
+     "第五部分 · 多端与网关", "Part 5 · Surfaces & Gateway"),
 ]
 
 
