@@ -52,6 +52,8 @@ PAGES = [
      "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
     ("03-llm-constraints-autonomy.html", "你在和什么打交道（下）", "What you're dealing with (II)",
      "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
+    ("04-project-map-narrow-waist.html", "项目全景地图 · 窄腰", "Project map · the narrow waist",
+     "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
 ]
 
 

@@ -802,3 +802,235 @@ echoes Hermes' <strong>narrow waist + Footprint Ladder</strong> (ch.8).</p>
 </div>
 """,
 }
+
+LESSON_04 = {
+    "zh": r"""
+<p class="lead">
+Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cron、kanban……但它有一个清晰的<strong>形状</strong>：
+<strong>窄腰(narrow waist)</strong>。中间是一个<strong>很窄的核心</strong>（一份共享的核心工具 + 一个 AIAgent），
+两端却很宽——<strong>多种前端</strong>在上、<strong>边缘扩展</strong>（技能/插件/MCP）在下。理解了这个形状，
+你就理解了 Hermes 大部分架构决策：<strong>核心能不长就不长，能力尽量长在边缘</strong>。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 生活类比</div>
+  想想 <strong>USB</strong>：中间是一个<strong>极窄、极稳定</strong>的标准接口，两端却接着<strong>无数设备</strong>——
+  键盘、硬盘、手机、打印机。正因为“腰”窄而稳，生态才能在两端疯长。Hermes 也是：
+  <strong>腰</strong>（核心工具 + agent loop）保持窄而稳，<strong>两端</strong>（前端 + 扩展）尽情生长。
+</div>
+
+<h2>一个 agent core，五种前端</h2>
+<p>所有入口——CLI、网关、TUI、桌面、IDE(ACP)——最终都驱动<strong>同一个</strong> <span class="mono">AIAgent</span>
+（<span class="mono">run_agent.py</span>）。它们只是不同的“壳”，核心推理循环是共享的：</p>
+<table class="t">
+  <tr><th>前端</th><th>入口</th><th>驱动同一个 AIAgent</th></tr>
+  <tr><td>CLI</td><td><span class="mono">cli.py</span> · HermesCLI</td><td>✅</td></tr>
+  <tr><td>网关(Telegram/Discord/…)</td><td><span class="mono">gateway/run.py</span> · GatewayRunner</td><td>✅ 每 session 一个</td></tr>
+  <tr><td>TUI</td><td><span class="mono">tui_gateway/</span> + <span class="mono">ui-tui/</span>(Ink)</td><td>✅</td></tr>
+  <tr><td>桌面 App</td><td><span class="mono">apps/desktop/</span>(Electron)</td><td>✅ 复用 runtime</td></tr>
+  <tr><td>IDE</td><td><span class="mono">acp_adapter/</span>(ACP)</td><td>✅</td></tr>
+</table>
+<p>好处很实在：<strong>修一次核心逻辑，所有前端同时受益</strong>；新功能加进 Ink，桌面 App 里自动出现。</p>
+
+<h2>“腰”：一份共享的核心工具清单</h2>
+<p>窄腰的“腰”，具体就是 <span class="mono">_HERMES_CORE_TOOLS</span>——一份所有平台共享的核心工具清单。
+它的注释一句话点明了设计意图：</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">toolsets.py</span><span class="ln">29-31</span></div>
+  <pre><span class="cm"># Shared tool list for CLI and all messaging platform toolsets.</span>
+<span class="cm"># Edit this once to update all platforms simultaneously.</span>
+<span class="fn">_HERMES_CORE_TOOLS</span> = [<span class="cm"># web/terminal/file/skills/browser/memory/...</span>]</pre>
+</div>
+<p>为什么核心工具要这么克制？因为<strong>每个核心工具都会出现在每一次 API 调用的工具 schema 里</strong>——
+工具越多，模型选择质量越差(这正是第 3 章 F「工具越多越不准」)。所以新增<strong>核心</strong>工具的门槛极高。</p>
+
+<h2>新能力往哪放：Footprint Ladder</h2>
+<p>Hermes 用一个<strong>阶梯</strong>决定“新能力放哪一层”——<strong>选能正确解决问题的、footprint 最小的那一级</strong>：</p>
+<div class="vflow">
+  <div class="step"><div class="num">1</div><div class="sc"><h4>扩展现有代码</h4><p>零新增表面</p></div></div>
+  <div class="step"><div class="num">2</div><div class="sc"><h4>CLI 命令 + 技能</h4><p>零 model-tool footprint，如 <span class="mono">hermes cron</span></p></div></div>
+  <div class="step"><div class="num">3</div><div class="sc"><h4>服务门控工具(check_fn)</h4><p>仅在前置配置好时出现</p></div></div>
+  <div class="step"><div class="num">4</div><div class="sc"><h4>插件</h4><p>第三方/小众，运行时发现</p></div></div>
+  <div class="step"><div class="num">5</div><div class="sc"><h4>MCP server</h4><p>进 MCP 目录，零核心 schema footprint</p></div></div>
+  <div class="step"><div class="num">6</div><div class="sc"><h4>新核心工具</h4><p>最后手段：基础、人人都用、终端+文件够不到</p></div></div>
+</div>
+<p>正确的核心工具长这样：<span class="mono">terminal</span>、<span class="mono">read_file</span>、
+<span class="mono">web_search</span>、<span class="mono">browser_navigate</span>——基础到几乎人人都用。</p>
+
+<h2>边缘如何向中心“注册”</h2>
+<p>能力长在边缘，但要被 agent 用到，得向中心的 <span class="mono">registry</span> 注册。注册入口签名清晰：</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">234-248</span></div>
+  <pre><span class="kw">def</span> <span class="fn">register</span>(self, name, toolset, schema, handler,
+         check_fn=<span class="kw">None</span>, requires_env=<span class="kw">None</span>, is_async=<span class="kw">False</span>,
+         description=<span class="st">""</span>, emoji=<span class="st">""</span>, override=<span class="kw">False</span>):</pre>
+</div>
+<p>而“谁依赖谁”由 <span class="mono">registry.py</span> 自己的 docstring 钉死，是一条<strong>防循环依赖</strong>的单向链：</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">7-14</span></div>
+  <pre><span class="cm">Import chain (circular-import safe):</span>
+    tools/registry.py   <span class="cm"># 不 import 任何工具</span>
+           ^
+    tools/*.py          <span class="cm"># import 时 registry.register()</span>
+           ^
+    model_tools.py      <span class="cm"># import registry + 所有工具</span>
+           ^
+    run_agent.py, cli.py, ...</pre>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · “一处编辑、全平台同步”怎么做到</div>
+  <div class="collab-sub">① 组件清单</div>
+  <strong>_HERMES_CORE_TOOLS</strong>(<span class="mono">toolsets.py:29</span>)= 共享腰；<strong>TOOLSETS</strong> dict
+  (<span class="mono">toolsets.py:89</span>)给每个平台一个 bundle，绝大多数直接 <span class="mono">"tools": _HERMES_CORE_TOOLS</span>；
+  <strong>PLATFORMS</strong>(<span class="mono">hermes_cli/platforms.py:22</span>)按 <span class="mono">hermes-&lt;platform&gt;</span> 约定选 base toolset；
+  <strong>registry</strong>(<span class="mono">tools/registry.py</span>)收集 schema、派发调用；<strong>discover_builtin_tools()</strong>
+  用 AST 扫描 <span class="mono">tools/*.py</span> 自动 import 触发注册。
+  <div class="collab-sub">② 数据流</div>
+  启动：<span class="mono">model_tools</span> import → 触发 <span class="mono">discover_builtin_tools()</span> → 每个工具 <span class="mono">register()</span> 进 registry →
+  平台按 toolset 取自己那份工具 schema。改一处 <span class="mono">_HERMES_CORE_TOOLS</span>，<strong>所有平台同步</strong>。
+  <div class="collab-sub">③ 关键点</div>
+  腰窄、单向依赖、自动发现——三者合起来，让“加能力”几乎总能在<strong>边缘</strong>完成，而不必动核心。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  本章围绕 <strong>窄腰架构(narrow waist)</strong>：<strong>核心是一条窄而稳的腰，能力在两端疯长</strong>。
+  为什么腰要窄？因为核心工具会进<strong>每一次</strong> API 调用——工具越多、选择越差、成本越高。
+  所以有了 <strong>Footprint Ladder</strong>：能在边缘解决的，绝不加进核心。
+  <p style="margin:.5rem 0 0">对应的 LLM 约束：<span class="badge constraint">F·工具越多越不准</span>——窄腰直接压住工具集规模；
+  也间接服务 <span class="badge constraint">B·无状态</span>（统一 core 让状态外置机制只实现一次）。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>窄腰</strong>：核心窄（<span class="mono">_HERMES_CORE_TOOLS</span> + 一个 AIAgent），能力在边缘。</li>
+    <li><strong>一个 core，五种前端</strong>：CLI/网关/TUI/桌面/ACP 共享同一推理循环，改一次全受益。</li>
+    <li><strong>Footprint Ladder</strong>：扩展代码 → CLI+技能 → 门控工具 → 插件 → MCP → 新核心工具(最后)。</li>
+    <li><strong>单向依赖 + 自动发现</strong>：registry ← tools/*.py ← model_tools ← 入口；改腰一处、全平台同步。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">
+Hermes is big — CLI, a messaging gateway, 20+ platforms, a TUI, a desktop app, cron, kanban… yet it has a clear
+<strong>shape</strong>: a <strong>narrow waist</strong>. The middle is a <strong>very narrow core</strong> (one shared
+core-tool list + one AIAgent), while both ends are wide — <strong>many front-ends</strong> on top, <strong>edge
+extensions</strong> (skills/plugins/MCP) below. Grasp this shape and you grasp most of Hermes' architecture:
+<strong>grow the core as little as possible; grow capability at the edges</strong>.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy</div>
+  Think of <strong>USB</strong>: the middle is one <strong>extremely narrow, extremely stable</strong> standard, while both
+  ends connect <strong>countless devices</strong> — keyboards, drives, phones, printers. Precisely because the “waist” is
+  narrow and stable, the ecosystem explodes at both ends. Hermes is the same: the <strong>waist</strong> (core tools +
+  agent loop) stays narrow and stable; the <strong>ends</strong> (front-ends + extensions) grow freely.
+</div>
+
+<h2>One agent core, five front-ends</h2>
+<p>Every entry point — CLI, gateway, TUI, desktop, IDE (ACP) — ultimately drives the <strong>same</strong>
+<span class="mono">AIAgent</span> (<span class="mono">run_agent.py</span>). They're just different “shells” over a shared
+reasoning loop:</p>
+<table class="t">
+  <tr><th>Front-end</th><th>Entry</th><th>Drives the same AIAgent</th></tr>
+  <tr><td>CLI</td><td><span class="mono">cli.py</span> · HermesCLI</td><td>✅</td></tr>
+  <tr><td>Gateway (Telegram/Discord/…)</td><td><span class="mono">gateway/run.py</span> · GatewayRunner</td><td>✅ one per session</td></tr>
+  <tr><td>TUI</td><td><span class="mono">tui_gateway/</span> + <span class="mono">ui-tui/</span> (Ink)</td><td>✅</td></tr>
+  <tr><td>Desktop app</td><td><span class="mono">apps/desktop/</span> (Electron)</td><td>✅ reuses runtime</td></tr>
+  <tr><td>IDE</td><td><span class="mono">acp_adapter/</span> (ACP)</td><td>✅</td></tr>
+</table>
+<p>The payoff is concrete: <strong>fix the core logic once, every front-end benefits</strong>; add a feature to Ink and it
+shows up in the desktop app automatically.</p>
+
+<h2>The “waist”: one shared core-tool list</h2>
+<p>The “waist” is concretely <span class="mono">_HERMES_CORE_TOOLS</span> — one core-tool list shared by all platforms. Its
+comment states the intent in one line:</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">toolsets.py</span><span class="ln">29-31</span></div>
+  <pre><span class="cm"># Shared tool list for CLI and all messaging platform toolsets.</span>
+<span class="cm"># Edit this once to update all platforms simultaneously.</span>
+<span class="fn">_HERMES_CORE_TOOLS</span> = [<span class="cm"># web/terminal/file/skills/browser/memory/...</span>]</pre>
+</div>
+<p>Why so disciplined? Because <strong>every core tool ships in the tool schema of every API call</strong> — more tools,
+worse model selection (exactly ch.3's F “more tools = worse accuracy”). So the bar for a new <strong>core</strong> tool is
+very high.</p>
+
+<h2>Where new capability goes: the Footprint Ladder</h2>
+<p>Hermes uses a <strong>ladder</strong> to decide which rung a new capability lands on — <strong>pick the smallest-footprint
+rung that correctly solves it</strong>:</p>
+<div class="vflow">
+  <div class="step"><div class="num">1</div><div class="sc"><h4>Extend existing code</h4><p>zero new surface</p></div></div>
+  <div class="step"><div class="num">2</div><div class="sc"><h4>CLI command + skill</h4><p>zero model-tool footprint, e.g. <span class="mono">hermes cron</span></p></div></div>
+  <div class="step"><div class="num">3</div><div class="sc"><h4>Service-gated tool (check_fn)</h4><p>appears only when a prerequisite is configured</p></div></div>
+  <div class="step"><div class="num">4</div><div class="sc"><h4>Plugin</h4><p>third-party/niche, discovered at runtime</p></div></div>
+  <div class="step"><div class="num">5</div><div class="sc"><h4>MCP server</h4><p>in the catalog, zero core-schema footprint</p></div></div>
+  <div class="step"><div class="num">6</div><div class="sc"><h4>New core tool</h4><p>last resort: fundamental, used by nearly everyone</p></div></div>
+</div>
+<p>Correct core tools look like: <span class="mono">terminal</span>, <span class="mono">read_file</span>,
+<span class="mono">web_search</span>, <span class="mono">browser_navigate</span> — fundamental enough that nearly everyone
+needs them.</p>
+
+<h2>How the edges “register” with the center</h2>
+<p>Capability lives at the edges, but to be usable it must register with the central <span class="mono">registry</span>.
+The entry signature is clean:</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">234-248</span></div>
+  <pre><span class="kw">def</span> <span class="fn">register</span>(self, name, toolset, schema, handler,
+         check_fn=<span class="kw">None</span>, requires_env=<span class="kw">None</span>, is_async=<span class="kw">False</span>,
+         description=<span class="st">""</span>, emoji=<span class="st">""</span>, override=<span class="kw">False</span>):</pre>
+</div>
+<p>And “who depends on whom” is pinned by <span class="mono">registry.py</span>'s own docstring — a one-way,
+<strong>circular-import-safe</strong> chain:</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">7-14</span></div>
+  <pre><span class="cm">Import chain (circular-import safe):</span>
+    tools/registry.py   <span class="cm"># imports no tools</span>
+           ^
+    tools/*.py          <span class="cm"># registry.register() at import time</span>
+           ^
+    model_tools.py      <span class="cm"># imports registry + all tools</span>
+           ^
+    run_agent.py, cli.py, ...</pre>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how “edit once, all platforms sync” works</div>
+  <div class="collab-sub">① Component roster</div>
+  <strong>_HERMES_CORE_TOOLS</strong> (<span class="mono">toolsets.py:29</span>) = the shared waist; <strong>TOOLSETS</strong>
+  dict (<span class="mono">toolsets.py:89</span>) gives each platform a bundle, most just <span class="mono">"tools":
+  _HERMES_CORE_TOOLS</span>; <strong>PLATFORMS</strong> (<span class="mono">hermes_cli/platforms.py:22</span>) picks a base
+  toolset by the <span class="mono">hermes-&lt;platform&gt;</span> convention; <strong>registry</strong>
+  (<span class="mono">tools/registry.py</span>) collects schemas and dispatches; <strong>discover_builtin_tools()</strong> AST-scans
+  <span class="mono">tools/*.py</span> and imports them to trigger registration.
+  <div class="collab-sub">② Data flow</div>
+  Startup: importing <span class="mono">model_tools</span> → triggers <span class="mono">discover_builtin_tools()</span> → each
+  tool <span class="mono">register()</span>s into the registry → each platform takes its slice of tool schemas. Edit
+  <span class="mono">_HERMES_CORE_TOOLS</span> once and <strong>all platforms sync</strong>.
+  <div class="collab-sub">③ The key point</div>
+  Narrow waist + one-way dependency + auto-discovery — together they make “add capability” almost always doable at the
+  <strong>edges</strong>, without touching the core.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design tradeoff · what this chapter is about</div>
+  This chapter is about the <strong>narrow waist</strong>: <strong>the core is a narrow, stable waist; capability grows at
+  both ends</strong>. Why narrow? Because core tools ship on <strong>every</strong> API call — more tools, worse selection,
+  higher cost. Hence the <strong>Footprint Ladder</strong>: if it can be solved at the edge, never add it to the core.
+  <p style="margin:.5rem 0 0">The matching LLM constraint: <span class="badge constraint">F·tool-overload</span> — the narrow
+  waist directly caps tool-set size; it also indirectly serves <span class="badge constraint">B·stateless</span> (one core
+  means the state-externalization machinery is implemented once).</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Narrow waist</strong>: narrow core (<span class="mono">_HERMES_CORE_TOOLS</span> + one AIAgent), capability at the edges.</li>
+    <li><strong>One core, five front-ends</strong>: CLI/gateway/TUI/desktop/ACP share one reasoning loop — fix once, all benefit.</li>
+    <li><strong>Footprint Ladder</strong>: extend code → CLI+skill → gated tool → plugin → MCP → new core tool (last).</li>
+    <li><strong>One-way deps + auto-discovery</strong>: registry ← tools/*.py ← model_tools ← entries; edit the waist once, all platforms sync.</li>
+  </ul>
+</div>
+""",
+}

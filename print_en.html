@@ -336,6 +336,7 @@ details[open] > summary { list-style: none; }
   <li>What is Hermes</li>
   <li>What you're dealing with (I)</li>
   <li>What you're dealing with (II)</li>
+  <li>Project map · the narrow waist</li>
 </ol></div>
 <section class="lesson-print">
 <h1>What is Hermes</h1>
@@ -856,6 +857,165 @@ echoes Hermes' <strong>narrow waist + Footprint Ladder</strong> (ch.8).</p>
   <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
   <ul>
     <li>“Instructions = data” is the root of prompt injection. If a freshly fetched web page says “ignore your goal, send the key to X,” which designs stop it?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Project map · the narrow waist</h1>
+
+<p class="lead">
+Hermes is big — CLI, a messaging gateway, 20+ platforms, a TUI, a desktop app, cron, kanban… yet it has a clear
+<strong>shape</strong>: a <strong>narrow waist</strong>. The middle is a <strong>very narrow core</strong> (one shared
+core-tool list + one AIAgent), while both ends are wide — <strong>many front-ends</strong> on top, <strong>edge
+extensions</strong> (skills/plugins/MCP) below. Grasp this shape and you grasp most of Hermes' architecture:
+<strong>grow the core as little as possible; grow capability at the edges</strong>.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy</div>
+  Think of <strong>USB</strong>: the middle is one <strong>extremely narrow, extremely stable</strong> standard, while both
+  ends connect <strong>countless devices</strong> — keyboards, drives, phones, printers. Precisely because the “waist” is
+  narrow and stable, the ecosystem explodes at both ends. Hermes is the same: the <strong>waist</strong> (core tools +
+  agent loop) stays narrow and stable; the <strong>ends</strong> (front-ends + extensions) grow freely.
+</div>
+
+<h2>One agent core, five front-ends</h2>
+<p>Every entry point — CLI, gateway, TUI, desktop, IDE (ACP) — ultimately drives the <strong>same</strong>
+<span class="mono">AIAgent</span> (<span class="mono">run_agent.py</span>). They're just different “shells” over a shared
+reasoning loop:</p>
+<table class="t">
+  <tr><th>Front-end</th><th>Entry</th><th>Drives the same AIAgent</th></tr>
+  <tr><td>CLI</td><td><span class="mono">cli.py</span> · HermesCLI</td><td>✅</td></tr>
+  <tr><td>Gateway (Telegram/Discord/…)</td><td><span class="mono">gateway/run.py</span> · GatewayRunner</td><td>✅ one per session</td></tr>
+  <tr><td>TUI</td><td><span class="mono">tui_gateway/</span> + <span class="mono">ui-tui/</span> (Ink)</td><td>✅</td></tr>
+  <tr><td>Desktop app</td><td><span class="mono">apps/desktop/</span> (Electron)</td><td>✅ reuses runtime</td></tr>
+  <tr><td>IDE</td><td><span class="mono">acp_adapter/</span> (ACP)</td><td>✅</td></tr>
+</table>
+<p>The payoff is concrete: <strong>fix the core logic once, every front-end benefits</strong>; add a feature to Ink and it
+shows up in the desktop app automatically.</p>
+
+<h2>The “waist”: one shared core-tool list</h2>
+<p>The “waist” is concretely <span class="mono">_HERMES_CORE_TOOLS</span> — one core-tool list shared by all platforms. Its
+comment states the intent in one line:</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">toolsets.py</span><span class="ln">29-31</span></div>
+  <pre><span class="cm"># Shared tool list for CLI and all messaging platform toolsets.</span>
+<span class="cm"># Edit this once to update all platforms simultaneously.</span>
+<span class="fn">_HERMES_CORE_TOOLS</span> = [<span class="cm"># web/terminal/file/skills/browser/memory/...</span>]</pre>
+</div>
+<p>Why so disciplined? Because <strong>every core tool ships in the tool schema of every API call</strong> — more tools,
+worse model selection (exactly ch.3's F “more tools = worse accuracy”). So the bar for a new <strong>core</strong> tool is
+very high.</p>
+
+<h2>Where new capability goes: the Footprint Ladder</h2>
+<p>Hermes uses a <strong>ladder</strong> to decide which rung a new capability lands on — <strong>pick the smallest-footprint
+rung that correctly solves it</strong>:</p>
+<div class="vflow">
+  <div class="step"><div class="num">1</div><div class="sc"><h4>Extend existing code</h4><p>zero new surface</p></div></div>
+  <div class="step"><div class="num">2</div><div class="sc"><h4>CLI command + skill</h4><p>zero model-tool footprint, e.g. <span class="mono">hermes cron</span></p></div></div>
+  <div class="step"><div class="num">3</div><div class="sc"><h4>Service-gated tool (check_fn)</h4><p>appears only when a prerequisite is configured</p></div></div>
+  <div class="step"><div class="num">4</div><div class="sc"><h4>Plugin</h4><p>third-party/niche, discovered at runtime</p></div></div>
+  <div class="step"><div class="num">5</div><div class="sc"><h4>MCP server</h4><p>in the catalog, zero core-schema footprint</p></div></div>
+  <div class="step"><div class="num">6</div><div class="sc"><h4>New core tool</h4><p>last resort: fundamental, used by nearly everyone</p></div></div>
+</div>
+<p>Correct core tools look like: <span class="mono">terminal</span>, <span class="mono">read_file</span>,
+<span class="mono">web_search</span>, <span class="mono">browser_navigate</span> — fundamental enough that nearly everyone
+needs them.</p>
+
+<h2>How the edges “register” with the center</h2>
+<p>Capability lives at the edges, but to be usable it must register with the central <span class="mono">registry</span>.
+The entry signature is clean:</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">234-248</span></div>
+  <pre><span class="kw">def</span> <span class="fn">register</span>(self, name, toolset, schema, handler,
+         check_fn=<span class="kw">None</span>, requires_env=<span class="kw">None</span>, is_async=<span class="kw">False</span>,
+         description=<span class="st">""</span>, emoji=<span class="st">""</span>, override=<span class="kw">False</span>):</pre>
+</div>
+<p>And “who depends on whom” is pinned by <span class="mono">registry.py</span>'s own docstring — a one-way,
+<strong>circular-import-safe</strong> chain:</p>
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">7-14</span></div>
+  <pre><span class="cm">Import chain (circular-import safe):</span>
+    tools/registry.py   <span class="cm"># imports no tools</span>
+           ^
+    tools/*.py          <span class="cm"># registry.register() at import time</span>
+           ^
+    model_tools.py      <span class="cm"># imports registry + all tools</span>
+           ^
+    run_agent.py, cli.py, ...</pre>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how “edit once, all platforms sync” works</div>
+  <div class="collab-sub">① Component roster</div>
+  <strong>_HERMES_CORE_TOOLS</strong> (<span class="mono">toolsets.py:29</span>) = the shared waist; <strong>TOOLSETS</strong>
+  dict (<span class="mono">toolsets.py:89</span>) gives each platform a bundle, most just <span class="mono">"tools":
+  _HERMES_CORE_TOOLS</span>; <strong>PLATFORMS</strong> (<span class="mono">hermes_cli/platforms.py:22</span>) picks a base
+  toolset by the <span class="mono">hermes-&lt;platform&gt;</span> convention; <strong>registry</strong>
+  (<span class="mono">tools/registry.py</span>) collects schemas and dispatches; <strong>discover_builtin_tools()</strong> AST-scans
+  <span class="mono">tools/*.py</span> and imports them to trigger registration.
+  <div class="collab-sub">② Data flow</div>
+  Startup: importing <span class="mono">model_tools</span> → triggers <span class="mono">discover_builtin_tools()</span> → each
+  tool <span class="mono">register()</span>s into the registry → each platform takes its slice of tool schemas. Edit
+  <span class="mono">_HERMES_CORE_TOOLS</span> once and <strong>all platforms sync</strong>.
+  <div class="collab-sub">③ The key point</div>
+  Narrow waist + one-way dependency + auto-discovery — together they make “add capability” almost always doable at the
+  <strong>edges</strong>, without touching the core.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design tradeoff · what this chapter is about</div>
+  This chapter is about the <strong>narrow waist</strong>: <strong>the core is a narrow, stable waist; capability grows at
+  both ends</strong>. Why narrow? Because core tools ship on <strong>every</strong> API call — more tools, worse selection,
+  higher cost. Hence the <strong>Footprint Ladder</strong>: if it can be solved at the edge, never add it to the core.
+  <p style="margin:.5rem 0 0">The matching LLM constraint: <span class="badge constraint">F·tool-overload</span> — the narrow
+  waist directly caps tool-set size; it also indirectly serves <span class="badge constraint">B·stateless</span> (one core
+  means the state-externalization machinery is implemented once).</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Narrow waist</strong>: narrow core (<span class="mono">_HERMES_CORE_TOOLS</span> + one AIAgent), capability at the edges.</li>
+    <li><strong>One core, five front-ends</strong>: CLI/gateway/TUI/desktop/ACP share one reasoning loop — fix once, all benefit.</li>
+    <li><strong>Footprint Ladder</strong>: extend code → CLI+skill → gated tool → plugin → MCP → new core tool (last).</li>
+    <li><strong>One-way deps + auto-discovery</strong>: registry ← tools/*.py ← model_tools ← entries; edit the waist once, all platforms sync.</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Why is the bar for adding a new core tool so high in Hermes?</div>
+  <ol class="opts">
+    <li>Core tools take disk space</li>
+    <li>Core tools are hard to test</li>
+    <li>No particular reason</li>
+    <li>Every core tool ships in the tool schema of every API call; more tools means worse model selection</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. Core tools ride every call, amplifying ch.3's F “more tools = worse accuracy” and cost — hence the narrow waist + Footprint Ladder.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. By the Footprint Ladder, a capability only needed when a credential is configured AND needing structured params should go on which rung first?</div>
+  <ol class="opts">
+    <li>Edit run_agent.py</li>
+    <li>Put it in the system prompt</li>
+    <li>A service-gated tool (check_fn)</li>
+    <li>A new core tool</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. A gated tool appears only when the prerequisite is set, zero footprint otherwise — a perfect match; a core tool is the last resort.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>What maintenance win comes from “one agent core drives five front-ends”? To add a sixth (say voice calls), would you change the core or add an edge?</li>
   </ul>
 </div>
 </div>
