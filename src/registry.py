@@ -8,4 +8,5 @@ import part1
 
 CONTENT = {
     "01-what-is-hermes.html": part1.LESSON_01,
+    "02-llm-constraints-single-call.html": part1.LESSON_02,
 }

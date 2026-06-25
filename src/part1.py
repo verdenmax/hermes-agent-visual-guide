@@ -275,3 +275,260 @@ careful tradeoff between <strong>driving evolution</strong> and <strong>never br
 </div>
 """,
 }
+
+LESSON_02 = {
+    "zh": r"""
+<p class="lead">
+在拆解 Hermes 的设计之前，先认清我们在和什么打交道。一次大模型调用，本质是一个
+<strong>无状态、按 token 看世界、凭概率续写</strong>的函数：你把上下文递进去，它吐出最可能的下一段文字。
+它很强，却带着一组“出厂自带”的硬约束。这一章讲<strong>单次调用</strong>层面的三类——
+<strong>注意力与上下文(A)</strong>、<strong>无状态与非确定(B)</strong>、<strong>token 表示层(E)</strong>。
+它们是后面几乎每个设计的“病因”：你会看到 Hermes 的很多取舍，都是在<strong>顺着这些约束</strong>设计，而不是硬刚。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 生活类比</div>
+  把一次调用想成请教一位<strong>博学却“每次失忆”的专家</strong>：你把所有背景写在<strong>一张纸</strong>上递进去，
+  他只读这张纸、给一个回答，然后<strong>忘光一切</strong>。下次再问，得重新递一张纸。而且他读长文时，
+  <strong>最在意开头和结尾，中间容易扫过去</strong>；他还不是一个字一个字读，而是按<strong>词块(token)</strong>读，
+  所以“strawberry 里有几个 r”这种字符级问题，他反而容易答错。
+</div>
+
+<h2>A · 注意力与上下文：不是“塞得下”就行</h2>
+<div class="card macro">
+  <div class="tag">🌍 宏观理解</div>
+  模型的注意力<strong>不是均匀</strong>铺在整个上下文上的。位置、长度都会显著影响它“看见”了什么、看得多准。
+  把上下文当成一种<strong>稀缺资源</strong>来经营，是 agent 设计的第一课。
+</div>
+<p><strong>① 中间遗失（lost in the middle）。</strong>大量实验发现：模型对上下文的<strong>开头</strong>和<strong>结尾</strong>
+注意力最强，<strong>中间最弱</strong>。把关键指令埋在长上下文中段，常常“看不见”。对策很直接——
+<strong>关键指令在头、尾各放一遍</strong>；最相关的检索片段放<strong>边缘</strong>，别塞在中间。</p>
+<div class="cellgroup">
+  <div class="cg-cap">同一条关键指令，放在不同位置时的“被看见”强度（示意）：</div>
+  <div class="cells">
+    <span class="cell hl">开头·强</span><span class="cell dim">中间·弱</span><span class="cell dim">中间·弱</span><span class="cell dim">中间·弱</span><span class="cell hl">结尾·强</span>
+    <span class="lab">U 型注意力</span>
+  </div>
+</div>
+<p><strong>② 上下文腐烂（context rot）。</strong>就算窗口没满，质量也会<strong>随长度下降</strong>：指令遵循度变差、幻觉变多。
+所以<strong>压缩不只是为了省钱/塞得下，更是为了质量</strong>——一份<strong>精简聚焦</strong>的上下文，往往胜过“把什么都塞进去”。
+检索也一样：要<strong>精度优先于召回</strong>，无关文档会“分散注意力”。</p>
+<p><strong>③ 长度 → 延迟与成本。</strong>上下文越长，每一步越慢、越贵。交互式 agent 必须有<strong>上下文预算</strong>，
+不能无脑堆历史。这条直接催生了 Hermes 的<strong>迭代预算</strong>（第 5 章）与<strong>上下文压缩</strong>（第 15 章）。</p>
+<div class="card warn">
+  <div class="tag">⚠️ 反直觉</div>
+  “给它更多上下文”不总是更好。超过某个点，<strong>更多上下文 = 更差的回答</strong>。少而精 &gt; 多而杂。
+</div>
+
+<h2>B · 无状态与非确定：它没有记忆，也不保证可复现</h2>
+<div class="card macro">
+  <div class="tag">🌍 宏观理解</div>
+  两次调用之间，模型<strong>什么都不记得</strong>；而且同样的输入，<strong>未必</strong>给同样的输出。
+  这两点决定了：“agent”本质是<strong>围绕一个无状态、非确定函数</strong>做的工程编排。
+</div>
+<p><strong>① 无状态。</strong>模型不在调用之间保存任何东西。所有“记忆”都必须<strong>外置</strong>（写进文件/数据库）
+或<strong>每次重发</strong>（塞进 messages）。这正是 Hermes 要有<strong>技能、记忆、会话库</strong>的根本原因——
+它们是那个失忆核心的“外接硬盘”（第 11、12 章）。</p>
+<div class="flow">
+  <div class="node"><div class="nt">第 1 次调用</div><div class="nd">读完 messages，回答</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">调用结束</div><div class="nd">模型<strong>忘光</strong></div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">第 2 次调用</div><div class="nd">必须<strong>重发</strong>全部上下文</div></div>
+</div>
+<p><strong>② 非确定性。</strong>即便温度设为 0，同一输入也可能产出不同结果。所以<strong>不能依赖可复现</strong>：
+要设计<strong>重试、校验、工具幂等</strong>，用<strong>容忍式</strong>测试而非逐字断言。</p>
+<p><strong>③ 自回归、不可回退。</strong>模型逐 token 生成，一旦<strong>开了个错头</strong>，往往会<strong>“承诺并自圆其说”</strong>，
+把错误一路编下去。对策：<strong>先规划、后执行</strong>，把“修订”放到<strong>单独一遍</strong>，并给足<strong>推理空间</strong>（思考 token）再出答案。
+这呼应 Hermes 的<strong>委派 / 规划-执行分离</strong>（第 13、14 章）。</p>
+
+<h2>E · token 表示层：它按词块看世界</h2>
+<div class="card macro">
+  <div class="tag">🌍 宏观理解</div>
+  模型不是按<strong>字符</strong>、更不是按<strong>数字</strong>理解输入的，而是按<strong>token（词块）</strong>。
+  这决定了它在<strong>精确字符、计数、算术</strong>上天生不可靠——这类活该<strong>交给工具</strong>。
+</div>
+<p><strong>① 分词导致字符/计数/数学弱。</strong>“strawberry 有几个 r”、精确子串匹配、多位数乘法，模型都容易错，
+因为它看到的是 <span class="mono">str</span>+<span class="mono">aw</span>+<span class="mono">berry</span> 这样的词块，不是单个字母。
+对策：<strong>别让模型做精确计算或数字符</strong>，交给<strong>计算器 / 代码执行</strong>（第 8 章工具系统）。</p>
+<div class="cellgroup">
+  <div class="cg-cap">“strawberry” 在模型眼里（示意分词）：</div>
+  <div class="cells">
+    <span class="cell q">str</span><span class="cell q">aw</span><span class="cell q">berry</span>
+    <span class="lab">→ 看不清“有几个 r”</span>
+  </div>
+</div>
+<p><strong>② 结构化输出脆弱。</strong>模型天生输出<strong>散文</strong>，不是类型化数据。要可靠拿到 JSON，得用
+<strong>function calling / JSON mode / 语法约束</strong> + <strong>校验 + 修复回路</strong>（第 7 章）。</p>
+<p><strong>③ 最大输出截断。</strong>长输出可能从<strong>结构中间</strong>被砍断。对策：<strong>分块生成、续写</strong>，
+按<strong>输出预算</strong>设计任务，别指望一口气吐出超长结构。</p>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 这些“病”分别由哪一章“开药”</div>
+  <div class="collab-sub">① 约束 → Hermes 对策（路线图）</div>
+  本章只诊断“病”，治疗散落在后续章节：<strong>A 中间遗失</strong> → 第 6 章把关键指令放 system prompt 头尾；
+  <strong>A 上下文腐烂</strong> → 第 15 章压缩（为质量，不只省钱）；<strong>B 无状态</strong> → 第 4/11/12 章把状态外置到技能/记忆/会话库；
+  <strong>B 自回归</strong> → 第 9 章先写 todo 再做、第 14 章规划/执行分离；<strong>E 数学弱</strong> → 第 8 章把精确计算交给 <span class="mono">execute_code</span>。
+  <div class="collab-sub">② 一次调用如何同时挨这三刀</div>
+  你发一句话 → 它被<strong>分词</strong>(E) → 和全部历史拼成上下文，长则<strong>腐烂</strong>、关键信息可能<strong>埋在中间</strong>(A)
+  → 模型<strong>无状态</strong>地读一遍、<strong>非确定</strong>地续写(B) → 输出可能<strong>截断</strong>(E)。每一步都有坑。
+  <div class="collab-sub">③ 关键心法</div>
+  不要和这些物理特性<strong>对抗</strong>，要<strong>顺着设计</strong>：状态外置、关键信息放边缘、精确活交工具、给推理留空间。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  这一章不讲某个 Hermes 部件，而是立一个<strong>认知地基</strong>：<strong>把模型当成一个有确定物理特性的“零件”</strong>来对待。
+  它无状态、按 token 看世界、注意力两头重中间轻、还不保证可复现。
+  <p style="margin:.5rem 0 0">对应的 LLM 约束：
+  <span class="badge constraint">A·中间遗失</span><span class="badge constraint">A·上下文腐烂</span>
+  <span class="badge constraint">B·无状态</span><span class="badge constraint">B·非确定</span>
+  <span class="badge constraint">E·分词</span>。记住它们，后面每个设计你都能看懂“在治哪个病”。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>注意力不均匀</strong>：关键信息放<strong>头尾</strong>；上下文<strong>少而精</strong>，长了会腐烂。</li>
+    <li><strong>无状态 + 非确定</strong>：状态必须<strong>外置/重发</strong>；要重试、校验、工具幂等。</li>
+    <li><strong>自回归不可回退</strong>：先规划后执行，给推理空间，错头难回。</li>
+    <li><strong>按 token 看世界</strong>：精确字符/计数/算术<strong>交给工具</strong>，结构化输出要校验。</li>
+    <li>核心心法：<strong>顺着模型的物理特性设计，而不是硬刚</strong>。</li>
+  </ul>
+</div>
+""",
+    "en": r"""
+<p class="lead">
+Before we dissect Hermes' design, let's see what we're dealing with. A single LLM call is, at heart, a
+<strong>stateless, token-based, probabilistic</strong> function: you hand it context, it emits the most likely next
+text. It's powerful, but ships with a set of hard, built-in constraints. This chapter covers the three that bite at
+the <strong>single-call</strong> level — <strong>attention &amp; context (A)</strong>, <strong>statelessness &amp;
+nondeterminism (B)</strong>, and the <strong>token representation layer (E)</strong>. They're the “root cause” behind
+almost every later design: you'll see most of Hermes' choices <strong>work with</strong> these constraints, not fight them.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy</div>
+  Think of one call as consulting a <strong>brilliant expert with per-call amnesia</strong>: you write all the background
+  on <strong>one sheet of paper</strong>, hand it over, they read only that sheet, give one answer, then <strong>forget
+  everything</strong>. Ask again and you re-hand a sheet. Reading long text they <strong>care most about the start and
+  end, and skim the middle</strong>; and they read in <strong>chunks (tokens)</strong>, not letters — so “how many r's in
+  strawberry” is exactly what they get wrong.
+</div>
+
+<h2>A · Attention &amp; context: “fits in the window” isn't enough</h2>
+<div class="card macro">
+  <div class="tag">🌍 Big picture</div>
+  The model's attention is <strong>not uniform</strong> across the context. Both position and length strongly affect what
+  it actually “sees” and how accurately. Treating context as a <strong>scarce resource</strong> is lesson one of agent design.
+</div>
+<p><strong>① Lost in the middle.</strong> Experiments consistently show the model attends most to the <strong>start</strong>
+and <strong>end</strong>, and <strong>least to the middle</strong>. A key instruction buried mid-context often goes
+“unseen.” The fix is direct — <strong>put key instructions at both the head and the tail</strong>; place the most relevant
+retrieved snippets at the <strong>edges</strong>, not the middle.</p>
+<div class="cellgroup">
+  <div class="cg-cap">How strongly the same key instruction is “seen” by position (schematic):</div>
+  <div class="cells">
+    <span class="cell hl">start·strong</span><span class="cell dim">middle·weak</span><span class="cell dim">middle·weak</span><span class="cell dim">middle·weak</span><span class="cell hl">end·strong</span>
+    <span class="lab">U-shaped attention</span>
+  </div>
+</div>
+<p><strong>② Context rot.</strong> Even when the window isn't full, quality <strong>degrades with length</strong>: weaker
+instruction-following, more hallucination. So <strong>compression isn't only about cost / fitting — it's about
+quality</strong>: a <strong>tight, focused</strong> context usually beats “stuff everything in.” Same for retrieval —
+<strong>precision over recall</strong>, since irrelevant docs “distract.”</p>
+<p><strong>③ Length → latency &amp; cost.</strong> Longer context means slower, pricier steps. An interactive agent needs a
+<strong>context budget</strong> and can't pile on history blindly. This directly motivates Hermes' <strong>iteration
+budget</strong> (ch.5) and <strong>context compression</strong> (ch.15).</p>
+<div class="card warn">
+  <div class="tag">⚠️ Counter-intuitive</div>
+  “More context” isn't always better. Past a point, <strong>more context = worse answers</strong>. Less but focused &gt; more but noisy.
+</div>
+
+<h2>B · Stateless &amp; nondeterministic: no memory, no guaranteed repeatability</h2>
+<div class="card macro">
+  <div class="tag">🌍 Big picture</div>
+  Between two calls the model <strong>remembers nothing</strong>; and the same input <strong>need not</strong> yield the
+  same output. Together: an “agent” is fundamentally <strong>orchestration around a stateless, nondeterministic function</strong>.
+</div>
+<p><strong>① Stateless.</strong> The model saves nothing between calls. All “memory” must be <strong>externalized</strong>
+(to files/DBs) or <strong>re-sent</strong> (packed into messages) every time. That's the root reason Hermes has
+<strong>skills, memory, a session store</strong> — the external hard drive for an amnesiac core (ch.11, 12).</p>
+<div class="flow">
+  <div class="node"><div class="nt">Call #1</div><div class="nd">read messages, answer</div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node"><div class="nt">Call ends</div><div class="nd">model <strong>forgets</strong></div></div>
+  <div class="arrow">-&gt;</div>
+  <div class="node hl"><div class="nt">Call #2</div><div class="nd">must <strong>re-send</strong> all context</div></div>
+</div>
+<p><strong>② Nondeterminism.</strong> Even at temperature 0, the same input can produce different results. So you
+<strong>can't rely on reproducibility</strong>: design for <strong>retries, validation, idempotent tools</strong>, and use
+<strong>tolerant</strong> tests instead of literal assertions.</p>
+<p><strong>③ Autoregressive, no undo.</strong> The model generates token by token; once it <strong>starts down a wrong
+path</strong>, it tends to <strong>“commit and rationalize,”</strong> inventing its way forward. The fix: <strong>plan
+first, execute second</strong>, put “revision” in a <strong>separate pass</strong>, and give it <strong>room to
+reason</strong> (thinking tokens) before answering. This echoes Hermes' <strong>delegation / plan-execute split</strong> (ch.13, 14).</p>
+
+<h2>E · The token layer: it sees the world in chunks</h2>
+<div class="card macro">
+  <div class="tag">🌍 Big picture</div>
+  The model doesn't read <strong>characters</strong>, let alone <strong>numbers</strong> — it reads <strong>tokens
+  (chunks)</strong>. That makes it inherently unreliable at <strong>exact characters, counting, and arithmetic</strong> —
+  work that should be <strong>handed to tools</strong>.
+</div>
+<p><strong>① Tokenization makes character/count/math weak.</strong> “How many r's in strawberry,” exact substring matching,
+multi-digit multiplication — the model often gets these wrong, because it sees chunks like <span class="mono">str</span>+<span class="mono">aw</span>+<span class="mono">berry</span>, not individual letters. Fix: <strong>don't let the model do exact
+math or character-counting</strong>; hand it to a <strong>calculator / code execution</strong> (ch.8, the tool system).</p>
+<div class="cellgroup">
+  <div class="cg-cap">“strawberry” as the model sees it (schematic tokenization):</div>
+  <div class="cells">
+    <span class="cell q">str</span><span class="cell q">aw</span><span class="cell q">berry</span>
+    <span class="lab">→ can't tell “how many r”</span>
+  </div>
+</div>
+<p><strong>② Structured output is fragile.</strong> The model natively emits <strong>prose</strong>, not typed data. For
+reliable JSON you need <strong>function calling / JSON mode / grammar constraints</strong> + a <strong>validate-and-repair
+loop</strong> (ch.7).</p>
+<p><strong>③ Max-output truncation.</strong> Long output can be cut <strong>mid-structure</strong>. Fix: <strong>chunk and
+continue</strong>, design tasks against an <strong>output budget</strong>; don't expect one giant structure in a single shot.</p>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · which chapter “prescribes” for each disease</div>
+  <div class="collab-sub">① Constraint → Hermes' answer (roadmap)</div>
+  This chapter only diagnoses; the cures are spread across later chapters: <strong>A lost-in-the-middle</strong> → ch.6 puts
+  key instructions at the head/tail of the system prompt; <strong>A context rot</strong> → ch.15 compression (for quality,
+  not just cost); <strong>B statelessness</strong> → ch.4/11/12 externalize state into skills/memory/session store;
+  <strong>B autoregression</strong> → ch.9 write a todo first, ch.14 plan-execute split; <strong>E weak math</strong> → ch.8
+  hands exact compute to <span class="mono">execute_code</span>.
+  <div class="collab-sub">② How one call takes all three hits at once</div>
+  You send a line → it's <strong>tokenized</strong> (E) → concatenated with all history; long context <strong>rots</strong>,
+  key info may be <strong>buried in the middle</strong> (A) → the model reads it <strong>statelessly</strong> and continues
+  <strong>nondeterministically</strong> (B) → the output may be <strong>truncated</strong> (E). Every step has a trap.
+  <div class="collab-sub">③ The mindset</div>
+  Don't <strong>fight</strong> these physical traits — <strong>design with them</strong>: externalize state, put key info at
+  the edges, hand exact work to tools, leave room to reason.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design tradeoff · what this chapter is about</div>
+  This chapter isn't about a Hermes part; it lays a <strong>cognitive foundation</strong>: <strong>treat the model as a
+  component with fixed physical properties</strong>. It's stateless, sees the world in tokens, attends heavily to the two
+  ends and weakly to the middle, and isn't reproducible.
+  <p style="margin:.5rem 0 0">The matching LLM constraints:
+  <span class="badge constraint">A·lost-in-the-middle</span><span class="badge constraint">A·context-rot</span>
+  <span class="badge constraint">B·stateless</span><span class="badge constraint">B·nondeterministic</span>
+  <span class="badge constraint">E·tokenization</span>. Hold onto them and every later design reads as “which disease it's treating.”</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Attention is uneven</strong>: put key info at the <strong>ends</strong>; keep context <strong>tight</strong>, long rots.</li>
+    <li><strong>Stateless + nondeterministic</strong>: state must be <strong>externalized/re-sent</strong>; use retries, validation, idempotent tools.</li>
+    <li><strong>Autoregressive, no undo</strong>: plan before executing, leave room to reason, a wrong start is hard to undo.</li>
+    <li><strong>Sees the world in tokens</strong>: hand exact characters/counting/math <strong>to tools</strong>; validate structured output.</li>
+    <li>Core mindset: <strong>design with the model's physics, don't fight them</strong>.</li>
+  </ul>
+</div>
+""",
+}

@@ -48,6 +48,8 @@ def head_meta(title, description, og_type="website"):
 PAGES = [
     ("01-what-is-hermes.html", "Hermes 是什么", "What is Hermes",
      "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
+    ("02-llm-constraints-single-call.html", "你在和什么打交道（上）", "What you're dealing with (I)",
+     "第一部分 · 宏观全景", "Part 1 · The Big Picture"),
 ]
 
 

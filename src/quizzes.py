@@ -75,6 +75,40 @@ QUIZZES = {
             },
         ],
     },
+    "02-llm-constraints-single-call.html": {
+        "mcq": [
+            {
+                "q": {"zh": "“把最关键的指令放在长上下文正中间”——这个做法的主要问题是？",
+                      "en": "“Put the most critical instruction right in the middle of a long context” — what's mainly wrong with that?"},
+                "opts": [
+                    {"zh": "中间太显眼，会被过度强调", "en": "The middle is too prominent and gets over-weighted"},
+                    {"zh": "模型对中间的注意力最弱，关键指令容易“看不见”", "en": "The model attends least to the middle, so the key instruction is easily “unseen”"},
+                    {"zh": "中间位置会增加 token 成本", "en": "The middle position increases token cost"},
+                    {"zh": "没有问题，位置不影响效果", "en": "Nothing — position doesn't matter"},
+                ],
+                "answer": 1,
+                "why": {"zh": "“中间遗失”：注意力两端强、中间弱。关键指令应放头尾，最相关的检索片段放边缘。",
+                        "en": "“Lost in the middle”: attention is strong at both ends, weak in the middle. Put key instructions at head/tail and the most relevant snippets at the edges."},
+            },
+            {
+                "q": {"zh": "为什么 Hermes 把“精确算术 / 数字符”交给工具，而不让模型自己算？",
+                      "en": "Why does Hermes hand exact arithmetic / character-counting to tools instead of letting the model do it?"},
+                "opts": [
+                    {"zh": "模型按 token（词块）看世界，对单字符与精确数字天生不可靠", "en": "The model sees the world in tokens (chunks), so it's inherently unreliable at single chars and exact numbers"},
+                    {"zh": "工具算得更快", "en": "Tools are simply faster"},
+                    {"zh": "为了省 token", "en": "To save tokens"},
+                    {"zh": "模型完全不会算术", "en": "The model can't do any arithmetic at all"},
+                ],
+                "answer": 0,
+                "why": {"zh": "分词让“strawberry 有几个 r”这类字符 / 计数 / 算术不可靠——交给 execute_code / 计算器（第 8 章）。",
+                        "en": "Tokenization makes char/count/math (“how many r in strawberry”) unreliable — hand them to execute_code / a calculator (ch.8)."},
+            },
+        ],
+        "open": [
+            {"zh": "“无状态”意味着两次调用之间模型零记忆。把它和“纯函数”联系起来：一个 agent 要有“记忆”，状态应该放在函数的哪一侧？",
+             "en": "“Stateless” means zero memory between calls. Relate it to a “pure function”: for an agent to have “memory,” which side of the function should hold state?"},
+        ],
+    },
 }
 
 
