@@ -345,6 +345,7 @@ details[open] > summary { list-style: none; }
   <li>Curator: the skill gardener</li>
   <li>Memory: MEMORY / USER</li>
   <li>Cross-session search: FTS5</li>
+  <li>Delegation & subagents</li>
 </ol></div>
 <section class="lesson-print">
 <h1>What is Hermes</h1>
@@ -2313,6 +2314,148 @@ merges all of that into a single calling shape with no mode parameter,
   <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
   <ul>
     <li>'Cross-session memory' seems to inherently need some 'understanding/summarizing', yet Hermes implements it with zero-LLM local FTS5 + verbatim append. What does this choice gain on both the 'cost/latency' and 'cache is sacred' axes?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Delegation & subagents</h1>
+
+<p class="lead">
+When a task produces <strong>tons of intermediate work</strong> (reading dozens of files, running a chain of commands), stuffing it all into the main conversation <strong>floods the context</strong>. Delegation (<span class="mono">delegate_task</span>) solves this: hand the subtask to an <strong>independent subagent</strong> — it has its own conversation, its own terminal, its own toolset, and <strong>returns only the final summary</strong> to the parent; the intermediate tool results <strong>never enter</strong> your context window. This chapter opens "scaling & isolation."
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · outsourcing to an independent team</div>
+  You're the project manager. A research task requires sifting a hundred documents — you <strong>don't</strong> haul all hundred onto your own desk to read (that buries it = floods the context). You <strong>outsource</strong> to an independent team: hand them a <strong>self-contained brief</strong> (the subagent knows nothing about your conversation history), they work in <strong>their own office</strong> (independent context + terminal), and finally give you a <strong>conclusion summary</strong>. The hundred documents they read and the drafts they tried <strong>never appear on your desk</strong>.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · context isolation, return only the summary</div>
+  Delegation's core value is <strong>context isolation</strong>. The subagent gets an <span class="mono">ephemeral_system_prompt</span> (just goal + context, <strong>not</strong> the parent's conversation history), plus <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> — it <strong>doesn't read</strong> the parent's AGENTS.md or the shared MEMORY.md. It runs to completion in its own conversation, and <strong>only the final response is returned to the parent as a summary</strong>. So the parent's context window stays <strong>clean</strong>: neither flooded by intermediate tool results nor polluted by the subtask's trial-and-error. This is another route against "limited context" — ch.15 uses compression, this chapter uses isolation.
+</div>
+
+<h2>The heart of isolation: what the subagent gets and doesn't</h2>
+<p>When constructing the child AIAgent, what is <strong>isolated</strong> vs <strong>inherited</strong> is the crux of the design:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">1219-1250 · simplified</span></div>
+  <pre>child = AIAgent(
+    base_url=..., api_key=..., model=...,          <span class="cm"># inherit: provider/model runtime</span>
+    enabled_toolsets=child_toolsets,
+    ephemeral_system_prompt=child_prompt,          <span class="cm"># isolate: just goal+context, no parent history</span>
+    platform=<span class="st">"subagent"</span>,
+    skip_context_files=<span class="kw">True</span>,                     <span class="cm"># isolate: no AGENTS.md/SOUL.md</span>
+    skip_memory=<span class="kw">True</span>,                            <span class="cm"># isolate: no shared MEMORY.md</span>
+    clarify_callback=<span class="kw">None</span>,                       <span class="cm"># isolate: cannot ask the user</span>
+    session_db=...,                                <span class="cm"># inherit: shared session DB (lineage via parent_session_id)</span>
+    iteration_budget=<span class="kw">None</span>,                       <span class="cm"># isolate: fresh budget per subagent</span>
+)</pre>
+</div>
+<p>Look at the "isolate vs inherit" list: <strong>isolated</strong> are the things that would pollute or flood — conversation history, context files, memory, user interaction, the iteration budget (each subagent gets a <strong>fresh</strong> one); <strong>inherited</strong> is the runtime needed to run — provider / model / api_key / session_db. The tool description states the trade-off most plainly: <span class="inline">Each subagent gets its own conversation, terminal session, and toolset. Only the final summary is returned -- intermediate tool results never enter your context window</span>.</p>
+
+<h2>Two roles: leaf can't re-delegate, orchestrator can</h2>
+<p>A subagent has two <span class="mono">role</span>s. The default <span class="mono">leaf</span> is a <strong>focused worker</strong> with a set of tools disabled; <span class="mono">orchestrator</span> retains delegation and can spawn its own workers:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">44-53 / 1021-1024 · excerpt</span></div>
+  <pre><span class="cm"># Tools a child must never have access to</span>
+DELEGATE_BLOCKED_TOOLS = <span class="fn">frozenset</span>([
+    <span class="st">"delegate_task"</span>,   <span class="cm"># no recursive delegation (leaf)</span>
+    <span class="st">"clarify"</span>,         <span class="cm"># no user questions</span>
+    <span class="st">"memory"</span>,          <span class="cm"># no writes to shared MEMORY.md</span>
+    <span class="st">"send_message"</span>,    <span class="cm"># no cross-platform side effects</span>
+    <span class="st">"execute_code"</span>,    <span class="cm"># reason step-by-step, don't write scripts</span>
+])
+
+<span class="cm"># role demotion: only an explicit orchestrator under the depth cap stays one</span>
+orchestrator_ok = _get_orchestrator_enabled() <span class="kw">and</span> child_depth &lt; max_spawn
+effective_role = role <span class="kw">if</span> (role == <span class="st">"orchestrator"</span> <span class="kw">and</span> orchestrator_ok) <span class="kw">else</span> <span class="st">"leaf"</span></pre>
+</div>
+<p><span class="mono">_strip_blocked_tools</span> removes four toolsets wholesale — <span class="mono">delegation / clarify / memory / code_execution</span> — so leaf loses delegate_task (<strong>can't re-delegate</strong>, preventing infinite nesting), clarify, memory, and execute_code; while <span class="mono">DELEGATE_BLOCKED_TOOLS</span> is the authoritative list of tools a child must <strong>never see</strong> (5 of them, including send_message), keeping the 'all-blocked' toolset out of the subagent's menu. <span class="mono">orchestrator</span> gets the delegation toolset re-added and can spawn workers — but <strong>nesting is off by default</strong> (<span class="mono">max_spawn</span> is flat by default; raise it in config to unlock multiple levels), and is bounded by a <strong>nesting depth cap</strong> (<span class="mono">child_depth &lt; max_spawn</span>) and a concurrency cap (<span class="mono">max_concurrent_children</span>, default 3), so a subagent army can't spin out of control.</p>
+
+<h2>How background delegation avoids breaking the cache</h2>
+<p>A top-level, model-issued delegation <strong>always runs in the background</strong>: it returns a <span class="mono">delegation_id</span> immediately, and the subagent runs on a background daemon thread. When the child finishes, how does the result re-enter the conversation <strong>without breaking the parent's cache</strong>? The answer is in the completion-queue design:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/async_delegation.py</span><span class="ln">1-34 · excerpt (docstring)</span></div>
+  <pre>When the child finishes, a completion event is pushed onto the SHARED
+completion_queue ... The CLI and gateway already poll that queue while
+the agent is idle and forge a fresh user/internal turn from each event:
+<span class="cm">  - completions surface as a NEW turn when the agent is idle, never</span>
+<span class="cm">    spliced between a tool result and an assistant message. That keeps</span>
+<span class="cm">    strict message-role alternation legal and the prompt cache intact.</span></pre>
+</div>
+<p>The key design: a child's completion event is <strong>not</strong> jammed into the middle of the conversation (that would break strict role alternation and shatter the cache). It goes onto a <strong>shared completion queue</strong>, and only when the parent is <strong>idle</strong> does it surface as a <strong>brand-new turn</strong>. This keeps strict role alternation (ch.7) legal and the <strong>prompt cache intact</strong> (ch.6). One detail: background delegation is <strong>process-local</strong> — if the process exits or you hit <span class="mono">/new</span>, unfinished subagents are discarded; for durable survival, use <span class="mono">cronjob</span> or <span class="mono">terminal(background=True, notify_on_complete=True)</span>.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">parent calls <span class="mono">delegate_task(goal=…)</span> or batch <span class="mono">tasks=[…]</span> (up to max_concurrent_children=3 in parallel)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">construct the child AIAgent: ephemeral_system_prompt (just goal+context) + skip_context_files/memory + fresh budget</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">the subagent runs in an <strong>independent context + terminal</strong>; intermediate tool results stay in the child context</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">only the <strong>final summary</strong> is returned to the parent (the parent's context window stays clean)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">background: the completion event goes to the shared queue → surfaces as a new turn when the parent is <strong>idle</strong> → strict alternation + cache intact</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "isolate without breaking the cache"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>delegate_task</strong> (single/batch entry), the <strong>child AIAgent isolated construction</strong> (ephemeral prompt + skip flags), <strong>DELEGATE_BLOCKED_TOOLS + role demotion</strong>, the <strong>async_delegation completion queue</strong>. Cross-chapter teamwork: <span class="mono">delegate_task</span> is a special <strong>tool</strong> (ch.8, and leaf disables it to prevent recursion); the subagent's <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> mean it doesn't inherit the parent's three-tier system prompt or memory (ch.6/11); the completion queue <strong>surfaces only as a new turn when idle</strong>, keeping strict role alternation (ch.7) + the cache (ch.6); context isolation and ch.15's compression are <strong>two different routes</strong> against "limited context" (isolate vs compress).
+  <div class="collab-sub">② Data-flow timing</div>
+  parent calls delegate_task → construct the child AIAgent (isolate conversation history/context files/memory, inherit runtime) → the subagent runs independently, intermediate results stay in the child context → return only the summary to the parent → (background) the completion event goes to the shared queue → surfaces as a new turn when the parent is idle.
+  <div class="collab-sub">③ The key point</div>
+  Delegation <strong>locks the context-flooding intermediate work inside the subagent's independent context</strong>, and the parent receives only a summary — protecting both the parent's context window and (via the queue's idle re-entry) the parent's cache. This is how "scaling" coexists with "the cache is sacred": <strong>isolate the complexity to the edges</strong>.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>context isolation + return only the summary + a completion queue that doesn't break the cache</strong>. It treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> — a subtask's flood of intermediate tool results would <strong>bury</strong> the parent context and push key info into the forgotten middle; delegation <strong>isolates</strong> them in the child context, so the parent receives only a high-signal summary;
+  <span class="badge constraint">F·error accumulation</span> — each subagent gets a <strong>fresh budget + independent context</strong>, avoiding cross-task state pollution and compounding errors. The anti-pattern: streaming the subagent's intermediate work back into the parent conversation live, or <strong>splicing</strong> the completion message into the middle of the conversation — the former floods context, the latter breaks alternation and shatters the cache.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Context isolation</strong>: a subagent has its own conversation/terminal/toolset; <span class="mono">ephemeral_system_prompt</span> holds just goal+context, with <span class="mono">skip_context_files/memory</span>, returning only the summary.</li>
+    <li><strong>Single / batch</strong>: <span class="mono">goal</span> for one task vs <span class="mono">tasks=[…]</span> for parallel batch; concurrency capped by <span class="mono">max_concurrent_children</span> (default 3).</li>
+    <li><strong>leaf vs orchestrator</strong>: leaf (default) disables delegate_task/clarify/memory/send_message/execute_code; orchestrator retains delegation and can spawn workers (bounded by a nesting depth cap).</li>
+    <li><strong>Background doesn't break the cache</strong>: the completion event goes to the shared queue and surfaces as a new turn when the parent is <strong>idle</strong>, keeping strict role alternation (ch.7) + the cache (ch.6).</li>
+    <li><strong>Not durable</strong>: background delegation is process-local; process exit / <span class="mono">/new</span> discards it; for survival use <span class="mono">cronjob</span> or <span class="mono">terminal(background, notify_on_complete)</span>.</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. What is delegate_task's most core value?</div>
+  <ol class="opts">
+    <li>Saving money</li>
+    <li>Let the subagent reply to the user for you</li>
+    <li>Context isolation — a subtask's flood of intermediate tool results stays in the subagent's own context; the parent receives only the final summary</li>
+    <li>Speeding up a single command</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. delegate_task gives the subagent its own conversation/terminal/toolset; intermediate tool results never enter the parent context, only the final summary is returned — protecting the parent's context window from flooding.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. Why is delegate_task disabled for leaf subagents, and why doesn't background delegation break the parent cache?</div>
+  <ol class="opts">
+    <li>For looks</li>
+    <li>Leaf is too weak; the cache doesn't matter</li>
+    <li>Leaf is barred from delegate_task to prevent infinite recursion; the completion event goes to a shared queue and surfaces as a new turn only when the parent is idle, never spliced mid-conversation, keeping strict alternation + the cache</li>
+    <li>Random</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. leaf loses the delegation toolset via _strip_blocked_tools → no recursion. The background completion event goes to the shared completion_queue and surfaces as a NEW turn only when the parent is idle → strict alternation legal, prompt cache intact.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Delegation (context isolation) and ch.15's context compression both fight 'limited context' but differently. How does each free/protect the parent's context space? Why does delegation 'isolate complexity to the edges' rather than bake it into the core?</li>
   </ul>
 </div>
 </div>

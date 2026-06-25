@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var l=localStorage.getItem('havg-lang');if(l==='en'){document.documentElement.dataset.lang='en';document.documentElement.lang='en';}}catch(e){}</script>
+<title>13 · 委派与子代理 / Delegation &amp; subagents · Hermes Agent 设计图解</title>
+<meta name="description" content="第四部分 · 规模化与隔离｜委派与子代理 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="theme-color" content="#c2630e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAzMiAzMic+PHJlY3Qgd2lkdGg9JzMyJyBoZWlnaHQ9JzMyJyByeD0nNycgZmlsbD0nI2M4YTAyYycvPjx0ZXh0IHg9JzE2JyB5PScyMicgZm9udC1mYW1pbHk9J3N5c3RlbS11aSxzYW5zLXNlcmlmJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nODAwJyBmaWxsPScjZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz7imKQ8L3RleHQ+PC9zdmc+">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Hermes Agent 设计图解">
+<meta property="og:title" content="13 · 委派与子代理 / Delegation &amp; subagents · Hermes Agent 设计图解">
+<meta property="og:description" content="第四部分 · 规模化与隔离｜委派与子代理 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="13 · 委派与子代理 / Delegation &amp; subagents · Hermes Agent 设计图解">
+<meta name="twitter:description" content="第四部分 · 规模化与隔离｜委派与子代理 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --ink: #1d2129;
+  --muted: #5b6470; --faint: #8a939f; --line: #e1e5ea;
+  --accent: #c8a02c; --accent-soft: #faf1d6; --accent-ink: #8a6d12;
+  --blue: #2563eb; --blue-soft: #e7efff; --amber: #b4690e; --amber-soft: #fdf1dd;
+  --purple: #7c3aed; --purple-soft: #f0e9ff; --red: #d23f3f; --red-soft: #fbe6e6;
+  --code-bg: #0f172a; --code-ink: #e2e8f0; --code-line: #1e293b;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232c; --ink: #e6edf3;
+    --muted: #9aa6b2; --faint: #6e7a86; --line: #2a323c;
+    --accent: #e3c05a; --accent-soft: #2e2510; --accent-ink: #f0d488;
+    --blue: #6ea8fe; --blue-soft: #16243f; --amber: #e0a44a; --amber-soft: #33270f;
+    --purple: #b794f6; --purple-soft: #271a40; --red: #f08080; --red-soft: #3a1a1a;
+    --code-bg: #0a0f1a; --code-ink: #d8e2f0; --code-line: #14202f;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+html { scroll-behavior: smooth; overflow-x: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+code, .mono { font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; overflow-wrap: break-word; }
+
+/* ---- top progress bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 50; background: var(--panel);
+  border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
+}
+.topbar-inner {
+  max-width: 960px; margin: 0 auto; padding: .7rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.topbar .home { font-size: .82rem; color: var(--muted); font-weight: 600; display:flex; gap:.5rem; align-items:center; }
+.topbar .home b { color: var(--accent); }
+.topbar .pill { font-size: .72rem; color: var(--muted); background: var(--panel-2);
+  padding: .2rem .6rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.progress { height: 3px; background: var(--panel-2); }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--blue)); }
+
+.wrap { max-width: 820px; margin: 0 auto; padding: 2.4rem 1.25rem 5rem; }
+
+/* ---- hero ---- */
+.hero { margin-bottom: 2rem; }
+.hero .part { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: .55rem; }
+.hero h1 { font-size: 2.05rem; line-height: 1.2; letter-spacing: -.01em; font-weight: 750; }
+.hero .lead { margin-top: .9rem; font-size: 1.06rem; color: var(--muted); }
+
+h2 { font-size: 1.32rem; margin: 2.4rem 0 .9rem; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: .55rem; }
+h2::before { content: ""; width: 4px; height: 1.05em; background: var(--accent); border-radius: 3px; display: inline-block; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+p { margin: .7rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .3rem 0; }
+strong { color: var(--ink); font-weight: 680; }
+.inline { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: .08em .4em; font-size: .9em; color: var(--accent-ink); }
+
+/* ---- callout cards ---- */
+.card { border-radius: var(--radius); padding: 1.05rem 1.2rem; margin: 1.2rem 0;
+  border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.card .tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.card.macro { border-left: 4px solid var(--blue); }
+.card.macro .tag { color: var(--blue); }
+.card.detail { border-left: 4px solid var(--purple); }
+.card.detail .tag { color: var(--purple); }
+.card.analogy { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+.card.analogy .tag { color: var(--amber); }
+.card.key { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.key .tag { color: var(--accent-ink); }
+.card.warn { border-left: 4px solid var(--red); background: var(--red-soft); }
+.card.warn .tag { color: var(--red); }
+.card.spark { border-left: 4px solid #e0a000;
+  background: linear-gradient(100deg, rgba(224,160,0,.12), transparent 70%); }
+.card.spark .tag { color: #c98a00; }
+@media (prefers-color-scheme: dark) { .card.spark .tag { color: #f0c050; } }
+
+/* ---- code file callout ---- */
+.codefile { margin: 1.2rem 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  box-shadow: var(--shadow); }
+.codefile .cf-head { display: flex; align-items: center; gap: .55rem; padding: .5rem .85rem;
+  background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: .8rem; }
+.codefile .cf-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink:0; }
+.codefile .cf-head .path { font-family: ui-monospace, monospace; color: var(--ink); font-weight: 600; }
+.codefile .cf-head .ln { margin-left: auto; color: var(--faint); font-size: .72rem; }
+.codefile pre { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem;
+  overflow-x: auto; font-size: .82rem; line-height: 1.6; }
+.codefile pre .cm { color: #7d8aa3; }
+.codefile pre .kw { color: #c792ea; }
+.codefile pre .fn { color: #82aaff; }
+.codefile pre .st { color: #c3e88d; }
+.codefile pre .nb { color: #f78c6c; }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem; border-radius: 12px;
+  overflow-x: auto; font-size: .83rem; line-height: 1.6; margin: 1.1rem 0; box-shadow: var(--shadow); }
+pre.code .cm { color: #7d8aa3; } pre.code .kw { color: #c792ea; }
+pre.code .fn { color: #82aaff; } pre.code .st { color: #c3e88d; } pre.code .nb { color: #f78c6c; }
+
+/* ---- collapsible accordion (details/summary) ---- */
+.accordion { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  margin: .7rem 0; box-shadow: var(--shadow); overflow: hidden; }
+.accordion > summary { cursor: pointer; padding: .85rem 1.1rem; font-weight: 650; font-size: .96rem;
+  list-style: none; display: flex; align-items: center; gap: .6rem; user-select: none; }
+.accordion > summary::-webkit-details-marker { display: none; }
+.accordion > summary::after { content: "▶"; font-size: .68rem; color: var(--accent);
+  margin-left: auto; transition: transform .15s ease; }
+.accordion[open] > summary::after { transform: rotate(90deg); }
+.accordion > summary:hover { background: var(--panel-2); }
+.accordion[open] > summary { border-bottom: 1px solid var(--line); }
+.accordion .badge-num { background: var(--accent-soft); color: var(--accent-ink);
+  width: 1.6rem; height: 1.6rem; border-radius: 7px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: .82rem; font-weight: 700; flex-shrink: 0; }
+.accordion .hint { font-size: .72rem; color: var(--faint); font-weight: 400; }
+.acc-body { padding: .9rem 1.1rem 1.1rem; }
+.acc-intro { color: var(--muted); font-size: .9rem; margin: .2rem 0 .4rem; }
+.qa { margin: 1rem 0; }
+.qa:first-child { margin-top: .3rem; }
+.qa .q { font-weight: 680; font-size: .9rem; display: flex; gap: .45rem; align-items: center; margin-bottom: .3rem; }
+.qa .a { color: var(--muted); font-size: .9rem; }
+.qa .a strong { color: var(--ink); }
+.qa pre.code { margin: .5rem 0 0; font-size: .78rem; }
+
+/* ---- flow diagram ---- */
+.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 1.3rem 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.2rem 1rem; box-shadow: var(--shadow); }
+.flow .node { flex: 1 1 0; min-width: 110px; text-align: center; padding: .7rem .5rem;
+  border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.flow .node .nt { font-weight: 700; font-size: .92rem; }
+.flow .node .nd { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+.flow .node.hl { background: var(--accent-soft); border-color: var(--accent); }
+.flow .arrow { align-self: center; color: var(--faint); font-size: 1.3rem; padding: 0 .35rem; }
+
+/* vertical flow */
+.vflow { margin: 1.3rem 0; }
+.vflow .step { display: flex; gap: .9rem; position: relative; padding-bottom: 1.1rem; }
+.vflow .step:not(:last-child)::before { content:""; position:absolute; left: 15px; top: 34px; bottom: -2px;
+  width: 2px; background: var(--line); }
+.vflow .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; z-index:1; }
+.vflow .sc h4 { margin: .25rem 0 .2rem; font-size: 1rem; }
+.vflow .sc p { margin: .15rem 0; font-size: .92rem; color: var(--muted); }
+.vflow .sc .mono { font-size: .8rem; color: var(--accent-ink); }
+
+/* layered architecture */
+.layers { margin: 1.3rem 0; display: flex; flex-direction: column; gap: .55rem; }
+.layer { border-radius: 12px; padding: .85rem 1.1rem; border: 1px solid var(--line); background: var(--panel);
+  box-shadow: var(--shadow); }
+.layer .lh { display: flex; align-items: center; gap: .6rem; }
+.layer .lh .badge { font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; }
+.layer .lh .name { font-weight: 700; font-family: ui-monospace, monospace; }
+.layer .ld { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
+.layer.l-core { border-left: 4px solid var(--accent); } .layer.l-core .badge { background: var(--accent-soft); color: var(--accent-ink); }
+.layer.l-main { border-left: 4px solid var(--blue); } .layer.l-main .badge { background: var(--blue-soft); color: var(--blue); }
+.layer.l-part { border-left: 4px solid var(--purple); } .layer.l-part .badge { background: var(--purple-soft); color: var(--purple); }
+.layer.l-app { border-left: 4px solid var(--amber); } .layer.l-app .badge { background: var(--amber-soft); color: var(--amber); }
+
+/* two-column compare */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0; }
+@media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+.col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; box-shadow: var(--shadow); min-width: 0; }
+.col h4 { margin: 0 0 .4rem; font-size: .95rem; }
+
+table.t { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .9rem;
+  background: var(--panel); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+table.t th, table.t td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--line); }
+table.t th { background: var(--panel-2); font-size: .8rem; letter-spacing: .02em; }
+table.t tr:last-child td { border-bottom: none; }
+table.t td.mono, table.t td .mono { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--accent-ink); }
+@media (max-width: 640px) {
+  /* Wide multi-column tables: scroll within their own box instead of
+     forcing page-level horizontal overflow (which clipped right columns). */
+  table.t { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.t th, table.t td { padding: .5rem .6rem; }
+}
+.selftest { margin: 2.2rem 0 0; border-top: 2px dashed var(--line); padding-top: 1.2rem; }
+.selftest > h2 { margin-top: .2rem; }
+.quiz { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+  border-radius: 12px; padding: .9rem 1.1rem; margin: 1rem 0; box-shadow: var(--shadow); }
+.quiz .qn { font-weight: 650; }
+.quiz ol.opts { list-style: upper-alpha; margin: .55rem 0 .6rem 1.5rem; padding: 0; }
+.quiz ol.opts li { margin: .3rem 0; padding-left: .15rem; }
+.quiz details.accordion { margin: .5rem 0 0; }
+.selftest code { font-family: ui-monospace, monospace; font-size: .9em; color: var(--accent-ink);
+  background: var(--accent-soft); padding: 0 .28em; border-radius: 4px; }
+
+/* footer nav */
+.footnav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem;
+  padding-top: 1.4rem; border-top: 1px solid var(--line); }
+.footnav a { flex: 1; padding: .85rem 1.1rem; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow); transition: .15s; }
+.footnav a:hover { border-color: var(--accent); transform: translateY(-1px); }
+.footnav a.next { text-align: right; }
+.footnav .dir { font-size: .72rem; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.footnav .ttl { font-weight: 700; color: var(--ink); margin-top: .15rem; }
+.footnav a.disabled { opacity: .35; pointer-events: none; }
+
+/* index page */
+.toc { display: grid; gap: .7rem; margin-top: 1.6rem; }
+.toc-part { font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--accent); margin: 1.4rem 0 .2rem; }
+.toc a { display: flex; align-items: center; gap: .9rem; padding: .85rem 1.05rem; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); transition: .15s; }
+.toc a:hover { border-color: var(--accent); transform: translateX(3px); }
+.toc .n { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+.toc .tt { font-weight: 650; color: var(--ink); }
+.toc .ts { font-size: .8rem; color: var(--muted); margin-left: auto; text-align: right; }
+.toc-search { position: relative; margin: 1.6rem 0 -.4rem; }
+.toc-search input { width: 100%; box-sizing: border-box; padding: .75rem 2.8rem .75rem 1rem;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font-size: .98rem; box-shadow: var(--shadow); }
+.toc-search input:focus { outline: none; border-color: var(--accent); }
+.toc-search .qcount { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  color: var(--faint); font-size: .8rem; pointer-events: none; }
+.toc a.hide, .toc .toc-part.hide { display: none; }
+.toc-empty { display: none; color: var(--muted); padding: 1rem; text-align: center; }
+.toc-empty.show { display: block; }
+.hero.index h1 { font-size: 2.3rem; }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:1rem; font-size:.8rem; color:var(--muted); }
+.legend span { display:flex; align-items:center; gap:.4rem; }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+.pdf-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1.1rem;
+  background:var(--accent); color:#fff; border-radius:10px; font-size:.9rem; font-weight:650;
+  box-shadow:var(--shadow); transition:.15s; }
+.pdf-btn:hover { background:var(--accent-ink); transform:translateY(-1px); }
+
+/* ---- bilingual language switch ----
+   Contract: <html> must carry data-lang="zh" (default) or "en".
+   page()/index_page() hard-code data-lang="zh"; LANG_BOOT may switch to "en". */
+html[data-lang="en"] .lang-zh { display: none !important; }
+html[data-lang="zh"] .lang-en { display: none !important; }
+.langtoggle { font-size:.72rem; font-weight:700; color:var(--accent-ink);
+  background:var(--accent-soft); border:1px solid var(--accent); border-radius:999px;
+  padding:.22rem .7rem; cursor:pointer; line-height:1.4; white-space:nowrap; }
+.langtoggle:hover { background:var(--accent); color:#fff; }
+
+/* ---- schematic: cell strips (token sequences / quant blocks / KV columns) ---- */
+.cellgroup { margin: 1.2rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.cellgroup .cg-cap { font-size: .82rem; color: var(--muted); margin-bottom: .55rem; }
+.cellgroup .cg-cap b { color: var(--ink); }
+.cells { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.cells + .cells { margin-top: .5rem; }
+.cell { min-width: 2.1rem; padding: .38rem .5rem; text-align: center; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: .78rem;
+  font-family: ui-monospace, monospace; white-space: nowrap; }
+.cell.scale { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); font-weight: 700; }
+.cell.hl    { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cell.q     { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.cell.dim   { opacity: .45; }
+.cells .lab { font-size: .76rem; color: var(--faint); padding: 0 .35rem; }
+.cells .sep { color: var(--faint); padding: 0 .1rem; }
+
+/* ---- schematic: timeline lanes (prefill vs decode, step-by-step) ---- */
+.timeline { margin: 1.2rem 0; display: flex; flex-direction: column; gap: .5rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.timeline .lane { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.timeline .lane-label { min-width: 6rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.timeline .tslot { padding: .4rem .6rem; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--line); font-size: .78rem; text-align: center; font-family: ui-monospace, monospace; }
+.timeline .tslot.span { flex: 1; min-width: 8rem; background: var(--blue-soft); border-color: var(--blue);
+  color: var(--blue); font-weight: 700; }
+.timeline .tslot.now { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+/* ---- worked-example trace: one concrete input, stepped through ---- */
+.trace { margin: 1.3rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.trace .tcap { font-size: .82rem; color: var(--muted); margin-bottom: .7rem; }
+.trace .tcap b { color: var(--accent-ink); }
+.trace .stations { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.trace .stn { flex: 1 1 0; min-width: 116px; border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem; background: var(--bg); }
+.trace .stn h5 { margin: 0 0 .45rem; font-size: .8rem; color: var(--ink); }
+.trace .cellrow { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.trace .vc { min-width: 2.1rem; padding: .32rem .45rem; text-align: center; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); font: 600 .76rem ui-monospace, monospace; white-space: nowrap; }
+.trace .vc.hot  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.trace .vc.blue { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.trace .vc.dim  { opacity: .42; }
+.trace .tlab { font-size: .68rem; color: var(--faint); margin-top: .35rem; }
+.trace .op { align-self: center; color: var(--accent); font: 700 .72rem ui-monospace, monospace;
+  padding: 0 .5rem; text-align: center; white-space: nowrap; }
+.trace svg { max-width: 100%; height: auto; display: block; margin: .3rem auto; }
+@media (max-width: 640px) { .trace .stations { flex-direction: column; } .trace .op { padding: .3rem 0; } }
+/* 🧩 collaboration-mechanism card */
+.card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
+.card.collab .tag { color: var(--blue); }
+.card.collab .collab-sub { font-weight:700; font-size:.82rem; margin:.85rem 0 .3rem; color:var(--ink); }
+/* 🎯 design-tradeoff card */
+.card.design { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.design .tag { color: var(--accent-ink); }
+/* A-G constraint back-reference badge */
+.badge.constraint { display:inline-block; font-size:.7rem; font-weight:700;
+  padding:.1rem .45rem; border-radius:999px; background:var(--purple-soft);
+  color:var(--purple); border:1px solid var(--purple); margin:0 .15rem; white-space:nowrap; }
+</style>
+</head><body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
+    <span class="pill"><span class="lang-zh">第四部分 · 规模化与隔离</span><span class="lang-en">Part 4 · Scaling &amp; Isolation</span></span>
+    <span class="pill">13 / 13</span>
+    <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
+  </div>
+  <div class="progress"><span style="width:100%"></span></div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="part"><span class="lang-zh">第四部分 · 规模化与隔离</span><span class="lang-en">Part 4 · Scaling &amp; Isolation</span></div>
+    <h1><span class="lang-zh">委派与子代理</span><span class="lang-en">Delegation &amp; subagents</span></h1>
+  </div>
+  <div class="lang-zh">
+<p class="lead">
+当一个任务会产生<strong>大量中间过程</strong>（读几十个文件、跑一串命令），把它们全塞进主对话会<strong>淹没上下文</strong>。委派（<span class="mono">delegate_task</span>）的解法是：把子任务交给一个<strong>独立的子代理</strong>——它有自己的对话、自己的终端、自己的工具集，<strong>只把最终摘要带回</strong>父对话，中间的工具结果<strong>永远不进</strong>你的上下文窗口。本章是「规模化与隔离」的开篇。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 把活外包给独立小组</div>
+  你是项目经理。一个调研任务要翻一百份资料，你<strong>不会</strong>把一百份资料都搬到自己桌上读（那会堆满桌面=淹没上下文）。你<strong>外包</strong>给一个独立小组：给他们一份<strong>自包含的任务书</strong>（子代理对你的对话历史一无所知），他们在<strong>自己的办公室</strong>（独立 context + 终端）干活，最后只交给你一份<strong>结论摘要</strong>。他们读过的一百份资料、试错的草稿，<strong>都不会出现在你桌上</strong>。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 上下文隔离，只带回摘要</div>
+  委派的核心价值是<strong>上下文隔离</strong>。子代理拿到的是一份 <span class="mono">ephemeral_system_prompt</span>（只装 goal + context，<strong>不含</strong>父对话历史），并且 <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span>——它<strong>不读</strong>父的 AGENTS.md、不读共享 MEMORY.md。它在自己的对话里跑完，<strong>只有最终响应作为摘要返回父代理</strong>。于是父的上下文窗口<strong>始终干净</strong>：既不被中间工具结果淹没，也不被子任务的试错污染。这是对抗「上下文有限」的另一条路——第 15 章用压缩，本章用隔离。
+</div>
+
+<h2>隔离的核心：子代理拿到什么、不拿什么</h2>
+<p>构造子 AIAgent 时，哪些<strong>隔离</strong>、哪些<strong>继承</strong>，是委派设计的关键：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">1219-1250 · 简化</span></div>
+  <pre>child = AIAgent(
+    base_url=..., api_key=..., model=...,          <span class="cm"># 继承：provider/model 运行时</span>
+    enabled_toolsets=child_toolsets,
+    ephemeral_system_prompt=child_prompt,          <span class="cm"># 隔离：只装 goal+context，无父对话历史</span>
+    platform=<span class="st">"subagent"</span>,
+    skip_context_files=<span class="kw">True</span>,                     <span class="cm"># 隔离：不读 AGENTS.md/SOUL.md</span>
+    skip_memory=<span class="kw">True</span>,                            <span class="cm"># 隔离：不读共享 MEMORY.md</span>
+    clarify_callback=<span class="kw">None</span>,                       <span class="cm"># 隔离：不能向用户提问</span>
+    session_db=...,                                <span class="cm"># 继承：共享会话 DB（血缘靠 parent_session_id）</span>
+    iteration_budget=<span class="kw">None</span>,                       <span class="cm"># 隔离：每个子代理 fresh budget</span>
+)</pre>
+</div>
+<p>看这份「隔离 vs 继承」清单：<strong>隔离</strong>的是会污染或淹没的东西——对话历史、上下文文件、记忆、用户交互、迭代预算（每个子代理一份<strong>全新</strong>预算）；<strong>继承</strong>的是跑起来必需的运行时——provider / model / api_key / session_db。工具描述把这条取舍说得最直白：<span class="inline">Each subagent gets its own conversation, terminal session, and toolset. Only the final summary is returned -- intermediate tool results never enter your context window</span>。</p>
+
+<h2>两种角色：leaf 不能再委派，orchestrator 能</h2>
+<p>子代理有两种 <span class="mono">role</span>。默认的 <span class="mono">leaf</span> 是<strong>专注的工人</strong>，被禁掉一批工具；<span class="mono">orchestrator</span> 则保留委派能力，能再派自己的工人：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">44-53 / 1021-1024 · 节选</span></div>
+  <pre><span class="cm"># 子代理永远不能用的工具</span>
+DELEGATE_BLOCKED_TOOLS = <span class="fn">frozenset</span>([
+    <span class="st">"delegate_task"</span>,   <span class="cm"># 不许递归委派（leaf）</span>
+    <span class="st">"clarify"</span>,         <span class="cm"># 不许向用户提问</span>
+    <span class="st">"memory"</span>,          <span class="cm"># 不许写共享 MEMORY.md</span>
+    <span class="st">"send_message"</span>,    <span class="cm"># 不许跨平台副作用</span>
+    <span class="st">"execute_code"</span>,    <span class="cm"># 应逐步推理，不写脚本</span>
+])
+
+<span class="cm"># role 降级：只有显式 orchestrator 且未超深度，才保留 orchestrator</span>
+orchestrator_ok = _get_orchestrator_enabled() <span class="kw">and</span> child_depth &lt; max_spawn
+effective_role = role <span class="kw">if</span> (role == <span class="st">"orchestrator"</span> <span class="kw">and</span> orchestrator_ok) <span class="kw">else</span> <span class="st">"leaf"</span></pre>
+</div>
+<p><span class="mono">_strip_blocked_tools</span> 把 <span class="mono">delegation / clarify / memory / code_execution</span> 四个 toolset <strong>整组移除</strong>——leaf 因此一并失去 delegate_task（<strong>不能再委派</strong>、避免无限套娃）、clarify、memory、execute_code；而 <span class="mono">DELEGATE_BLOCKED_TOOLS</span> 是「子代理永不可见」的<strong>权威工具清单</strong>（5 个，含 send_message），把『全员被禁』的 toolset 挡在子代理菜单之外。<span class="mono">orchestrator</span> 则被重新加回 delegation toolset、能再派工人——但<strong>默认配置下嵌套是关闭的</strong>（<span class="mono">max_spawn</span> 默认扁平，需在 config 显式抬高才解锁多级），且受<strong>嵌套深度上限</strong>（<span class="mono">child_depth &lt; max_spawn</span>）和并发上限（<span class="mono">max_concurrent_children</span>，默认 3）兜住，防止子代理军团失控。</p>
+
+<h2>background 委派如何不破缓存</h2>
+<p>顶层 model 发起的委派<strong>总是 background</strong>：立即返回一个 <span class="mono">delegation_id</span>，子代理在后台守护线程里跑。子代理跑完后，结果如何<strong>不破坏父缓存</strong>地回到对话？答案在完成队列的设计里：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/async_delegation.py</span><span class="ln">1-34 · 节选（docstring）</span></div>
+  <pre>When the child finishes, a completion event is pushed onto the SHARED
+completion_queue ... The CLI and gateway already poll that queue while
+the agent is idle and forge a fresh user/internal turn from each event:
+<span class="cm">  - completions surface as a NEW turn when the agent is idle, never</span>
+<span class="cm">    spliced between a tool result and an assistant message. That keeps</span>
+<span class="cm">    strict message-role alternation legal and the prompt cache intact.</span></pre>
+</div>
+<p>关键设计：子代理完成事件<strong>不会</strong>被硬塞进对话中段（那会破坏严格角色交替、击穿缓存）。它进一个<strong>共享完成队列</strong>，等父代理<strong>空闲时</strong>，才作为一个<strong>全新的 turn</strong> 浮现。这样既维持了严格角色交替（第 7 章）的合法性，又<strong>保住了 prompt 缓存</strong>（第 6 章）。一个细节：background 委派是<strong>进程内的</strong>——若进程退出或 <span class="mono">/new</span>，未完成的子代理会被丢弃；要可靠存活，得用 <span class="mono">cronjob</span> 或 <span class="mono">terminal(background=True, notify_on_complete=True)</span>。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">父代理调 <span class="mono">delegate_task(goal=…)</span> 或批量 <span class="mono">tasks=[…]</span>（最多 max_concurrent_children=3 并行）</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">构造子 AIAgent：ephemeral_system_prompt(只装 goal+context) + skip_context_files/memory + fresh budget</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">子代理在<strong>独立 context + 独立终端</strong>跑完，中间工具结果全留在子 context</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">只把<strong>最终摘要</strong>返回父代理（父上下文窗口始终干净）</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">background：完成事件进共享队列 → 父<strong>空闲时</strong>作新 turn 浮现 → 严格交替+缓存不破</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「隔离而不破缓存」</div>
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章核心：<strong>delegate_task</strong>（单/批量入口）、<strong>子 AIAgent 隔离构造</strong>（ephemeral prompt + skip 标志）、<strong>DELEGATE_BLOCKED_TOOLS + role 降级</strong>、<strong>async_delegation 完成队列</strong>。跨章节配合：<span class="mono">delegate_task</span> 是一个特殊的<strong>工具</strong>（第 8 章，且 leaf 禁用它防递归）；子代理 <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> 意味着不继承父的 system prompt 三层与记忆（第 6 / 11 章）；完成队列<strong>只在 idle 作新 turn</strong>，维持严格角色交替（第 7 章）+ 不破缓存（第 6 章）；上下文隔离与第 15 章压缩是对抗「上下文有限」的<strong>两条不同路</strong>（隔离 vs 压缩）。
+  <div class="collab-sub">② 数据流时序</div>
+  父调 delegate_task → 构造子 AIAgent（隔离对话历史/上下文文件/记忆，继承运行时）→ 子代理独立跑、中间结果留子 context → 只把摘要返回父 → （background）完成事件进共享队列 → 父空闲时作新 turn 浮现。
+  <div class="collab-sub">③ 关键点</div>
+  委派把「会淹没上下文的中间过程」<strong>关进子代理的独立 context</strong>，父只收摘要——既保护父上下文窗口，又（靠完成队列的 idle 重入）保护父缓存。这是「规模化」与「缓存神圣」共存的手法：<strong>把复杂度隔离到边缘</strong>。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线：<strong>上下文隔离 + 只带回摘要 + 完成队列不破缓存</strong>。它治两条 LLM 固有约束：
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span>——子任务的大量中间工具结果会<strong>淹没</strong>父上下文、把关键信息挤到中间被遗忘；委派把它们<strong>隔离</strong>在子 context，父只收高信号摘要；
+  <span class="badge constraint">F·误差累积</span>——每个子代理<strong>fresh budget + 独立 context</strong>，避免跨任务的状态污染与误差累积。反模式：让子代理把中间过程<strong>实时回传</strong>父对话、或在对话中段<strong>硬插</strong>完成消息——前者淹没上下文，后者破坏角色交替、击穿缓存。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>上下文隔离</strong>：子代理有独立对话/终端/工具集，<span class="mono">ephemeral_system_prompt</span> 只装 goal+context、<span class="mono">skip_context_files/memory</span>，只带回摘要。</li>
+    <li><strong>单 / 批量</strong>：<span class="mono">goal</span> 单任务 vs <span class="mono">tasks=[…]</span> 批量并行；并发上限 <span class="mono">max_concurrent_children</span>（默认 3）。</li>
+    <li><strong>leaf vs orchestrator</strong>：leaf（默认）禁用 delegate_task/clarify/memory/send_message/execute_code；orchestrator 保留委派、能再派工人（受嵌套深度上限约束）。</li>
+    <li><strong>background 不破缓存</strong>：完成事件进共享队列，父<strong>空闲时</strong>作新 turn 浮现，维持严格角色交替（第 7 章）+ 缓存（第 6 章）。</li>
+    <li><strong>非持久</strong>：background 委派进程内，进程退出/<span class="mono">/new</span> 即丢；要存活用 <span class="mono">cronjob</span> 或 <span class="mono">terminal(background, notify_on_complete)</span>。</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. 委派（delegate_task）最核心的价值是什么？</div>
+  <ol class="opts">
+    <li>省钱</li>
+    <li>让子代理替你回复用户</li>
+    <li>上下文隔离——子任务的大量中间工具结果留在子代理独立 context，父只收最终摘要</li>
+    <li>加快单条命令</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：C</strong>。delegate_task 给子代理独立的 conversation/terminal/toolset，中间工具结果永不进父 context，只把最终摘要返回父——保护父上下文窗口不被淹没。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. 为什么 leaf 子代理被禁用 delegate_task？background 委派完成后又为什么不破父缓存？</div>
+  <ol class="opts">
+    <li>为了好看</li>
+    <li>leaf 太弱；缓存无所谓</li>
+    <li>leaf 禁 delegate_task 防无限递归套娃；完成事件进共享队列、父空闲时才作新 turn 浮现，不硬插对话中段，故维持严格角色交替+不破缓存</li>
+    <li>随机决定</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：C</strong>。leaf 经 _strip_blocked_tools 失去 delegation toolset → 不能递归。background 完成事件进共享 completion_queue，父 idle 时才作 NEW turn 浮现 → 严格角色交替合法、prompt 缓存不破。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>委派（上下文隔离）和第 15 章的上下文压缩，都是对抗「上下文有限」的手段，但思路不同。它们各自如何腾出/保护父代理的上下文空间？为什么委派把复杂度「隔离到边缘」而不做进核心？</li>
+  </ul>
+</div>
+</div></div>
+  <div class="lang-en">
+<p class="lead">
+When a task produces <strong>tons of intermediate work</strong> (reading dozens of files, running a chain of commands), stuffing it all into the main conversation <strong>floods the context</strong>. Delegation (<span class="mono">delegate_task</span>) solves this: hand the subtask to an <strong>independent subagent</strong> — it has its own conversation, its own terminal, its own toolset, and <strong>returns only the final summary</strong> to the parent; the intermediate tool results <strong>never enter</strong> your context window. This chapter opens "scaling & isolation."
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · outsourcing to an independent team</div>
+  You're the project manager. A research task requires sifting a hundred documents — you <strong>don't</strong> haul all hundred onto your own desk to read (that buries it = floods the context). You <strong>outsource</strong> to an independent team: hand them a <strong>self-contained brief</strong> (the subagent knows nothing about your conversation history), they work in <strong>their own office</strong> (independent context + terminal), and finally give you a <strong>conclusion summary</strong>. The hundred documents they read and the drafts they tried <strong>never appear on your desk</strong>.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · context isolation, return only the summary</div>
+  Delegation's core value is <strong>context isolation</strong>. The subagent gets an <span class="mono">ephemeral_system_prompt</span> (just goal + context, <strong>not</strong> the parent's conversation history), plus <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> — it <strong>doesn't read</strong> the parent's AGENTS.md or the shared MEMORY.md. It runs to completion in its own conversation, and <strong>only the final response is returned to the parent as a summary</strong>. So the parent's context window stays <strong>clean</strong>: neither flooded by intermediate tool results nor polluted by the subtask's trial-and-error. This is another route against "limited context" — ch.15 uses compression, this chapter uses isolation.
+</div>
+
+<h2>The heart of isolation: what the subagent gets and doesn't</h2>
+<p>When constructing the child AIAgent, what is <strong>isolated</strong> vs <strong>inherited</strong> is the crux of the design:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">1219-1250 · simplified</span></div>
+  <pre>child = AIAgent(
+    base_url=..., api_key=..., model=...,          <span class="cm"># inherit: provider/model runtime</span>
+    enabled_toolsets=child_toolsets,
+    ephemeral_system_prompt=child_prompt,          <span class="cm"># isolate: just goal+context, no parent history</span>
+    platform=<span class="st">"subagent"</span>,
+    skip_context_files=<span class="kw">True</span>,                     <span class="cm"># isolate: no AGENTS.md/SOUL.md</span>
+    skip_memory=<span class="kw">True</span>,                            <span class="cm"># isolate: no shared MEMORY.md</span>
+    clarify_callback=<span class="kw">None</span>,                       <span class="cm"># isolate: cannot ask the user</span>
+    session_db=...,                                <span class="cm"># inherit: shared session DB (lineage via parent_session_id)</span>
+    iteration_budget=<span class="kw">None</span>,                       <span class="cm"># isolate: fresh budget per subagent</span>
+)</pre>
+</div>
+<p>Look at the "isolate vs inherit" list: <strong>isolated</strong> are the things that would pollute or flood — conversation history, context files, memory, user interaction, the iteration budget (each subagent gets a <strong>fresh</strong> one); <strong>inherited</strong> is the runtime needed to run — provider / model / api_key / session_db. The tool description states the trade-off most plainly: <span class="inline">Each subagent gets its own conversation, terminal session, and toolset. Only the final summary is returned -- intermediate tool results never enter your context window</span>.</p>
+
+<h2>Two roles: leaf can't re-delegate, orchestrator can</h2>
+<p>A subagent has two <span class="mono">role</span>s. The default <span class="mono">leaf</span> is a <strong>focused worker</strong> with a set of tools disabled; <span class="mono">orchestrator</span> retains delegation and can spawn its own workers:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">44-53 / 1021-1024 · excerpt</span></div>
+  <pre><span class="cm"># Tools a child must never have access to</span>
+DELEGATE_BLOCKED_TOOLS = <span class="fn">frozenset</span>([
+    <span class="st">"delegate_task"</span>,   <span class="cm"># no recursive delegation (leaf)</span>
+    <span class="st">"clarify"</span>,         <span class="cm"># no user questions</span>
+    <span class="st">"memory"</span>,          <span class="cm"># no writes to shared MEMORY.md</span>
+    <span class="st">"send_message"</span>,    <span class="cm"># no cross-platform side effects</span>
+    <span class="st">"execute_code"</span>,    <span class="cm"># reason step-by-step, don't write scripts</span>
+])
+
+<span class="cm"># role demotion: only an explicit orchestrator under the depth cap stays one</span>
+orchestrator_ok = _get_orchestrator_enabled() <span class="kw">and</span> child_depth &lt; max_spawn
+effective_role = role <span class="kw">if</span> (role == <span class="st">"orchestrator"</span> <span class="kw">and</span> orchestrator_ok) <span class="kw">else</span> <span class="st">"leaf"</span></pre>
+</div>
+<p><span class="mono">_strip_blocked_tools</span> removes four toolsets wholesale — <span class="mono">delegation / clarify / memory / code_execution</span> — so leaf loses delegate_task (<strong>can't re-delegate</strong>, preventing infinite nesting), clarify, memory, and execute_code; while <span class="mono">DELEGATE_BLOCKED_TOOLS</span> is the authoritative list of tools a child must <strong>never see</strong> (5 of them, including send_message), keeping the 'all-blocked' toolset out of the subagent's menu. <span class="mono">orchestrator</span> gets the delegation toolset re-added and can spawn workers — but <strong>nesting is off by default</strong> (<span class="mono">max_spawn</span> is flat by default; raise it in config to unlock multiple levels), and is bounded by a <strong>nesting depth cap</strong> (<span class="mono">child_depth &lt; max_spawn</span>) and a concurrency cap (<span class="mono">max_concurrent_children</span>, default 3), so a subagent army can't spin out of control.</p>
+
+<h2>How background delegation avoids breaking the cache</h2>
+<p>A top-level, model-issued delegation <strong>always runs in the background</strong>: it returns a <span class="mono">delegation_id</span> immediately, and the subagent runs on a background daemon thread. When the child finishes, how does the result re-enter the conversation <strong>without breaking the parent's cache</strong>? The answer is in the completion-queue design:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/async_delegation.py</span><span class="ln">1-34 · excerpt (docstring)</span></div>
+  <pre>When the child finishes, a completion event is pushed onto the SHARED
+completion_queue ... The CLI and gateway already poll that queue while
+the agent is idle and forge a fresh user/internal turn from each event:
+<span class="cm">  - completions surface as a NEW turn when the agent is idle, never</span>
+<span class="cm">    spliced between a tool result and an assistant message. That keeps</span>
+<span class="cm">    strict message-role alternation legal and the prompt cache intact.</span></pre>
+</div>
+<p>The key design: a child's completion event is <strong>not</strong> jammed into the middle of the conversation (that would break strict role alternation and shatter the cache). It goes onto a <strong>shared completion queue</strong>, and only when the parent is <strong>idle</strong> does it surface as a <strong>brand-new turn</strong>. This keeps strict role alternation (ch.7) legal and the <strong>prompt cache intact</strong> (ch.6). One detail: background delegation is <strong>process-local</strong> — if the process exits or you hit <span class="mono">/new</span>, unfinished subagents are discarded; for durable survival, use <span class="mono">cronjob</span> or <span class="mono">terminal(background=True, notify_on_complete=True)</span>.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">parent calls <span class="mono">delegate_task(goal=…)</span> or batch <span class="mono">tasks=[…]</span> (up to max_concurrent_children=3 in parallel)</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">construct the child AIAgent: ephemeral_system_prompt (just goal+context) + skip_context_files/memory + fresh budget</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">the subagent runs in an <strong>independent context + terminal</strong>; intermediate tool results stay in the child context</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">only the <strong>final summary</strong> is returned to the parent (the parent's context window stays clean)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">background: the completion event goes to the shared queue → surfaces as a new turn when the parent is <strong>idle</strong> → strict alternation + cache intact</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "isolate without breaking the cache"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>delegate_task</strong> (single/batch entry), the <strong>child AIAgent isolated construction</strong> (ephemeral prompt + skip flags), <strong>DELEGATE_BLOCKED_TOOLS + role demotion</strong>, the <strong>async_delegation completion queue</strong>. Cross-chapter teamwork: <span class="mono">delegate_task</span> is a special <strong>tool</strong> (ch.8, and leaf disables it to prevent recursion); the subagent's <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> mean it doesn't inherit the parent's three-tier system prompt or memory (ch.6/11); the completion queue <strong>surfaces only as a new turn when idle</strong>, keeping strict role alternation (ch.7) + the cache (ch.6); context isolation and ch.15's compression are <strong>two different routes</strong> against "limited context" (isolate vs compress).
+  <div class="collab-sub">② Data-flow timing</div>
+  parent calls delegate_task → construct the child AIAgent (isolate conversation history/context files/memory, inherit runtime) → the subagent runs independently, intermediate results stay in the child context → return only the summary to the parent → (background) the completion event goes to the shared queue → surfaces as a new turn when the parent is idle.
+  <div class="collab-sub">③ The key point</div>
+  Delegation <strong>locks the context-flooding intermediate work inside the subagent's independent context</strong>, and the parent receives only a summary — protecting both the parent's context window and (via the queue's idle re-entry) the parent's cache. This is how "scaling" coexists with "the cache is sacred": <strong>isolate the complexity to the edges</strong>.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>context isolation + return only the summary + a completion queue that doesn't break the cache</strong>. It treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> — a subtask's flood of intermediate tool results would <strong>bury</strong> the parent context and push key info into the forgotten middle; delegation <strong>isolates</strong> them in the child context, so the parent receives only a high-signal summary;
+  <span class="badge constraint">F·error accumulation</span> — each subagent gets a <strong>fresh budget + independent context</strong>, avoiding cross-task state pollution and compounding errors. The anti-pattern: streaming the subagent's intermediate work back into the parent conversation live, or <strong>splicing</strong> the completion message into the middle of the conversation — the former floods context, the latter breaks alternation and shatters the cache.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Context isolation</strong>: a subagent has its own conversation/terminal/toolset; <span class="mono">ephemeral_system_prompt</span> holds just goal+context, with <span class="mono">skip_context_files/memory</span>, returning only the summary.</li>
+    <li><strong>Single / batch</strong>: <span class="mono">goal</span> for one task vs <span class="mono">tasks=[…]</span> for parallel batch; concurrency capped by <span class="mono">max_concurrent_children</span> (default 3).</li>
+    <li><strong>leaf vs orchestrator</strong>: leaf (default) disables delegate_task/clarify/memory/send_message/execute_code; orchestrator retains delegation and can spawn workers (bounded by a nesting depth cap).</li>
+    <li><strong>Background doesn't break the cache</strong>: the completion event goes to the shared queue and surfaces as a new turn when the parent is <strong>idle</strong>, keeping strict role alternation (ch.7) + the cache (ch.6).</li>
+    <li><strong>Not durable</strong>: background delegation is process-local; process exit / <span class="mono">/new</span> discards it; for survival use <span class="mono">cronjob</span> or <span class="mono">terminal(background, notify_on_complete)</span>.</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. What is delegate_task's most core value?</div>
+  <ol class="opts">
+    <li>Saving money</li>
+    <li>Let the subagent reply to the user for you</li>
+    <li>Context isolation — a subtask's flood of intermediate tool results stays in the subagent's own context; the parent receives only the final summary</li>
+    <li>Speeding up a single command</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. delegate_task gives the subagent its own conversation/terminal/toolset; intermediate tool results never enter the parent context, only the final summary is returned — protecting the parent's context window from flooding.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. Why is delegate_task disabled for leaf subagents, and why doesn't background delegation break the parent cache?</div>
+  <ol class="opts">
+    <li>For looks</li>
+    <li>Leaf is too weak; the cache doesn't matter</li>
+    <li>Leaf is barred from delegate_task to prevent infinite recursion; the completion event goes to a shared queue and surfaces as a new turn only when the parent is idle, never spliced mid-conversation, keeping strict alternation + the cache</li>
+    <li>Random</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. leaf loses the delegation toolset via _strip_blocked_tools → no recursion. The background completion event goes to the shared completion_queue and surfaces as a NEW turn only when the parent is idle → strict alternation legal, prompt cache intact.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Delegation (context isolation) and ch.15's context compression both fight 'limited context' but differently. How does each free/protect the parent's context space? Why does delegation 'isolate complexity to the edges' rather than bake it into the core?</li>
+  </ul>
+</div>
+</div></div>
+  <div class="footnav"><a class="prev" href="12-session-search.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">跨会话搜索：FTS5</span><span class="lang-en">Cross-session search: FTS5</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
+</div>
+<script>
+function havgSetLang(l){
+  l=(l==='en')?'en':'zh';
+  var d=document.documentElement;
+  d.dataset.lang=l; d.lang=(l==='en'?'en':'zh-CN');
+  try{localStorage.setItem('havg-lang',l);}catch(e){}
+}
+function havgToggleLang(){
+  havgSetLang(document.documentElement.dataset.lang==='en'?'zh':'en');
+}
+</script>
+</body></html>

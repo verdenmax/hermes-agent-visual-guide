@@ -449,6 +449,40 @@ QUIZZES = {
              "en": "'Cross-session memory' seems to inherently need some 'understanding/summarizing', yet Hermes implements it with zero-LLM local FTS5 + verbatim append. What does this choice gain on both the 'cost/latency' and 'cache is sacred' axes?"},
         ],
     },
+    "13-delegation.html": {
+        "mcq": [
+            {
+                "q": {"zh": "委派（delegate_task）最核心的价值是什么？",
+                      "en": "What is delegate_task's most core value?"},
+                "opts": [
+                    {"zh": "让子代理替你回复用户", "en": "Let the subagent reply to the user for you"},
+                    {"zh": "上下文隔离——子任务的大量中间工具结果留在子代理独立 context，父只收最终摘要", "en": "Context isolation — a subtask's flood of intermediate tool results stays in the subagent's own context; the parent receives only the final summary"},
+                    {"zh": "省钱", "en": "Saving money"},
+                    {"zh": "加快单条命令", "en": "Speeding up a single command"},
+                ],
+                "answer": 1,
+                "why": {"zh": "delegate_task 给子代理独立的 conversation/terminal/toolset，中间工具结果永不进父 context，只把最终摘要返回父——保护父上下文窗口不被淹没。",
+                        "en": "delegate_task gives the subagent its own conversation/terminal/toolset; intermediate tool results never enter the parent context, only the final summary is returned — protecting the parent's context window from flooding."},
+            },
+            {
+                "q": {"zh": "为什么 leaf 子代理被禁用 delegate_task？background 委派完成后又为什么不破父缓存？",
+                      "en": "Why is delegate_task disabled for leaf subagents, and why doesn't background delegation break the parent cache?"},
+                "opts": [
+                    {"zh": "leaf 太弱；缓存无所谓", "en": "Leaf is too weak; the cache doesn't matter"},
+                    {"zh": "leaf 禁 delegate_task 防无限递归套娃；完成事件进共享队列、父空闲时才作新 turn 浮现，不硬插对话中段，故维持严格角色交替+不破缓存", "en": "Leaf is barred from delegate_task to prevent infinite recursion; the completion event goes to a shared queue and surfaces as a new turn only when the parent is idle, never spliced mid-conversation, keeping strict alternation + the cache"},
+                    {"zh": "随机决定", "en": "Random"},
+                    {"zh": "为了好看", "en": "For looks"},
+                ],
+                "answer": 1,
+                "why": {"zh": "leaf 经 _strip_blocked_tools 失去 delegation toolset → 不能递归。background 完成事件进共享 completion_queue，父 idle 时才作 NEW turn 浮现 → 严格角色交替合法、prompt 缓存不破。",
+                        "en": "leaf loses the delegation toolset via _strip_blocked_tools → no recursion. The background completion event goes to the shared completion_queue and surfaces as a NEW turn only when the parent is idle → strict alternation legal, prompt cache intact."},
+            },
+        ],
+        "open": [
+            {"zh": "委派（上下文隔离）和第 15 章的上下文压缩，都是对抗「上下文有限」的手段，但思路不同。它们各自如何腾出/保护父代理的上下文空间？为什么委派把复杂度「隔离到边缘」而不做进核心？",
+             "en": "Delegation (context isolation) and ch.15's context compression both fight 'limited context' but differently. How does each free/protect the parent's context space? Why does delegation 'isolate complexity to the edges' rather than bake it into the core?"},
+        ],
+    },
 }
 
 

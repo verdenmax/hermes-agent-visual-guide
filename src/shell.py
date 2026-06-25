@@ -70,6 +70,8 @@ PAGES = [
      "第三部分 · 自我进化闭环", "Part 3 · The Self-Improvement Loop"),
     ("12-session-search.html", "跨会话搜索：FTS5", "Cross-session search: FTS5",
      "第三部分 · 自我进化闭环", "Part 3 · The Self-Improvement Loop"),
+    ("13-delegation.html", "委派与子代理", "Delegation & subagents",
+     "第四部分 · 规模化与隔离", "Part 4 · Scaling & Isolation"),
 ]
 
 

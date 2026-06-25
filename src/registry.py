@@ -7,6 +7,7 @@ chapter by (1) appending it to shell.PAGES and (2) mapping it here.
 import part1
 import part2
 import part3
+import part4
 
 CONTENT = {
     "01-what-is-hermes.html": part1.LESSON_01,
@@ -21,4 +22,5 @@ CONTENT = {
     "10-curator.html": part3.LESSON_10,
     "11-memory.html": part3.LESSON_11,
     "12-session-search.html": part3.LESSON_12,
+    "13-delegation.html": part4.LESSON_13,
 }
