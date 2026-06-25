@@ -585,6 +585,40 @@ QUIZZES = {
              "en": "How do serverless backends like modal 'save money' (tie it to on-demand start + cleanup release)? And why should these backend differences 'sink to edge subclasses' rather than living as per-environment if-else in the core?"},
         ],
     },
+    "17-gateway-adapters.html": {
+        "mcq": [
+            {
+                "q": {"zh": "要给 Hermes 接入一个全新的聊天平台,需要改核心网关的消息循环吗?",
+                      "en": "To onboard a brand-new chat platform to Hermes, do you change the core gateway's message loop?"},
+                "opts": [
+                    {"zh": "要,得在核心里加一套该平台的分支逻辑", "en": "Yes, add a branch of that platform's logic in the core"},
+                    {"zh": "不用——在 plugins/platforms/ 下写一个 BasePlatformAdapter 子类,把平台原生消息翻成统一 MessageEvent 即可", "en": "No — write a BasePlatformAdapter subclass under plugins/platforms/ that translates native messages into a unified MessageEvent"},
+                    {"zh": "要,得重新训练模型", "en": "Yes, retrain the model"},
+                    {"zh": "要,得改每个工具", "en": "Yes, change every tool"},
+                ],
+                "answer": 1,
+                "why": {"zh": "核心只认 MessageEvent + BasePlatformAdapter 两个抽象,平台差异沉到边缘适配器(多数还是 plugins/platforms/ 插件)。加平台=写一个子类。诚实地说核心主路径零改动——base.py 仍有极少数历史遗留的平台特例(如 Telegram 话题锚点),但那不是主路径架构。",
+                        "en": "The core knows only two abstractions, MessageEvent + BasePlatformAdapter; platform differences sink to edge adapters (mostly plugins/platforms/). Adding a platform = one subclass. Honestly the core main path is untouched — base.py keeps a few legacy platform special-cases (e.g. Telegram topic anchors), but that is not the main-path architecture."},
+            },
+            {
+                "q": {"zh": "Telegram 的富文本、Discord 的嵌入、IRC 的纯文本,进入核心 agent 循环前是什么形态?",
+                      "en": "Telegram's rich text, Discord's embeds, IRC's plain text — what form do they take before entering the core agent loop?"},
+                "opts": [
+                    {"zh": "各自保留平台原生格式", "en": "Each keeps its native platform format"},
+                    {"zh": "都被适配器归一化成同一个 MessageEvent,核心从不认识任何平台原生格式", "en": "All normalized by adapters into the same MessageEvent; the core never knows any platform's native format"},
+                    {"zh": "统一转成 Markdown", "en": "All converted to Markdown"},
+                    {"zh": "统一转成一段 JSON 字符串", "en": "All converted to a JSON string"},
+                ],
+                "answer": 1,
+                "why": {"zh": "MessageEvent 的 docstring 写得很直白:「Normalized representation that all adapters produce」——所有适配器都产出这一种归一化表示。核心 agent 循环只见过 MessageEvent。",
+                        "en": "MessageEvent's docstring says it plainly: 'Normalized representation that all adapters produce.' The core agent loop has only ever seen MessageEvent."},
+            },
+        ],
+        "open": [
+            {"zh": "IRC 没有「正在输入」指示,IRCAdapter 的 send_typing 被写成 no-op。为什么这种平台能力差异要在边缘适配器里「吸收」、而不是上报给核心让核心去判断每个平台支持什么?",
+             "en": "IRC has no 'typing' indicator, so IRCAdapter's send_typing is a no-op. Why should such capability gaps be 'absorbed' inside the edge adapter rather than reported up so the core decides what each platform supports?"},
+        ],
+    },
 }
 
 
