@@ -371,6 +371,25 @@ because LLMs have a hard limitation — <strong>they remember nothing between tw
   rule: <strong>per-conversation prompt caching is sacred</strong>, and almost every design bends around it.
 </div>
 
+<h2>Why it isn't tied to your laptop</h2>
+<p>Many agents only run on the one machine you keep open. A core goal of Hermes is to <strong>free the agent from a
+single box</strong>: it runs on a $5 VPS, a GPU cluster, or <strong>serverless</strong> infra that <strong>hibernates to
+near-zero cost</strong> when idle and wakes on demand. So you can message it from Telegram while it works on a <strong>cloud
+VM</strong> — close your phone and it keeps going.</p>
+<p>It's also <strong>model-agnostic</strong>: Nous Portal, OpenRouter (200+ models), OpenAI, your own endpoint — switch
+with one <span class="mono">hermes model</span> command, no code changes. This “<strong>freedom of place + freedom of
+model</strong>” is what lets it be a <strong>long-lived personal agent</strong> — your assistant shouldn't be locked to one
+machine or vendor. It echoes the deployment philosophy: the agent's <strong>runtime</strong> is itself pluggable, from local
+all the way to a serverless sandbox:</p>
+<table class="t">
+  <tr><th>Terminal backend</th><th>Use</th></tr>
+  <tr><td><span class="mono">local</span></td><td>just run on this machine</td></tr>
+  <tr><td><span class="mono">docker</span></td><td>isolated, disposable container</td></tr>
+  <tr><td><span class="mono">ssh</span></td><td>send work to a remote host</td></tr>
+  <tr><td><span class="mono">singularity</span></td><td>HPC / cluster environments</td></tr>
+  <tr><td><span class="mono">modal · daytona</span></td><td><strong>serverless</strong>: hibernate when idle, wake on demand, near-zero cost</td></tr>
+</table>
+
 <h2>The self-improvement loop: four parts</h2>
 <p>Hermes' “evolution” isn't magic — it's <strong>four cooperating subsystems</strong> that turn one-off chats
 into accumulating assets:</p>
@@ -397,6 +416,23 @@ skill/memory → next time it's faster:</p>
   <div class="node"><div class="nt">Capture</div><div class="nd">write skill / memory</div></div>
   <div class="arrow">-&gt;</div>
   <div class="node hl"><div class="nt">Faster next time</div><div class="nd">flip to notes, done</div></div>
+</div>
+
+<h2>The engine of evolution: the learning nudge</h2>
+<p>The loop has one catch: an LLM <strong>won't spontaneously reflect</strong> on “should I save what I just learned?”
+Hermes' fix is clever — after enough turns of working together, it <strong>appends a reflection prompt to the end of the
+chat</strong> (a nudge): “Did you just learn a repeatable procedure? Want to save it as a skill with
+<span class="mono">skill_manage</span>?” The nudge fires at the <strong>right moment</strong>, <strong>once per
+session</strong>, so it never nags.</p>
+<p>What's neat is <strong>where</strong> it's injected: the nudge is a plain user message appended at the
+<strong>end</strong>, <strong>changing no system prompt and rebuilding no context</strong>. That's exactly to honor the iron
+rule — <strong>the prompt cache must not break</strong>. “Remind the agent to learn” sounds trivial, but underneath it's a
+careful tradeoff between <strong>driving evolution</strong> and <strong>never breaking the cache</strong> (details in ch.9).</p>
+<div class="vflow">
+  <div class="step"><div class="num">1</div><div class="sc"><h4>Work</h4><p>solve problems with you; accumulate know-how</p></div></div>
+  <div class="step"><div class="num">2</div><div class="sc"><h4>Nudge</h4><p>append at the end: “save as a skill/memory?”</p></div></div>
+  <div class="step"><div class="num">3</div><div class="sc"><h4>Capture</h4><p>agent calls <span class="mono">skill_manage</span> / <span class="mono">memory</span></p></div></div>
+  <div class="step"><div class="num">4</div><div class="sc"><h4>Reuse</h4><p>next session the skill/memory is ready — done in a few steps</p></div></div>
 </div>
 
 <h2>How it differs from a normal agent</h2>

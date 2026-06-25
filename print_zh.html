@@ -367,6 +367,23 @@ Hermes 是 <a href="https://github.com/NousResearch/hermes-agent">Nous Research<
   几乎所有设计都要绕着它走。
 </div>
 
+<h2>它为什么不绑定你的笔记本</h2>
+<p>很多 agent 只能跑在你开着的那台电脑上。Hermes 的设计目标之一是<strong>把 agent 从单机里解放出来</strong>：
+它能跑在 5 美元的 VPS、GPU 集群，或 <strong>serverless</strong> 环境上——闲时<strong>休眠到几乎零成本</strong>、有请求才唤醒。
+于是你可以一边在 Telegram 上发消息，一边让它在<strong>云端 VM</strong> 上默默干活，关掉手机它也不停。</p>
+<p>它还<strong>模型无关</strong>：Nous Portal、OpenRouter（200+ 模型）、OpenAI、本地端点都行，一条
+<span class="mono">hermes model</span> 命令切换，不动一行代码。这种“<strong>位置自由 + 模型自由</strong>”，是它能成为
+<strong>长期个人 agent</strong> 的前提——你的助理不该被锁在某台机器、某个厂商上。这一点也呼应了它的部署哲学：
+agent 的<strong>运行环境</strong>本身就是可插拔的，从本机一直到 serverless 沙箱：</p>
+<table class="t">
+  <tr><th>终端后端</th><th>用途</th></tr>
+  <tr><td><span class="mono">local</span></td><td>就在本机跑，最简单</td></tr>
+  <tr><td><span class="mono">docker</span></td><td>隔离容器，干净可弃</td></tr>
+  <tr><td><span class="mono">ssh</span></td><td>把活派到远程主机</td></tr>
+  <tr><td><span class="mono">singularity</span></td><td>HPC / 集群环境</td></tr>
+  <tr><td><span class="mono">modal · daytona</span></td><td><strong>serverless</strong>：闲时休眠、按需唤醒，几乎零成本</td></tr>
+</table>
+
 <h2>自我进化的学习闭环：四件套</h2>
 <p>Hermes 的“进化”不是玄学，而是<strong>四个协作的子系统</strong>，把一次性的对话变成可积累的资产：</p>
 
@@ -391,6 +408,20 @@ Hermes 是 <a href="https://github.com/NousResearch/hermes-agent">Nous Research<
   <div class="node"><div class="nt">沉淀</div><div class="nd">写技能 / 记忆</div></div>
   <div class="arrow">-&gt;</div>
   <div class="node hl"><div class="nt">下次更快</div><div class="nd">翻笔记，几步搞定</div></div>
+</div>
+
+<h2>进化的发动机：学习 nudge</h2>
+<p>这套闭环有个关键问题：大模型<strong>不会主动反思</strong>“我刚学到的东西要不要存起来”。Hermes 的解法很巧——
+在你和它干活到一定轮次时，<strong>往对话末尾塞一条反思提醒</strong>（nudge）：“你是不是学到了一个可复用的流程？
+要不要用 <span class="mono">skill_manage</span> 存成技能？”这条提醒踩着<strong>恰当的时机</strong>触发、每个会话<strong>只发一次</strong>，不打扰你。</p>
+<p>更妙的是它<strong>注入的位置</strong>：nudge 是一条追加到消息<strong>末尾</strong>的普通 user 消息，
+<strong>不改动 system prompt、不重建上下文</strong>。这正是为了守住那条铁律——<strong>prompt 缓存不能破</strong>。
+“提醒 agent 去学习”这件看似简单的事，背后是一个<strong>既要驱动进化、又不能破坏缓存</strong>的精细权衡（细节见第 9 章）。</p>
+<div class="vflow">
+  <div class="step"><div class="num">1</div><div class="sc"><h4>干活</h4><p>和你一起解决问题，积累了“怎么做”的经验</p></div></div>
+  <div class="step"><div class="num">2</div><div class="sc"><h4>到点提醒</h4><p>末尾追加 nudge：“要不要存成技能/记忆？”</p></div></div>
+  <div class="step"><div class="num">3</div><div class="sc"><h4>沉淀</h4><p>agent 调 <span class="mono">skill_manage</span> / <span class="mono">memory</span> 落盘</p></div></div>
+  <div class="step"><div class="num">4</div><div class="sc"><h4>复用</h4><p>下个会话技能清单/记忆已就位，几步搞定</p></div></div>
 </div>
 
 <h2>和普通 agent 的区别</h2>
