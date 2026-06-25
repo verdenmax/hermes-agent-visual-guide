@@ -381,6 +381,40 @@ QUIZZES = {
              "en": "Why does the curator's review fork set platform='curator' + skip_context/memory + both nudge_interval=0? What does each prevent, and how do they echo 'never touch the main cache' and ch.9's learning mechanism?"},
         ],
     },
+    "11-memory.html": {
+        "mcq": [
+            {
+                "q": {"zh": "你在会话中途用 memory 工具写了一条新记忆，它会立刻出现在 system prompt 里吗？",
+                      "en": "You write a new memory mid-session via the memory tool — does it immediately appear in the system prompt?"},
+                "opts": [
+                    {"zh": "会，立刻注入", "en": "Yes, injected immediately"},
+                    {"zh": "不会——system prompt 里的记忆是会话开始拍的「冻结快照」，中途写入只落磁盘+live，要到下个会话或压缩边界才进前缀", "en": "No — the memory in the system prompt is a 'frozen snapshot' taken at session start; mid-session writes only hit disk+live, entering the prefix next session or at a compression boundary"},
+                    {"zh": "会，但只在偶数轮", "en": "Yes, but only on even turns"},
+                    {"zh": "永远不会保存", "en": "Never saved at all"},
+                ],
+                "answer": 1,
+                "why": {"zh": "format_for_system_prompt 返回 load_from_disk 时刻的冻结快照（NOT the live state），中途写入不影响它——这样 system prompt 整会话字节稳定，守住前缀缓存。快照只在下个会话/压缩边界刷新。",
+                        "en": "format_for_system_prompt returns the snapshot frozen at load_from_disk time (NOT the live state); mid-session writes don't affect it — keeping the system prompt byte-stable all session and guarding the prefix cache. It refreshes only next session or at a compression boundary."},
+            },
+            {
+                "q": {"zh": "会话中途 prefetch 取回的一条旧记忆，被注入到哪里？",
+                      "en": "A mid-session prefetch recalls an old memory — where is it injected?"},
+                "opts": [
+                    {"zh": "重写进 system prompt", "en": "Rewritten into the system prompt"},
+                    {"zh": "只贴到当前用户消息的 API 副本（api_msg=msg.copy）上，原 messages 不改、不入持久化", "en": "Only onto the current user message's API copy (api_msg=msg.copy); the original messages are unchanged and not persisted"},
+                    {"zh": "插入到对话最前面", "en": "Prepended to the conversation"},
+                    {"zh": "丢弃不用", "en": "Discarded"},
+                ],
+                "answer": 1,
+                "why": {"zh": "conversation_loop 构造发往 API 的副本时 api_msg = msg.copy()，取回内容经 memory-context 围栏只追加到当前 user 消息副本末尾。原 messages 永不被改 → 之前轮次字节不变、system prompt 不变 → 缓存不破。",
+                        "en": "When building the copy sent to the API, api_msg = msg.copy(); recalled content wrapped in a memory-context fence is appended only to the current user message copy. The original messages are never mutated → prior turns byte-identical, system prompt unchanged → cache intact."},
+            },
+        ],
+        "open": [
+            {"zh": "记忆和技能（第9章）共用同一套「响应后 fork review」机制，一个写 MEMORY/USER、一个写 SKILL.md。为什么两者都把「写入」放到响应之后的后台 fork，而不是在主对话里实时写？",
+             "en": "Memory and skills (ch.9) share the same 'fork review after the response' mechanism, one writing MEMORY/USER, the other SKILL.md. Why do both put 'writing' in a background fork after the response, rather than writing live in the main conversation?"},
+        ],
+    },
 }
 
 

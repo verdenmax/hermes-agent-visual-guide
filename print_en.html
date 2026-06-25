@@ -343,6 +343,7 @@ details[open] > summary { list-style: none; }
   <li>Tool system</li>
   <li>Learning engine & skills</li>
   <li>Curator: the skill gardener</li>
+  <li>Memory: MEMORY / USER</li>
 </ol></div>
 <section class="lesson-print">
 <h1>What is Hermes</h1>
@@ -2026,6 +2027,149 @@ review_agent._skill_nudge_interval = 0     <span class="cm"># the curator must n
   <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
   <ul>
     <li>Why does the curator's review fork set platform='curator' + skip_context/memory + both nudge_interval=0? What does each prevent, and how do they echo 'never touch the main cache' and ch.9's learning mechanism?</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Memory: MEMORY / USER</h1>
+
+<p class="lead">
+Memory lets Hermes remember across sessions "<strong>who you are and what you prefer</strong>": <span class="mono">MEMORY.md</span> is the agent's personal notebook, <span class="mono">USER.md</span> its profile of you. But a sharp tension hides here — memory is <strong>written at any time</strong> (the preference you just stated, the lesson the agent just learned), yet the system prompt <strong>must never change mid-session</strong> (ch.6). Hermes satisfies both "write anytime" and "never break the cache" with <strong>two carefully designed injection paths</strong>: a <strong>frozen snapshot</strong> + <strong>appending only to the current user message's copy</strong>.
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · an assistant's notebooks + a Polaroid snapshot</div>
+  Picture an assistant with two notebooks on the desk: <strong>MEMORY.md</strong> records "what this project deploys with, what pitfalls we hit," <strong>USER.md</strong> records "this boss likes brevity, hates rambling." Each morning he <strong>takes a snapshot</strong> (the frozen snapshot) and pins it where it's most visible, and <strong>looks at that all day</strong> — even if he jots new things into the notebooks midday, <strong>he doesn't swap the snapshot</strong>, to avoid distracting himself by re-reading. When he needs an old record temporarily, he doesn't alter the pinned snapshot — he <strong>copies a sticky note</strong> onto the current page (appending to a copy). Both paths <strong>never touch that sacred snapshot</strong>.
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 The big picture · declarative memory, written durably, injected cache-safe</div>
+  Memory is <strong>declarative</strong> ("who / what-state"), distinct from ch.9's procedural skills ("how to"). <span class="mono">MEMORY.md</span> (the agent's notes, ~2200-char cap) and <span class="mono">USER.md</span> (the user profile, ~1375-char cap) live under <span class="mono">$HERMES_HOME/memories/</span>. The fix for the core tension is <strong>read/write separation</strong>: writes hit disk anytime (durable); but <strong>what enters the system prompt is the snapshot frozen at session start</strong>, and <strong>real-time recalled memory is appended only to the current user message's API copy</strong>. Both injection paths bypass "changing the system prompt mid-session" — that's the whole way memory honors "the cache is sacred."
+</div>
+
+<h2>Path one: a frozen snapshot enters the system prompt</h2>
+<p>Memory enters the system prompt's <span class="mono">volatile</span> tier (the lowest of ch.6's three tiers). But injecting <strong>live</strong> memory directly would change the system prompt with every memory you write, shattering the cache. Hermes's fix — what's injected is <strong>always the snapshot frozen at session start</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/memory_tool.py</span><span class="ln">567-578 · excerpt</span></div>
+  <pre><span class="kw">def</span> <span class="fn">format_for_system_prompt</span>(self, target):
+    <span class="cm">&quot;&quot;&quot;Return the frozen snapshot for system prompt injection.</span>
+<span class="cm">    This returns the state captured at load_from_disk() time, NOT the</span>
+<span class="cm">    live state. Mid-session writes do not affect this. This keeps the</span>
+<span class="cm">    system prompt stable across all turns, preserving the prefix cache.&quot;&quot;&quot;</span>
+    block = self._system_prompt_snapshot.get(target, <span class="st">""</span>)
+    <span class="kw">return</span> block <span class="kw">if</span> block <span class="kw">else</span> <span class="kw">None</span></pre>
+</div>
+<p>The docstring pins the intent: <span class="inline">NOT the live state. Mid-session writes do not affect this. This keeps the system prompt stable across all turns, preserving the prefix cache</span>. <span class="mono">_system_prompt_snapshot</span> is captured at session-start <span class="mono">load_from_disk()</span>; no matter how many entries you write via the <span class="mono">memory</span> tool afterward, <strong>this snapshot doesn't change</strong> → the system prompt stays byte-stable → the prefix cache holds. The snapshot refreshes only at <strong>the next session start</strong>, or at a <strong>context-compression</strong> boundary (ch.6's sole rebuild moment).</p>
+
+<h2>Path two: real-time recall appends only to the current user message's copy</h2>
+<p>So what about recalling an old memory <strong>mid-session</strong>? (e.g. relevant context fetched by an external provider.) The answer: <strong>it doesn't enter the system prompt — it's appended only to the "send copy" of the current user message</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py</span><span class="ln">738-758 · simplified</span></div>
+  <pre>api_messages = []
+<span class="kw">for</span> idx, msg <span class="kw">in</span> <span class="fn">enumerate</span>(messages):
+    api_msg = msg.copy()                       <span class="cm"># a copy! the original messages are never changed</span>
+    <span class="cm"># recalled memory is injected only into the current user message copy</span>
+    <span class="kw">if</span> idx == current_turn_user_idx <span class="kw">and</span> msg.get(<span class="st">"role"</span>) == <span class="st">"user"</span>:
+        <span class="kw">if</span> _ext_prefetch_cache:
+            fenced = build_memory_context_block(_ext_prefetch_cache)  <span class="cm"># wraps in &lt;memory-context&gt;</span>
+            api_msg[<span class="st">"content"</span>] = _base + <span class="st">"\n\n"</span> + fenced
+    api_messages.append(api_msg)</pre>
+</div>
+<p>The key is line three, <span class="mono">api_msg = msg.copy()</span> — injection happens only on the <strong>copy sent to the API</strong>, as the source comment states plainly: <span class="inline">the original message in `messages` is never mutated, so nothing leaks into session persistence</span>. The recalled content is wrapped by <span class="mono">build_memory_context_block</span> in a <span class="mono">&lt;memory-context&gt;</span> fence (marking it "recalled reference data, not a new user instruction") and <strong>appended to the end of the current user message</strong>. So: all prior turns stay byte-identical (the cache prefix is intact), the system prompt is unchanged, and the original <span class="mono">messages</span> aren't polluted or persisted.</p>
+
+<h2>memory nudge: isomorphic to the skill nudge</h2>
+<p>Memory also has a nudge — every so many turns it reminds the agent "should I save a memory?" It is <strong>completely isomorphic</strong> to ch.9's skill nudge: it sets a single boolean and <strong>injects no text</strong> into the main conversation:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/turn_context.py</span><span class="ln">249-260 · excerpt</span></div>
+  <pre><span class="cm"># Preserve the original user message (no nudge injection).</span>
+<span class="cm"># Track memory nudge trigger (turn-based, checked here).</span>
+should_review_memory = <span class="kw">False</span>
+<span class="kw">if</span> (agent._memory_nudge_interval &gt; 0
+        <span class="kw">and</span> <span class="st">"memory"</span> <span class="kw">in</span> agent.valid_tool_names
+        <span class="kw">and</span> agent._memory_store):
+    agent._turns_since_memory += 1
+    <span class="kw">if</span> agent._turns_since_memory &gt;= agent._memory_nudge_interval:
+        should_review_memory = <span class="kw">True</span>            <span class="cm"># only a boolean; a forked review consumes it after the turn</span>
+        agent._turns_since_memory = 0</pre>
+</div>
+<p>The first-line comment <span class="inline">Preserve the original user message (no nudge injection)</span> is the whole charter: the nudge <strong>injects nothing</strong>, just sets <span class="mono">should_review_memory</span> to <span class="kw">True</span>; as with the skill nudge, the real review happens after the response, forked by <span class="mono">turn_finalizer</span> as the same background agent (ch.9). Memory and skills <strong>share</strong> this "fork after the response, write elsewhere" mechanism.</p>
+
+<h2>Pluggable: MemoryProvider and Honcho</h2>
+<p>Beyond the built-in <span class="mono">MEMORY.md/USER.md</span>, Hermes supports <strong>external memory providers</strong> (Honcho, Mem0, Supermemory…). They implement the <span class="mono">MemoryProvider</span> ABC, orchestrated by <span class="mono">MemoryManager</span>, with <strong>only one external provider allowed at a time</strong> (to prevent tool-schema bloat). The key: an external provider's recall also takes <strong>path two</strong> — via <span class="mono">prefetch</span>, appended to the current user message copy, <strong>never</strong> polluting the system prompt. A "dialectic user-modeling" provider like Honcho injects all its live context into user messages, never touching the prefix.</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc"><strong>Write (durable)</strong>: the memory tool drops entries into MEMORY.md / USER.md disk + live state anytime</span></div>
+  <div class="step"><span class="num">2</span><span class="sc"><strong>Injection path ①</strong>: at session start load_from_disk takes a <strong>frozen snapshot</strong> → enters the system prompt volatile tier → byte-stable all session</span></div>
+  <div class="step"><span class="num">3</span><span class="sc"><strong>Injection path ②</strong>: real-time prefetch → build_memory_context_block fence → appended only to the <strong>current user message's API copy</strong> (original messages unchanged)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc"><strong>Nudge</strong>: every N turns sets should_review_memory, <strong>no injection into the main conversation</strong>, forked review writes after the response</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">both injection paths <strong>bypass "changing the system prompt mid-session"</strong> → the cache never breaks</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the parts mesh for "remember without breaking the cache"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>MemoryStore</strong> (MEMORY.md/USER.md + the frozen snapshot), <strong>format_for_system_prompt</strong> (injection path ①), <strong>prefetch copy-injection</strong> (injection path ②), the <strong>memory nudge</strong>, <strong>MemoryManager</strong> (external-provider orchestration). Cross-chapter teamwork: the frozen snapshot enters the <strong>volatile tier</strong> and refreshes only at a compression boundary (ch.6 caching); prefetch copy-injection <strong>doesn't change the prefix</strong> (ch.6); the memory nudge is <strong>isomorphic</strong> to the skill nudge, sharing turn_finalizer's "fork after the response" (ch.9); memory vs skill = declarative vs procedural (ch.9's boundary).
+  <div class="collab-sub">② Data-flow timing</div>
+  session start load_from_disk → frozen snapshot enters the system prompt (path ①, unchanged all session); each turn the memory tool writes to disk anytime (durable, but the snapshot doesn't move); recalling an old memory → prefetch → appended to the current user message copy (path ②, original messages unchanged); every N turns the nudge sets a boolean → forked review writes after the response. The snapshot refreshes only at a compression boundary.
+  <div class="collab-sub">③ The key point</div>
+  "Write anytime, inject cache-safe" rests on <strong>read/write separation</strong>: writes happen on disk + live state; reads (injection) use either the <strong>session-start frozen snapshot</strong> or <strong>only the current user message's copy</strong>. Neither path <strong>touches</strong> the mid-session system prompt — that's memory's contribution to "the cache is sacred."
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>a frozen snapshot + appending only to the current user message's copy</strong> — both injection paths bypass "changing the system prompt mid-session" = guarding the cache. It treats three inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·stateless</span> — the model remembers nothing across sessions, so MEMORY/USER distill "who you are, what you prefer" into <strong>durable memory</strong>;
+  <span class="badge constraint">A·lost-in-the-middle</span> — memory is <strong>recalled on demand</strong> (prefetch) rather than dumped wholesale, kept compact and high-signal;
+  <span class="badge constraint">D·instr=data</span> — recalled content is wrapped in a <span class="mono">&lt;memory-context&gt;</span> fence marking it "reference data, not instruction," and the snapshot is injection-scanned at build time. The anti-pattern: reloading live memory <strong>directly into the system prompt</strong> — every write shatters the cache once.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Declarative memory</strong>: <span class="mono">MEMORY.md</span> (agent notes) + <span class="mono">USER.md</span> (user profile), distinct from ch.9 skills' procedural "how-to."</li>
+    <li><strong>Frozen snapshot (path ①)</strong>: <span class="mono">format_for_system_prompt</span> returns the session-start snapshot, not live; mid-session writes don't affect it, guarding the prefix cache.</li>
+    <li><strong>Copy-injection (path ②)</strong>: prefetch recall, wrapped in a <span class="mono">&lt;memory-context&gt;</span> fence, is appended only to the <strong>current user message's API copy</strong>; original messages are unchanged and not persisted.</li>
+    <li><strong>memory nudge</strong>: isomorphic to the skill nudge — sets a boolean, no injection into the main conversation, forked review after the response (ch.9).</li>
+    <li><strong>Pluggable providers</strong>: MemoryProvider ABC + MemoryManager, one external provider at a time; its recall also takes only the copy path.</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. You write a new memory mid-session via the memory tool — does it immediately appear in the system prompt?</div>
+  <ol class="opts">
+    <li>Yes, but only on even turns</li>
+    <li>Yes, injected immediately</li>
+    <li>No — the memory in the system prompt is a 'frozen snapshot' taken at session start; mid-session writes only hit disk+live, entering the prefix next session or at a compression boundary</li>
+    <li>Never saved at all</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. format_for_system_prompt returns the snapshot frozen at load_from_disk time (NOT the live state); mid-session writes don't affect it — keeping the system prompt byte-stable all session and guarding the prefix cache. It refreshes only next session or at a compression boundary.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. A mid-session prefetch recalls an old memory — where is it injected?</div>
+  <ol class="opts">
+    <li>Only onto the current user message's API copy (api_msg=msg.copy); the original messages are unchanged and not persisted</li>
+    <li>Prepended to the conversation</li>
+    <li>Discarded</li>
+    <li>Rewritten into the system prompt</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. When building the copy sent to the API, api_msg = msg.copy(); recalled content wrapped in a memory-context fence is appended only to the current user message copy. The original messages are never mutated → prior turns byte-identical, system prompt unchanged → cache intact.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Memory and skills (ch.9) share the same 'fork review after the response' mechanism, one writing MEMORY/USER, the other SKILL.md. Why do both put 'writing' in a background fork after the response, rather than writing live in the main conversation?</li>
   </ul>
 </div>
 </div>

@@ -19,4 +19,5 @@ CONTENT = {
     "08-tool-system.html": part2.LESSON_08,
     "09-learning-nudge-skills.html": part3.LESSON_09,
     "10-curator.html": part3.LESSON_10,
+    "11-memory.html": part3.LESSON_11,
 }

@@ -66,6 +66,8 @@ PAGES = [
      "第三部分 · 自我进化闭环", "Part 3 · The Self-Improvement Loop"),
     ("10-curator.html", "Curator：技能园丁", "Curator: the skill gardener",
      "第三部分 · 自我进化闭环", "Part 3 · The Self-Improvement Loop"),
+    ("11-memory.html", "记忆：MEMORY / USER", "Memory: MEMORY / USER",
+     "第三部分 · 自我进化闭环", "Part 3 · The Self-Improvement Loop"),
 ]
 
 
