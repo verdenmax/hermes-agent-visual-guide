@@ -18,4 +18,5 @@ CONTENT = {
     "07-message-flow-providers.html": part2.LESSON_07,
     "08-tool-system.html": part2.LESSON_08,
     "09-learning-nudge-skills.html": part3.LESSON_09,
+    "10-curator.html": part3.LESSON_10,
 }

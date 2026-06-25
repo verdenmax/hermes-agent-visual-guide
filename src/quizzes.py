@@ -347,6 +347,40 @@ QUIZZES = {
              "en": "'Self-improvement' must write new skills, yet 'the cache is sacred' forbids changing the prefix mid-session — how does Hermes's 'fork after the response, write elsewhere, take effect next time' satisfy both?"},
         ],
     },
+    "10-curator.html": {
+        "mcq": [
+            {
+                "q": {"zh": "Curator 对一个长期不用的技能，最激进的动作是什么？",
+                      "en": "What is the most aggressive action the Curator takes on a long-unused skill?"},
+                "opts": [
+                    {"zh": "永久删除", "en": "Permanent deletion"},
+                    {"zh": "归档（搬进 .archive/，随时可恢复）——永不删除", "en": "Archiving (moved into .archive/, restorable anytime) — never deletion"},
+                    {"zh": "立即重写覆盖", "en": "Immediate rewrite"},
+                    {"zh": "上传到云端", "en": "Upload to the cloud"},
+                ],
+                "answer": 1,
+                "why": {"zh": "四不变量之一：Never auto-deletes — only archives. Archive is recoverable。最坏结果是搬进 ~/.hermes/skills/.archive/，随时 restore，数据绝不丢。",
+                        "en": "One of the four invariants: Never auto-deletes — only archives. Archive is recoverable. The worst outcome is a move into ~/.hermes/skills/.archive/, restorable anytime; data is never lost."},
+            },
+            {
+                "q": {"zh": "curator 的降级状态机（active→stale→archived）靠什么判断、用了 LLM 吗？",
+                      "en": "What drives the curator's demotion state machine (active→stale→archived), and does it use an LLM?"},
+                "opts": [
+                    {"zh": "靠 LLM 逐个评估每个技能", "en": "An LLM evaluates each skill"},
+                    {"zh": "纯确定性——只看「最近活动时间戳」（30/90 天阈值），零 LLM 调用", "en": "Purely deterministic — just the latest-activity timestamp (30/90-day thresholds), zero LLM calls"},
+                    {"zh": "随机降级", "en": "Random demotion"},
+                    {"zh": "靠用户手动标记", "en": "Manual user tagging"},
+                ],
+                "answer": 1,
+                "why": {"zh": "apply_automatic_transitions 纯看 anchor（last_activity→created_at→now）：30 天 active→stale，90 天 archived，又被用则复活。零 LLM，靠第9章 skill_usage 遥测时间戳，便宜可预测。烧 token 的 LLM 合并 pass 是另一回事且默认关。",
+                        "en": "apply_automatic_transitions reads only the anchor (last_activity→created_at→now): 30 days active→stale, 90 days archived, reactivation on use. Zero LLM, fed by ch.9's skill_usage timestamps — cheap and predictable. The token-burning LLM consolidation pass is separate and off by default."},
+            },
+        ],
+        "open": [
+            {"zh": "curator 的 review fork 为什么要设 platform='curator' + skip_context/memory + 两个 nudge_interval=0？这三组设定分别在防止什么、又如何呼应「不碰主缓存」和第9章的学习机制？",
+             "en": "Why does the curator's review fork set platform='curator' + skip_context/memory + both nudge_interval=0? What does each prevent, and how do they echo 'never touch the main cache' and ch.9's learning mechanism?"},
+        ],
+    },
 }
 
 

@@ -64,6 +64,8 @@ PAGES = [
      "第二部分 · Agent 核心", "Part 2 · The Agent Core"),
     ("09-learning-nudge-skills.html", "学习引擎与技能", "Learning engine & skills",
      "第三部分 · 自我进化闭环", "Part 3 · The Self-Improvement Loop"),
+    ("10-curator.html", "Curator：技能园丁", "Curator: the skill gardener",
+     "第三部分 · 自我进化闭环", "Part 3 · The Self-Improvement Loop"),
 ]
 
 

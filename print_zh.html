@@ -342,6 +342,7 @@ details[open] > summary { list-style: none; }
   <li>消息流与 provider 适配</li>
   <li>工具系统：注册·门控·分派·预算</li>
   <li>学习引擎与技能</li>
+  <li>Curator：技能园丁</li>
 </ol></div>
 <section class="lesson-print">
 <h1>Hermes 是什么</h1>
@@ -1830,6 +1831,138 @@ or updated?"</span>.  Writes go straight to the memory + skill stores.
   <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
   <ul>
     <li>「自我进化」要写入新技能，「缓存神圣」又要求会话中途绝不改前缀——这两个目标看似冲突，Hermes 用「响应后 fork + 写在别处、生效在下次」如何同时满足它们？</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Curator：技能园丁</h1>
+
+<p class="lead">
+第 9 章里，后台 review 会不断<strong>创建</strong>新技能。问题随之而来：技能库会不会越长越乱、塞满一堆只用过一次的「一次性」技能？这就是 <strong>Curator</strong>（技能园丁）要解决的——它在后台定期巡查 agent 创建的技能，把<strong>长期不用</strong>的自动降级、归档。但它有一条铁律：<strong>永远只归档、绝不删除</strong>，而且<strong>整个过程不碰主对话的 prompt 缓存</strong>。本章也是「数据安全 + 辅助模型隔离」的范本。
+</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 图书馆管理员 + 可恢复的暂存库</div>
+  把技能库想成一座图书馆。<strong>管理员</strong>（curator）每隔一阵子巡一次馆，把<strong>很久没人借</strong>的书先挪到「暂存区」（stale），再久没动就搬进<strong>地下库房</strong>（archived）。但他<strong>从不烧书</strong>——库房里的书随时能取回。读者<strong>钉住</strong>（pinned）的常用书永远留在书架上、不受巡查影响。最关键的是，管理员在<strong>另一间办公室</strong>干活（forked agent），从不打断正在阅览区看书的你（主对话）。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 自我维护，但永不破坏</div>
+  Curator 的设计被一句话概括：<strong>自我维护，但永不破坏</strong>。它<strong>只治理「后台 review fork 自动创建」</strong>的技能（标记 <span class="mono">created_by=agent</span>）——你<strong>手工</strong>建的（不会被标记）、hub 安装的、受保护内置都不碰；它<strong>永不删除</strong>，最激进的动作是归档（可恢复）；<strong>pinned 技能豁免</strong>一切自动转换；而且它<strong>用辅助模型</strong>跑在独立 session 里，<strong>从不触碰主对话的 prompt 缓存</strong>。这四条不变量，正是「让 agent 自由进化」与「数据绝不丢、缓存绝不破」之间的安全边界。
+</div>
+
+<h2>四条不变量：写在 docstring 里的安全边界</h2>
+<p>这些约束不是口头约定，而是钉死在模块 docstring 里的<strong>严格不变量</strong>：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/curator.py</span><span class="ln">15-19 · 节选</span></div>
+  <pre><span class="cm">Strict invariants:</span>
+<span class="cm">  - Only touches agent-created skills (see tools/skill_usage.is_agent_created)</span>
+<span class="cm">  - Never auto-deletes — only archives. Archive is recoverable.</span>
+<span class="cm">  - Pinned skills bypass all auto-transitions</span>
+<span class="cm">  - Uses the auxiliary client; never touches the main session's prompt cache</span></pre>
+</div>
+<p>逐条拆开：①这里的「agent 创建」特指<strong>后台 review fork 自动创建</strong>的技能（产权门控见第 9 章，<span class="mono">created_by=agent</span>）——你<strong>手工</strong>建的不会被标记，所以<strong>永远安全</strong>；<strong>hub 安装</strong>的无条件豁免，<strong>bundled 内置</strong>默认（<span class="mono">prune_builtins</span>）也只可能被<strong>归档</strong>、绝不删改；②<strong>永不删，只归档</strong>，且归档<strong>可恢复</strong>（搬进 <span class="mono">.archive/</span>，随时 restore）；③<strong>pinned 豁免</strong>一切自动转换；④<strong>用辅助客户端、绝不碰主 session 的 prompt 缓存</strong>。最后这条把 curator 和「缓存神圣」（第 6 章）直接绑定。</p>
+
+<h2>确定性状态机：active → stale → archived</h2>
+<p>降级的核心是一个<strong>纯确定性</strong>的状态机——不调用任何 LLM，只看技能「最近一次真实活动」的时间戳：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/curator.py</span><span class="ln">276-331 · 简化</span></div>
+  <pre><span class="kw">for</span> row <span class="kw">in</span> skill_usage.agent_created_report():
+    <span class="kw">if</span> row.get(<span class="st">"pinned"</span>):
+        <span class="kw">continue</span>                                  <span class="cm"># pinned 豁免一切转换</span>
+    <span class="cm"># 活跃锚点：最近活动 -> 创建时间 -> 现在（新技能不会立刻自我归档）</span>
+    anchor = last_activity <span class="kw">or</span> created_at <span class="kw">or</span> now
+
+    <span class="kw">if</span> anchor &lt;= archive_cutoff <span class="kw">and</span> current != ARCHIVED:
+        archive_skill(name)                       <span class="cm"># 90 天未动 -> 归档（可恢复）</span>
+    <span class="kw">elif</span> anchor &lt;= stale_cutoff <span class="kw">and</span> current == ACTIVE:
+        set_state(name, STALE)                    <span class="cm"># 30 天未动 -> 标记 stale</span>
+    <span class="kw">elif</span> anchor &gt; stale_cutoff <span class="kw">and</span> current == STALE:
+        set_state(name, ACTIVE)                   <span class="cm"># 又被用了 -> 复活</span></pre>
+</div>
+<p>三条转换都基于 <span class="mono">anchor</span>（最近活动时间）：30 天没动 <span class="mono">active → stale</span>，90 天没动 <span class="mono">stale → archived</span>，一旦又被用到则 <span class="mono">stale → active</span> 复活。注意 anchor 的回退链 <span class="mono">last_activity → created_at → now</span>——保证<strong>刚建的新技能不会立刻把自己归档</strong>。整段<strong>没有一次 LLM 调用</strong>，纯靠遥测时间戳（第 9 章的 skill_usage 喂数据），既便宜又可预测。</p>
+
+<h2>辅助模型隔离：fork 一个独立 agent</h2>
+<p>除了确定性降级，curator 还能（可选）跑一次 LLM「合并」pass——把零散技能并成「伞形」大技能。这一步用一个<strong>完全独立 fork 的 AIAgent</strong>，跑在辅助模型上：</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">agent/curator.py</span><span class="ln">1826-1845 · 简化</span></div>
+  <pre>review_agent = AIAgent(
+    model=_model_name, provider=_resolved_provider, ...,
+    max_iterations=9999,           <span class="cm"># umbrella 扫描可能 50-100 次调用</span>
+    quiet_mode=<span class="kw">True</span>,
+    platform=<span class="st">"curator"</span>,           <span class="cm"># 独立 platform，独立 prompt cache</span>
+    skip_context_files=<span class="kw">True</span>,
+    skip_memory=<span class="kw">True</span>,
+)
+review_agent._memory_nudge_interval = 0    <span class="cm"># 禁止递归 nudge</span>
+review_agent._skill_nudge_interval = 0     <span class="cm"># curator 绝不能再 spawn review</span></pre>
+</div>
+<p>注意几处关键设定：<span class="mono">platform="curator"</span> 让它有<strong>独立的 prompt 缓存</strong>，不与主对话共享；<span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> 让它<strong>不加载</strong>主 session 的上下文与记忆；两个 <span class="mono">nudge_interval = 0</span> <strong>禁止递归</strong>——curator 绝不能再触发自己的 review（否则无限套娃）。它的 stdout/stderr 还被重定向到 <span class="mono">/dev/null</span>，连终端噪声都不漏。更重要的是：这次 LLM 合并 pass <strong>默认是关闭</strong>的（opt-in）——因为它每跑一次都烧辅助模型 token，确定性降级才是常态、始终在跑。</p>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各组分如何咬合实现「自我维护而不破坏」</div>
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章核心：<strong>maybe_run_curator</strong>（inactivity 门控触发）、<strong>apply_automatic_transitions</strong>（确定性状态机）、<strong>forked review AIAgent</strong>（platform=curator 的辅助模型隔离）、<strong>archive/restore</strong>（可恢复归档）。跨章节配合：curator <strong>只园丁 background review fork 创建</strong>的 agent-skill（第 9 章产权门控）；forked agent 用<strong>独立 prompt cache</strong>、不碰主对话（第 6 章缓存 + 与第 9 章 fork 同源的「学习在别处」机制）；降级靠 <strong>skill_usage 遥测</strong>时间戳（第 9 章的 use/view/patch 计数喂回这里）；辅助模型走<strong>独立 aux 槽</strong>、与主 runtime 隔离。
+  <div class="collab-sub">② 数据流时序</div>
+  agent 空闲 + 距上次运行超过 interval_hours → <span class="mono">maybe_run_curator</span> → <span class="mono">apply_automatic_transitions</span>（读 skill_usage 时间戳，确定性降级，pinned 跳过）→ 持久化 .curator_state →（仅当 opt-in consolidate 开）fork 辅助模型 review agent 做 umbrella 合并 → 全程<strong>主对话 / 缓存零改动</strong>，最坏结果只是把技能搬进可恢复的 <span class="mono">.archive/</span>。
+  <div class="collab-sub">③ 关键点</div>
+  「自我进化」需要「自我维护」兜底，否则技能库会无限膨胀（误差累积）。但维护本身必须<strong>零破坏</strong>：永不删（只归档）、不碰主缓存（fork 独立 session）、pinned 豁免、LLM 合并 opt-in 省成本——每一条都在「主动维护」与「绝不伤害用户资产/性能」之间划线。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线：<strong>自我维护但永不破坏</strong>（数据安全 + 辅助模型隔离）。它治两条 LLM 固有约束：
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·误差累积</span>——不加约束的自动学习会让技能库无限膨胀、互相污染；curator 用确定性状态机<strong>持续修剪</strong>，把熵控制住；
+  <span class="badge constraint">G·运维</span>——它是一套<strong>后台运维系统</strong>：inactivity 触发、状态持久化、可恢复归档、备份/回滚。两者都服务「缓存神圣」（第 6 章）：维护跑在 forked 辅助 agent 里、<strong>独立 prompt cache</strong>。反模式：让 curator <strong>删除</strong>技能、或<strong>在主 session 里</strong>跑维护——前者毁掉用户资产，后者击穿缓存。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>四条不变量</strong>：只碰 agent 创建 / 永不删只归档（可恢复）/ pinned 豁免 / 不碰主缓存。</li>
+    <li><strong>inactivity 触发</strong>：非 cron daemon——agent 空闲 + 距上次超过 interval_hours 才由 <span class="mono">maybe_run_curator</span> 跑。</li>
+    <li><strong>确定性状态机</strong>：<span class="mono">active→stale→archived</span>（30/90 天）+ 复活，纯看活动时间戳、<strong>零 LLM</strong>。</li>
+    <li><strong>辅助模型隔离</strong>：forked AIAgent <span class="mono">platform="curator"</span>、独立 cache、skip_context/memory、nudge=0 防递归。</li>
+    <li><strong>LLM 合并 opt-in</strong>：烧 token 的 umbrella 合并默认关；确定性降级始终在跑。</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. Curator 对一个长期不用的技能，最激进的动作是什么？</div>
+  <ol class="opts">
+    <li>立即重写覆盖</li>
+    <li>永久删除</li>
+    <li>上传到云端</li>
+    <li>归档（搬进 .archive/，随时可恢复）——永不删除</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：D</strong>。四不变量之一：Never auto-deletes — only archives. Archive is recoverable。最坏结果是搬进 ~/.hermes/skills/.archive/，随时 restore，数据绝不丢。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. curator 的降级状态机（active→stale→archived）靠什么判断、用了 LLM 吗？</div>
+  <ol class="opts">
+    <li>随机降级</li>
+    <li>靠用户手动标记</li>
+    <li>靠 LLM 逐个评估每个技能</li>
+    <li>纯确定性——只看「最近活动时间戳」（30/90 天阈值），零 LLM 调用</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：D</strong>。apply_automatic_transitions 纯看 anchor（last_activity→created_at→now）：30 天 active→stale，90 天 archived，又被用则复活。零 LLM，靠第9章 skill_usage 遥测时间戳，便宜可预测。烧 token 的 LLM 合并 pass 是另一回事且默认关。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>curator 的 review fork 为什么要设 platform='curator' + skip_context/memory + 两个 nudge_interval=0？这三组设定分别在防止什么、又如何呼应「不碰主缓存」和第9章的学习机制？</li>
   </ul>
 </div>
 </div>
