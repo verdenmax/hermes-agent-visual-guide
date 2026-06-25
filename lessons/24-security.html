@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var l=localStorage.getItem('havg-lang');if(l==='en'){document.documentElement.dataset.lang='en';document.documentElement.lang='en';}}catch(e){}</script>
+<title>24 · 安全与威胁模型 / Security &amp; threat model · Hermes Agent 设计图解</title>
+<meta name="description" content="第七部分 · 横向专题与收束｜安全与威胁模型 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="theme-color" content="#c2630e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAzMiAzMic+PHJlY3Qgd2lkdGg9JzMyJyBoZWlnaHQ9JzMyJyByeD0nNycgZmlsbD0nI2M4YTAyYycvPjx0ZXh0IHg9JzE2JyB5PScyMicgZm9udC1mYW1pbHk9J3N5c3RlbS11aSxzYW5zLXNlcmlmJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nODAwJyBmaWxsPScjZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz7imKQ8L3RleHQ+PC9zdmc+">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Hermes Agent 设计图解">
+<meta property="og:title" content="24 · 安全与威胁模型 / Security &amp; threat model · Hermes Agent 设计图解">
+<meta property="og:description" content="第七部分 · 横向专题与收束｜安全与威胁模型 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="24 · 安全与威胁模型 / Security &amp; threat model · Hermes Agent 设计图解">
+<meta name="twitter:description" content="第七部分 · 横向专题与收束｜安全与威胁模型 · Hermes Agent 设计图解（中英双语，配真实源码与 prompt 原文、协作机制与设计取舍）">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --ink: #1d2129;
+  --muted: #5b6470; --faint: #8a939f; --line: #e1e5ea;
+  --accent: #c8a02c; --accent-soft: #faf1d6; --accent-ink: #8a6d12;
+  --blue: #2563eb; --blue-soft: #e7efff; --amber: #b4690e; --amber-soft: #fdf1dd;
+  --purple: #7c3aed; --purple-soft: #f0e9ff; --red: #d23f3f; --red-soft: #fbe6e6;
+  --code-bg: #0f172a; --code-ink: #e2e8f0; --code-line: #1e293b;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232c; --ink: #e6edf3;
+    --muted: #9aa6b2; --faint: #6e7a86; --line: #2a323c;
+    --accent: #e3c05a; --accent-soft: #2e2510; --accent-ink: #f0d488;
+    --blue: #6ea8fe; --blue-soft: #16243f; --amber: #e0a44a; --amber-soft: #33270f;
+    --purple: #b794f6; --purple-soft: #271a40; --red: #f08080; --red-soft: #3a1a1a;
+    --code-bg: #0a0f1a; --code-ink: #d8e2f0; --code-line: #14202f;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+html { scroll-behavior: smooth; overflow-x: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+code, .mono { font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; overflow-wrap: break-word; }
+
+/* ---- top progress bar ---- */
+.topbar {
+  position: sticky; top: 0; z-index: 50; background: var(--panel);
+  border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
+}
+.topbar-inner {
+  max-width: 960px; margin: 0 auto; padding: .7rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.topbar .home { font-size: .82rem; color: var(--muted); font-weight: 600; display:flex; gap:.5rem; align-items:center; }
+.topbar .home b { color: var(--accent); }
+.topbar .pill { font-size: .72rem; color: var(--muted); background: var(--panel-2);
+  padding: .2rem .6rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.progress { height: 3px; background: var(--panel-2); }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--blue)); }
+
+.wrap { max-width: 820px; margin: 0 auto; padding: 2.4rem 1.25rem 5rem; }
+
+/* ---- hero ---- */
+.hero { margin-bottom: 2rem; }
+.hero .part { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: .55rem; }
+.hero h1 { font-size: 2.05rem; line-height: 1.2; letter-spacing: -.01em; font-weight: 750; }
+.hero .lead { margin-top: .9rem; font-size: 1.06rem; color: var(--muted); }
+
+h2 { font-size: 1.32rem; margin: 2.4rem 0 .9rem; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: .55rem; }
+h2::before { content: ""; width: 4px; height: 1.05em; background: var(--accent); border-radius: 3px; display: inline-block; }
+h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+p { margin: .7rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .3rem 0; }
+strong { color: var(--ink); font-weight: 680; }
+.inline { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: .08em .4em; font-size: .9em; color: var(--accent-ink); }
+
+/* ---- callout cards ---- */
+.card { border-radius: var(--radius); padding: 1.05rem 1.2rem; margin: 1.2rem 0;
+  border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.card .tag { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.card.macro { border-left: 4px solid var(--blue); }
+.card.macro .tag { color: var(--blue); }
+.card.detail { border-left: 4px solid var(--purple); }
+.card.detail .tag { color: var(--purple); }
+.card.analogy { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+.card.analogy .tag { color: var(--amber); }
+.card.key { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.key .tag { color: var(--accent-ink); }
+.card.warn { border-left: 4px solid var(--red); background: var(--red-soft); }
+.card.warn .tag { color: var(--red); }
+.card.spark { border-left: 4px solid #e0a000;
+  background: linear-gradient(100deg, rgba(224,160,0,.12), transparent 70%); }
+.card.spark .tag { color: #c98a00; }
+@media (prefers-color-scheme: dark) { .card.spark .tag { color: #f0c050; } }
+
+/* ---- code file callout ---- */
+.codefile { margin: 1.2rem 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  box-shadow: var(--shadow); }
+.codefile .cf-head { display: flex; align-items: center; gap: .55rem; padding: .5rem .85rem;
+  background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: .8rem; }
+.codefile .cf-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink:0; }
+.codefile .cf-head .path { font-family: ui-monospace, monospace; color: var(--ink); font-weight: 600; }
+.codefile .cf-head .ln { margin-left: auto; color: var(--faint); font-size: .72rem; }
+.codefile pre { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem;
+  overflow-x: auto; font-size: .82rem; line-height: 1.6; }
+.codefile pre .cm { color: #7d8aa3; }
+.codefile pre .kw { color: #c792ea; }
+.codefile pre .fn { color: #82aaff; }
+.codefile pre .st { color: #c3e88d; }
+.codefile pre .nb { color: #f78c6c; }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); padding: .9rem 1rem; border-radius: 12px;
+  overflow-x: auto; font-size: .83rem; line-height: 1.6; margin: 1.1rem 0; box-shadow: var(--shadow); }
+pre.code .cm { color: #7d8aa3; } pre.code .kw { color: #c792ea; }
+pre.code .fn { color: #82aaff; } pre.code .st { color: #c3e88d; } pre.code .nb { color: #f78c6c; }
+
+/* ---- collapsible accordion (details/summary) ---- */
+.accordion { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  margin: .7rem 0; box-shadow: var(--shadow); overflow: hidden; }
+.accordion > summary { cursor: pointer; padding: .85rem 1.1rem; font-weight: 650; font-size: .96rem;
+  list-style: none; display: flex; align-items: center; gap: .6rem; user-select: none; }
+.accordion > summary::-webkit-details-marker { display: none; }
+.accordion > summary::after { content: "▶"; font-size: .68rem; color: var(--accent);
+  margin-left: auto; transition: transform .15s ease; }
+.accordion[open] > summary::after { transform: rotate(90deg); }
+.accordion > summary:hover { background: var(--panel-2); }
+.accordion[open] > summary { border-bottom: 1px solid var(--line); }
+.accordion .badge-num { background: var(--accent-soft); color: var(--accent-ink);
+  width: 1.6rem; height: 1.6rem; border-radius: 7px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: .82rem; font-weight: 700; flex-shrink: 0; }
+.accordion .hint { font-size: .72rem; color: var(--faint); font-weight: 400; }
+.acc-body { padding: .9rem 1.1rem 1.1rem; }
+.acc-intro { color: var(--muted); font-size: .9rem; margin: .2rem 0 .4rem; }
+.qa { margin: 1rem 0; }
+.qa:first-child { margin-top: .3rem; }
+.qa .q { font-weight: 680; font-size: .9rem; display: flex; gap: .45rem; align-items: center; margin-bottom: .3rem; }
+.qa .a { color: var(--muted); font-size: .9rem; }
+.qa .a strong { color: var(--ink); }
+.qa pre.code { margin: .5rem 0 0; font-size: .78rem; }
+
+/* ---- flow diagram ---- */
+.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 1.3rem 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.2rem 1rem; box-shadow: var(--shadow); }
+.flow .node { flex: 1 1 0; min-width: 110px; text-align: center; padding: .7rem .5rem;
+  border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.flow .node .nt { font-weight: 700; font-size: .92rem; }
+.flow .node .nd { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+.flow .node.hl { background: var(--accent-soft); border-color: var(--accent); }
+.flow .arrow { align-self: center; color: var(--faint); font-size: 1.3rem; padding: 0 .35rem; }
+
+/* vertical flow */
+.vflow { margin: 1.3rem 0; }
+.vflow .step { display: flex; gap: .9rem; position: relative; padding-bottom: 1.1rem; }
+.vflow .step:not(:last-child)::before { content:""; position:absolute; left: 15px; top: 34px; bottom: -2px;
+  width: 2px; background: var(--line); }
+.vflow .num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; z-index:1; }
+.vflow .sc h4 { margin: .25rem 0 .2rem; font-size: 1rem; }
+.vflow .sc p { margin: .15rem 0; font-size: .92rem; color: var(--muted); }
+.vflow .sc .mono { font-size: .8rem; color: var(--accent-ink); }
+
+/* layered architecture */
+.layers { margin: 1.3rem 0; display: flex; flex-direction: column; gap: .55rem; }
+.layer { border-radius: 12px; padding: .85rem 1.1rem; border: 1px solid var(--line); background: var(--panel);
+  box-shadow: var(--shadow); }
+.layer .lh { display: flex; align-items: center; gap: .6rem; }
+.layer .lh .badge { font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; }
+.layer .lh .name { font-weight: 700; font-family: ui-monospace, monospace; }
+.layer .ld { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
+.layer.l-core { border-left: 4px solid var(--accent); } .layer.l-core .badge { background: var(--accent-soft); color: var(--accent-ink); }
+.layer.l-main { border-left: 4px solid var(--blue); } .layer.l-main .badge { background: var(--blue-soft); color: var(--blue); }
+.layer.l-part { border-left: 4px solid var(--purple); } .layer.l-part .badge { background: var(--purple-soft); color: var(--purple); }
+.layer.l-app { border-left: 4px solid var(--amber); } .layer.l-app .badge { background: var(--amber-soft); color: var(--amber); }
+
+/* two-column compare */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0; }
+@media (max-width: 640px) { .cols { grid-template-columns: 1fr; } }
+.col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; box-shadow: var(--shadow); min-width: 0; }
+.col h4 { margin: 0 0 .4rem; font-size: .95rem; }
+
+table.t { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .9rem;
+  background: var(--panel); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+table.t th, table.t td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--line); }
+table.t th { background: var(--panel-2); font-size: .8rem; letter-spacing: .02em; }
+table.t tr:last-child td { border-bottom: none; }
+table.t td.mono, table.t td .mono { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--accent-ink); }
+@media (max-width: 640px) {
+  /* Wide multi-column tables: scroll within their own box instead of
+     forcing page-level horizontal overflow (which clipped right columns). */
+  table.t { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.t th, table.t td { padding: .5rem .6rem; }
+}
+.selftest { margin: 2.2rem 0 0; border-top: 2px dashed var(--line); padding-top: 1.2rem; }
+.selftest > h2 { margin-top: .2rem; }
+.quiz { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+  border-radius: 12px; padding: .9rem 1.1rem; margin: 1rem 0; box-shadow: var(--shadow); }
+.quiz .qn { font-weight: 650; }
+.quiz ol.opts { list-style: upper-alpha; margin: .55rem 0 .6rem 1.5rem; padding: 0; }
+.quiz ol.opts li { margin: .3rem 0; padding-left: .15rem; }
+.quiz details.accordion { margin: .5rem 0 0; }
+.selftest code { font-family: ui-monospace, monospace; font-size: .9em; color: var(--accent-ink);
+  background: var(--accent-soft); padding: 0 .28em; border-radius: 4px; }
+
+/* footer nav */
+.footnav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem;
+  padding-top: 1.4rem; border-top: 1px solid var(--line); }
+.footnav a { flex: 1; padding: .85rem 1.1rem; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow); transition: .15s; }
+.footnav a:hover { border-color: var(--accent); transform: translateY(-1px); }
+.footnav a.next { text-align: right; }
+.footnav .dir { font-size: .72rem; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.footnav .ttl { font-weight: 700; color: var(--ink); margin-top: .15rem; }
+.footnav a.disabled { opacity: .35; pointer-events: none; }
+
+/* index page */
+.toc { display: grid; gap: .7rem; margin-top: 1.6rem; }
+.toc-part { font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--accent); margin: 1.4rem 0 .2rem; }
+.toc a { display: flex; align-items: center; gap: .9rem; padding: .85rem 1.05rem; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); transition: .15s; }
+.toc a:hover { border-color: var(--accent); transform: translateX(3px); }
+.toc .n { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+.toc .tt { font-weight: 650; color: var(--ink); }
+.toc .ts { font-size: .8rem; color: var(--muted); margin-left: auto; text-align: right; }
+.toc-search { position: relative; margin: 1.6rem 0 -.4rem; }
+.toc-search input { width: 100%; box-sizing: border-box; padding: .75rem 2.8rem .75rem 1rem;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font-size: .98rem; box-shadow: var(--shadow); }
+.toc-search input:focus { outline: none; border-color: var(--accent); }
+.toc-search .qcount { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  color: var(--faint); font-size: .8rem; pointer-events: none; }
+.toc a.hide, .toc .toc-part.hide { display: none; }
+.toc-empty { display: none; color: var(--muted); padding: 1rem; text-align: center; }
+.toc-empty.show { display: block; }
+.hero.index h1 { font-size: 2.3rem; }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:1rem; font-size:.8rem; color:var(--muted); }
+.legend span { display:flex; align-items:center; gap:.4rem; }
+.legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+.pdf-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1.1rem;
+  background:var(--accent); color:#fff; border-radius:10px; font-size:.9rem; font-weight:650;
+  box-shadow:var(--shadow); transition:.15s; }
+.pdf-btn:hover { background:var(--accent-ink); transform:translateY(-1px); }
+
+/* ---- bilingual language switch ----
+   Contract: <html> must carry data-lang="zh" (default) or "en".
+   page()/index_page() hard-code data-lang="zh"; LANG_BOOT may switch to "en". */
+html[data-lang="en"] .lang-zh { display: none !important; }
+html[data-lang="zh"] .lang-en { display: none !important; }
+.langtoggle { font-size:.72rem; font-weight:700; color:var(--accent-ink);
+  background:var(--accent-soft); border:1px solid var(--accent); border-radius:999px;
+  padding:.22rem .7rem; cursor:pointer; line-height:1.4; white-space:nowrap; }
+.langtoggle:hover { background:var(--accent); color:#fff; }
+
+/* ---- schematic: cell strips (token sequences / quant blocks / KV columns) ---- */
+.cellgroup { margin: 1.2rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.cellgroup .cg-cap { font-size: .82rem; color: var(--muted); margin-bottom: .55rem; }
+.cellgroup .cg-cap b { color: var(--ink); }
+.cells { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.cells + .cells { margin-top: .5rem; }
+.cell { min-width: 2.1rem; padding: .38rem .5rem; text-align: center; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: .78rem;
+  font-family: ui-monospace, monospace; white-space: nowrap; }
+.cell.scale { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); font-weight: 700; }
+.cell.hl    { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cell.q     { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.cell.dim   { opacity: .45; }
+.cells .lab { font-size: .76rem; color: var(--faint); padding: 0 .35rem; }
+.cells .sep { color: var(--faint); padding: 0 .1rem; }
+
+/* ---- schematic: timeline lanes (prefill vs decode, step-by-step) ---- */
+.timeline { margin: 1.2rem 0; display: flex; flex-direction: column; gap: .5rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.timeline .lane { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.timeline .lane-label { min-width: 6rem; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.timeline .tslot { padding: .4rem .6rem; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--line); font-size: .78rem; text-align: center; font-family: ui-monospace, monospace; }
+.timeline .tslot.span { flex: 1; min-width: 8rem; background: var(--blue-soft); border-color: var(--blue);
+  color: var(--blue); font-weight: 700; }
+.timeline .tslot.now { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+/* ---- worked-example trace: one concrete input, stepped through ---- */
+.trace { margin: 1.3rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow); }
+.trace .tcap { font-size: .82rem; color: var(--muted); margin-bottom: .7rem; }
+.trace .tcap b { color: var(--accent-ink); }
+.trace .stations { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.trace .stn { flex: 1 1 0; min-width: 116px; border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem; background: var(--bg); }
+.trace .stn h5 { margin: 0 0 .45rem; font-size: .8rem; color: var(--ink); }
+.trace .cellrow { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.trace .vc { min-width: 2.1rem; padding: .32rem .45rem; text-align: center; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); font: 600 .76rem ui-monospace, monospace; white-space: nowrap; }
+.trace .vc.hot  { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.trace .vc.blue { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.trace .vc.dim  { opacity: .42; }
+.trace .tlab { font-size: .68rem; color: var(--faint); margin-top: .35rem; }
+.trace .op { align-self: center; color: var(--accent); font: 700 .72rem ui-monospace, monospace;
+  padding: 0 .5rem; text-align: center; white-space: nowrap; }
+.trace svg { max-width: 100%; height: auto; display: block; margin: .3rem auto; }
+@media (max-width: 640px) { .trace .stations { flex-direction: column; } .trace .op { padding: .3rem 0; } }
+/* 🧩 collaboration-mechanism card */
+.card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
+.card.collab .tag { color: var(--blue); }
+.card.collab .collab-sub { font-weight:700; font-size:.82rem; margin:.85rem 0 .3rem; color:var(--ink); }
+/* 🎯 design-tradeoff card */
+.card.design { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.card.design .tag { color: var(--accent-ink); }
+/* A-G constraint back-reference badge */
+.badge.constraint { display:inline-block; font-size:.7rem; font-weight:700;
+  padding:.1rem .45rem; border-radius:999px; background:var(--purple-soft);
+  color:var(--purple); border:1px solid var(--purple); margin:0 .15rem; white-space:nowrap; }
+</style>
+</head><body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
+    <span class="pill"><span class="lang-zh">第七部分 · 横向专题与收束</span><span class="lang-en">Part 7 · Cross-Cutting &amp; Synthesis</span></span>
+    <span class="pill">24 / 24</span>
+    <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
+  </div>
+  <div class="progress"><span style="width:100%"></span></div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="part"><span class="lang-zh">第七部分 · 横向专题与收束</span><span class="lang-en">Part 7 · Cross-Cutting &amp; Synthesis</span></div>
+    <h1><span class="lang-zh">安全与威胁模型</span><span class="lang-en">Security &amp; threat model</span></h1>
+  </div>
+  <div class="lang-zh">
+<p class="lead">Hermes 有<strong>真实的权限</strong>:跑终端命令、开浏览器、读写文件、连你的消息平台。这意味着威胁也是真实的——恶意输入想<strong>注入</strong>指令、被污染的技能想<strong>中毒</strong>、一条 <span class="mono">rm -rf /</span> 想<strong>毁掉系统</strong>。本章是横向专题:Hermes 怎么用<strong>纵深防御</strong>把这些威胁层层挡住。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 银行金库的多层安保</div>
+  没有哪一道锁是绝对的,所以银行<strong>层层设防</strong>:门禁刷卡(命令审批)、保安认黑名单脸(危险模式检测)、柜员权限分级(子代理最小权限)、供应商背景审查(依赖锁定)。<strong>单层失守,还有下一层兜底。</strong>关键是:别指望"信任一个聪明的内部人"就够了——因为那个内部人(模型)可能被一句话<strong>骗</strong>(注入)。
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 纵深防御(Defense in Depth)</div>
+  agent 越能干,爆炸半径越大,所以安全是<strong>多层独立</strong>的:① 危险命令要<strong>审批</strong>(红线模式连 yolo 都不放行);② 子代理<strong>剥离</strong>高危工具(最小权限);③ 控制命令在网关就和数据流<strong>分离</strong>(防注入,第 18 章);④ 依赖全<strong>钉死版本</strong>(防供应链投毒)。不靠模型自己"判断安全"——模型会被骗。
+</div>
+
+<h2>第一层:危险命令审批</h2>
+<p>agent 要跑的每条命令,先过一个"危险模式"黑名单:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/approval.py</span><span class="ln">262-275 / 657-668 · 简化</span></div>
+  <pre>HARDLINE_PATTERNS = [                       <span class="cm"># 红线:连 yolo 也不放行</span>
+    (<span class="st">r"\brm\s+(-[^\s]*\s+)*(/|/home|/root|/etc|/usr)"</span>, <span class="st">"recursive delete of system directory"</span>),
+    (<span class="st">r"\bmkfs(\.[a-z0-9]+)?\b"</span>, <span class="st">"format filesystem (mkfs)"</span>),
+    (<span class="st">r"\bdd\b[^\n]*\bof=/dev/(sd|nvme|hd)"</span>, <span class="st">"dd to raw block device"</span>),
+    (<span class="st">r":\(\)\s*\{\s*:\s*\|\s*:\s*&amp;\s*\}\s*;\s*:"</span>, <span class="st">"fork bomb"</span>),
+]
+
+<span class="kw">def</span> <span class="fn">detect_dangerous_command</span>(command):
+    <span class="cm">&quot;&quot;&quot;Returns (is_dangerous, pattern_key, description).&quot;&quot;&quot;</span>
+    <span class="kw">for</span> pattern_re, description <span class="kw">in</span> DANGEROUS_PATTERNS_COMPILED:
+        <span class="kw">if</span> pattern_re.search(command_lower):
+            <span class="kw">return</span> (<span class="kw">True</span>, description, description)
+    <span class="kw">return</span> (<span class="kw">False</span>, <span class="kw">None</span>, <span class="kw">None</span>)</pre>
+</div>
+<p><span class="mono">approval.py</span> 是危险命令系统的<strong>单一真相源</strong>:12 条 <strong>HARDLINE</strong>(删根、格式化、写裸盘、fork 炸弹……)+ 47 条 <strong>DANGEROUS</strong>。命中就要用户<strong>审批</strong>。区别在:<span class="mono">/yolo</span> 模式能放行 DANGEROUS,但 <strong>HARDLINE 红线永远拦</strong>——给"省心"留了口子,却把"会毁系统"的死死焊住。还有一层<strong>智能审批</strong>:用辅助 LLM 自动放行低风险命令,减少打扰。</p>
+
+<h2>第二层:子代理最小权限</h2>
+<p>派给子代理干活时,先把一批高危工具从它手里<strong>拿掉</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">45-53 · 逐字</span></div>
+  <pre>DELEGATE_BLOCKED_TOOLS = frozenset([
+    <span class="st">"delegate_task"</span>,  <span class="cm"># no recursive delegation</span>
+    <span class="st">"clarify"</span>,        <span class="cm"># no user interaction</span>
+    <span class="st">"memory"</span>,         <span class="cm"># no writes to shared MEMORY.md</span>
+    <span class="st">"send_message"</span>,   <span class="cm"># no cross-platform side effects</span>
+    <span class="st">"execute_code"</span>,   <span class="cm"># children should reason step-by-step, not write scripts</span>
+])</pre>
+</div>
+<p>每个被剥离的工具都有<strong>明确理由</strong>:不让子代理<strong>递归派生</strong>(防爆炸)、不让它<strong>打扰用户</strong>、不让它<strong>写共享记忆</strong>(防污染)、不让它<strong>跨平台发消息</strong>(防外部副作用)。这就是<strong>最小权限</strong>:子代理只拿完成任务<strong>够用</strong>的工具,把爆炸半径关进边缘(第 13 章委派隔离的安全面)。</p>
+
+<h2>第三层:供应链锁定</h2>
+<p>最隐蔽的攻击来自依赖。Hermes 把每个依赖<strong>钉死版本</strong>:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">pyproject.toml</span><span class="ln">45-52 · 节选</span></div>
+  <pre><span class="cm"># exact pins 收窄下一次供应链攻击的爆炸半径</span>
+dependencies = [
+    <span class="st">"openai==2.24.0"</span>,
+    <span class="st">"httpx[socks]==0.28.1"</span>,
+    <span class="st">"certifi==2026.5.20"</span>,
+    <span class="st">"pyyaml==6.0.3"</span>,
+    <span class="cm"># 策略:PyPI &gt;=floor,&lt;next_major;Git URL 用 commit SHA;Actions 用 SHA</span>
+]</pre>
+</div>
+<p>这条纪律是 <span class="mono">litellm</span> 被投毒(供应链攻击)后立的:每个 PyPI 包都有<strong>上界</strong>(<span class="mono">&gt;=floor,&lt;next_major</span>),Git 依赖钉 <strong>commit SHA</strong>,连 GitHub Actions 都钉 SHA;而核心运行时包(如上面的 openai/httpx)在 Mini Shai-Hulud worm 击中 mistralai 后,更被<strong>额外收紧为 exact</strong>(<span class="mono">==</span>)。一个被攻陷的上游包,没法靠"自动升级到恶意新版本"溜进来。<strong>不信任任何会自动变的东西</strong>——这和"不信任模型会自己判断安全"是同一种偏执。</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">agent 要跑命令 → <span class="mono">detect_dangerous_command</span> 匹配 HARDLINE/DANGEROUS</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">命中 → 要用户审批;HARDLINE 连 <span class="mono">/yolo</span> 都拦,DANGEROUS 可被 yolo 放行</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">派子代理 → 先剥离 <span class="mono">DELEGATE_BLOCKED_TOOLS</span>(最小权限)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">控制命令(<span class="mono">/stop</span>/<span class="mono">/approve</span>)在网关就和数据流分离(防注入,第 18 章)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">依赖全钉死版本(<span class="mono">==</span>/SHA),防供应链投毒</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 协作机制 · 各层安全如何咬合成「纵深防御」</div>
+  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
+  本章核心:<strong>detect_dangerous_command</strong>(危险命令审批)、<strong>DELEGATE_BLOCKED_TOOLS</strong>(子代理最小权限)、<strong>依赖 pin</strong>(供应链锁定)。跨章节配合:<strong>注入隔离</strong>靠网关两道守卫把控制命令从数据流拎出(第 18 章,D·指令=数据);子代理在<strong>独立 context + terminal</strong> 里跑(第 13 章),最小权限叠加隔离;<strong>profile 隔离</strong>防跨实例数据污染(第 20 章);<strong>Curator</strong> 只动 <span class="mono">created_by:agent</span> 的技能、绝不碰用户/官方技能(第 10 章,防技能中毒);审批 <span class="mono">/approve</span> 经网关旁路送达(第 18 章)。
+  <div class="collab-sub">② 数据流时序</div>
+  命令 → <span class="mono">detect_dangerous_command</span> → 危险则审批(HARDLINE 锁死);派子代理 → 剥离 <span class="mono">DELEGATE_BLOCKED_TOOLS</span> + 独立 context(第 13 章);消息进来 → 网关守卫把控制命令从数据分离(第 18 章);依赖 → 全程 pin 死。
+  <div class="collab-sub">③ 关键点</div>
+  <strong>纵深防御</strong>:每层独立,单层失守有下一层。核心威胁是<strong>注入</strong>——模型分不清"这是恶意数据还是给我的指令",所以安全<strong>绝不靠模型自己判断</strong>:危险命令用<strong>正则黑名单</strong>拦、控制命令在<strong>网关</strong>分离、权限用<strong>代码</strong>剥离、依赖用<strong>版本</strong>钉死。
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
+  主线:<strong>纵深防御——agent 有真实权限,每层独立安全,绝不靠模型自己判断</strong>。它主要治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">D·指令=数据</span>——对模型而言,system prompt、用户消息、工具返回、网页内容<strong>都是 token,没有可信边界</strong>。一段恶意网页/文件可以伪装成"系统指令"<strong>注入</strong>。对策是<strong>不让模型当裁判</strong>:控制命令在网关用 <span class="mono">get_command()</span> 显式解析、走旁路通道(第 18 章);危险命令用<strong>正则黑名单</strong>而非"问模型这条命令危不危险"。把信任边界<strong>挪到代码层</strong>。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——安全是<strong>运维责任</strong>,不是一次性功能:审批系统、最小权限、供应链 pin、profile 隔离都是<strong>持续维护的基础设施</strong>。供应链投毒推动全仓依赖 pin(<span class="mono">litellm</span> 立上界政策、Mini Shai-Hulud worm 后核心包收紧为 <span class="mono">==</span>),HARDLINE 红线则借鉴 Mercury Agent 的硬化黑名单——安全纪律随真实威胁迭代。</p>
+  <p style="margin:.5rem 0 0">反模式:<strong>信任模型自己判断安全</strong>("这条命令看起来没问题就跑")——模型会被注入、会幻觉、会被诱导。Hermes 把安全决策<strong>钉在确定性的代码</strong>(正则、frozenset、版本号)上,而非概率性的模型判断上。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>纵深防御</strong>:多层独立安全(审批 + 最小权限 + 注入隔离 + 供应链锁定),单层失守有下一层。</li>
+    <li><strong>危险命令审批</strong>:<span class="mono">detect_dangerous_command</span> 用正则黑名单(12 HARDLINE + 47 DANGEROUS);HARDLINE 红线连 <span class="mono">/yolo</span> 都拦。</li>
+    <li><strong>子代理最小权限</strong>:<span class="mono">DELEGATE_BLOCKED_TOOLS</span> 剥离递归派生/打扰/写记忆/跨平台/写脚本,把爆炸半径关进边缘(第 13 章)。</li>
+    <li><strong>注入隔离(★)</strong>:控制命令在网关用 <span class="mono">get_command()</span> 显式解析、走旁路(第 18 章),不让模型当裁判(D·指令=数据)。</li>
+    <li><strong>供应链锁定</strong>:依赖全 pin(<span class="mono">==</span>/上界/commit SHA),不信任任何会自动变的东西(<span class="mono">litellm</span> 教训)。</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. agent 要跑 rm -rf / 这种命令时,安全决策靠什么?</div>
+  <ol class="opts">
+    <li>不检查,直接跑</li>
+    <li>确定性的正则黑名单 detect_dangerous_command;HARDLINE 红线(删根/格式化/fork 炸弹)连 /yolo 都无条件拦,绝不靠模型判断</li>
+    <li>问模型「这条命令危不危险」</li>
+    <li>每条命令都弹窗让用户确认</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。安全决策钉在确定性代码上:detect_dangerous_command 用正则黑名单(12 HARDLINE + 47 DANGEROUS),不问模型——模型会被注入/幻觉骗。区别在:/yolo 能放行 DANGEROUS,但 HARDLINE 红线(rm 删根、mkfs、dd 写裸盘、fork 炸弹)在 yolo 检查之前就无条件拦截。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. 派给子代理干活时,为什么先从它手里拿掉 delegate_task/memory/send_message 等工具?</div>
+  <ol class="opts">
+    <li>随机决定</li>
+    <li>这些工具跑得慢</li>
+    <li>最小权限:不让子代理递归派生(防爆炸)、写共享记忆(防污染)、跨平台发消息(防外部副作用),把爆炸半径关进边缘</li>
+    <li>子代理不会用这些工具</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：C</strong>。DELEGATE_BLOCKED_TOOLS 是最小权限的落地:每个被剥离的工具都有明确理由(no recursive delegation/no writes to shared MEMORY.md/no cross-platform side effects…)。子代理只拿完成任务够用的工具,叠加第 13 章的独立 context 隔离,把爆炸半径关进边缘。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>Hermes 的安全哲学是「绝不让概率性的模型当裁判,信任边界一律钉在确定性的代码上」。请从危险命令审批、注入隔离(第 18 章)、供应链锁定三个角度,说明这句话各自怎么落地、为什么模型判断不可信。</li>
+  </ul>
+</div>
+</div></div>
+  <div class="lang-en">
+<p class="lead">Hermes has <strong>real privileges</strong>: it runs terminal commands, opens browsers, reads/writes files, connects to your messaging platforms. That means the threats are real too — malicious input wants to <strong>inject</strong> instructions, a poisoned skill wants to <strong>contaminate</strong>, a single <span class="mono">rm -rf /</span> wants to <strong>destroy the system</strong>. This chapter is a cross-cutting deep-dive: how Hermes uses <strong>defense in depth</strong> to block these threats layer by layer.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · a bank vault's layered security</div>
+  No single lock is absolute, so a bank <strong>layers its defenses</strong>: keycard access (command approval), guards who recognize blacklisted faces (dangerous-pattern detection), tellers with tiered permissions (subagent least-privilege), vendor background checks (dependency pinning). <strong>One layer falls, the next catches it.</strong> The key: don't count on "trusting one smart insider" — because that insider (the model) can be <strong>fooled</strong> by a single sentence (injection).
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · Defense in Depth</div>
+  The more capable the agent, the bigger the blast radius, so security is <strong>multiple independent layers</strong>: ① dangerous commands need <strong>approval</strong> (hardline patterns aren't even cleared by yolo); ② subagents are <strong>stripped</strong> of high-risk tools (least privilege); ③ control commands are <strong>separated</strong> from the data stream at the gateway (anti-injection, ch.18); ④ dependencies are all <strong>version-pinned</strong> (anti-supply-chain). Never rely on the model to "judge safety" itself — it can be fooled.
+</div>
+
+<h2>Layer one: dangerous-command approval</h2>
+<p>Every command the agent wants to run first passes a "dangerous pattern" blacklist:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/approval.py</span><span class="ln">262-275 / 657-668 · simplified</span></div>
+  <pre>HARDLINE_PATTERNS = [                       <span class="cm"># red lines: not even yolo clears these</span>
+    (<span class="st">r"\brm\s+(-[^\s]*\s+)*(/|/home|/root|/etc|/usr)"</span>, <span class="st">"recursive delete of system directory"</span>),
+    (<span class="st">r"\bmkfs(\.[a-z0-9]+)?\b"</span>, <span class="st">"format filesystem (mkfs)"</span>),
+    (<span class="st">r"\bdd\b[^\n]*\bof=/dev/(sd|nvme|hd)"</span>, <span class="st">"dd to raw block device"</span>),
+    (<span class="st">r":\(\)\s*\{\s*:\s*\|\s*:\s*&amp;\s*\}\s*;\s*:"</span>, <span class="st">"fork bomb"</span>),
+]
+
+<span class="kw">def</span> <span class="fn">detect_dangerous_command</span>(command):
+    <span class="cm">&quot;&quot;&quot;Returns (is_dangerous, pattern_key, description).&quot;&quot;&quot;</span>
+    <span class="kw">for</span> pattern_re, description <span class="kw">in</span> DANGEROUS_PATTERNS_COMPILED:
+        <span class="kw">if</span> pattern_re.search(command_lower):
+            <span class="kw">return</span> (<span class="kw">True</span>, description, description)
+    <span class="kw">return</span> (<span class="kw">False</span>, <span class="kw">None</span>, <span class="kw">None</span>)</pre>
+</div>
+<p><span class="mono">approval.py</span> is the <strong>single source of truth</strong> for the dangerous-command system: 12 <strong>HARDLINE</strong> patterns (delete root, format, raw-disk write, fork bomb…) + 47 <strong>DANGEROUS</strong>. A match requires user <strong>approval</strong>. The distinction: <span class="mono">/yolo</span> mode can clear DANGEROUS, but <strong>HARDLINE red lines always block</strong> — leaving a "convenience" door open while welding shut the "will destroy the system" ones. There's also a <strong>smart-approval</strong> layer: an auxiliary LLM auto-clears low-risk commands to cut the nagging.</p>
+
+<h2>Layer two: subagent least-privilege</h2>
+<p>When delegating to a subagent, a batch of high-risk tools is <strong>taken away</strong> first:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">45-53 · verbatim</span></div>
+  <pre>DELEGATE_BLOCKED_TOOLS = frozenset([
+    <span class="st">"delegate_task"</span>,  <span class="cm"># no recursive delegation</span>
+    <span class="st">"clarify"</span>,        <span class="cm"># no user interaction</span>
+    <span class="st">"memory"</span>,         <span class="cm"># no writes to shared MEMORY.md</span>
+    <span class="st">"send_message"</span>,   <span class="cm"># no cross-platform side effects</span>
+    <span class="st">"execute_code"</span>,   <span class="cm"># children should reason step-by-step, not write scripts</span>
+])</pre>
+</div>
+<p>Each stripped tool has an <strong>explicit reason</strong>: no <strong>recursive spawning</strong> (prevents explosion), no <strong>bothering the user</strong>, no <strong>writing shared memory</strong> (prevents pollution), no <strong>cross-platform messaging</strong> (prevents external side effects). This is <strong>least privilege</strong>: a subagent gets only the tools <strong>sufficient</strong> for its task, caging the blast radius at the edge (the security face of ch.13's delegation isolation).</p>
+
+<h2>Layer three: supply-chain pinning</h2>
+<p>The stealthiest attack comes through dependencies. Hermes <strong>version-pins</strong> every one:</p>
+
+<div class="codefile">
+  <div class="cf-head"><span class="dot"></span><span class="path">pyproject.toml</span><span class="ln">45-52 · excerpt</span></div>
+  <pre><span class="cm"># exact pins shrink the blast radius for the next supply-chain attack</span>
+dependencies = [
+    <span class="st">"openai==2.24.0"</span>,
+    <span class="st">"httpx[socks]==0.28.1"</span>,
+    <span class="st">"certifi==2026.5.20"</span>,
+    <span class="st">"pyyaml==6.0.3"</span>,
+    <span class="cm"># policy: PyPI &gt;=floor,&lt;next_major; Git URL commit SHA; Actions SHA</span>
+]</pre>
+</div>
+<p>This discipline was set after <span class="mono">litellm</span> was poisoned (a supply-chain attack): every PyPI package has an <strong>upper bound</strong> (<span class="mono">&gt;=floor,&lt;next_major</span>), Git deps pin a <strong>commit SHA</strong>, even GitHub Actions pin a SHA; and core runtime packages (like the openai/httpx above) were <strong>further tightened to exact</strong> (<span class="mono">==</span>) after the Mini Shai-Hulud worm hit mistralai. A compromised upstream package can't sneak in by "auto-upgrading to a malicious new version." <strong>Trust nothing that changes automatically</strong> — the same paranoia as "don't trust the model to judge safety itself."</p>
+
+<div class="vflow">
+  <div class="step"><span class="num">1</span><span class="sc">agent wants to run a command → <span class="mono">detect_dangerous_command</span> matches HARDLINE/DANGEROUS</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">match → user approval required; HARDLINE blocks even <span class="mono">/yolo</span>, DANGEROUS can be cleared by yolo</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">delegating → strip <span class="mono">DELEGATE_BLOCKED_TOOLS</span> first (least privilege)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">control commands (<span class="mono">/stop</span>/<span class="mono">/approve</span>) separated from the data stream at the gateway (anti-injection, ch.18)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">all dependencies version-pinned (<span class="mono">==</span>/SHA), anti-supply-chain</span></div>
+</div>
+
+<div class="card collab">
+  <div class="tag">🧩 Collaboration · how the security layers mesh into "defense in depth"</div>
+  <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
+  Core: <strong>detect_dangerous_command</strong> (dangerous-command approval), <strong>DELEGATE_BLOCKED_TOOLS</strong> (subagent least-privilege), <strong>dependency pinning</strong> (supply-chain lock). Cross-chapter teamwork: <strong>injection isolation</strong> rests on the gateway's two guards pulling control commands out of the data stream (ch.18, D·instr=data); subagents run in an <strong>isolated context + terminal</strong> (ch.13), least-privilege on top of isolation; <strong>profile isolation</strong> prevents cross-instance data contamination (ch.20); the <strong>Curator</strong> only touches <span class="mono">created_by:agent</span> skills, never user/official ones (ch.10, anti skill-poisoning); <span class="mono">/approve</span> reaches the runner via the gateway bypass (ch.18).
+  <div class="collab-sub">② Data-flow timing</div>
+  command → <span class="mono">detect_dangerous_command</span> → approve if dangerous (HARDLINE locked); delegate → strip <span class="mono">DELEGATE_BLOCKED_TOOLS</span> + isolated context (ch.13); message arrives → gateway guards split control commands from data (ch.18); dependencies → pinned throughout.
+  <div class="collab-sub">③ The key point</div>
+  <strong>Defense in depth</strong>: each layer independent, one falls the next catches. The core threat is <strong>injection</strong> — the model can't tell "is this malicious data or an instruction to me," so security <strong>never relies on the model's own judgment</strong>: dangerous commands blocked by a <strong>regex blacklist</strong>, control commands split at the <strong>gateway</strong>, privileges stripped in <strong>code</strong>, dependencies nailed by <strong>version</strong>.
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · what this chapter is about</div>
+  The throughline: <strong>defense in depth — the agent has real privileges, each layer independently secure, never relying on the model's own judgment</strong>. It mainly treats two inherent LLM constraints:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">D·instr=data</span> — to the model, the system prompt, user messages, tool returns, and web content are <strong>all tokens with no trusted boundary</strong>. A malicious web page/file can masquerade as a "system instruction" and <strong>inject</strong>. The countermeasure: <strong>don't let the model be the judge</strong>: control commands are explicitly parsed at the gateway via <span class="mono">get_command()</span> and routed on a bypass channel (ch.18); dangerous commands use a <strong>regex blacklist</strong>, not "ask the model whether this command is dangerous." Move the trust boundary <strong>into the code layer</strong>.</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·ops</span> — security is an <strong>operational responsibility</strong>, not a one-off feature: the approval system, least privilege, supply-chain pins, and profile isolation are all <strong>continuously maintained infrastructure</strong>. Supply-chain poisonings drove repo-wide dependency pinning (<span class="mono">litellm</span> set the upper-bound policy; the Mini Shai-Hulud worm later tightened core packages to <span class="mono">==</span>), while the HARDLINE red lines borrow from Mercury Agent's hardened blocklist — the security discipline iterates with real threats.</p>
+  <p style="margin:.5rem 0 0">The anti-pattern: <strong>trusting the model to judge safety</strong> ("this command looks fine, run it") — the model gets injected, hallucinates, gets lured. Hermes nails security decisions to <strong>deterministic code</strong> (regexes, frozensets, version numbers), not the model's probabilistic judgment.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Defense in depth</strong>: multiple independent layers (approval + least privilege + injection isolation + supply-chain lock); one falls, the next catches.</li>
+    <li><strong>Dangerous-command approval</strong>: <span class="mono">detect_dangerous_command</span> uses a regex blacklist (12 HARDLINE + 47 DANGEROUS); HARDLINE red lines block even <span class="mono">/yolo</span>.</li>
+    <li><strong>Subagent least-privilege</strong>: <span class="mono">DELEGATE_BLOCKED_TOOLS</span> strips recursive-spawn/interaction/memory-write/cross-platform/script-write, caging the blast radius at the edge (ch.13).</li>
+    <li><strong>Injection isolation (★)</strong>: control commands explicitly parsed at the gateway via <span class="mono">get_command()</span> on a bypass (ch.18), never letting the model judge (D·instr=data).</li>
+    <li><strong>Supply-chain lock</strong>: all deps pinned (<span class="mono">==</span>/upper bound/commit SHA), trusting nothing that auto-changes (the <span class="mono">litellm</span> lesson).</li>
+  </ul>
+</div>
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. When the agent wants to run something like rm -rf /, what makes the safety decision?</div>
+  <ol class="opts">
+    <li>Don't check, just run</li>
+    <li>A deterministic regex blacklist (detect_dangerous_command); HARDLINE red lines (delete-root/format/fork-bomb) block even /yolo unconditionally, never relying on the model's judgment</li>
+    <li>Ask the model 'is this command dangerous'</li>
+    <li>Pop up a confirm for every command</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. Safety decisions are nailed to deterministic code: detect_dangerous_command uses a regex blacklist (12 HARDLINE + 47 DANGEROUS), not the model — the model gets injected/hallucinates. The distinction: /yolo can clear DANGEROUS, but HARDLINE red lines (rm delete-root, mkfs, dd raw-disk, fork bomb) block unconditionally, before the yolo check.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. When delegating to a subagent, why strip tools like delegate_task/memory/send_message first?</div>
+  <ol class="opts">
+    <li>Random</li>
+    <li>Those tools are slow</li>
+    <li>Least privilege: no recursive spawning (prevents explosion), no writing shared memory (prevents pollution), no cross-platform messaging (prevents external side effects), caging the blast radius at the edge</li>
+    <li>Subagents can't use those tools</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. DELEGATE_BLOCKED_TOOLS implements least privilege: each stripped tool has an explicit reason (no recursive delegation/no writes to shared MEMORY.md/no cross-platform side effects…). A subagent gets only the tools sufficient for its task, plus ch.13's isolated context, caging the blast radius at the edge.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Hermes's security philosophy is 'never let the probabilistic model be the judge; nail the trust boundary to deterministic code.' From three angles — dangerous-command approval, injection isolation (ch.18), and supply-chain pinning — explain how each realizes this and why the model's judgment can't be trusted.</li>
+  </ul>
+</div>
+</div></div>
+  <div class="footnav"><a class="prev" href="23-plugins-skills-mcp.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">插件、技能与 MCP</span><span class="lang-en">Plugins, skills &amp; MCP</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
+</div>
+<script>
+function havgSetLang(l){
+  l=(l==='en')?'en':'zh';
+  var d=document.documentElement;
+  d.dataset.lang=l; d.lang=(l==='en'?'en':'zh-CN');
+  try{localStorage.setItem('havg-lang',l);}catch(e){}
+}
+function havgToggleLang(){
+  havgSetLang(document.documentElement.dataset.lang==='en'?'zh':'en');
+}
+</script>
+</body></html>

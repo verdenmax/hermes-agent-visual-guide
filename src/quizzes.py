@@ -823,6 +823,40 @@ QUIZZES = {
              "en": "Why is a skill's content injected as a user message rather than stuffed into the system prompt? How does this relate to 'caching is sacred'? Why does it show that 'even edge extension answers to the cache line'?"},
         ],
     },
+    "24-security.html": {
+        "mcq": [
+            {
+                "q": {"zh": "agent 要跑 rm -rf / 这种命令时,安全决策靠什么?",
+                      "en": "When the agent wants to run something like rm -rf /, what makes the safety decision?"},
+                "opts": [
+                    {"zh": "问模型「这条命令危不危险」", "en": "Ask the model 'is this command dangerous'"},
+                    {"zh": "确定性的正则黑名单 detect_dangerous_command;HARDLINE 红线(删根/格式化/fork 炸弹)连 /yolo 都无条件拦,绝不靠模型判断", "en": "A deterministic regex blacklist (detect_dangerous_command); HARDLINE red lines (delete-root/format/fork-bomb) block even /yolo unconditionally, never relying on the model's judgment"},
+                    {"zh": "每条命令都弹窗让用户确认", "en": "Pop up a confirm for every command"},
+                    {"zh": "不检查,直接跑", "en": "Don't check, just run"},
+                ],
+                "answer": 1,
+                "why": {"zh": "安全决策钉在确定性代码上:detect_dangerous_command 用正则黑名单(12 HARDLINE + 47 DANGEROUS),不问模型——模型会被注入/幻觉骗。区别在:/yolo 能放行 DANGEROUS,但 HARDLINE 红线(rm 删根、mkfs、dd 写裸盘、fork 炸弹)在 yolo 检查之前就无条件拦截。",
+                        "en": "Safety decisions are nailed to deterministic code: detect_dangerous_command uses a regex blacklist (12 HARDLINE + 47 DANGEROUS), not the model — the model gets injected/hallucinates. The distinction: /yolo can clear DANGEROUS, but HARDLINE red lines (rm delete-root, mkfs, dd raw-disk, fork bomb) block unconditionally, before the yolo check."},
+            },
+            {
+                "q": {"zh": "派给子代理干活时,为什么先从它手里拿掉 delegate_task/memory/send_message 等工具?",
+                      "en": "When delegating to a subagent, why strip tools like delegate_task/memory/send_message first?"},
+                "opts": [
+                    {"zh": "这些工具跑得慢", "en": "Those tools are slow"},
+                    {"zh": "最小权限:不让子代理递归派生(防爆炸)、写共享记忆(防污染)、跨平台发消息(防外部副作用),把爆炸半径关进边缘", "en": "Least privilege: no recursive spawning (prevents explosion), no writing shared memory (prevents pollution), no cross-platform messaging (prevents external side effects), caging the blast radius at the edge"},
+                    {"zh": "子代理不会用这些工具", "en": "Subagents can't use those tools"},
+                    {"zh": "随机决定", "en": "Random"},
+                ],
+                "answer": 1,
+                "why": {"zh": "DELEGATE_BLOCKED_TOOLS 是最小权限的落地:每个被剥离的工具都有明确理由(no recursive delegation/no writes to shared MEMORY.md/no cross-platform side effects…)。子代理只拿完成任务够用的工具,叠加第 13 章的独立 context 隔离,把爆炸半径关进边缘。",
+                        "en": "DELEGATE_BLOCKED_TOOLS implements least privilege: each stripped tool has an explicit reason (no recursive delegation/no writes to shared MEMORY.md/no cross-platform side effects…). A subagent gets only the tools sufficient for its task, plus ch.13's isolated context, caging the blast radius at the edge."},
+            },
+        ],
+        "open": [
+            {"zh": "Hermes 的安全哲学是「绝不让概率性的模型当裁判,信任边界一律钉在确定性的代码上」。请从危险命令审批、注入隔离(第 18 章)、供应链锁定三个角度,说明这句话各自怎么落地、为什么模型判断不可信。",
+             "en": "Hermes's security philosophy is 'never let the probabilistic model be the judge; nail the trust boundary to deterministic code.' From three angles — dangerous-command approval, injection isolation (ch.18), and supply-chain pinning — explain how each realizes this and why the model's judgment can't be trusted."},
+        ],
+    },
 }
 
 

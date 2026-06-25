@@ -92,6 +92,8 @@ PAGES = [
      "第六部分 · 自动化与研究", "Part 6 · Automation & Research"),
     ("23-plugins-skills-mcp.html", "插件、技能与 MCP", "Plugins, skills & MCP",
      "第六部分 · 自动化与研究", "Part 6 · Automation & Research"),
+    ("24-security.html", "安全与威胁模型", "Security & threat model",
+     "第七部分 · 横向专题与收束", "Part 7 · Cross-Cutting & Synthesis"),
 ]
 
 
