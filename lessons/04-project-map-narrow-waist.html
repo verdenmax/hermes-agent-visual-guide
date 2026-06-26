@@ -328,6 +328,21 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 .figure .svg-blues { fill: var(--blue-soft); }
 .figure .svg-panel { fill: var(--panel); }
 .figure .svg-panel2 { fill: var(--panel-2); }
+/* ⚠️ pitfall card (symptom → root cause → fix → chapter) */
+.pit { margin: 1rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--red); border-radius: var(--radius); padding: .8rem 1rem; box-shadow: var(--shadow); }
+.pit-h { display: flex; align-items: center; gap: .55rem; margin-bottom: .5rem; }
+.pit-id { font: 700 .72rem ui-monospace, monospace; color: #fff; background: var(--red);
+  padding: .12rem .45rem; border-radius: 6px; }
+.pit-title { font-weight: 700; font-size: .98rem; color: var(--ink); }
+.pit-row { display: flex; gap: .5rem; font-size: .9rem; margin: .25rem 0; line-height: 1.55; }
+.pit-k { flex: 0 0 3.2rem; font-weight: 700; font-size: .78rem; padding-top: .08rem; }
+.pit-k.sym { color: var(--red); }
+.pit-k.root { color: var(--amber); }
+.pit-k.fix { color: var(--blue); }
+.pit-k.ch { color: var(--accent-ink); }
+.pit-v { flex: 1; color: var(--muted); }
+.pit-v strong { color: var(--ink); }
 /* 🧩 collaboration-mechanism card */
 .card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
 .card.collab .tag { color: var(--blue); }
@@ -345,10 +360,10 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <div class="topbar-inner">
     <a class="home" href="../index.html">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></a>
     <span class="pill"><span class="lang-zh">第一部分 · 宏观全景</span><span class="lang-en">Part 1 · The Big Picture</span></span>
-    <span class="pill">04 / 25</span>
+    <span class="pill">04 / 26</span>
     <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
   </div>
-  <div class="progress"><span style="width:16%"></span></div>
+  <div class="progress"><span style="width:15%"></span></div>
 </div>
 <div class="wrap">
   <div class="hero">

@@ -891,6 +891,10 @@ QUIZZES = {
              "en": "Summarize Hermes's design DNA in one sentence, and explain which inherent LLM flaw (A–G) each of 'externalize state / sacred context / narrow waist, thick edges' fights. Why is 'security the cross-cut — never let the probabilistic model be the judge'?"},
         ],
     },
+    "26-pitfalls-building-an-agent.html": {
+        "mcq": [],
+        "open": [],
+    },
 }
 
 

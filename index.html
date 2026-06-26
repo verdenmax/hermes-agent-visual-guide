@@ -328,6 +328,21 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 .figure .svg-blues { fill: var(--blue-soft); }
 .figure .svg-panel { fill: var(--panel); }
 .figure .svg-panel2 { fill: var(--panel-2); }
+/* ⚠️ pitfall card (symptom → root cause → fix → chapter) */
+.pit { margin: 1rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--red); border-radius: var(--radius); padding: .8rem 1rem; box-shadow: var(--shadow); }
+.pit-h { display: flex; align-items: center; gap: .55rem; margin-bottom: .5rem; }
+.pit-id { font: 700 .72rem ui-monospace, monospace; color: #fff; background: var(--red);
+  padding: .12rem .45rem; border-radius: 6px; }
+.pit-title { font-weight: 700; font-size: .98rem; color: var(--ink); }
+.pit-row { display: flex; gap: .5rem; font-size: .9rem; margin: .25rem 0; line-height: 1.55; }
+.pit-k { flex: 0 0 3.2rem; font-weight: 700; font-size: .78rem; padding-top: .08rem; }
+.pit-k.sym { color: var(--red); }
+.pit-k.root { color: var(--amber); }
+.pit-k.fix { color: var(--blue); }
+.pit-k.ch { color: var(--accent-ink); }
+.pit-v { flex: 1; color: var(--muted); }
+.pit-v strong { color: var(--ink); }
 /* 🧩 collaboration-mechanism card */
 .card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
 .card.collab .tag { color: var(--blue); }
@@ -344,7 +359,7 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 <div class="topbar">
   <div class="topbar-inner">
     <span class="home">☤ <b class="lang-zh">Hermes 设计图解</b><b class="lang-en">Hermes Agent Design Guide</b></span>
-    <span class="pill"><span class="lang-zh">共 25 课 · 7 个部分</span><span class="lang-en">25 lessons · 7 parts</span></span>
+    <span class="pill"><span class="lang-zh">共 26 课 · 7 个部分</span><span class="lang-en">26 lessons · 7 parts</span></span>
     <button class="langtoggle" onclick="havgToggleLang()" aria-label="switch language"><span class="lang-zh">EN</span><span class="lang-en">中</span></button>
   </div>
   <div class="progress"><span style="width:100%"></span></div>
@@ -397,7 +412,8 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 <a href="lessons/23-plugins-skills-mcp.html"><span class="n">23</span><span class="tt"><span class="lang-zh">插件、技能与 MCP</span><span class="lang-en">Plugins, skills &amp; MCP</span></span><span class="ts"><span class="lang-zh"></span><span class="lang-en"></span></span></a>
 <div class="toc-part"><span class="lang-zh">第七部分 · 横向专题与收束</span><span class="lang-en">Part 7 · Cross-Cutting &amp; Synthesis</span></div>
 <a href="lessons/24-security.html"><span class="n">24</span><span class="tt"><span class="lang-zh">安全与威胁模型</span><span class="lang-en">Security &amp; threat model</span></span><span class="ts"><span class="lang-zh"></span><span class="lang-en"></span></span></a>
-<a href="lessons/25-design-principles.html"><span class="n">25</span><span class="tt"><span class="lang-zh">设计原则横向收束</span><span class="lang-en">Design principles synthesis</span></span><span class="ts"><span class="lang-zh"></span><span class="lang-en"></span></span></a></div>
+<a href="lessons/25-design-principles.html"><span class="n">25</span><span class="tt"><span class="lang-zh">设计原则横向收束</span><span class="lang-en">Design principles synthesis</span></span><span class="ts"><span class="lang-zh"></span><span class="lang-en"></span></span></a>
+<a href="lessons/26-pitfalls-building-an-agent.html"><span class="n">26</span><span class="tt"><span class="lang-zh">自己做 agent 的避坑指南</span><span class="lang-en">Pitfalls of building an agent</span></span><span class="ts"><span class="lang-zh"></span><span class="lang-en"></span></span></a></div>
   <div class="toc-empty" id="tocempty"><span class="lang-zh">没有匹配的课程，换个关键词试试。</span><span class="lang-en">No matching lessons, try another keyword.</span></div>
 </div>
 <script>
