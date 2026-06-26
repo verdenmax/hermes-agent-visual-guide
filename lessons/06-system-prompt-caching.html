@@ -358,6 +358,8 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 
 <p>这条纪律为什么值得<strong>全书</strong>为它让路？因为它直接决定了<strong>成本量级</strong>。个人 agent 的对话往往是<strong>长会话</strong>——几十上百轮，那堵长长的前缀被反复重发。缓存命中时，长对话的边际成本几乎只剩“新增的那几句”；缓存一破，每轮都得从头按全价再算一遍。第 1 章那条“prompt 缓存神圣不可侵犯”的铁律，到这一章终于落到了<strong>具体的代码与数字</strong>上。</p>
 
+<p>为什么守这条纪律如此<strong>反直觉</strong>？因为每一轮都飘着“把上下文刷新一下”的诱惑——补个最新时间戳、把刚写的记忆读回来、按当前任务换一套工具。Hermes 偏偏<strong>反着来</strong>：<span class="mono">volatile</span> 里的记忆快照是<strong>会话开始那一刻</strong>取的，整轮对话都端着这份“略旧”的上下文不动，宁可牺牲一点新鲜度，也要把前缀<strong>冻死</strong>。这正是<strong>缓存与时效之间</strong>的取舍——长会话里省下的成本，远比“记忆晚几轮才更新”值钱；真要刷新，自有压缩那一下统一兜底（第 15 章），把本会话写下的东西一次性折进前缀。</p>
+
 <h2>三层结构：越稳定越靠前</h2>
 <p>组装入口是 <span class="mono">build_system_prompt_parts()</span>（<span class="mono">system_prompt.py:113</span>），它返回一个 <span class="mono">{stable, context, volatile}</span> 三键字典。三层的顺序绝非随意——<strong>越稳定的越靠前，越易变的越靠后</strong>：</p>
 
@@ -391,6 +393,8 @@ html[data-lang="zh"] .lang-en { display: none !important; }
                provider block, timestamp/session/model/provider line.</pre>
 </div>
 <p>盯住那句 <span class="inline">built once per session … only context compression triggers a rebuild</span>——“每会话只建一次，唯一触发重建的是上下文压缩”。这是本章、也是全书最重要的一条不变量。<span class="mono">build_system_prompt_parts()</span> 自己的 docstring 把后果说得更直白：<span class="inline">Hermes never re-renders parts of this string mid-session — that's the only way to keep upstream prompt caches warm across turns</span>。</p>
+
+<p>这份逐字节稳定还得<strong>跨进程</strong>扛住：每一轮都把构建好的 system prompt 持久化进 <span class="mono">session_db</span>，下次<strong>恢复会话</strong>时直接取出、<strong>原样复用</strong>（注释写得很直白：<span class="inline">reuse the exact system prompt … so the Anthropic cache prefix matches</span>），连重启都不让前缀变样。只留一道闸：若运行时身份（<strong>模型 / provider</strong>）跟存档对不上，<span class="mono">_stored_prompt_matches_runtime</span> 判为 stale 才重建——你既然<strong>换了模型</strong>，上游那份旧前缀本就命中不了，重建反而是省钱。可见“稳定”不是抽象口号，而是要让真实字节在多轮、多次进程间<strong>分毫不差</strong>。</p>
 
 <h2>缓存策略：system_and_3 打 4 个断点</h2>
 <p>有了一条逐字节稳定的前缀，剩下的就是告诉上游“从哪里开始可以复用”。Hermes 只用<strong>一种</strong>布局——<span class="mono">system_and_3</span>：在 <strong>system prompt</strong> 和<strong>最后 3 条非 system 消息</strong>上各打一个 <span class="mono">cache_control</span> 断点，一共 <strong>4 个</strong>，同一个 TTL（5 分钟或 1 小时）。它把多轮对话的输入 token 成本<strong>降低 ~75%</strong>：</p>
@@ -466,6 +470,8 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 </div>
 
 <p>那<strong>唯一的例外</strong>——上下文压缩——又是怎么回事？当对话长到逼近模型上下文窗口，Hermes 会把早期历史<strong>摘要压缩</strong>成更短的一段再拼回去。这一步<strong>必然</strong>改写了前缀，缓存<strong>注定作废</strong>，所以它被设计成<strong>万不得已</strong>才触发：用一次“缓存重置”的代价，换回继续对话的空间。除此之外，自动对话回合里<strong>没有任何理由</strong>在会话中途重建 system prompt（细节见第 15 章）。<em>（严格说，用户<strong>主动</strong>切换模型 / 人格、手动改写 system prompt 这类配置操作也会触发一次重建，但那是显式发起的<strong>非常规事件</strong>，不在自动回合循环之内——正常对话回合里，压缩仍是唯一的重建。）</em></p>
+
+<p>那会话中途<strong>非改不可</strong>怎么办——比如用户当场装了个新技能、调了工具集？Hermes 的答案是<strong>“延迟生效”</strong>：改动默认<strong>下个会话</strong>才进前缀，本轮缓存毫发无伤；只有显式加 <span class="mono">--now</span>（见 <span class="mono">/skills install --now</span>）才立刻作废重建。这条“缓存感知”准则把第 9 章的技能、工具命令全收编进同一套纪律——能不破缓存就绝不破。而压缩重建那一下，<span class="mono">invalidate_system_prompt</span> 会顺手把磁盘上的记忆<strong>重新读一遍</strong>，于是本会话新写的记忆、技能<strong>正好</strong>趁这次注定的缓存重置一起折进前缀，一分额外代价都不花（第 11、15 章）。</p>
 
 <p>三层各自对应一段“跨章节配合”——它们都为<strong>同一条缓存纪律</strong>让路：</p>
 <table class="t">
@@ -568,6 +574,8 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
 
 <p>Why does this discipline deserve the <strong>whole book</strong> bending to it? Because it directly sets the <strong>cost order of magnitude</strong>. A personal agent's conversations tend to be <strong>long</strong> — dozens to hundreds of turns, with that long prefix resent again and again. On a cache hit, a long conversation's marginal cost is almost just “the few new lines”; once the cache breaks, every turn pays full price from scratch. Chapter 1's iron rule — “the prompt cache is sacred” — finally lands here on <strong>concrete code and numbers</strong>.</p>
 
+<p>Why is this discipline so <strong>counter-intuitive</strong>? Because every turn dangles the temptation to “freshen the context” — drop in a newer timestamp, read back the memory you just wrote, swap toolsets for the task at hand. Hermes does the <strong>opposite</strong>: the memory snapshot in <span class="mono">volatile</span> is taken at the <strong>moment the session starts</strong>, and the whole conversation carries that slightly-stale context unchanged — trading a bit of freshness to <strong>freeze the prefix solid</strong>. That's the <strong>cache-vs-freshness</strong> trade-off: across a long session the saved cost dwarfs “memory updating a few turns late,” and when a refresh is truly needed, compression is the single catch-all (ch.15) that folds this session's writes into the prefix all at once.</p>
+
 <h2>The three tiers: more stable goes first</h2>
 <p>The assembly entry is <span class="mono">build_system_prompt_parts()</span> (<span class="mono">system_prompt.py:113</span>), which returns a three-key dict <span class="mono">{stable, context, volatile}</span>. The order is anything but arbitrary — <strong>the more stable goes first, the more volatile goes last</strong>:</p>
 
@@ -601,6 +609,8 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
                provider block, timestamp/session/model/provider line.</pre>
 </div>
 <p>Fix your eyes on <span class="inline">built once per session … only context compression triggers a rebuild</span>. This is the most important invariant of the chapter — and of the whole book. <span class="mono">build_system_prompt_parts()</span>'s own docstring spells out the consequence even more bluntly: <span class="inline">Hermes never re-renders parts of this string mid-session — that's the only way to keep upstream prompt caches warm across turns</span>.</p>
+
+<p>This byte-stability has to survive <strong>across processes</strong> too: every turn persists the assembled system prompt into <span class="mono">session_db</span>, and the next time the session <strong>resumes</strong> it's pulled out and <strong>reused verbatim</strong> (the comment is blunt: <span class="inline">reuse the exact system prompt … so the Anthropic cache prefix matches</span>) — not even a restart is allowed to alter the prefix. Only one gate remains: if the runtime identity (<strong>model / provider</strong>) no longer matches the stored copy, <span class="mono">_stored_prompt_matches_runtime</span> flags it stale and rebuilds — since you <strong>changed models</strong>, the upstream's old prefix wouldn't hit anyway, so rebuilding actually saves money. “Stable” isn't an abstract slogan; it means the real bytes match <strong>exactly</strong> across many turns and many process restarts.</p>
 
 <h2>The caching strategy: system_and_3 places 4 breakpoints</h2>
 <p>With a byte-stable prefix in hand, all that's left is to tell the upstream “where reuse may begin.” Hermes uses just <strong>one</strong> layout — <span class="mono">system_and_3</span>: one <span class="mono">cache_control</span> breakpoint on the <strong>system prompt</strong> and one on each of the <strong>last 3 non-system messages</strong>, <strong>4 in total</strong>, all at the same TTL (5 minutes or 1 hour). It cuts multi-turn input token cost by <strong>~75%</strong>:</p>
@@ -676,6 +686,8 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
 </div>
 
 <p>So what about the <strong>one exception</strong> — context compression? When a conversation grows close to the model's context window, Hermes <strong>summarizes and compresses</strong> the early history into a shorter span and splices it back. That step <strong>necessarily</strong> rewrites the prefix, so the cache is <strong>bound to be voided</strong> — which is exactly why it's designed to fire only as a <strong>last resort</strong>: spend one “cache reset” to buy back room to keep talking. Outside of that, within the automatic turn loop there is <strong>no reason whatsoever</strong> to rebuild the system prompt mid-session (details in ch.15). <em>(Strictly speaking, a user-initiated switch of model / personality or a manual system-prompt edit also triggers a rebuild — but those are explicit, <strong>out-of-band</strong> events, not part of a normal turn; inside the loop, compression stays the only rebuild.)</em></p>
+
+<p>So what if something <strong>must</strong> change mid-session — the user installs a new skill on the spot, or tweaks the toolset? Hermes's answer is <strong>“deferred invalidation”</strong>: by default the change enters the prefix only <strong>next session</strong>, leaving this turn's cache untouched; only an explicit <span class="mono">--now</span> (see <span class="mono">/skills install --now</span>) voids and rebuilds immediately. This “cache-aware” rule pulls ch.9's skills and the tool commands into the same discipline — never break the cache if you can avoid it. And when compression does rebuild, <span class="mono">invalidate_system_prompt</span> also <strong>re-reads memory from disk</strong>, so the memories and skills written this session get folded into the prefix <strong>exactly</strong> during that already-inevitable cache reset — at no extra cost (ch.11, ch.15).</p>
 
 <p>Each tier maps to a piece of “cross-chapter teamwork” — all of it bending to the <strong>same caching discipline</strong>:</p>
 <table class="t">

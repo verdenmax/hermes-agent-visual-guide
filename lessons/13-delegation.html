@@ -356,6 +356,8 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 
 <h2>隔离的核心：子代理拿到什么、不拿什么</h2>
 <p>构造子 AIAgent 时，哪些<strong>隔离</strong>、哪些<strong>继承</strong>，是委派设计的关键：</p>
+<p>为什么偏偏隔离这三样——对话历史、上下文文件、共享记忆？因为它们正是会<strong>淹没</strong>父窗口、又会<strong>击穿</strong>那段神圣缓存（第 6 章）的东西。子任务读几十个文件、试错几十轮，这些中间过程若回流父对话，关键信息会被挤进「被遗忘的中间」（约束 A）；而任何改动父的历史前缀，都让缓存前缀失配、整段重算，成本翻几倍。<span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> 不是图省事，而是<strong>刻意</strong>不让子代理把父的 AGENTS.md、共享 MEMORY.md 再加载一遍——子代理要的是一份<strong>自包含任务书</strong>，不是父的整套世界观。</p>
+<p>反过来，为什么 <span class="mono">session_db</span> 和 provider / model 要<strong>继承</strong>？因为它们是「能跑起来」的运行时底座，而非会污染上下文的<strong>内容</strong>：共享会话 DB 让子代理的血缘靠 <span class="mono">parent_session_id</span> 串起来、事后可追溯，却不把父的对话搬进子窗口。而 <span class="mono">iteration_budget=None</span> 给每个子代理<strong>全新预算</strong>，是为了治约束 F（误差累积）——若一群兄弟子代理共用一份预算，一个跑飞就会饿死其余；独立预算让每个工人都有干净起点，失败也只失败它自己那一份。</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">1219-1250 · 简化</span></div>
@@ -372,9 +374,12 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 )</pre>
 </div>
 <p>看这份「隔离 vs 继承」清单：<strong>隔离</strong>的是会污染或淹没的东西——对话历史、上下文文件、记忆、用户交互、迭代预算（每个子代理一份<strong>全新</strong>预算）；<strong>继承</strong>的是跑起来必需的运行时——provider / model / api_key / session_db。工具描述把这条取舍说得最直白：<span class="inline">Each subagent gets its own conversation, terminal session, and toolset. Only the final summary is returned -- intermediate tool results never enter your context window</span>。</p>
+<p>这条「隔离 vs 继承」的分界线，背后是一个统一判据：<strong>会污染上下文或缓存的，一律隔离；只供运行不入对话的，才继承</strong>。它不是逐项拍脑袋，而是把第 6 章「缓存神圣」与约束 A「中间遗失」当成<strong>硬约束</strong>反推出来的结果。也正因如此，子代理跑的是一份 <span class="mono">ephemeral_system_prompt</span> 而非父那套三层稳定 system prompt——临时、用完即弃，不参与父的缓存前缀，于是父对话从头到尾<strong>字节级稳定</strong>，每一轮都命中缓存。理解了这个判据，你就能预测任何新字段该落在隔离侧还是继承侧。</p>
 
 <h2>两种角色：leaf 不能再委派，orchestrator 能</h2>
 <p>子代理有两种 <span class="mono">role</span>。默认的 <span class="mono">leaf</span> 是<strong>专注的工人</strong>，被禁掉一批工具；<span class="mono">orchestrator</span> 则保留委派能力，能再派自己的工人：</p>
+<p>为什么 leaf 默认要被剥掉这<strong>五</strong>个高危工具？这是<strong>最小权限</strong>（连第 24 章安全）落到委派上的体现，每一条禁令都对着一类具体越权风险：<span class="mono">delegate_task</span> 禁掉防无限套娃；<span class="mono">clarify</span> 禁掉是因为子代理的 <span class="mono">clarify_callback=None</span>——它根本够不到用户，留着只会卡死；<span class="mono">memory</span> 禁掉防一个隔离的子上下文去写<strong>共享</strong> MEMORY.md 污染全局；<span class="mono">send_message</span> 禁掉防工人擅自制造跨平台副作用；<span class="mono">execute_code</span> 禁掉是要它<strong>逐步推理</strong>而非一把梭写脚本。</p>
+<p>为什么嵌套<strong>默认关</strong>、并发还要<strong>设上限</strong>？因为代理军团的成本是<strong>相乘</strong>的：<span class="mono">MAX_DEPTH=1</span> 让默认树扁平（父→子，孙被拒），每多一层 API 成本翻倍，必须在 config 显式抬 <span class="mono">max_spawn_depth</span> 才解锁；同步批量受 <span class="mono">max_concurrent_children</span>（默认 3）限，后台委派另受 <span class="mono">max_async_children</span>（默认 3）限——且满载时新的后台派发是<strong>直接拒绝、不排队</strong>，免得一个跑飞的模型堆出无界的后台工作。<span class="mono">orchestrator_enabled</span> 则是一键全局开关，运营者无需改码即可禁掉整个编排能力。</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">44-53 / 1021-1024 · 节选</span></div>
@@ -395,6 +400,8 @@ effective_role = role <span class="kw">if</span> (role == <span class="st">"orch
 
 <h2>background 委派如何不破缓存</h2>
 <p>顶层 model 发起的委派<strong>总是 background</strong>：立即返回一个 <span class="mono">delegation_id</span>，子代理在后台守护线程里跑。子代理跑完后，结果如何<strong>不破坏父缓存</strong>地回到对话？答案在完成队列的设计里：</p>
+<p>为什么宁可绕一大圈走<strong>共享完成队列</strong>，也不直接把结果塞回正在跑的循环？因为那条 idle 重入的轨道是<strong>现成且安全</strong>的：CLI 与 gateway 本就在空闲时轮询这条队列，复用它就白拿了<strong>去重、崩溃恢复检查点</strong>，还省得在仓库两个最大的文件里再写一套排空循环。更关键的是，硬插会在工具结果与 assistant 消息之间制造非法的同角色相邻（第 7 章），并改写历史前缀击穿缓存（第 6 章）——而作为新 turn 浮现，两样都不犯。</p>
+<p>完成事件还特意携带一块<strong>自包含的任务来源</strong>（原始 goal、父给的 context、toolsets、model、派发时刻、状态、完整摘要）。为什么这么重？因为结果回灌时父可能已深陷无关上下文、早忘了当初为何派出这个子代理；这块自述让父能就地<strong>用掉结果或按新世界重派</strong>。这也解释了父为何<strong>默认等</strong>子的摘要再走：等待点就是<strong>汇总点</strong>，把多路并行的结论收拢成一段高信号文字，是上下文经济最划算的一步。</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">tools/async_delegation.py</span><span class="ln">1-34 · 节选（docstring）</span></div>
@@ -406,6 +413,7 @@ the agent is idle and forge a fresh user/internal turn from each event:
 <span class="cm">    strict message-role alternation legal and the prompt cache intact.</span></pre>
 </div>
 <p>关键设计：子代理完成事件<strong>不会</strong>被硬塞进对话中段（那会破坏严格角色交替、击穿缓存）。它进一个<strong>共享完成队列</strong>，等父代理<strong>空闲时</strong>，才作为一个<strong>全新的 turn</strong> 浮现。这样既维持了严格角色交替（第 7 章）的合法性，又<strong>保住了 prompt 缓存</strong>（第 6 章）。一个细节：background 委派是<strong>进程内的</strong>——若进程退出或 <span class="mono">/new</span>，未完成的子代理会被丢弃；要可靠存活，得用 <span class="mono">cronjob</span> 或 <span class="mono">terminal(background=True, notify_on_complete=True)</span>。</p>
+<p>把这三章串起来看就更清楚：委派、压缩（第 15 章）、记忆（第 11 章）其实是对抗「上下文有限」的<strong>三条互补路径</strong>——隔离把中间过程<strong>挡在门外</strong>，压缩把已进来的历史<strong>就地瘦身</strong>，记忆把该长期留存的<strong>沉到外部存储</strong>。委派选的是「挡在门外」这条，代价是子代理看不到父的全貌、只能靠任务书自立门户，好处是父窗口与父缓存<strong>都毫发无损</strong>。当一个任务的中间体量大、又彼此独立时，委派几乎总是比硬塞进父对话再压缩更划算，也更能保住缓存命中率。</p>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">父代理调 <span class="mono">delegate_task(goal=…)</span> 或批量 <span class="mono">tasks=[…]</span>（最多 max_concurrent_children=3 并行）</span></div>
@@ -430,6 +438,7 @@ the agent is idle and forge a fresh user/internal turn from each event:
   主线：<strong>上下文隔离 + 只带回摘要 + 完成队列不破缓存</strong>。它治两条 LLM 固有约束：
   <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span>——子任务的大量中间工具结果会<strong>淹没</strong>父上下文、把关键信息挤到中间被遗忘；委派把它们<strong>隔离</strong>在子 context，父只收高信号摘要；
   <span class="badge constraint">F·误差累积</span>——每个子代理<strong>fresh budget + 独立 context</strong>，避免跨任务的状态污染与误差累积。反模式：让子代理把中间过程<strong>实时回传</strong>父对话、或在对话中段<strong>硬插</strong>完成消息——前者淹没上下文，后者破坏角色交替、击穿缓存。</p>
+  <p style="margin:.5rem 0 0">再往根上挖一层：委派之所以能让「规模化」与「缓存神圣」并存，靠的是把复杂度<strong>关到边缘</strong>而非摊进核心。子代理是一次性的隔离舱——<span class="mono">platform="subagent"</span>、独立终端会话、跑完即弃，唯一产出是返回父的一段摘要。但隔离也有代价：后台委派是<strong>进程内</strong>的守护线程，进程退出或 <span class="mono">/new</span> 即丢；要让活儿<strong>跨进程存活</strong>，得改用 <span class="mono">cronjob</span> 或 <span class="mono">terminal(background=True, notify_on_complete=True)</span>。这正是「快而不持久」与「慢而可靠」之间的清醒取舍。</p>
 </div>
 
 <div class="card key">
@@ -494,6 +503,8 @@ When a task produces <strong>tons of intermediate work</strong> (reading dozens 
 
 <h2>The heart of isolation: what the subagent gets and doesn't</h2>
 <p>When constructing the child AIAgent, what is <strong>isolated</strong> vs <strong>inherited</strong> is the crux of the design:</p>
+<p>Why isolate exactly these three — conversation history, context files, shared memory? Because they're precisely what would <strong>flood</strong> the parent window and <strong>shatter</strong> the sacred cache (ch.6). A subtask reads dozens of files and burns dozens of trial-and-error rounds; if that intermediate work flows back into the parent conversation, key info gets shoved into the "forgotten middle" (constraint A), and any change to the parent's history prefix forces a cache-prefix mismatch and a full recompute at several times the cost. <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> aren't shortcuts — they <strong>deliberately</strong> stop the subagent from re-loading the parent's AGENTS.md or shared MEMORY.md. The subagent wants a <strong>self-contained brief</strong>, not the parent's entire worldview.</p>
+<p>Conversely, why <strong>inherit</strong> <span class="mono">session_db</span> and provider / model? Because they're the runtime substrate that makes it <strong>run</strong>, not context-polluting <strong>content</strong>: the shared session DB threads the subagent's lineage via <span class="mono">parent_session_id</span> for later traceability, without hauling the parent's conversation into the child window. And <span class="mono">iteration_budget=None</span> gives each subagent a <strong>fresh budget</strong> to treat constraint F (error accumulation) — if a pack of sibling subagents shared one budget, a single runaway would starve the rest; an independent budget gives every worker a clean start, and a failure only fails its own share.</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">1219-1250 · simplified</span></div>
@@ -510,9 +521,12 @@ When a task produces <strong>tons of intermediate work</strong> (reading dozens 
 )</pre>
 </div>
 <p>Look at the "isolate vs inherit" list: <strong>isolated</strong> are the things that would pollute or flood — conversation history, context files, memory, user interaction, the iteration budget (each subagent gets a <strong>fresh</strong> one); <strong>inherited</strong> is the runtime needed to run — provider / model / api_key / session_db. The tool description states the trade-off most plainly: <span class="inline">Each subagent gets its own conversation, terminal session, and toolset. Only the final summary is returned -- intermediate tool results never enter your context window</span>.</p>
+<p>This "isolate vs inherit" dividing line rests on a single criterion: <strong>anything that would pollute context or cache is isolated; only what's needed to run, without entering the conversation, is inherited</strong>. It's not item-by-item guesswork — it's reverse-derived from treating ch.6's "cache is sacred" and constraint A "lost-in-the-middle" as <strong>hard constraints</strong>. That's also why the subagent runs on an <span class="mono">ephemeral_system_prompt</span> rather than the parent's stable three-tier system prompt — temporary, throwaway, never part of the parent's cache prefix, so the parent conversation stays <strong>byte-stable</strong> end to end and hits the cache every turn. Grasp this criterion and you can predict which side any new field belongs on.</p>
 
 <h2>Two roles: leaf can't re-delegate, orchestrator can</h2>
 <p>A subagent has two <span class="mono">role</span>s. The default <span class="mono">leaf</span> is a <strong>focused worker</strong> with a set of tools disabled; <span class="mono">orchestrator</span> retains delegation and can spawn its own workers:</p>
+<p>Why is leaf stripped of these <strong>five</strong> high-risk tools by default? It's <strong>least privilege</strong> (tying into ch.24 security) applied to delegation, and each ban targets a concrete over-reach risk: <span class="mono">delegate_task</span> is blocked to prevent infinite nesting; <span class="mono">clarify</span> is blocked because the child's <span class="mono">clarify_callback=None</span> — it literally can't reach the user, so keeping it would only deadlock; <span class="mono">memory</span> is blocked so an isolated child context can't write the <strong>shared</strong> MEMORY.md and pollute the global; <span class="mono">send_message</span> is blocked so a worker can't unilaterally cause cross-platform side effects; <span class="mono">execute_code</span> is blocked to force <strong>step-by-step reasoning</strong> instead of one-shot scripting.</p>
+<p>Why is nesting <strong>off by default</strong> and concurrency <strong>capped</strong>? Because the cost of an agent army is <strong>multiplicative</strong>: <span class="mono">MAX_DEPTH=1</span> keeps the default tree flat (parent → child, grandchild rejected), every extra level doubles API cost, and you must raise <span class="mono">max_spawn_depth</span> in config to unlock it; a synchronous batch is capped by <span class="mono">max_concurrent_children</span> (default 3), and background delegation is separately capped by <span class="mono">max_async_children</span> (default 3) — at capacity a new async dispatch is <strong>rejected outright, not queued</strong>, so a runaway model can't pile up unbounded background work. <span class="mono">orchestrator_enabled</span> is the one-switch global kill so an operator can disable the whole orchestration feature without a code change.</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">44-53 / 1021-1024 · excerpt</span></div>
@@ -533,6 +547,8 @@ effective_role = role <span class="kw">if</span> (role == <span class="st">"orch
 
 <h2>How background delegation avoids breaking the cache</h2>
 <p>A top-level, model-issued delegation <strong>always runs in the background</strong>: it returns a <span class="mono">delegation_id</span> immediately, and the subagent runs on a background daemon thread. When the child finishes, how does the result re-enter the conversation <strong>without breaking the parent's cache</strong>? The answer is in the completion-queue design:</p>
+<p>Why take the long way through a <strong>shared completion queue</strong> instead of stuffing the result straight back into the running loop? Because that idle re-entry rail is <strong>already there and safe</strong>: the CLI and gateway already poll this queue while idle, so reusing it gets <strong>de-dup and a crash-recovery checkpoint</strong> for free and avoids writing a second drain loop in the two largest files in the repo. More importantly, splicing inline would create an illegal same-role adjacency between a tool result and an assistant message (ch.7) and rewrite the history prefix to shatter the cache (ch.6) — whereas surfacing as a new turn commits neither sin.</p>
+<p>The completion event also deliberately carries a <strong>self-contained task-source block</strong> (the original goal, the context the parent supplied, toolsets, model, dispatch time, status, full summary). Why so heavy? Because when the result re-enters, the parent may be deep in unrelated context and has long forgotten why it spawned this subagent; the self-description lets it <strong>use the result or re-dispatch against the new world</strong> on the spot. This also explains why the parent <strong>waits by default</strong> for the child's summary: the wait point is the <strong>aggregation point</strong>, and collapsing parallel conclusions into one high-signal blob of text is the most context-economical move available.</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">tools/async_delegation.py</span><span class="ln">1-34 · excerpt (docstring)</span></div>
@@ -544,6 +560,7 @@ the agent is idle and forge a fresh user/internal turn from each event:
 <span class="cm">    strict message-role alternation legal and the prompt cache intact.</span></pre>
 </div>
 <p>The key design: a child's completion event is <strong>not</strong> jammed into the middle of the conversation (that would break strict role alternation and shatter the cache). It goes onto a <strong>shared completion queue</strong>, and only when the parent is <strong>idle</strong> does it surface as a <strong>brand-new turn</strong>. This keeps strict role alternation (ch.7) legal and the <strong>prompt cache intact</strong> (ch.6). One detail: background delegation is <strong>process-local</strong> — if the process exits or you hit <span class="mono">/new</span>, unfinished subagents are discarded; for durable survival, use <span class="mono">cronjob</span> or <span class="mono">terminal(background=True, notify_on_complete=True)</span>.</p>
+<p>String these chapters together and it gets clearer: delegation, compression (ch.15), and memory (ch.11) are <strong>three complementary routes</strong> against "limited context" — isolation <strong>keeps intermediate work outside the door</strong>, compression <strong>slims down history already inside</strong>, and memory <strong>sinks what deserves long-term retention into external storage</strong>. Delegation picks "keep it outside": the cost is that the subagent can't see the parent's full picture and must stand on its own from the brief; the benefit is that both the parent window and the parent cache are left <strong>completely untouched</strong>. When a task's intermediate volume is large yet independent, delegation almost always beats stuffing it into the parent conversation and compressing later.</p>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">parent calls <span class="mono">delegate_task(goal=…)</span> or batch <span class="mono">tasks=[…]</span> (up to max_concurrent_children=3 in parallel)</span></div>
@@ -568,6 +585,7 @@ the agent is idle and forge a fresh user/internal turn from each event:
   The throughline: <strong>context isolation + return only the summary + a completion queue that doesn't break the cache</strong>. It treats two inherent LLM constraints:
   <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> — a subtask's flood of intermediate tool results would <strong>bury</strong> the parent context and push key info into the forgotten middle; delegation <strong>isolates</strong> them in the child context, so the parent receives only a high-signal summary;
   <span class="badge constraint">F·error accumulation</span> — each subagent gets a <strong>fresh budget + independent context</strong>, avoiding cross-task state pollution and compounding errors. The anti-pattern: streaming the subagent's intermediate work back into the parent conversation live, or <strong>splicing</strong> the completion message into the middle of the conversation — the former floods context, the latter breaks alternation and shatters the cache.</p>
+  <p style="margin:.5rem 0 0">Dig one level deeper to the root: delegation lets "scaling" coexist with "the cache is sacred" by <strong>locking complexity at the edge</strong> instead of smearing it through the core. A subagent is a single-use isolation pod — <span class="mono">platform="subagent"</span>, its own terminal session, discarded once done, its only output a summary returned to the parent. But isolation has a cost: background delegation is a <strong>process-local</strong> daemon thread; a process exit or <span class="mono">/new</span> discards it. For work that must <strong>survive across processes</strong>, switch to <span class="mono">cronjob</span> or <span class="mono">terminal(background=True, notify_on_complete=True)</span>. That's the clear-eyed trade-off between "fast but ephemeral" and "slow but durable."</p>
 </div>
 
 <div class="card key">

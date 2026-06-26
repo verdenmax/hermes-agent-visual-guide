@@ -23,6 +23,10 @@ Hermes 是 <a href="https://github.com/NousResearch/hermes-agent">Nous Research<
 把成功的做法变成<strong>可复用的程序性知识</strong>。这件事之所以重要，是因为大模型本身有个硬伤——
 <strong>两次调用之间它什么都不记得</strong>。Hermes 的全部“进化”机制，本质都是在<strong>对抗这个失忆</strong>。</p>
 
+<p>为什么是“把状态外置”而不是“换个记性更好的模型”？因为<strong>无状态是大模型的结构性事实</strong>，不是某一代模型的缺陷——再强的模型，两次 API 调用之间也只能看见你这一次塞进去的上下文（第 2 章 B·无状态）。如果把“记住你”寄托在模型权重上，就等于把<strong>个人化</strong>押在一次次昂贵的微调上，既慢又把你锁死在单一厂商。Hermes 反其道而行：让模型保持<strong>无状态、可随时替换</strong>，把所有“记忆”沉淀到模型<strong>之外</strong>的技能、记忆文件、会话库里（第 4 章把状态外置）。于是“变聪明”这件事，就从<strong>训练问题</strong>变成了<strong>工程问题</strong>——这正是 Hermes 全部进化机制的设计原点。</p>
+
+<p>还有一个容易被忽略的取舍：<strong>同一套 agent 核心</strong>同时驱动 CLI、消息网关（20+ 平台）、TUI 和 Electron 桌面 App，而不是每个端各写一套逻辑。为什么这么做？因为如果每端独立实现，“学习闭环”就会<strong>四分五裂</strong>：在 Telegram 上学到的技能，到了桌面端却用不上。一个核心多端，意味着<strong>记忆、技能、会话库全平台共享</strong>，行为也<strong>处处一致</strong>（第 17 章网关适配、第 19 章 TUI/桌面）。代价是核心必须保持<strong>足够通用</strong>、不能为某一个端开特例——这又反过来强化了“窄腰”纪律：核心只留各端都需要的最小公共面（第 8 章）。</p>
+
 <div class="card macro">
   <div class="tag">🌍 宏观理解</div>
   同一个 <span class="inline">AIAgent</span> 核心，被 CLI、网关（Telegram/Discord/Slack…）、TUI、桌面 App
@@ -35,6 +39,7 @@ Hermes 是 <a href="https://github.com/NousResearch/hermes-agent">Nous Research<
 <p>很多 agent 只能跑在你开着的那台电脑上。Hermes 的设计目标之一是<strong>把 agent 从单机里解放出来</strong>：
 它能跑在 5 美元的 VPS、GPU 集群，或 <strong>serverless</strong> 环境上——闲时<strong>休眠到几乎零成本</strong>、有请求才唤醒。
 于是你可以一边在 Telegram 上发消息，一边让它在<strong>云端 VM</strong> 上默默干活，关掉手机它也不停。</p>
+<p>“位置自由”背后其实是一个关于<strong>信任与持久</strong>的取舍。一个真正的<strong>个人</strong> agent 必须能<strong>长期在线、不依赖你的人在场</strong>：它要替你跑定时任务（第 21 章 cron）、要在你睡觉时把一件活干完。如果它只能寄生在你开着的那台笔记本上，这些都无从谈起。所以 Hermes 把<strong>运行环境本身做成可插拔的</strong>——从 <span class="mono">local</span> 到 <span class="mono">docker</span>、<span class="mono">ssh</span>，一直到 <span class="mono">modal</span>/<span class="mono">daytona</span> 这类闲时休眠的 serverless 沙箱（第 16 章终端后端）。<strong>模型无关</strong>同理：把模型当成可替换的零件，你的助理才不会随某个厂商涨价、停服而一起消失。这两种“自由”合起来，才撑得起“<strong>长期</strong>个人 agent”这个定位——否则它顶多是个绑在你桌面上的临时工。</p>
 <p>它还<strong>模型无关</strong>：Nous Portal、OpenRouter（200+ 模型）、OpenAI、本地端点都行，一条
 <span class="mono">hermes model</span> 命令切换，不动一行代码。这种“<strong>位置自由 + 模型自由</strong>”，是它能成为
 <strong>长期个人 agent</strong> 的前提——你的助理不该被锁在某台机器、某个厂商上。这一点也呼应了它的部署哲学：
@@ -62,6 +67,8 @@ agent 的<strong>运行环境</strong>本身就是可插拔的，从本机一直
     <div class="ld">后台维护：自动归档没人用的旧技能，<strong>永不删除、只归档</strong>，可恢复。</div></div>
 </div>
 
+<p>为什么要拆成<strong>四个</strong>子系统，而不是做一个“无所不记”的大记忆？因为它们<strong>解决的问题根本不同</strong>，混在一起反而更糟。<strong>技能</strong>是“某类任务怎么做”的程序性知识，<strong>记忆</strong>是“关于你和项目的事实”的声明性知识，<strong>会话搜索</strong>是按需召回的历史，<strong>Curator</strong> 则是防止技能无限膨胀的园丁。各管一段，才能各自演进、互不拖累。更关键的是它们遵守<strong>同一条纪律</strong>：读只在<strong>会话开始</strong>注入固定前缀，写只往对话<strong>末尾</strong>追加（第 9–12 章）。这条纪律不是巧合——它直接服务于那条铁律：<strong>prompt 缓存不能被中途改写</strong>（第 6 章）。把"记得更多"和"缓存不破"同时做到，正是靠这种分工。</p>
+
 <h2>一次“变聪明”长什么样</h2>
 <p>把闭环跑一遍，就是下面这条线：解决问题 → 被<strong>提醒</strong>该沉淀了 → 写成技能/记忆 → 下次更快：</p>
 <div class="flow">
@@ -74,6 +81,8 @@ agent 的<strong>运行环境</strong>本身就是可插拔的，从本机一直
   <div class="node hl"><div class="nt">下次更快</div><div class="nd">翻笔记，几步搞定</div></div>
 </div>
 
+<p>这条线看着平平无奇，难点其实藏在<strong>第二步</strong>。大模型不会<strong>自发</strong>停下来问自己“我刚才这套做法值不值得存”——它的本能是把当前任务做完就结束。如果没有外力推一把，闭环的入口根本不会被触发，再好的技能系统也只是<strong>空有其表</strong>。所以整条进化链最脆弱、也最关键的一环，不是“怎么写技能”，而是“<strong>什么时候提醒它去写</strong>”。Hermes 用一条踩准时机、每会话只发一次的<strong>学习 nudge</strong> 顶住这个缺口（第 9 章），把“反思”这件模型并不擅长的事，变成了<strong>系统层面的确定动作</strong>。理解这一点，你就明白后面几章为什么花那么多笔墨在“何时、以何种方式注入”上。</p>
+
 <h2>进化的发动机：学习 nudge</h2>
 <p>这套闭环有个关键问题：大模型<strong>不会主动反思</strong>“我刚学到的东西要不要存起来”。Hermes 的解法很巧——
 在你和它干活到一定轮次时，<strong>往对话末尾塞一条反思提醒</strong>（nudge）：“你是不是学到了一个可复用的流程？
@@ -81,6 +90,7 @@ agent 的<strong>运行环境</strong>本身就是可插拔的，从本机一直
 <p>更妙的是它<strong>注入的位置</strong>：nudge 是一条追加到消息<strong>末尾</strong>的普通 user 消息，
 <strong>不改动 system prompt、不重建上下文</strong>。这正是为了守住那条铁律——<strong>prompt 缓存不能破</strong>。
 “提醒 agent 去学习”这件看似简单的事，背后是一个<strong>既要驱动进化、又不能破坏缓存</strong>的精细权衡（细节见第 9 章）。</p>
+<p>把这个小细节放大看，它其实是<strong>整本书的设计缩影</strong>：一个再有用的功能，只要它要<strong>改 system prompt 或重建上下文</strong>，就会击穿 prompt 缓存、让长对话每轮成本翻倍——所以宁可换一种“只往末尾追加”的笨办法，也绝不去动前缀。这就是为什么“提醒 agent 学习”不能简单地塞进系统提示里。同样的取舍也解释了“<strong>窄腰</strong>”：每多一个核心工具，它的 schema 就要<strong>随每一次 API 调用一起发出去</strong>，成本与“工具越多、模型选择质量越差”的代价是全局摊派的（第 3 章 F·工具过载）。所以能力优先长在<strong>边缘</strong>——技能、插件、MCP（第 23 章），而不是往核心里塞。</p>
 <div class="vflow">
   <div class="step"><div class="num">1</div><div class="sc"><h4>干活</h4><p>和你一起解决问题，积累了“怎么做”的经验</p></div></div>
   <div class="step"><div class="num">2</div><div class="sc"><h4>到点提醒</h4><p>末尾追加 nudge：“要不要存成技能/记忆？”</p></div></div>
@@ -119,6 +129,8 @@ agent 的<strong>运行环境</strong>本身就是可插拔的，从本机一直
   <strong>③ 窄腰架构</strong>（核心小、能力在边缘长）。
   <p style="margin:.5rem 0 0">它对抗的 LLM 固有约束：<span class="badge constraint">B·无状态</span>——
   模型两次调用之间零记忆，所以“状态”必须<strong>外置</strong>到技能、记忆、会话库里。这就是“进化”存在的根本理由。</p>
+  <p style="margin:.5rem 0 0">为什么把后两条抬成“<strong>审查任何改动的透镜</strong>”，而不是普通的优化建议？因为它们对应的是<strong>成本结构</strong>，而非代码风格。缓存一旦在长对话中途被破，<strong>之前所有轮次</strong>都要重新计费，用户开销可能<strong>成倍</strong>上涨；核心工具一旦加多，<strong>每一次</strong>调用都得为它买单。这两笔账都不是一次性的，而是<strong>随对话长度、随调用次数无限累加</strong>。正因为代价是<strong>全局摊派</strong>的，它们才有资格成为否决一个改动的硬标准——也是后面几乎每章做权衡时都会回到的那把尺子（第 25 章设计原则）。</p>
+  <p style="margin:.5rem 0 0">落到日常，这把尺子给出的是一条明确的<strong>扩展次序</strong>：能扩展已有代码就不新增、能用 <strong>CLI 命令 + 技能</strong>就不做工具、能用<strong>服务门控工具</strong>就不进核心、能做<strong>插件 / MCP</strong> 就不碰核心面，新增核心工具永远是<strong>最后手段</strong>（第 8 章 Footprint Ladder）。这解释了 Hermes 一个看似矛盾的现象：它的<strong>产品面</strong>（平台、模型、桌面/TUI 功能）扩张得很凶，<strong>核心工具集</strong>却始终克制。“在边缘奔放、在窄腰保守”——这不是不思进取，恰恰是为了让核心能<strong>长期低成本地</strong>承载越来越多的边缘能力。</p>
 </div>
 
 <div class="card key">
@@ -157,6 +169,10 @@ you; it turns proven approaches into <strong>reusable procedural knowledge</stro
 because LLMs have a hard limitation — <strong>they remember nothing between two calls</strong>. Every Hermes
 “evolution” mechanism is, at heart, <strong>a fight against that amnesia</strong>.</p>
 
+<p>Why externalize state instead of “just use a model with a better memory”? Because <strong>statelessness is a structural fact of LLMs</strong>, not a flaw of one generation — even the strongest model sees only the context you hand it on this single call (ch.2, B·Statelessness). Pinning “remembering you” to model weights would bet <strong>personalization</strong> on repeated, expensive fine-tunes — slow, and locked to one vendor. Hermes does the opposite: keep the model <strong>stateless and swappable</strong>, and persist all “memory” <strong>outside</strong> it — into skills, memory files, the session store (ch.4, externalizing state). That turns “getting smarter” from a <strong>training problem</strong> into an <strong>engineering problem</strong> — the design origin of every evolution mechanism here.</p>
+
+<p>One easily-missed tradeoff: a <strong>single agent core</strong> drives the CLI, the messaging gateway (20+ platforms), the TUI and the Electron desktop app — rather than reimplementing the logic per front-end. Why? Because separate implementations would <strong>fragment the learning loop</strong>: a skill learned on Telegram would be useless on the desktop. One core, many ends means <strong>memory, skills and the session store are shared across every platform</strong>, with <strong>consistent behavior everywhere</strong> (ch.17 gateway adapters, ch.19 TUI/desktop). The price: the core must stay <strong>general enough</strong> to special-case no single front-end — which in turn reinforces the “narrow waist”: the core keeps only the minimal common surface every end needs (ch.8).</p>
+
 <div class="card macro">
   <div class="tag">🌍 Big picture</div>
   One <span class="inline">AIAgent</span> core is shared by the CLI, the gateway (Telegram/Discord/Slack…),
@@ -170,6 +186,7 @@ because LLMs have a hard limitation — <strong>they remember nothing between tw
 single box</strong>: it runs on a $5 VPS, a GPU cluster, or <strong>serverless</strong> infra that <strong>hibernates to
 near-zero cost</strong> when idle and wakes on demand. So you can message it from Telegram while it works on a <strong>cloud
 VM</strong> — close your phone and it keeps going.</p>
+<p>“Freedom of place” is really a tradeoff about <strong>trust and persistence</strong>. A true <strong>personal</strong> agent must stay <strong>online for the long haul, independent of your presence</strong>: it runs your scheduled jobs (ch.21 cron) and finishes a task while you sleep. None of that works if it can only live on the one laptop you keep open. So Hermes makes <strong>the runtime itself pluggable</strong> — from <span class="mono">local</span> to <span class="mono">docker</span>, <span class="mono">ssh</span>, all the way to idle-hibernating serverless sandboxes like <span class="mono">modal</span>/<span class="mono">daytona</span> (ch.16 terminal backends). <strong>Model-agnosticism</strong> follows the same logic: treat the model as a replaceable part, so your assistant doesn't vanish when one vendor hikes prices or shuts down. Together these two freedoms are what make it a <strong>long-lived</strong> personal agent — otherwise it's just a temp worker chained to your desktop.</p>
 <p>It's also <strong>model-agnostic</strong>: Nous Portal, OpenRouter (200+ models), OpenAI, your own endpoint — switch
 with one <span class="mono">hermes model</span> command, no code changes. This “<strong>freedom of place + freedom of
 model</strong>” is what lets it be a <strong>long-lived personal agent</strong> — your assistant shouldn't be locked to one
@@ -199,6 +216,8 @@ into accumulating assets:</p>
     <div class="ld">Background upkeep: auto-archives unused old skills — <strong>never deletes, only archives</strong>, restorable.</div></div>
 </div>
 
+<p>Why split into <strong>four</strong> subsystems instead of one “remember-everything” mega-memory? Because they solve <strong>fundamentally different problems</strong>, and fusing them makes things worse. <strong>Skills</strong> are procedural knowledge (“how to do a class of task”), <strong>memory</strong> is declarative knowledge (“facts about you and the project”), <strong>session search</strong> is on-demand recall of history, and <strong>Curator</strong> is the gardener that stops skills from sprawling forever. Each owning one stage lets them evolve independently without dragging on each other. More important, they obey <strong>one shared discipline</strong>: reads enter the fixed prefix only at <strong>session start</strong>, writes only <strong>append at the end</strong> (ch.9–12). That discipline is no accident — it directly serves the iron rule: <strong>the prompt cache must not be rewritten mid-conversation</strong> (ch.6). Doing “remember more” and “never break the cache” at once is exactly what this division of labor buys.</p>
+
 <h2>What “getting smarter” looks like</h2>
 <p>Run the loop once and you get this line: solve a problem → get <strong>nudged</strong> to capture it → save a
 skill/memory → next time it's faster:</p>
@@ -212,6 +231,8 @@ skill/memory → next time it's faster:</p>
   <div class="node hl"><div class="nt">Faster next time</div><div class="nd">flip to notes, done</div></div>
 </div>
 
+<p>The line looks unremarkable, but the hard part hides in <strong>step two</strong>. An LLM won't <strong>spontaneously</strong> stop and ask itself “was that approach worth saving?” — its instinct is to finish the current task and stop. Without an external push, the loop's entry point never fires, and even the best skill system is <strong>all form, no function</strong>. So the most fragile and most critical link in the whole chain isn't “how to write a skill” but “<strong>when to remind it to write one</strong>.” Hermes plugs that gap with a well-timed, once-per-session <strong>learning nudge</strong> (ch.9), turning “reflection” — something models are bad at — into a <strong>deterministic, system-level action</strong>. Grasp this and you'll see why later chapters spend so much ink on “when and how to inject.”</p>
+
 <h2>The engine of evolution: the learning nudge</h2>
 <p>The loop has one catch: an LLM <strong>won't spontaneously reflect</strong> on “should I save what I just learned?”
 Hermes' fix is clever — after enough turns of working together, it <strong>appends a reflection prompt to the end of the
@@ -222,6 +243,7 @@ session</strong>, so it never nags.</p>
 <strong>end</strong>, <strong>changing no system prompt and rebuilding no context</strong>. That's exactly to honor the iron
 rule — <strong>the prompt cache must not break</strong>. “Remind the agent to learn” sounds trivial, but underneath it's a
 careful tradeoff between <strong>driving evolution</strong> and <strong>never breaking the cache</strong> (details in ch.9).</p>
+<p>Zoom out and this small detail is <strong>the book's design in miniature</strong>: any feature, however useful, that has to <strong>change the system prompt or rebuild context</strong> will shatter the prompt cache and double the per-turn cost of a long chat — so we'd rather take the clumsy “append-only at the end” path than touch the prefix. That's why “remind the agent to learn” can't simply be stuffed into the system prompt. The same tradeoff explains the <strong>narrow waist</strong>: each extra core tool ships its schema <strong>on every single API call</strong>, and the cost — plus “more tools, worse model selection” — is paid globally (ch.3, F·tool overload). So capability grows at the <strong>edges</strong> first — skills, plugins, MCP (ch.23) — rather than being crammed into the core.</p>
 <div class="vflow">
   <div class="step"><div class="num">1</div><div class="sc"><h4>Work</h4><p>solve problems with you; accumulate know-how</p></div></div>
   <div class="step"><div class="num">2</div><div class="sc"><h4>Nudge</h4><p>append at the end: “save as a skill/memory?”</p></div></div>
@@ -262,6 +284,8 @@ careful tradeoff between <strong>driving evolution</strong> and <strong>never br
   <p style="margin:.5rem 0 0">The LLM constraint it fights: <span class="badge constraint">B·Statelessness</span> —
   the model has zero memory between calls, so “state” must be <strong>externalized</strong> into skills, memory and the
   session store. That is the root reason “evolution” exists at all.</p>
+  <p style="margin:.5rem 0 0">Why elevate the latter two to “<strong>the lens for reviewing any change</strong>” rather than ordinary optimization advice? Because they map to <strong>cost structure</strong>, not code style. Break the cache mid-chat and <strong>every prior turn</strong> is re-billed, so the user's cost can rise <strong>severalfold</strong>; add core tools and <strong>every</strong> call pays for them. Neither bill is one-off — both <strong>accumulate without bound</strong> with chat length and call count. Precisely because the cost is <strong>paid globally</strong>, these earn the right to veto a change — the same yardstick nearly every later chapter returns to when weighing tradeoffs (ch.25 design principles).</p>
+  <p style="margin:.5rem 0 0">In practice, that yardstick yields a clear <strong>order of extension</strong>: extend existing code before adding anything; a <strong>CLI command + skill</strong> before a tool; a <strong>service-gated tool</strong> before touching the core; a <strong>plugin / MCP</strong> before the core surface — a new core tool is always the <strong>last resort</strong> (ch.8, the Footprint Ladder). This explains a seeming paradox: Hermes' <strong>product surface</strong> (platforms, models, desktop/TUI features) expands aggressively, while the <strong>core tool set</strong> stays restrained. “Expansive at the edges, conservative at the waist” isn't timidity — it's exactly what lets the core carry ever more edge capability at <strong>low cost over the long run</strong>.</p>
 </div>
 
 <div class="card key">
