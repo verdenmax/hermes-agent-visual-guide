@@ -85,7 +85,7 @@ LESSON_13 = {
 <h2>两种角色：leaf 不能再委派，orchestrator 能</h2>
 <p>子代理有两种 <span class="mono">role</span>。默认的 <span class="mono">leaf</span> 是<strong>专注的工人</strong>，被禁掉一批工具；<span class="mono">orchestrator</span> 则保留委派能力，能再派自己的工人：</p>
 <p>为什么 leaf 默认要被剥掉这<strong>五</strong>个高危工具？这是<strong>最小权限</strong>（连第 24 章安全）落到委派上的体现，每一条禁令都对着一类具体越权风险：<span class="mono">delegate_task</span> 禁掉防无限套娃；<span class="mono">clarify</span> 禁掉是因为子代理的 <span class="mono">clarify_callback=None</span>——它根本够不到用户，留着只会卡死；<span class="mono">memory</span> 禁掉防一个隔离的子上下文去写<strong>共享</strong> MEMORY.md 污染全局；<span class="mono">send_message</span> 禁掉防工人擅自制造跨平台副作用；<span class="mono">execute_code</span> 禁掉是要它<strong>逐步推理</strong>而非一把梭写脚本。</p>
-<p>为什么嵌套<strong>默认关</strong>、并发还要<strong>设上限</strong>？因为代理军团的成本是<strong>相乘</strong>的：<span class="mono">MAX_DEPTH=1</span> 让默认树扁平（父→子，孙被拒），每多一层 API 成本翻倍，必须在 config 显式抬 <span class="mono">max_spawn_depth</span> 才解锁；同步批量受 <span class="mono">max_concurrent_children</span>（默认 3）限，后台委派另受 <span class="mono">max_async_children</span>（默认 3）限——且满载时新的后台派发是<strong>直接拒绝、不排队</strong>，免得一个跑飞的模型堆出无界的后台工作。<span class="mono">orchestrator_enabled</span> 则是一键全局开关，运营者无需改码即可禁掉整个编排能力。</p>
+<p>为什么嵌套<strong>默认关</strong>、并发还要<strong>设上限</strong>？因为代理军团的成本是<strong>相乘</strong>的：<span class="mono">MAX_DEPTH=1</span> 让默认树扁平（父→子，孙被拒），每多一层 API 成本<strong>按扇出相乘</strong>，必须在 config 显式抬 <span class="mono">max_spawn_depth</span> 才解锁；同步批量受 <span class="mono">max_concurrent_children</span>（默认 3）限，后台委派另受 <span class="mono">max_async_children</span>（默认 3）限——且满载时新的后台派发是<strong>直接拒绝、不排队</strong>，免得一个跑飞的模型堆出无界的后台工作。<span class="mono">orchestrator_enabled</span> 则是一键全局开关，运营者无需改码即可禁掉整个编排能力。</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">44-53 / 1021-1024 · 节选</span></div>
@@ -132,7 +132,7 @@ effective_role = role <span class="kw">if</span> (role == <span class="st">"orch
   <text x="576" y="167" text-anchor="middle" font-size="9" fill="var(--muted)">leaf · depth 1</text>
 
   <text x="340" y="196" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">并发上限 max_concurrent_children = 3</text>
-  <text x="340" y="213" text-anchor="middle" font-size="9.5" fill="var(--muted)">超过 3 个则排队，等空位才起跑</text>
+  <text x="340" y="213" text-anchor="middle" font-size="9.5" fill="var(--muted)">一次超过 3 个直接拒绝、需拆分调用</text>
 
   <rect x="24" y="240" width="372" height="74" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="40" y="262" font-size="11" font-weight="700" fill="var(--muted)">嵌套深度上限</text>
@@ -145,7 +145,7 @@ effective_role = role <span class="kw">if</span> (role == <span class="st">"orch
   <text x="553" y="272" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">孙代理 grandchild</text>
   <text x="553" y="290" text-anchor="middle" font-size="9.5" fill="var(--red)">depth 2 · 被拒绝</text>
 </svg>
-<div class="fig-cap"><b>并行 batch 与深度上限</b>：父代理用 <span class="mono">tasks=[…]</span> 一次派发多个子代理并发执行，但同步并发受 <span class="mono">max_concurrent_children</span>（默认 <b>3</b>）约束，超出的排队等空位。嵌套则<b>默认扁平</b>：<span class="mono">max_spawn_depth = 1</span>，父→子放行、子→孙<b>被拒</b>——要多级必须在 config 显式抬高（后台委派另受 <span class="mono">max_async_children=3</span> 限，满载直接拒绝、不排队）。代价相乘，所以默认收得很紧。</div>
+<div class="fig-cap"><b>并行 batch 与深度上限</b>：父代理用 <span class="mono">tasks=[…]</span> 一次派发多个子代理并发执行，但同步并发受 <span class="mono">max_concurrent_children</span>（默认 <b>3</b>）约束，一次<b>超出即被拒</b>（须拆成多次调用或抬高上限）。嵌套则<b>默认扁平</b>：<span class="mono">max_spawn_depth = 1</span>，父→子放行、子→孙<b>被拒</b>——要多级必须在 config 显式抬高（后台委派另受 <span class="mono">max_async_children=3</span> 限，满载直接拒绝、不排队）。代价相乘，所以默认收得很紧。</div>
 </div>
 
 <h2>background 委派如何不破缓存</h2>
@@ -283,7 +283,7 @@ When a task produces <strong>tons of intermediate work</strong> (reading dozens 
 <h2>Two roles: leaf can't re-delegate, orchestrator can</h2>
 <p>A subagent has two <span class="mono">role</span>s. The default <span class="mono">leaf</span> is a <strong>focused worker</strong> with a set of tools disabled; <span class="mono">orchestrator</span> retains delegation and can spawn its own workers:</p>
 <p>Why is leaf stripped of these <strong>five</strong> high-risk tools by default? It's <strong>least privilege</strong> (tying into ch.24 security) applied to delegation, and each ban targets a concrete over-reach risk: <span class="mono">delegate_task</span> is blocked to prevent infinite nesting; <span class="mono">clarify</span> is blocked because the child's <span class="mono">clarify_callback=None</span> — it literally can't reach the user, so keeping it would only deadlock; <span class="mono">memory</span> is blocked so an isolated child context can't write the <strong>shared</strong> MEMORY.md and pollute the global; <span class="mono">send_message</span> is blocked so a worker can't unilaterally cause cross-platform side effects; <span class="mono">execute_code</span> is blocked to force <strong>step-by-step reasoning</strong> instead of one-shot scripting.</p>
-<p>Why is nesting <strong>off by default</strong> and concurrency <strong>capped</strong>? Because the cost of an agent army is <strong>multiplicative</strong>: <span class="mono">MAX_DEPTH=1</span> keeps the default tree flat (parent → child, grandchild rejected), every extra level doubles API cost, and you must raise <span class="mono">max_spawn_depth</span> in config to unlock it; a synchronous batch is capped by <span class="mono">max_concurrent_children</span> (default 3), and background delegation is separately capped by <span class="mono">max_async_children</span> (default 3) — at capacity a new async dispatch is <strong>rejected outright, not queued</strong>, so a runaway model can't pile up unbounded background work. <span class="mono">orchestrator_enabled</span> is the one-switch global kill so an operator can disable the whole orchestration feature without a code change.</p>
+<p>Why is nesting <strong>off by default</strong> and concurrency <strong>capped</strong>? Because the cost of an agent army is <strong>multiplicative</strong>: <span class="mono">MAX_DEPTH=1</span> keeps the default tree flat (parent → child, grandchild rejected), every extra level <strong>multiplies API cost by the fan-out</strong>, and you must raise <span class="mono">max_spawn_depth</span> in config to unlock it; a synchronous batch is capped by <span class="mono">max_concurrent_children</span> (default 3), and background delegation is separately capped by <span class="mono">max_async_children</span> (default 3) — at capacity a new async dispatch is <strong>rejected outright, not queued</strong>, so a runaway model can't pile up unbounded background work. <span class="mono">orchestrator_enabled</span> is the one-switch global kill so an operator can disable the whole orchestration feature without a code change.</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">tools/delegate_tool.py</span><span class="ln">44-53 / 1021-1024 · excerpt</span></div>
@@ -330,7 +330,7 @@ effective_role = role <span class="kw">if</span> (role == <span class="st">"orch
   <text x="576" y="167" text-anchor="middle" font-size="9" fill="var(--muted)">leaf · depth 1</text>
 
   <text x="340" y="196" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">concurrency cap max_concurrent_children = 3</text>
-  <text x="340" y="213" text-anchor="middle" font-size="9.5" fill="var(--muted)">beyond 3, tasks queue and wait for a free slot</text>
+  <text x="340" y="213" text-anchor="middle" font-size="9.5" fill="var(--muted)">more than 3 in one call is rejected, split it</text>
 
   <rect x="24" y="240" width="372" height="74" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="40" y="262" font-size="11" font-weight="700" fill="var(--muted)">nesting depth cap</text>
@@ -343,7 +343,7 @@ effective_role = role <span class="kw">if</span> (role == <span class="st">"orch
   <text x="553" y="272" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">grandchild</text>
   <text x="553" y="290" text-anchor="middle" font-size="9.5" fill="var(--red)">depth 2 · rejected</text>
 </svg>
-<div class="fig-cap"><b>Parallel batch &amp; the depth cap</b>: the parent uses <span class="mono">tasks=[…]</span> to dispatch several subagents that run concurrently, but synchronous concurrency is bounded by <span class="mono">max_concurrent_children</span> (default <b>3</b>) — extras queue for a free slot. Nesting is <b>flat by default</b>: <span class="mono">max_spawn_depth = 1</span>, parent→child allowed but child→grandchild <b>rejected</b> — multiple levels require explicitly raising it in config (background delegation is separately capped by <span class="mono">max_async_children=3</span>, rejected outright at capacity, not queued). Cost is multiplicative, so the defaults are tight.</div>
+<div class="fig-cap"><b>Parallel batch &amp; the depth cap</b>: the parent uses <span class="mono">tasks=[…]</span> to dispatch several subagents that run concurrently, but synchronous concurrency is bounded by <span class="mono">max_concurrent_children</span> (default <b>3</b>) — more than the cap in one call is <b>rejected</b> (split it into multiple calls or raise the cap). Nesting is <b>flat by default</b>: <span class="mono">max_spawn_depth = 1</span>, parent→child allowed but child→grandchild <b>rejected</b> — multiple levels require explicitly raising it in config (background delegation is separately capped by <span class="mono">max_async_children=3</span>, rejected outright at capacity, not queued). Cost is multiplicative, so the defaults are tight.</div>
 </div>
 
 <h2>How background delegation avoids breaking the cache</h2>

@@ -55,7 +55,7 @@ LESSON_24 = {
 <p>agent 要跑的每条命令,先过一个"危险模式"黑名单:</p>
 
 <div class="codefile">
-  <div class="cf-head"><span class="dot"></span><span class="path">tools/approval.py</span><span class="ln">262-275 / 657-668 · 简化</span></div>
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/approval.py</span><span class="ln">262-275 / 657-669 · 简化</span></div>
   <pre>HARDLINE_PATTERNS = [                       <span class="cm"># 红线:连 yolo 也不放行</span>
     (<span class="st">r"\brm\s+(-[^\s]*\s+)*(/|/home|/root|/etc|/usr)"</span>, <span class="st">"recursive delete of system directory"</span>),
     (<span class="st">r"\bmkfs(\.[a-z0-9]+)?\b"</span>, <span class="st">"format filesystem (mkfs)"</span>),
@@ -243,7 +243,7 @@ dependencies = [
 <p>Every command the agent wants to run first passes a "dangerous pattern" blacklist:</p>
 
 <div class="codefile">
-  <div class="cf-head"><span class="dot"></span><span class="path">tools/approval.py</span><span class="ln">262-275 / 657-668 · simplified</span></div>
+  <div class="cf-head"><span class="dot"></span><span class="path">tools/approval.py</span><span class="ln">262-275 / 657-669 · simplified</span></div>
   <pre>HARDLINE_PATTERNS = [                       <span class="cm"># red lines: not even yolo clears these</span>
     (<span class="st">r"\brm\s+(-[^\s]*\s+)*(/|/home|/root|/etc|/usr)"</span>, <span class="st">"recursive delete of system directory"</span>),
     (<span class="st">r"\bmkfs(\.[a-z0-9]+)?\b"</span>, <span class="st">"format filesystem (mkfs)"</span>),

@@ -193,7 +193,7 @@ messages.insert(3, {"role": "system", "content": "[配额仅剩 10%]"})
 # 或：按当前任务重排 / 增删工具定义，顺手「整理」上下文
 messages = reorder_tools_for_task(messages, current_task)
 # 从插入 / 改动点起，后面每个 token 的缓存断点全部作废 → 全价重算</pre></div>
-<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ 正例 · agent/prompt_caching.py:64</span></div><pre>def apply_anthropic_cache_control(
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ 正例 · agent/prompt_caching.py:49</span></div><pre>def apply_anthropic_cache_control(
     api_messages: List[Dict[str, Any]],
     cache_ttl: str = "5m",
     native_anthropic: bool = False,
@@ -1064,7 +1064,7 @@ assert "gemini-2.5-pro" in _PROVIDER_MODELS["gemini"]   # 模型一改名就红
 assert DEFAULT_CONFIG["_config_version"] == 21           # config 一升版就红
 assert len(_PROVIDER_MODELS["huggingface"]) == 8         # 加一个 provider 就红
 # 没有任何行为覆盖，只是逼着每次例行更新都去「修测试」</pre></div>
-<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ 正例 · AGENTS.md:1340 · 锁不变量</span></div><pre># 不变量：断言两份数据之间该有的关系（随系统演化恒真）
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ 正例 · AGENTS.md:1349 · 锁不变量</span></div><pre># 不变量：断言两份数据之间该有的关系（随系统演化恒真）
 assert "gemini" in _PROVIDER_MODELS
 assert len(_PROVIDER_MODELS["gemini"]) &gt;= 1              # catalog 至少有一个条目
 # 每个 catalog 条目都必须有 context-length
@@ -1103,9 +1103,9 @@ for m in _PROVIDER_MODELS["huggingface"]:
   <text x="510" y="252" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">CI 恒绿</text>
   <text x="510" y="269" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">关系不变，测试随系统演化</text>
   <text x="510" y="304" text-anchor="middle" font-size="10.5" fill="var(--muted)">锁行为不变量，不锁具体值</text>
-  <text x="510" y="324" text-anchor="middle" font-size="10.5" fill="var(--muted)">AGENTS.md:1340 · 每条都有 context length</text>
+  <text x="510" y="324" text-anchor="middle" font-size="10.5" fill="var(--muted)">AGENTS.md:1349 · 每条都有 context length</text>
 </svg>
-<div class="fig-cap"><b>E4 · 不变量 vs 快照</b>：断言 <span class="mono">"gemini-2.5-pro" in models</span> 这种具体值，模型一周更就红、天天「修测试」；改断言「catalog 至少一个条目」「每条都有 context length」这种<strong>不变量</strong>，加删模型都不红——测试随系统演化（AGENTS.md:1340）。</div>
+<div class="fig-cap"><b>E4 · 不变量 vs 快照</b>：断言 <span class="mono">"gemini-2.5-pro" in models</span> 这种具体值，模型一周更就红、天天「修测试」；改断言「catalog 至少一个条目」「每条都有 context length」这种<strong>不变量</strong>，加删模型都不红——测试随系统演化（AGENTS.md:1349）。</div>
 </div>
 
 <p>剩下三张卡（E5 / E6 / E7）都关于<strong>「别让单点把整条龙拖垮」</strong>，再各配一张图收尾。先看 <strong>E5 · provider 韧性</strong>：把所有请求押在一个 provider 上，它一超时 / 限流 / 5xx，整个 agent 就停摆；而且不同 provider 的<strong>方言</strong>并不一致——reasoning 字段放哪、工具调用怎么序列化、能不能接受空响应，各有各的脾气。对策是两手：一手 <span class="mono">fallback_model</span> 在主 provider 挂掉时自动顶上（run_agent.py:421），一手按 provider <strong>方言适配</strong>（<span class="mono">api_mode</span> 切换、客户端替换、空响应补一个空格）。</p>
@@ -1452,7 +1452,7 @@ messages.insert(3, {"role": "system", "content": "[quota only 10% left]"})
 # or: reorder / add / drop tool definitions for the current task, "tidying" the context
 messages = reorder_tools_for_task(messages, current_task)
 # from the insert / edit point on, every later token's cache breakpoint is voided → full-price recompute</pre></div>
-<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ right · agent/prompt_caching.py:64</span></div><pre>def apply_anthropic_cache_control(
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ right · agent/prompt_caching.py:49</span></div><pre>def apply_anthropic_cache_control(
     api_messages: List[Dict[str, Any]],
     cache_ttl: str = "5m",
     native_anthropic: bool = False,
@@ -2323,7 +2323,7 @@ assert "gemini-2.5-pro" in _PROVIDER_MODELS["gemini"]   # reddens on any rename
 assert DEFAULT_CONFIG["_config_version"] == 21           # reddens on any bump
 assert len(_PROVIDER_MODELS["huggingface"]) == 8         # reddens on any new provider
 # No behavioral coverage — just forces "fix the test" on every routine update</pre></div>
-<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ right · AGENTS.md:1340 · lock the invariant</span></div><pre># Invariant: assert the relationship two pieces of data must hold (stays true as the system evolves)
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ right · AGENTS.md:1349 · lock the invariant</span></div><pre># Invariant: assert the relationship two pieces of data must hold (stays true as the system evolves)
 assert "gemini" in _PROVIDER_MODELS
 assert len(_PROVIDER_MODELS["gemini"]) &gt;= 1              # catalog has at least one entry
 # every catalog entry must have a context-length
@@ -2362,9 +2362,9 @@ for m in _PROVIDER_MODELS["huggingface"]:
   <text x="510" y="252" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">CI stays green</text>
   <text x="510" y="269" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">relation holds, test evolves with the system</text>
   <text x="510" y="304" text-anchor="middle" font-size="10.5" fill="var(--muted)">lock the invariant, not the value</text>
-  <text x="510" y="324" text-anchor="middle" font-size="10.5" fill="var(--muted)">AGENTS.md:1340 · every entry has a context length</text>
+  <text x="510" y="324" text-anchor="middle" font-size="10.5" fill="var(--muted)">AGENTS.md:1349 · every entry has a context length</text>
 </svg>
-<div class="fig-cap"><b>E4 · invariant vs snapshot</b>: assert a specific value like <span class="mono">"gemini-2.5-pro" in models</span> and a weekly model update reddens it — you "fix tests" daily; switch to an <strong>invariant</strong> ("catalog has at least one entry", "every entry has a context length") and adds/removes don't redden — the test evolves with the system (AGENTS.md:1340).</div>
+<div class="fig-cap"><b>E4 · invariant vs snapshot</b>: assert a specific value like <span class="mono">"gemini-2.5-pro" in models</span> and a weekly model update reddens it — you "fix tests" daily; switch to an <strong>invariant</strong> ("catalog has at least one entry", "every entry has a context length") and adds/removes don't redden — the test evolves with the system (AGENTS.md:1349).</div>
 </div>
 
 <p>The last three cards (E5 / E6 / E7) are all about <strong>"don't let a single point drag the whole stack down"</strong>, each capped with a figure. First <strong>E5 · provider resilience</strong>: bet every request on one provider and a single timeout / rate-limit / 5xx stalls the whole agent; worse, providers' <strong>dialects</strong> differ — where the reasoning field lives, how tool calls serialize, whether an empty response is accepted, each has its own quirks. The fix is two-handed: one hand, <span class="mono">fallback_model</span> takes over automatically when the primary provider goes down (run_agent.py:421); the other, adapt per provider <strong>dialect</strong> (<span class="mono">api_mode</span> switch, client swap, pad an empty response with a space).</p>

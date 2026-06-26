@@ -1078,6 +1078,7 @@ Memory lets Hermes remember across sessions "<strong>who you are and what you pr
     <span class="kw">if</span> idx == current_turn_user_idx <span class="kw">and</span> msg.get(<span class="st">"role"</span>) == <span class="st">"user"</span>:
         <span class="kw">if</span> _ext_prefetch_cache:
             fenced = build_memory_context_block(_ext_prefetch_cache)  <span class="cm"># wraps in &lt;memory-context&gt;</span>
+            _base = api_msg.get(<span class="st">"content"</span>, <span class="st">""</span>)
             api_msg[<span class="st">"content"</span>] = _base + <span class="st">"\n\n"</span> + fenced
     api_messages.append(api_msg)</pre>
 </div>

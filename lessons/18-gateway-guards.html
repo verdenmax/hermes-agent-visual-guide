@@ -565,7 +565,7 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
     <li><strong>两道守卫</strong>:适配器层(busy 排队 <span class="mono">_pending_messages</span>)+ 网关 runner 层(slash 命令分派)。控制命令必须<strong>同时旁路两道</strong>。</li>
     <li><strong>旁路两类</strong>:<span class="mono">/stop /new /reset</span> 取消在途任务;<span class="mono">/approve /deny /status</span> 等直接内联派发(不取消)。</li>
     <li><strong>排队=出事</strong>:控制命令进队列会被兜底<strong>丢弃</strong>(zero-char 响应)或<strong>死锁</strong>(<span class="mono">/approve</span>)。</li>
-    <li><strong>不破缓存</strong>:控制命令走控制通道、不混进对话历史,维持严格角色交替(第 6 章)。</li>
+    <li><strong>不破缓存</strong>:控制命令走控制通道、不混进对话历史,维持严格角色交替(第 7 章)。</li>
     <li><strong>避开竞争</strong>:旁路用内联派发,<strong>不走</strong> <span class="mono">_process_message_background</span>(它和会话生命周期清理抢)。</li>
   </ul>
 </div>
@@ -799,7 +799,7 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
     <li><strong>Two guards</strong>: the adapter layer (busy → queue in <span class="mono">_pending_messages</span>) + the gateway runner layer (slash-command dispatch). Control commands must <strong>bypass both</strong>.</li>
     <li><strong>Two bypass classes</strong>: <span class="mono">/stop /new /reset</span> cancel the in-flight task; <span class="mono">/approve /deny /status</span> etc. dispatch inline (no cancel).</li>
     <li><strong>Queue = trouble</strong>: a queued control command gets <strong>discarded</strong> by the safety net (zero-char response) or <strong>deadlocks</strong> (<span class="mono">/approve</span>).</li>
-    <li><strong>Cache intact</strong>: control commands ride a control channel, never mixing into conversation history, preserving strict role alternation (ch.6).</li>
+    <li><strong>Cache intact</strong>: control commands ride a control channel, never mixing into conversation history, preserving strict role alternation (ch.7).</li>
     <li><strong>Dodge the race</strong>: bypass uses inline dispatch, <strong>not</strong> <span class="mono">_process_message_background</span> (which races session-lifecycle cleanup).</li>
   </ul>
 </div>
