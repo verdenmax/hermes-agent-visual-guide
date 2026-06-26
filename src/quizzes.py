@@ -892,8 +892,38 @@ QUIZZES = {
         ],
     },
     "26-pitfalls-building-an-agent.html": {
-        "mcq": [],
-        "open": [],
+        "mcq": [
+            {
+                "q": {"zh": "一段长对话越聊越贵、从某一轮起每轮成本突然翻倍，最可能的根因是？",
+                      "en": "A long conversation keeps getting pricier and from one turn on the per-turn cost suddenly doubles — what's the most likely root cause?"},
+                "opts": [
+                    {"zh": "模型「变笨了」，需要换个更大的模型重来", "en": "The model 'got dumber' and you need to swap in a bigger one"},
+                    {"zh": "会话中途改动了可缓存前缀（重排工具 / 插了条系统通知 / 刷新了记忆），缓存从那一点起整段失效、之后每轮都按全价重算", "en": "Something mutated the cacheable prefix mid-conversation (reordered tools / injected a system notice / refreshed memory); the cache voids from that point on, so every later turn is re-billed at full price"},
+                    {"zh": "网络变慢了，延迟拉高了账单", "en": "The network slowed down and latency inflated the bill"},
+                    {"zh": "只是模型这一轮的输出变长了一点", "en": "The model's output just got a bit longer this turn"},
+                ],
+                "answer": 1,
+                "why": {"zh": "这撞的是「缓存神圣线」：前缀缓存逐字节比对，首个不同字节起整段作废。中途重排工具、插系统通知、刷新记忆都会改动已缓存前缀，让缓存从那一点崩掉——之后每轮都按全价重算，成本翻几倍。对策是绝不在对话中途改前缀、只往末尾追加（唯一例外是第 15 章的上下文压缩）。",
+                        "en": "This hits the 'sacred cache' line: the prefix cache matches byte-by-byte and voids everything from the first differing byte. Reordering tools, injecting a system notice, or refreshing memory mid-conversation all mutate the cached prefix, collapsing the cache from that point on — every later turn is re-billed at full price, multiplying cost. The fix: never edit the prefix mid-conversation, only append to the tail (the one exception is ch.15 context compression)."},
+            },
+            {
+                "q": {"zh": "本章五类坑（缓存 / 循环 / 工具 / 安全 / 实践）共同的总根源是什么？",
+                      "en": "What's the shared root cause behind this chapter's five pitfall families (cache / loops / tools / safety / practice)?"},
+                "opts": [
+                    {"zh": "框架本身的 bug，把框架修好就没坑了", "en": "Bugs in the framework itself — fix the framework and the pitfalls vanish"},
+                    {"zh": "Python 这门语言的限制", "en": "Limitations of the Python language"},
+                    {"zh": "都是 LLM 七缺陷 A–G 在「自主、连续、安全运行」这个场景下的现身——同一批固有缺陷换个舞台再次冒头", "en": "They're all the LLM's seven flaws A–G resurfacing in the 'autonomous, continuous, safe-running' setting — the same inherent flaws showing up again on a new stage"},
+                    {"zh": "模型参数量还不够大", "en": "The model just doesn't have enough parameters yet"},
+                ],
+                "answer": 2,
+                "why": {"zh": "五类坑不是各自孤立的 bug，而是 A–G 七缺陷在「让模型自主、连续、还要安全地跑」这个新场景下的再现：缓存坑源于把有状态当无状态用、循环坑源于无状态与不会喊停、工具坑源于窄腰被撑破、安全坑源于「指令=数据」且模型不可信。根治靠的是顺着缺陷设计（缓存神圣 / 自我进化 / 窄腰 / 安全横切），而不是指望换框架或换更大的模型。",
+                        "en": "The five families aren't isolated bugs but the seven flaws A–G recurring in the new setting of 'let the model run autonomously, continuously, and safely': cache pitfalls come from treating stateful as stateless, loop pitfalls from statelessness plus no self-stop, tool pitfalls from bursting the narrow waist, safety pitfalls from instructions-as-data plus an untrustworthy model. The cure is designing along the flaws (sacred cache / self-evolution / narrow waist / cross-cutting safety), not swapping frameworks or reaching for a bigger model."},
+            },
+        ],
+        "open": [
+            {"zh": "举一个你自己做 agent 最可能踩的坑，写出它的「症状 → 根因（对应哪条 A–G 缺陷）→ 对策」，并说明它对应 hermes 的哪条设计线（缓存神圣 / 自我进化 / 窄腰 / 安全横切）。",
+             "en": "Name a pitfall you'd most likely hit building your own agent. Write out its 'symptom → root cause (which A–G flaw) → countermeasure,' and say which Hermes design line it maps to (sacred cache / self-evolution / narrow waist / cross-cutting safety)."},
+        ],
     },
 }
 
