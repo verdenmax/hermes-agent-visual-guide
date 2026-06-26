@@ -149,7 +149,7 @@ effective_role = role <span class="kw">if</span> (role == <span class="st">"orch
 </div>
 
 <h2>background 委派如何不破缓存</h2>
-<p>顶层 model 发起的委派<strong>总是 background</strong>：立即返回一个 <span class="mono">delegation_id</span>，子代理在后台守护线程里跑。子代理跑完后，结果如何<strong>不破坏父缓存</strong>地回到对话？答案在完成队列的设计里：</p>
+<p>顶层 model 发起的委派<strong>默认是同步的</strong>——父代理会等子代理跑完、拿到摘要再继续（见下一节）。但也可以显式 <span class="mono">background=true</span> 让它<strong>异步</strong>：立即返回一个 <span class="mono">delegation_id</span>，子代理在后台守护线程里跑。这时子代理跑完后，结果如何<strong>不破坏父缓存</strong>地回到对话？答案在完成队列的设计里：</p>
 <p>为什么宁可绕一大圈走<strong>共享完成队列</strong>，也不直接把结果塞回正在跑的循环？因为那条 idle 重入的轨道是<strong>现成且安全</strong>的：CLI 与 gateway 本就在空闲时轮询这条队列，复用它就白拿了<strong>去重、崩溃恢复检查点</strong>，还省得在仓库两个最大的文件里再写一套排空循环。更关键的是，硬插会在工具结果与 assistant 消息之间制造非法的同角色相邻（第 7 章），并改写历史前缀击穿缓存（第 6 章）——而作为新 turn 浮现，两样都不犯。</p>
 <p>完成事件还特意携带一块<strong>自包含的任务来源</strong>（原始 goal、父给的 context、toolsets、model、派发时刻、状态、完整摘要）。为什么这么重？因为结果回灌时父可能已深陷无关上下文、早忘了当初为何派出这个子代理；这块自述让父能就地<strong>用掉结果或按新世界重派</strong>。这也解释了父为何<strong>默认等</strong>子的摘要再走：等待点就是<strong>汇总点</strong>，把多路并行的结论收拢成一段高信号文字，是上下文经济最划算的一步。</p>
 
@@ -347,7 +347,7 @@ effective_role = role <span class="kw">if</span> (role == <span class="st">"orch
 </div>
 
 <h2>How background delegation avoids breaking the cache</h2>
-<p>A top-level, model-issued delegation <strong>always runs in the background</strong>: it returns a <span class="mono">delegation_id</span> immediately, and the subagent runs on a background daemon thread. When the child finishes, how does the result re-enter the conversation <strong>without breaking the parent's cache</strong>? The answer is in the completion-queue design:</p>
+<p>A top-level, model-issued delegation is <strong>synchronous by default</strong> — the parent waits for the child to finish and return its summary before continuing (see the next section). But it can also be made <strong>asynchronous</strong> with an explicit <span class="mono">background=true</span>: it returns a <span class="mono">delegation_id</span> immediately, and the subagent runs on a background daemon thread. When the child then finishes, how does the result re-enter the conversation <strong>without breaking the parent's cache</strong>? The answer is in the completion-queue design:</p>
 <p>Why take the long way through a <strong>shared completion queue</strong> instead of stuffing the result straight back into the running loop? Because that idle re-entry rail is <strong>already there and safe</strong>: the CLI and gateway already poll this queue while idle, so reusing it gets <strong>de-dup and a crash-recovery checkpoint</strong> for free and avoids writing a second drain loop in the two largest files in the repo. More importantly, splicing inline would create an illegal same-role adjacency between a tool result and an assistant message (ch.7) and rewrite the history prefix to shatter the cache (ch.6) — whereas surfacing as a new turn commits neither sin.</p>
 <p>The completion event also deliberately carries a <strong>self-contained task-source block</strong> (the original goal, the context the parent supplied, toolsets, model, dispatch time, status, full summary). Why so heavy? Because when the result re-enters, the parent may be deep in unrelated context and has long forgotten why it spawned this subagent; the self-description lets it <strong>use the result or re-dispatch against the new world</strong> on the spot. This also explains why the parent <strong>waits by default</strong> for the child's summary: the wait point is the <strong>aggregation point</strong>, and collapsing parallel conclusions into one high-signal blob of text is the most context-economical move available.</p>
 
@@ -478,7 +478,7 @@ Spawn a THIRD agent context -- not you (the implementer), not the reviewer.</pre
   <text x="289" y="145" text-anchor="middle" font-size="16" font-weight="700" fill="var(--red)">✕</text>
 
   <rect x="378" y="44" width="282" height="196" rx="10" fill="var(--purple-soft)" stroke="var(--purple)"/>
-  <text x="519" y="66" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">③ 验证者 · 独立 fresh context</text>
+  <text x="519" y="66" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">② 验证者 · 独立 fresh context</text>
   <text x="394" y="92" font-size="11.5" fill="var(--ink)">• 只拿 diff（不共享实现者上下文）</text>
   <text x="394" y="116" font-size="11.5" fill="var(--ink)">• 对照原始要求做符合性判断</text>
   <text x="394" y="140" font-size="11.5" fill="var(--ink)">• 要求可验证把手：URL/ID/路径/HTTP</text>
@@ -660,7 +660,7 @@ Spawn a THIRD agent context -- not you (the implementer), not the reviewer.</pre
   <text x="289" y="145" text-anchor="middle" font-size="16" font-weight="700" fill="var(--red)">✕</text>
 
   <rect x="378" y="44" width="282" height="196" rx="10" fill="var(--purple-soft)" stroke="var(--purple)"/>
-  <text x="519" y="66" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">③ Verifier · independent fresh context</text>
+  <text x="519" y="66" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">② Verifier · independent fresh context</text>
   <text x="394" y="92" font-size="11.5" fill="var(--ink)">• gets only the diff (no shared context)</text>
   <text x="394" y="116" font-size="11.5" fill="var(--ink)">• checks compliance vs original spec</text>
   <text x="394" y="140" font-size="11.5" fill="var(--ink)">• demands handles: URL/ID/path/HTTP</text>

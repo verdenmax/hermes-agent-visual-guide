@@ -152,7 +152,7 @@ agent 的<strong>运行环境</strong>本身就是可插拔的，从本机一直
 <p>更妙的是它<strong>注入的位置</strong>：nudge 是一条追加到消息<strong>末尾</strong>的普通 user 消息，
 <strong>不改动 system prompt、不重建上下文</strong>。这正是为了守住那条铁律——<strong>prompt 缓存不能破</strong>。
 “提醒 agent 去学习”这件看似简单的事，背后是一个<strong>既要驱动进化、又不能破坏缓存</strong>的精细权衡（细节见第 9 章）。</p>
-<p>把这个小细节放大看，它其实是<strong>整本书的设计缩影</strong>：一个再有用的功能，只要它要<strong>改 system prompt 或重建上下文</strong>，就会击穿 prompt 缓存、让长对话每轮成本翻倍——所以宁可换一种“只往末尾追加”的笨办法，也绝不去动前缀。这就是为什么“提醒 agent 学习”不能简单地塞进系统提示里。同样的取舍也解释了“<strong>窄腰</strong>”：每多一个核心工具，它的 schema 就要<strong>随每一次 API 调用一起发出去</strong>，成本与“工具越多、模型选择质量越差”的代价是全局摊派的（第 3 章 F·工具过载）。所以能力优先长在<strong>边缘</strong>——技能、插件、MCP（第 23 章），而不是往核心里塞。</p>
+<p>把这个小细节放大看，它其实是<strong>整本书的设计缩影</strong>：一个再有用的功能，只要它要<strong>改 system prompt 或重建上下文</strong>，就会击穿 prompt 缓存、让长对话每轮成本翻倍——所以宁可换一种“只往末尾追加”的笨办法，也绝不去动前缀。这就是为什么“提醒 agent 学习”不能简单地塞进系统提示里。同样的取舍也解释了“<strong>窄腰</strong>”：每多一个核心工具，它的 schema 就要<strong>随每一次 API 调用一起发出去</strong>，成本与“工具越多、模型选择质量越差”的代价是全局摊派的（第 3 章 F·误差累积——这里具体是其中“工具越多、选择质量越差”这一面）。所以能力优先长在<strong>边缘</strong>——技能、插件、MCP（第 23 章），而不是往核心里塞。</p>
 <div class="vflow">
   <div class="step"><div class="num">1</div><div class="sc"><h4>干活</h4><p>和你一起解决问题，积累了“怎么做”的经验</p></div></div>
   <div class="step"><div class="num">2</div><div class="sc"><h4>到点提醒</h4><p>末尾追加 nudge：“要不要存成技能/记忆？”</p></div></div>
@@ -371,7 +371,7 @@ session</strong>, so it never nags.</p>
 <strong>end</strong>, <strong>changing no system prompt and rebuilding no context</strong>. That's exactly to honor the iron
 rule — <strong>the prompt cache must not break</strong>. “Remind the agent to learn” sounds trivial, but underneath it's a
 careful tradeoff between <strong>driving evolution</strong> and <strong>never breaking the cache</strong> (details in ch.9).</p>
-<p>Zoom out and this small detail is <strong>the book's design in miniature</strong>: any feature, however useful, that has to <strong>change the system prompt or rebuild context</strong> will shatter the prompt cache and double the per-turn cost of a long chat — so we'd rather take the clumsy “append-only at the end” path than touch the prefix. That's why “remind the agent to learn” can't simply be stuffed into the system prompt. The same tradeoff explains the <strong>narrow waist</strong>: each extra core tool ships its schema <strong>on every single API call</strong>, and the cost — plus “more tools, worse model selection” — is paid globally (ch.3, F·tool overload). So capability grows at the <strong>edges</strong> first — skills, plugins, MCP (ch.23) — rather than being crammed into the core.</p>
+<p>Zoom out and this small detail is <strong>the book's design in miniature</strong>: any feature, however useful, that has to <strong>change the system prompt or rebuild context</strong> will shatter the prompt cache and double the per-turn cost of a long chat — so we'd rather take the clumsy “append-only at the end” path than touch the prefix. That's why “remind the agent to learn” can't simply be stuffed into the system prompt. The same tradeoff explains the <strong>narrow waist</strong>: each extra core tool ships its schema <strong>on every single API call</strong>, and the cost — plus “more tools, worse model selection” — is paid globally (ch.3, F·error accumulation — specifically its “more tools, worse selection” facet). So capability grows at the <strong>edges</strong> first — skills, plugins, MCP (ch.23) — rather than being crammed into the core.</p>
 <div class="vflow">
   <div class="step"><div class="num">1</div><div class="sc"><h4>Work</h4><p>solve problems with you; accumulate know-how</p></div></div>
   <div class="step"><div class="num">2</div><div class="sc"><h4>Nudge</h4><p>append at the end: “save as a skill/memory?”</p></div></div>
@@ -939,7 +939,7 @@ LESSON_03 = {
 </div>
 <p><strong>① ⭐⭐ 误差累积(error compounding)。</strong>每步 95% 可靠，20 步连乘只剩 <strong>≈36%</strong>。对策：<strong>保持回路短</strong>、
 <strong>每步验证</strong>、<strong>任务分解</strong>、<strong>设检查点</strong>。Hermes 的委派(第 13 章)正是用“短回路 + 分解”对抗它。</p>
-<p><strong>为什么误差会“滚雪球”:自回归没有归零点。</strong>自主循环里每一步都<strong>以上一步的输出为输入</strong>,包括上一步犯下的错——中途没有外部标准答案把状态拉回正轨,于是小偏差被一路<strong>带进并放大</strong>,可靠率随步数<strong>连乘衰减</strong>(95% 的 20 步只剩约 36%)。Hermes 的对策是<strong>不让单条回路拉太长</strong>:用委派(第 13 章)把大任务拆成<strong>各自隔离上下文</strong>的短回路子任务,每段独立收敛、独立核查,父 agent 只接住子任务的摘要而不被它的中间噪声污染;再用迭代预算与 <span class="mono">max_iterations</span>(默认 90)、每轮的<strong>中断检查</strong>和一次“宽限调用”(第 5 章)给循环钉上硬上限,防止它无声地一直烧下去。</p>
+<p><strong>为什么误差会“滚雪球”:自回归没有归零点。</strong>自主循环里每一步都<strong>以上一步的输出为输入</strong>,包括上一步犯下的错——中途没有外部标准答案把状态拉回正轨,于是小偏差被一路<strong>带进并放大</strong>,可靠率随步数<strong>连乘衰减</strong>(95% 的 20 步只剩约 36%)。Hermes 的对策是<strong>不让单条回路拉太长</strong>:用委派(第 13 章)把大任务拆成<strong>各自隔离上下文</strong>的短回路子任务,每段独立收敛、独立核查,父 agent 只接住子任务的摘要而不被它的中间噪声污染;再用迭代预算与 <span class="mono">max_iterations</span>(默认 90)、每轮的<strong>中断检查</strong>给循环钉上硬上限(此外还有一个<strong>默认从不触发</strong>的“宽限调用”预留钩子,详见第 5 章),防止它无声地一直烧下去。</p>
 <div class="figure">
 <svg viewBox="0 0 680 300" role="img" aria-label="F 误差累积：早期一个小错沿自主回合越滚越大，生成-验证分离、压缩、评测在中途截断累积">
   <text x="20" y="20" font-size="13.5" font-weight="700" fill="var(--accent-ink)">F·误差累积：早期一个小错，沿自主回合越滚越大</text>
@@ -1169,7 +1169,7 @@ treat <strong>prompts as code</strong> — version them, back them with an eval 
 <p><strong>① ⭐⭐ Error compounding.</strong> 95% reliable per step, 20 steps multiplies to <strong>≈36%</strong>. Fix:
 <strong>keep loops short</strong>, <strong>verify each step</strong>, <strong>decompose</strong>, <strong>checkpoint</strong>.
 Hermes' delegation (ch.13) fights this with “short loop + decomposition.”</p>
-<p><strong>Why errors “snowball”: autoregression has no reset to zero.</strong> In an autonomous loop every step takes <strong>the previous step's output as input</strong> — including the mistakes it just made — with no external ground truth mid-stream to pull state back on track, so small deviations get <strong>carried forward and amplified</strong> and reliability <strong>decays multiplicatively</strong> with step count (95% over 20 steps leaves ~36%). Hermes' answer is to <strong>not let any single loop run too long</strong>: delegation (ch.13) splits a big task into short-loop subtasks with <strong>isolated contexts</strong>, each converging and being checked on its own, so the parent receives only the child's summary and isn't polluted by its intermediate noise; then iteration budget plus <span class="mono">max_iterations</span> (default 90), per-turn <strong>interrupt checks</strong> and a single “grace call” (ch.5) nail a hard ceiling on the loop so it can't silently burn forever.</p>
+<p><strong>Why errors “snowball”: autoregression has no reset to zero.</strong> In an autonomous loop every step takes <strong>the previous step's output as input</strong> — including the mistakes it just made — with no external ground truth mid-stream to pull state back on track, so small deviations get <strong>carried forward and amplified</strong> and reliability <strong>decays multiplicatively</strong> with step count (95% over 20 steps leaves ~36%). Hermes' answer is to <strong>not let any single loop run too long</strong>: delegation (ch.13) splits a big task into short-loop subtasks with <strong>isolated contexts</strong>, each converging and being checked on its own, so the parent receives only the child's summary and isn't polluted by its intermediate noise; then iteration budget plus <span class="mono">max_iterations</span> (default 90) and per-turn <strong>interrupt checks</strong> nail a hard ceiling on the loop (plus a “grace call” reserved hook that the core <strong>never actually fires</strong> by default, see ch.5) so it can't silently burn forever.</p>
 <div class="figure">
 <svg viewBox="0 0 680 300" role="img" aria-label="F error compounding: one small early error snowballs over autonomous turns; generator-verifier split, compression, and eval truncate the accumulation">
   <text x="20" y="20" font-size="13.5" font-weight="700" fill="var(--accent-ink)">F · error compounding: one small early error snowballs over the turns</text>
@@ -1397,7 +1397,9 @@ Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cro
   <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">234-248</span></div>
   <pre><span class="kw">def</span> <span class="fn">register</span>(self, name, toolset, schema, handler,
          check_fn=<span class="kw">None</span>, requires_env=<span class="kw">None</span>, is_async=<span class="kw">False</span>,
-         description=<span class="st">""</span>, emoji=<span class="st">""</span>, override=<span class="kw">False</span>):</pre>
+         description=<span class="st">""</span>, emoji=<span class="st">""</span>,
+       max_result_size_chars=<span class="kw">None</span>, dynamic_schema_overrides=<span class="kw">None</span>,
+       override=<span class="kw">False</span>):</pre>
 </div>
 <p>而“谁依赖谁”由 <span class="mono">registry.py</span> 自己的 docstring 钉死，是一条<strong>防循环依赖</strong>的单向链：</p>
 <div class="codefile">
@@ -1419,9 +1421,9 @@ Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cro
 <div class="card collab">
   <div class="tag">🧩 协作机制 · “一处编辑、全平台同步”怎么做到</div>
   <div class="collab-sub">① 组件清单</div>
-  <strong>_HERMES_CORE_TOOLS</strong>(<span class="mono">toolsets.py:29</span>)= 共享腰；<strong>TOOLSETS</strong> dict
+  <strong>_HERMES_CORE_TOOLS</strong>(<span class="mono">toolsets.py:31</span>)= 共享腰；<strong>TOOLSETS</strong> dict
   (<span class="mono">toolsets.py:89</span>)给每个平台一个 bundle，绝大多数直接 <span class="mono">"tools": _HERMES_CORE_TOOLS</span>；
-  <strong>PLATFORMS</strong>(<span class="mono">hermes_cli/platforms.py:22</span>)按 <span class="mono">hermes-&lt;platform&gt;</span> 约定选 base toolset；
+  <strong>PLATFORMS</strong>(<span class="mono">hermes_cli/platforms.py:21</span>)按 <span class="mono">hermes-&lt;platform&gt;</span> 约定选 base toolset；
   <strong>registry</strong>(<span class="mono">tools/registry.py</span>)收集 schema、派发调用；<strong>discover_builtin_tools()</strong>
   用 AST 扫描 <span class="mono">tools/*.py</span> 自动 import 触发注册。
   <div class="collab-sub">② 数据流</div>
@@ -1571,7 +1573,9 @@ The entry signature is clean:</p>
   <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">234-248</span></div>
   <pre><span class="kw">def</span> <span class="fn">register</span>(self, name, toolset, schema, handler,
          check_fn=<span class="kw">None</span>, requires_env=<span class="kw">None</span>, is_async=<span class="kw">False</span>,
-         description=<span class="st">""</span>, emoji=<span class="st">""</span>, override=<span class="kw">False</span>):</pre>
+         description=<span class="st">""</span>, emoji=<span class="st">""</span>,
+       max_result_size_chars=<span class="kw">None</span>, dynamic_schema_overrides=<span class="kw">None</span>,
+       override=<span class="kw">False</span>):</pre>
 </div>
 <p>And “who depends on whom” is pinned by <span class="mono">registry.py</span>'s own docstring — a one-way,
 <strong>circular-import-safe</strong> chain:</p>
@@ -1594,9 +1598,9 @@ The entry signature is clean:</p>
 <div class="card collab">
   <div class="tag">🧩 Collaboration · how “edit once, all platforms sync” works</div>
   <div class="collab-sub">① Component roster</div>
-  <strong>_HERMES_CORE_TOOLS</strong> (<span class="mono">toolsets.py:29</span>) = the shared waist; <strong>TOOLSETS</strong>
+  <strong>_HERMES_CORE_TOOLS</strong> (<span class="mono">toolsets.py:31</span>) = the shared waist; <strong>TOOLSETS</strong>
   dict (<span class="mono">toolsets.py:89</span>) gives each platform a bundle, most just <span class="mono">"tools":
-  _HERMES_CORE_TOOLS</span>; <strong>PLATFORMS</strong> (<span class="mono">hermes_cli/platforms.py:22</span>) picks a base
+  _HERMES_CORE_TOOLS</span>; <strong>PLATFORMS</strong> (<span class="mono">hermes_cli/platforms.py:21</span>) picks a base
   toolset by the <span class="mono">hermes-&lt;platform&gt;</span> convention; <strong>registry</strong>
   (<span class="mono">tools/registry.py</span>) collects schemas and dispatches; <strong>discover_builtin_tools()</strong> AST-scans
   <span class="mono">tools/*.py</span> and imports them to trigger registration.
@@ -1816,7 +1820,7 @@ LESSON_05 = {
 <p>预算还有个容易被误读的细节：<strong>每个 agent 各有一本独立的预算</strong>，parent 90、subagent 50，<strong>不是从同一个池子里扣</strong>。<span class="mono">iteration_budget.py</span> 的 docstring 写得很直白——「total iterations across parent + subagents can exceed the parent's cap」。这看似放宽了总量，其实是刻意的取舍：如果父子共用一池，一个贪心的子任务就能把父代理的额度吃光、让主线没法收尾；给子代理<strong>另开一本</strong>，等于把「深度」和「广度」分开计费——主循环的 90 管自己这条主线走多远，委派出去的每台小发动机各自的 50 管它们各自别失控。再加上 <span class="mono">_lock</span> 让 <span class="mono">consume</span>／<span class="mono">refund</span> 线程安全，并发的工具与子代理才能同时安全地扣同一本账。</p>
 
 <h2>可中断：随时能喊停</h2>
-<p>循环每圈开头都查 <span class="mono">_interrupt_requested</span>，那么这个标志是谁设的？是 <span class="mono">interrupt()</span>（<span class="mono">run_agent.py:2400-2440</span>）：它把 <span class="mono">_interrupt_requested = True</span>，记下中断消息，并把信号<strong>级联</strong>给正在执行的工具线程与子 agent，让 in-flight 操作尽快收手。最典型的触发场景在消息网关：当某个会话的 agent 还在跑、你又发来一条新消息，网关就调 <span class="mono">running_agent.interrupt(new_message.text)</span>——于是它在下一圈循环顶部被截停，转身处理你的新指令。</p>
+<p>循环每圈开头都查 <span class="mono">_interrupt_requested</span>，那么这个标志是谁设的？是 <span class="mono">interrupt()</span>（定义于 <span class="mono">run_agent.py:2376</span>，置位在 2400-2440）：它把 <span class="mono">_interrupt_requested = True</span>，记下中断消息，并把信号<strong>级联</strong>给正在执行的工具线程与子 agent，让 in-flight 操作尽快收手。最典型的触发场景在消息网关：当某个会话的 agent 还在跑、你又发来一条新消息，网关就调 <span class="mono">running_agent.interrupt(event.text)</span>——于是它在下一圈循环顶部被截停，转身处理你的新指令。</p>
 
 <p>中断为什么做得这么「重」——不只翻一个布尔，还要按线程定向、再级联给工具线程和子代理？看 <span class="mono">interrupt()</span>（<span class="mono">run_agent.py:2400</span>）就懂了：它用 <span class="mono">_set_interrupt(True, self._execution_thread_id)</span> 把信号<strong>精确打到这台 agent 的执行线程</strong>，而不是无差别地全局置位。为什么？因为网关（第 18 章）里<strong>同一个进程跑着多个会话</strong>，一个全局标志会让你打断 A 会话时连 B 会话一起截停。所以中断必须<strong>按会话隔离</strong>，再 fan-out 给那台 agent 自己的并发工具线程（否则一个卡在网络 I/O 的终端命令要等到自己超时才松手）和它派出去的子代理。多层定向不是不信任模型停下来的能力，而是要让「喊停」这件事本身<strong>精准、即时、互不误伤</strong>。</p>
 
@@ -2062,7 +2066,7 @@ From the moment you hit enter to the moment Hermes hands back a final answer, wh
 <p>The budget hides one easily-misread detail: <strong>each agent gets its own independent budget</strong> — parent 90, subagent 50 — and they <strong>do not draw from one shared pool</strong>. The <span class="mono">iteration_budget.py</span> docstring says it outright: "total iterations across parent + subagents can exceed the parent's cap." That looks like loosening the total, but it's a deliberate trade-off: if parent and child shared one pool, a greedy subtask could drain the parent's allotment and leave the main line unable to finish; giving each subagent <strong>its own book</strong> bills "depth" and "breadth" separately — the main loop's 90 governs how far this main line goes, while each delegated mini-engine's own 50 keeps it from spinning out. Add the <span class="mono">_lock</span> that makes <span class="mono">consume</span>/<span class="mono">refund</span> thread-safe, and concurrent tools and subagents can safely debit the same book at once.</p>
 
 <h2>Interruptible: halt any time</h2>
-<p>Every turn starts by checking <span class="mono">_interrupt_requested</span> — so who sets it? <span class="mono">interrupt()</span> (<span class="mono">run_agent.py:2400-2440</span>): it sets <span class="mono">_interrupt_requested = True</span>, records the interrupt message, and <strong>cascades</strong> the signal to in-flight tool threads and subagents so live operations abort fast. The classic trigger is the messaging gateway: when a session's agent is still running and you send a new message, the gateway calls <span class="mono">running_agent.interrupt(new_message.text)</span> — so it's cut off at the top of the next turn and pivots to your new instruction.</p>
+<p>Every turn starts by checking <span class="mono">_interrupt_requested</span> — so who sets it? <span class="mono">interrupt()</span> (defined at <span class="mono">run_agent.py:2376</span>, sets the flag at 2400-2440): it sets <span class="mono">_interrupt_requested = True</span>, records the interrupt message, and <strong>cascades</strong> the signal to in-flight tool threads and subagents so live operations abort fast. The classic trigger is the messaging gateway: when a session's agent is still running and you send a new message, the gateway calls <span class="mono">running_agent.interrupt(event.text)</span> — so it's cut off at the top of the next turn and pivots to your new instruction.</p>
 
 <p>Why is interrupt built so "heavy" — not just flipping a boolean, but targeting a thread, then cascading to tool threads and subagents? Look at <span class="mono">interrupt()</span> (<span class="mono">run_agent.py:2400</span>): it calls <span class="mono">_set_interrupt(True, self._execution_thread_id)</span> to land the signal <strong>precisely on this agent's execution thread</strong>, rather than setting a global flag indiscriminately. Why? Because in the gateway (Ch. 18) <strong>one process runs many sessions</strong>, and a single global flag would cut off session B when you interrupt session A. So the interrupt must be <strong>isolated per session</strong>, then fan out to that agent's own concurrent tool threads (otherwise a terminal command stuck on network I/O wouldn't let go until its own timeout) and to the subagents it dispatched. The multi-layer targeting isn't distrust of the model's ability to stop — it's making the act of "halt" itself <strong>precise, instant, and collision-free</strong>.</p>
 

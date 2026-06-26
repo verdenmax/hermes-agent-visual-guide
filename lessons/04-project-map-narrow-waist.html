@@ -466,7 +466,9 @@ Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cro
   <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">234-248</span></div>
   <pre><span class="kw">def</span> <span class="fn">register</span>(self, name, toolset, schema, handler,
          check_fn=<span class="kw">None</span>, requires_env=<span class="kw">None</span>, is_async=<span class="kw">False</span>,
-         description=<span class="st">""</span>, emoji=<span class="st">""</span>, override=<span class="kw">False</span>):</pre>
+         description=<span class="st">""</span>, emoji=<span class="st">""</span>,
+       max_result_size_chars=<span class="kw">None</span>, dynamic_schema_overrides=<span class="kw">None</span>,
+       override=<span class="kw">False</span>):</pre>
 </div>
 <p>而“谁依赖谁”由 <span class="mono">registry.py</span> 自己的 docstring 钉死，是一条<strong>防循环依赖</strong>的单向链：</p>
 <div class="codefile">
@@ -488,9 +490,9 @@ Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cro
 <div class="card collab">
   <div class="tag">🧩 协作机制 · “一处编辑、全平台同步”怎么做到</div>
   <div class="collab-sub">① 组件清单</div>
-  <strong>_HERMES_CORE_TOOLS</strong>(<span class="mono">toolsets.py:29</span>)= 共享腰；<strong>TOOLSETS</strong> dict
+  <strong>_HERMES_CORE_TOOLS</strong>(<span class="mono">toolsets.py:31</span>)= 共享腰；<strong>TOOLSETS</strong> dict
   (<span class="mono">toolsets.py:89</span>)给每个平台一个 bundle，绝大多数直接 <span class="mono">"tools": _HERMES_CORE_TOOLS</span>；
-  <strong>PLATFORMS</strong>(<span class="mono">hermes_cli/platforms.py:22</span>)按 <span class="mono">hermes-&lt;platform&gt;</span> 约定选 base toolset；
+  <strong>PLATFORMS</strong>(<span class="mono">hermes_cli/platforms.py:21</span>)按 <span class="mono">hermes-&lt;platform&gt;</span> 约定选 base toolset；
   <strong>registry</strong>(<span class="mono">tools/registry.py</span>)收集 schema、派发调用；<strong>discover_builtin_tools()</strong>
   用 AST 扫描 <span class="mono">tools/*.py</span> 自动 import 触发注册。
   <div class="collab-sub">② 数据流</div>
@@ -674,7 +676,9 @@ The entry signature is clean:</p>
   <div class="cf-head"><span class="dot"></span><span class="path">tools/registry.py</span><span class="ln">234-248</span></div>
   <pre><span class="kw">def</span> <span class="fn">register</span>(self, name, toolset, schema, handler,
          check_fn=<span class="kw">None</span>, requires_env=<span class="kw">None</span>, is_async=<span class="kw">False</span>,
-         description=<span class="st">""</span>, emoji=<span class="st">""</span>, override=<span class="kw">False</span>):</pre>
+         description=<span class="st">""</span>, emoji=<span class="st">""</span>,
+       max_result_size_chars=<span class="kw">None</span>, dynamic_schema_overrides=<span class="kw">None</span>,
+       override=<span class="kw">False</span>):</pre>
 </div>
 <p>And “who depends on whom” is pinned by <span class="mono">registry.py</span>'s own docstring — a one-way,
 <strong>circular-import-safe</strong> chain:</p>
@@ -697,9 +701,9 @@ The entry signature is clean:</p>
 <div class="card collab">
   <div class="tag">🧩 Collaboration · how “edit once, all platforms sync” works</div>
   <div class="collab-sub">① Component roster</div>
-  <strong>_HERMES_CORE_TOOLS</strong> (<span class="mono">toolsets.py:29</span>) = the shared waist; <strong>TOOLSETS</strong>
+  <strong>_HERMES_CORE_TOOLS</strong> (<span class="mono">toolsets.py:31</span>) = the shared waist; <strong>TOOLSETS</strong>
   dict (<span class="mono">toolsets.py:89</span>) gives each platform a bundle, most just <span class="mono">"tools":
-  _HERMES_CORE_TOOLS</span>; <strong>PLATFORMS</strong> (<span class="mono">hermes_cli/platforms.py:22</span>) picks a base
+  _HERMES_CORE_TOOLS</span>; <strong>PLATFORMS</strong> (<span class="mono">hermes_cli/platforms.py:21</span>) picks a base
   toolset by the <span class="mono">hermes-&lt;platform&gt;</span> convention; <strong>registry</strong>
   (<span class="mono">tools/registry.py</span>) collects schemas and dispatches; <strong>discover_builtin_tools()</strong> AST-scans
   <span class="mono">tools/*.py</span> and imports them to trigger registration.

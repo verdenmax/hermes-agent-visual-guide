@@ -426,7 +426,7 @@ html[data-lang="zh"] .lang-en { display: none !important; }
             <span class="kw">return</span> (<span class="kw">True</span>, description, description)
     <span class="kw">return</span> (<span class="kw">False</span>, <span class="kw">None</span>, <span class="kw">None</span>)</pre>
 </div>
-<p><span class="mono">approval.py</span> 是危险命令系统的<strong>单一真相源</strong>:12 条 <strong>HARDLINE</strong>(删根、格式化、写裸盘、fork 炸弹……)+ 47 条 <strong>DANGEROUS</strong>。命中就要用户<strong>审批</strong>。区别在:<span class="mono">/yolo</span> 模式能放行 DANGEROUS,但 <strong>HARDLINE 红线永远拦</strong>——给"省心"留了口子,却把"会毁系统"的死死焊住。还有一层<strong>智能审批</strong>:用辅助 LLM 自动放行低风险命令,减少打扰。</p>
+<p><span class="mono">approval.py</span> 是危险命令系统的<strong>单一真相源</strong>:12 条 <strong>HARDLINE</strong>(删根、格式化、写裸盘、fork 炸弹……)+ 61 条 <strong>DANGEROUS</strong>。命中就要用户<strong>审批</strong>。区别在:<span class="mono">/yolo</span> 模式能放行 DANGEROUS,但 <strong>HARDLINE 红线永远拦</strong>——给"省心"留了口子,却把"会毁系统"的死死焊住。还有一层<strong>智能审批</strong>:用辅助 LLM 自动放行低风险命令,减少打扰。</p>
 
 <p>黑名单还有个容易被忽略的细节:匹配前先把命令送进 <span class="mono">_normalize_command_for_detection</span> <strong>归一化</strong>(转小写、剥掉用来藏命令的转义反斜杠和成对空引号),正则也覆盖常见<strong>混淆写法</strong>——攻击者想用大小写、插转义符、塞空引号把 <span class="mono">rm -rf /</span> 拆散藏过去,会被归一化先<strong>还原</strong>、再被模式挡下。但要诚实:正则黑名单<strong>不可能穷尽</strong>所有混淆(这是黑名单的固有软肋),所以它<strong>不是唯一防线</strong>——它只是纵深里靠前的一层,后面还有审批确认、子代理剥离、最小权限兜着。安全的设计从不假设"某一层完美",而是假设"<strong>每一层都会漏</strong>",用层数换鲁棒。</p>
 
@@ -451,7 +451,7 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <text x="178" y="230" text-anchor="middle" font-size="10.5" fill="var(--red)">不可逆 · 几乎无正当理由 · 代价无穷大</text>
   <rect x="352" y="38" width="300" height="200" rx="10" fill="var(--amber-soft)" stroke="var(--amber)"/>
   <rect x="352" y="38" width="300" height="34" rx="10" fill="var(--amber)"/>
-  <text x="502" y="60" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--panel)">DANGEROUS · 47 条 · 黄线</text>
+  <text x="502" y="60" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--panel)">DANGEROUS · 61 条 · 黄线</text>
   <g font-size="11.5" fill="var(--ink)">
     <text x="368" y="98">命中即需用户审批后执行</text>
     <text x="368" y="122">/yolo 可一次放行</text>
@@ -465,7 +465,7 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <text x="340" y="270" text-anchor="middle" font-size="11" fill="var(--muted)">按不可逆程度分级</text>
   <text x="610" y="270" text-anchor="end" font-size="11" font-weight="700" fill="var(--amber)">可逆（给方便）▶</text>
 </svg>
-<div class="fig-cap"><b>HARDLINE vs DANGEROUS 分级</b>：危险命令按<b>不可逆程度</b>分两级。<b>HARDLINE</b>（删根 / 格式化 / 写裸盘 / fork 炸弹）一旦执行就<b>不可逆</b>、几乎无正当理由，故焊成红线——连 <span class="mono">/yolo</span> 都拦、零容忍；<b>DANGEROUS</b>（其余 47 条）危险但在受控场景可能正当，留了 <span class="mono">/yolo</span> 一次放行的口子，智能审批也只能<b>放宽</b>、无权松动红线。可逆的给方便，不可逆的零容忍。</div>
+<div class="fig-cap"><b>HARDLINE vs DANGEROUS 分级</b>：危险命令按<b>不可逆程度</b>分两级。<b>HARDLINE</b>（删根 / 格式化 / 写裸盘 / fork 炸弹）一旦执行就<b>不可逆</b>、几乎无正当理由，故焊成红线——连 <span class="mono">/yolo</span> 都拦、零容忍；<b>DANGEROUS</b>（其余 61 条）危险但在受控场景可能正当，留了 <span class="mono">/yolo</span> 一次放行的口子，智能审批也只能<b>放宽</b>、无权松动红线。可逆的给方便，不可逆的零容忍。</div>
 </div>
 
 <h2>第二层:子代理最小权限</h2>
@@ -536,7 +536,7 @@ dependencies = [
   <div class="tag">📌 本课要点</div>
   <ul>
     <li><strong>纵深防御</strong>:多层独立安全(审批 + 最小权限 + 注入隔离 + 供应链锁定),单层失守有下一层。</li>
-    <li><strong>危险命令审批</strong>:<span class="mono">detect_dangerous_command</span> 用正则黑名单(12 HARDLINE + 47 DANGEROUS);HARDLINE 红线连 <span class="mono">/yolo</span> 都拦。</li>
+    <li><strong>危险命令审批</strong>:<span class="mono">detect_dangerous_command</span> 用正则黑名单(12 HARDLINE + 61 DANGEROUS);HARDLINE 红线连 <span class="mono">/yolo</span> 都拦。</li>
     <li><strong>子代理最小权限</strong>:<span class="mono">DELEGATE_BLOCKED_TOOLS</span> 剥离递归派生/打扰/写记忆/跨平台/写脚本,把爆炸半径关进边缘(第 13 章)。</li>
     <li><strong>注入隔离(★)</strong>:控制命令在网关用 <span class="mono">get_command()</span> 显式解析、走旁路(第 18 章),不让模型当裁判(D·指令=数据)。</li>
     <li><strong>供应链锁定</strong>:依赖全 pin(<span class="mono">==</span>/上界/commit SHA),不信任任何会自动变的东西(<span class="mono">litellm</span> 教训)。</li>
@@ -648,7 +648,7 @@ dependencies = [
             <span class="kw">return</span> (<span class="kw">True</span>, description, description)
     <span class="kw">return</span> (<span class="kw">False</span>, <span class="kw">None</span>, <span class="kw">None</span>)</pre>
 </div>
-<p><span class="mono">approval.py</span> is the <strong>single source of truth</strong> for the dangerous-command system: 12 <strong>HARDLINE</strong> patterns (delete root, format, raw-disk write, fork bomb…) + 47 <strong>DANGEROUS</strong>. A match requires user <strong>approval</strong>. The distinction: <span class="mono">/yolo</span> mode can clear DANGEROUS, but <strong>HARDLINE red lines always block</strong> — leaving a "convenience" door open while welding shut the "will destroy the system" ones. There's also a <strong>smart-approval</strong> layer: an auxiliary LLM auto-clears low-risk commands to cut the nagging.</p>
+<p><span class="mono">approval.py</span> is the <strong>single source of truth</strong> for the dangerous-command system: 12 <strong>HARDLINE</strong> patterns (delete root, format, raw-disk write, fork bomb…) + 61 <strong>DANGEROUS</strong>. A match requires user <strong>approval</strong>. The distinction: <span class="mono">/yolo</span> mode can clear DANGEROUS, but <strong>HARDLINE red lines always block</strong> — leaving a "convenience" door open while welding shut the "will destroy the system" ones. There's also a <strong>smart-approval</strong> layer: an auxiliary LLM auto-clears low-risk commands to cut the nagging.</p>
 
 <p>The blacklist has an easily-missed detail: before matching, the command goes through <span class="mono">_normalize_command_for_detection</span> (lowercase, strip the escape backslashes and paired empty quotes used to hide a command), and the patterns also cover common <strong>obfuscations</strong> — an attacker trying to break up and hide <span class="mono">rm -rf /</span> with casing, inserted escapes, or empty quotes is first <strong>restored</strong> by normalization, then caught by the patterns. But to be honest: a regex blacklist <strong>can never exhaust</strong> every obfuscation (the inherent weakness of any blacklist), so it is <strong>not the only line</strong> — it's just an early layer in the depth, with approval confirmation, subagent stripping, and least privilege behind it. Secure design never assumes "one layer is perfect"; it assumes "<strong>every layer leaks</strong>" and trades layer count for robustness.</p>
 
@@ -673,7 +673,7 @@ dependencies = [
   <text x="178" y="230" text-anchor="middle" font-size="10.5" fill="var(--red)">irreversible · no legit reason · unbounded cost</text>
   <rect x="352" y="38" width="300" height="200" rx="10" fill="var(--amber-soft)" stroke="var(--amber)"/>
   <rect x="352" y="38" width="300" height="34" rx="10" fill="var(--amber)"/>
-  <text x="502" y="60" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--panel)">DANGEROUS · 47 · yellow lines</text>
+  <text x="502" y="60" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--panel)">DANGEROUS · 61 · yellow lines</text>
   <g font-size="11.5" fill="var(--ink)">
     <text x="368" y="98">a match requires user approval</text>
     <text x="368" y="122">/yolo can clear it once</text>
@@ -687,7 +687,7 @@ dependencies = [
   <text x="340" y="270" text-anchor="middle" font-size="11" fill="var(--muted)">graded by irreversibility</text>
   <text x="610" y="270" text-anchor="end" font-size="11" font-weight="700" fill="var(--amber)">reversible (convenience) ▶</text>
 </svg>
-<div class="fig-cap"><b>HARDLINE vs DANGEROUS tiering</b>: dangerous commands are graded by <b>irreversibility</b>. <b>HARDLINE</b> (delete-root / format / raw-disk write / fork bomb) is <b>irreversible</b> with almost no legitimate reason, so it's welded into a red line — blocks even <span class="mono">/yolo</span>, zero tolerance. <b>DANGEROUS</b> (the other 47) is risky but can be legitimate in a controlled setting, so it keeps the <span class="mono">/yolo</span> one-shot door, and smart-approval may only <b>loosen</b>, never touching the red lines. Convenience for the reversible, zero tolerance for the irreversible.</div>
+<div class="fig-cap"><b>HARDLINE vs DANGEROUS tiering</b>: dangerous commands are graded by <b>irreversibility</b>. <b>HARDLINE</b> (delete-root / format / raw-disk write / fork bomb) is <b>irreversible</b> with almost no legitimate reason, so it's welded into a red line — blocks even <span class="mono">/yolo</span>, zero tolerance. <b>DANGEROUS</b> (the other 61) is risky but can be legitimate in a controlled setting, so it keeps the <span class="mono">/yolo</span> one-shot door, and smart-approval may only <b>loosen</b>, never touching the red lines. Convenience for the reversible, zero tolerance for the irreversible.</div>
 </div>
 
 <h2>Layer two: subagent least-privilege</h2>
@@ -758,7 +758,7 @@ dependencies = [
   <div class="tag">📌 Key points</div>
   <ul>
     <li><strong>Defense in depth</strong>: multiple independent layers (approval + least privilege + injection isolation + supply-chain lock); one falls, the next catches.</li>
-    <li><strong>Dangerous-command approval</strong>: <span class="mono">detect_dangerous_command</span> uses a regex blacklist (12 HARDLINE + 47 DANGEROUS); HARDLINE red lines block even <span class="mono">/yolo</span>.</li>
+    <li><strong>Dangerous-command approval</strong>: <span class="mono">detect_dangerous_command</span> uses a regex blacklist (12 HARDLINE + 61 DANGEROUS); HARDLINE red lines block even <span class="mono">/yolo</span>.</li>
     <li><strong>Subagent least-privilege</strong>: <span class="mono">DELEGATE_BLOCKED_TOOLS</span> strips recursive-spawn/interaction/memory-write/cross-platform/script-write, caging the blast radius at the edge (ch.13).</li>
     <li><strong>Injection isolation (★)</strong>: control commands explicitly parsed at the gateway via <span class="mono">get_command()</span> on a bypass (ch.18), never letting the model judge (D·instr=data).</li>
     <li><strong>Supply-chain lock</strong>: all deps pinned (<span class="mono">==</span>/upper bound/commit SHA), trusting nothing that auto-changes (the <span class="mono">litellm</span> lesson).</li>
