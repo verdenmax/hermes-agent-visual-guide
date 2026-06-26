@@ -1223,9 +1223,9 @@ for m in _PROVIDER_MODELS["huggingface"]:
 <table class="t">
   <tr><th>症状</th><th>根因（A–G）</th><th>对策</th><th>→ 章</th></tr>
   <tr><td><strong>A1</strong> · 每轮成本不降反升、记不住新知</td><td><strong>B·无状态</strong>错解（前缀每轮变）</td><td>状态外置，prompt 只放稳定身份</td><td>ch6 / ch11</td></tr>
-  <tr><td><strong>A2</strong> · 长对话越聊越贵、某轮起翻倍</td><td>撞<strong>缓存神圣线</strong>（中途改前缀）</td><td>只追加，改只在压缩边界</td><td>ch6 / ch15</td></tr>
+  <tr><td><strong>A2</strong> · 长对话越聊越贵、某轮起翻倍</td><td><strong>B·无状态</strong> · 撞<strong>缓存神圣线</strong>（中途改前缀）</td><td>只追加，改只在压缩边界</td><td>ch6 / ch15</td></tr>
   <tr><td><strong>A3</strong> · 偶发空响应、莫名重试</td><td><strong>E·结构化脆弱</strong>（同角色相邻）</td><td>发送前跑角色交替修复</td><td>ch7</td></tr>
-  <tr><td><strong>A4</strong> · 压缩频繁、缓存反复失效</td><td>阈值太低 → 抖动</td><td>阈值 ~50%、连续 2 次无效才停</td><td>ch15</td></tr>
+  <tr><td><strong>A4</strong> · 压缩频繁、缓存反复失效</td><td><strong>G·运维</strong> · 阈值太低 → 抖动</td><td>阈值 ~50%、连续 2 次无效才停</td><td>ch15</td></tr>
   <tr><td><strong>B1</strong> · 跑几十上百轮停不下、账单爆</td><td><strong>G·运维</strong> + <strong>F·误差累积</strong></td><td><span class="mono">max_iterations</span> + budget + 中断检查</td><td>ch5</td></tr>
   <tr><td><strong>B2</strong> · 子代理报「已完成」实则没做</td><td><strong>C·幻觉</strong>（自报不可信）</td><td>要可验证把手，父代理独立核验</td><td>ch14</td></tr>
   <tr><td><strong>B3</strong> · 父上下文被噪声淹没、缓存污染</td><td><strong>A·中间遗失</strong> + 缓存线</td><td>子代理独立 context，只回摘要</td><td>ch13</td></tr>
@@ -1234,16 +1234,16 @@ for m in _PROVIDER_MODELS["huggingface"]:
   <tr><td><strong>C2</strong> · 工具越多、选择质量越差</td><td><strong>A·中间遗失</strong>（注意力稀释）</td><td>service-gated 裁掉、tool_search 折叠</td><td>ch8</td></tr>
   <tr><td><strong>C3</strong> · 返回时 dict 时 str、偶发崩溃</td><td><strong>E·结构化脆弱</strong></td><td>统一返回 JSON string，dispatch 包裹</td><td>ch8</td></tr>
   <tr><td><strong>D1</strong> · 危险命令被一句话放行</td><td><strong>D·指令=数据</strong>（被骗）</td><td>确定性正则黑名单，而非问模型</td><td>ch24</td></tr>
-  <tr><td><strong>D2</strong> · 控制命令被注入 / 破坏交替</td><td>控制命令混进数据流</td><td>网关 <span class="mono">get_command</span> 显式解析、走旁路</td><td>ch18</td></tr>
+  <tr><td><strong>D2</strong> · 控制命令被注入 / 破坏交替</td><td><strong>D·指令=数据</strong> · 控制命令混进数据流</td><td>网关 <span class="mono">get_command</span> 显式解析、走旁路</td><td>ch18</td></tr>
   <tr><td><strong>D3</strong> · 执行了网页 / 文件里藏的恶意指令</td><td><strong>D·指令=数据</strong>（无可信边界）</td><td>注入隔离 + 危险动作仍过确定性闸</td><td>ch18 / ch24</td></tr>
-  <tr><td><strong>D4</strong> · 跨平台副作用 / 写坏记忆 / 递归失控</td><td>子代理权限过大</td><td>最小权限，leaf 剥离高危工具</td><td>ch13 / ch24</td></tr>
-  <tr><td><strong>E1</strong> · 账单远超预期、长对话尤贵</td><td>不监控 + 不缓存 + 不压缩</td><td>缓存省 ~75% + 0.50 压缩 + 每轮监控</td><td>ch6 / ch15</td></tr>
-  <tr><td><strong>E2</strong> · 无法及时中断、reasoning 污染前缀</td><td>流式与中断 / 存储没处理好</td><td>回调查中断；reasoning 单独存、下轮 pop</td><td>ch5 / ch7</td></tr>
-  <tr><td><strong>E3</strong> · 新消息永卡「正在处理」、会话假死</td><td>并发竞态（锁没自愈）</td><td>owner-task 映射 + 进门先自愈锁</td><td>ch18</td></tr>
-  <tr><td><strong>E4</strong> · 模型 / config 一更新 CI 就红</td><td>写快照测试而非不变量</td><td>锁行为不变量，让测试随系统演化</td><td>ch22</td></tr>
-  <tr><td><strong>E5</strong> · provider 挂了整条停摆 / 方言失败</td><td>没 fallback + 方言差异</td><td><span class="mono">fallback_model</span> + 按 api_mode 适配</td><td>ch7</td></tr>
-  <tr><td><strong>E6</strong> · 进程重启后台任务全没了</td><td>误以为 background 能持久</td><td>跨重启用 <span class="mono">cron</span> 或 terminal 后台</td><td>ch13 / ch21</td></tr>
-  <tr><td><strong>E7</strong> · 一个工具失败整个 agent 崩 / 卡</td><td>工具错误没优雅降级</td><td>dispatch 统一包裹、超时有界可重试</td><td>ch8 / ch22</td></tr>
+  <tr><td><strong>D4</strong> · 跨平台副作用 / 写坏记忆 / 递归失控</td><td><strong>G·运维</strong> · 子代理权限过大</td><td>最小权限，leaf 剥离高危工具</td><td>ch13 / ch24</td></tr>
+  <tr><td><strong>E1</strong> · 账单远超预期、长对话尤贵</td><td><strong>G·运维</strong> · 不监控 + 不缓存 + 不压缩</td><td>缓存省 ~75% + 0.50 压缩 + 每轮监控</td><td>ch6 / ch15</td></tr>
+  <tr><td><strong>E2</strong> · 无法及时中断、reasoning 污染前缀</td><td><strong>G·运维</strong> · 流式与中断 / 存储没处理好</td><td>回调查中断；reasoning 单独存、下轮 pop</td><td>ch5 / ch7</td></tr>
+  <tr><td><strong>E3</strong> · 新消息永卡「正在处理」、会话假死</td><td><strong>G·运维</strong> · 并发竞态（锁没自愈）</td><td>owner-task 映射 + 进门先自愈锁</td><td>ch18</td></tr>
+  <tr><td><strong>E4</strong> · 模型 / config 一更新 CI 就红</td><td><strong>G·运维</strong> · 写快照测试而非不变量</td><td>锁行为不变量，让测试随系统演化</td><td>ch22</td></tr>
+  <tr><td><strong>E5</strong> · provider 挂了整条停摆 / 方言失败</td><td><strong>E·结构化脆弱</strong> + <strong>G·运维</strong> · 没 fallback + 方言差异</td><td><span class="mono">fallback_model</span> + 按 api_mode 适配</td><td>ch7</td></tr>
+  <tr><td><strong>E6</strong> · 进程重启后台任务全没了</td><td><strong>G·运维</strong> · 误以为 background 能持久</td><td>跨重启用 <span class="mono">cron</span> 或 terminal 后台</td><td>ch13 / ch21</td></tr>
+  <tr><td><strong>E7</strong> · 一个工具失败整个 agent 崩 / 卡</td><td><strong>G·运维</strong> · 工具错误没优雅降级</td><td>dispatch 统一包裹、超时有界可重试</td><td>ch8 / ch22</td></tr>
 </table>
 
 <div class="card key">
@@ -2482,9 +2482,9 @@ for m in _PROVIDER_MODELS["huggingface"]:
 <table class="t">
   <tr><th>Symptom</th><th>Root (A–G)</th><th>Fix</th><th>→ ch</th></tr>
   <tr><td><strong>A1</strong> · per-turn cost rises, can't recall new knowledge</td><td><strong>B·statelessness</strong> misfix (prefix shifts)</td><td>externalize state; prompt = stable identity</td><td>ch6 / ch11</td></tr>
-  <tr><td><strong>A2</strong> · long chats get pricier, doubles mid-way</td><td>hits the <strong>sacred-cache line</strong> (edited prefix)</td><td>append only; rebuild at the compression boundary</td><td>ch6 / ch15</td></tr>
+  <tr><td><strong>A2</strong> · long chats get pricier, doubles mid-way</td><td><strong>B·statelessness</strong> · hits the <strong>sacred-cache line</strong> (edited prefix)</td><td>append only; rebuild at the compression boundary</td><td>ch6 / ch15</td></tr>
   <tr><td><strong>A3</strong> · occasional empty response, odd retries</td><td><strong>E·brittle structure</strong> (same-role adjacent)</td><td>role-alternation repair before send</td><td>ch7</td></tr>
-  <tr><td><strong>A4</strong> · compression thrashes, cache keeps voiding</td><td>threshold too low → thrash</td><td>~50% threshold; stop after 2 no-op compactions</td><td>ch15</td></tr>
+  <tr><td><strong>A4</strong> · compression thrashes, cache keeps voiding</td><td><strong>G·ops</strong> · threshold too low → thrash</td><td>~50% threshold; stop after 2 no-op compactions</td><td>ch15</td></tr>
   <tr><td><strong>B1</strong> · runs 100s of turns, bill explodes</td><td><strong>G·ops</strong> + <strong>F·error accumulation</strong></td><td><span class="mono">max_iterations</span> + budget + interrupt check</td><td>ch5</td></tr>
   <tr><td><strong>B2</strong> · subagent reports "done" but didn't</td><td><strong>C·hallucination</strong> (self-report)</td><td>demand a verifiable handle; parent verifies</td><td>ch14</td></tr>
   <tr><td><strong>B3</strong> · parent context drowns, cache polluted</td><td><strong>A·lost-in-the-middle</strong> + cache line</td><td>isolated context; return only a summary</td><td>ch13</td></tr>
@@ -2493,16 +2493,16 @@ for m in _PROVIDER_MODELS["huggingface"]:
   <tr><td><strong>C2</strong> · more tools, worse selection quality</td><td><strong>A·lost-in-the-middle</strong> (diluted attention)</td><td>service-gated trims; tool_search folds</td><td>ch8</td></tr>
   <tr><td><strong>C3</strong> · returns dict/str inconsistently, crashes</td><td><strong>E·brittle structure</strong></td><td>all return JSON string; dispatch wraps</td><td>ch8</td></tr>
   <tr><td><strong>D1</strong> · dangerous command waved through</td><td><strong>D·instr=data</strong> (model fooled)</td><td>deterministic regex blocklist, not the model</td><td>ch24</td></tr>
-  <tr><td><strong>D2</strong> · control command injected / breaks alternation</td><td>control mixed into the data stream</td><td>gateway <span class="mono">get_command</span> parses out-of-band</td><td>ch18</td></tr>
+  <tr><td><strong>D2</strong> · control command injected / breaks alternation</td><td><strong>D·instr=data</strong> · control mixed into the data stream</td><td>gateway <span class="mono">get_command</span> parses out-of-band</td><td>ch18</td></tr>
   <tr><td><strong>D3</strong> · runs malicious instructions hidden in data</td><td><strong>D·instr=data</strong> (no trust boundary)</td><td>injection isolation + deterministic gate</td><td>ch18 / ch24</td></tr>
-  <tr><td><strong>D4</strong> · cross-platform side effects / runaway spawn</td><td>subagent over-privileged</td><td>least privilege; leaf strips high-risk tools</td><td>ch13 / ch24</td></tr>
-  <tr><td><strong>E1</strong> · bill far over expectation, long chats worst</td><td>no monitor + no cache + no compress</td><td>cache saves ~75% + 0.50 compress + monitor</td><td>ch6 / ch15</td></tr>
-  <tr><td><strong>E2</strong> · can't interrupt; reasoning pollutes prefix</td><td>streaming vs interrupt / storage unhandled</td><td>check interrupt; store reasoning, pop next turn</td><td>ch5 / ch7</td></tr>
-  <tr><td><strong>E3</strong> · new messages stuck at "processing", wedged</td><td>concurrency race (lock won't self-heal)</td><td>owner-task map + heal stale lock on entry</td><td>ch18</td></tr>
-  <tr><td><strong>E4</strong> · a model/config update turns CI red</td><td>snapshot tests instead of invariants</td><td>lock behavior invariants; tests evolve</td><td>ch22</td></tr>
-  <tr><td><strong>E5</strong> · provider down stalls all / dialect parse fails</td><td>no fallback + dialect differences</td><td><span class="mono">fallback_model</span> + adapt per api_mode</td><td>ch7</td></tr>
-  <tr><td><strong>E6</strong> · background tasks gone after restart</td><td>assumed background is durable</td><td>use <span class="mono">cron</span> or terminal background</td><td>ch13 / ch21</td></tr>
-  <tr><td><strong>E7</strong> · one tool fails, whole agent crashes/hangs</td><td>tool errors not degraded gracefully</td><td>dispatch wraps; bounded timeouts, retryable</td><td>ch8 / ch22</td></tr>
+  <tr><td><strong>D4</strong> · cross-platform side effects / runaway spawn</td><td><strong>G·ops</strong> · subagent over-privileged</td><td>least privilege; leaf strips high-risk tools</td><td>ch13 / ch24</td></tr>
+  <tr><td><strong>E1</strong> · bill far over expectation, long chats worst</td><td><strong>G·ops</strong> · no monitor + no cache + no compress</td><td>cache saves ~75% + 0.50 compress + monitor</td><td>ch6 / ch15</td></tr>
+  <tr><td><strong>E2</strong> · can't interrupt; reasoning pollutes prefix</td><td><strong>G·ops</strong> · streaming vs interrupt / storage unhandled</td><td>check interrupt; store reasoning, pop next turn</td><td>ch5 / ch7</td></tr>
+  <tr><td><strong>E3</strong> · new messages stuck at "processing", wedged</td><td><strong>G·ops</strong> · concurrency race (lock won't self-heal)</td><td>owner-task map + heal stale lock on entry</td><td>ch18</td></tr>
+  <tr><td><strong>E4</strong> · a model/config update turns CI red</td><td><strong>G·ops</strong> · snapshot tests instead of invariants</td><td>lock behavior invariants; tests evolve</td><td>ch22</td></tr>
+  <tr><td><strong>E5</strong> · provider down stalls all / dialect parse fails</td><td><strong>E·brittle structure</strong> + <strong>G·ops</strong> · no fallback + dialect differences</td><td><span class="mono">fallback_model</span> + adapt per api_mode</td><td>ch7</td></tr>
+  <tr><td><strong>E6</strong> · background tasks gone after restart</td><td><strong>G·ops</strong> · assumed background is durable</td><td>use <span class="mono">cron</span> or terminal background</td><td>ch13 / ch21</td></tr>
+  <tr><td><strong>E7</strong> · one tool fails, whole agent crashes/hangs</td><td><strong>G·ops</strong> · tool errors not degraded gracefully</td><td>dispatch wraps; bounded timeouts, retryable</td><td>ch8 / ch22</td></tr>
 </table>
 
 <div class="card key">
