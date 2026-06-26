@@ -1,7 +1,9 @@
 # Hermes Agent Visual Guide / Hermes Agent 设计图解 ☤
 
+**🌐 Read online / 在线阅读: https://verdenmax.github.io/hermes-agent-visual-guide/**
+
 A visual, bilingual (English + 中文) guide to the **design** of
-[hermes-agent](https://github.com/NousResearch/hermes-agent) — **25 chapters**
+[hermes-agent](https://github.com/NousResearch/hermes-agent) — **26 chapters**
 that explain *what each part was designed to achieve*, the LLM constraint it
 fights, and how it cooperates with the rest of the system.
 
@@ -29,7 +31,7 @@ The guide is organized into seven parts that build up step by step:
 | 4 | Scale & isolation — delegation, compression, terminal backends | 13–16 |
 | 5 | Edges & gateway — platforms, guards, TUI/desktop, profiles | 17–20 |
 | 6 | Automation & research — cron/kanban, eval/trajectory, plugins/MCP | 21–23 |
-| 7 | Reference — security threat model, design-principle matrix & glossary | 24–25 |
+| 7 | Reference — security, design-principle matrix, glossary & a pitfalls-of-building-an-agent guide | 24–26 |
 
 A throughline runs across the book: **the prompt cache is sacred**, **the core
 is a narrow waist**, **the agent self-evolves** — and most designs are an
@@ -100,7 +102,7 @@ Dual-licensed:
 ## 中文说明
 
 这是一份 [hermes-agent](https://github.com/NousResearch/hermes-agent) **设计原理**
-的**图解、双语**学习指南，共 **25 章**，讲清楚*每个部件在设计时想达成什么*、
+的**图解、双语**学习指南，共 **26 章**，讲清楚*每个部件在设计时想达成什么*、
 它在对抗哪个 LLM 固有约束、以及它如何与系统其他部分协作。
 
 > **声明：** 本项目是**第三方、非官方**的学习材料，**不包含 hermes-agent 源码**，
