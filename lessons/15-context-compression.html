@@ -389,6 +389,46 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 
 <p>为什么阈值定在 <strong>50%</strong> 而不是逼到 90% 才压?这是<strong>留缓冲</strong>的取舍:从触发到摘要完成还要再烧掉若干 token,而真实请求(含工具 schema)往往比粗估更大,留出半个窗口才不至于在压缩动作本身就把请求顶穿、被 provider 拒绝。反过来,为什么不<strong>每轮都压</strong>?因为每压一次就作废一次缓存(本章核心),频繁压缩等于把第 6 章「缓存神圣」的收益反复清零,成本爆炸。50% 阈值加上防抖动,正是在「太晚撞墙」和「太早废缓存」这两端之间取的平衡点——既不让上下文白白闲置,也不让缓存被无谓地反复推倒。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 250" role="img" aria-label="防抖动：为什么不每轮压缩——50%阈值加连续两次无效才放弃">
+  <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--accent-ink)">防抖动：为什么不每轮压</text>
+
+  <rect x="16" y="96" width="120" height="58" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="76" y="120" text-anchor="middle" font-size="11.5" fill="var(--ink)">每轮检查</text>
+  <text x="76" y="138" text-anchor="middle" font-size="10.5" fill="var(--muted)">should_compress</text>
+
+  <path d="M136 125 L168 125 M160 119 L170 125 L160 131" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+
+  <rect x="170" y="92" width="160" height="66" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="250" y="116" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">tokens ≥ 阈值？</text>
+  <text x="250" y="134" text-anchor="middle" font-size="10" fill="var(--muted)">默认 50% 窗口 · 小模型 85%</text>
+
+  <path d="M250 158 L250 186 M244 178 L250 188 L256 178" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+  <text x="258" y="176" font-size="10" fill="var(--muted)">否 · 未到</text>
+  <rect x="120" y="190" width="260" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="250" y="217" text-anchor="middle" font-size="11" fill="var(--accent-ink)">不压 · 向末尾追加（缓存命中）</text>
+
+  <path d="M330 125 L362 125 M354 119 L364 125 L354 131" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+  <text x="332" y="116" font-size="10" fill="var(--muted)">是</text>
+
+  <rect x="364" y="92" width="160" height="66" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="444" y="116" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">连续 2 次各省 &lt;10%？</text>
+  <text x="444" y="134" text-anchor="middle" font-size="10" fill="var(--muted)">压无可压的死循环</text>
+
+  <path d="M444 92 L444 64 M438 72 L444 62 L450 72" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+  <text x="452" y="80" font-size="10" fill="var(--muted)">是</text>
+  <rect x="344" y="22" width="200" height="42" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="444" y="48" text-anchor="middle" font-size="11" fill="var(--muted)">放弃压缩 · 防抖动</text>
+
+  <path d="M524 125 L552 125 M544 119 L554 125 L544 131" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+  <text x="528" y="116" font-size="10" fill="var(--muted)">否</text>
+  <rect x="556" y="96" width="112" height="58" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="612" y="118" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">压缩一次</text>
+  <text x="612" y="136" text-anchor="middle" font-size="9.5" fill="var(--red)">缓存作废+重建</text>
+</svg>
+<div class="fig-cap"><b>防抖动</b>：每轮调 <span class="mono">should_compress</span>，但有两道闸——① token 未达阈值（默认 <b>50%</b> 窗口，小模型升到 <b>85%</b>）就不压，继续向末尾追加、缓存命中；② 即便到阈值，若<b>连续两次</b>压缩各只省下 &lt;10%，说明压无可压，<b>跳过</b>以免陷入「每次删 1–2 条」的死循环。只有两闸都过才真正压缩一次——因为每压一次就作废一次缓存，频繁压＝不断废缓存，成本爆炸。</div>
+</div>
+
 <p>阈值还会<strong>随模型自适应</strong>,不是死板的 50%。<span class="mono">_compute_threshold_tokens</span> 先把窗口减去输出预留(<span class="mono">max_tokens</span>)算出真正可用的<strong>输入预算</strong>,再乘以阈值百分比;但若 50% 的值低于最小上下文下限被抬高、反而触到窗口本身,小窗口模型就<strong>永远压不动</strong>——provider 会在用量到 100% 前先拒绝请求。于是对这类模型改在窗口的 <strong>85%</strong>(<span class="mono">_MIN_CTX_TRIGGER_RATIO</span>)触发:既让小模型用满大半预算,又卡在被拒之前。这层细节保证「逼近才压」这条规矩在大窗口和小窗口模型下<strong>都成立</strong>,而不是只对大模型有效。</p>
 
 <h2>缓存的唯一例外：压缩后重建 system prompt</h2>
@@ -401,6 +441,47 @@ new_system_prompt = agent._build_system_prompt(system_message)  <span class="cm"
 agent._cached_system_prompt = new_system_prompt      <span class="cm"># 写回新前缀</span></pre>
 </div>
 <p>平时（第 6 章），<span class="mono">_cached_system_prompt</span> 一旦构建就<strong>逐字节不变</strong>，整会话复用、命中前缀缓存。但压缩<strong>重写了历史前缀</strong>——继续用旧缓存就错了。所以这里 <span class="mono">_invalidate_system_prompt()</span> 把缓存清空（置 <span class="kw">None</span>），随即 <span class="mono">_build_system_prompt()</span> 重建并写回。而 <span class="mono">invalidate_system_prompt</span> 还<strong>顺便 reload 记忆快照</strong>（<span class="mono">load_from_disk()</span>）——这正是第 11 章说的「记忆快照只在压缩边界刷新」：压缩本来就要重建，顺势把这会话写入的新记忆也纳入，<strong>不增加额外的缓存代价</strong>。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 348" role="img" aria-label="压缩是缓存的唯一例外：上下文增长到50%窗口触发压缩，重建前缀并折进新记忆">
+  <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--accent-ink)">压缩：缓存的唯一例外</text>
+
+  <text x="20" y="50" font-size="12" fill="var(--muted)">压缩前 · 上下文增长，逼近 50% 窗口</text>
+  <text x="520" y="44" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">50% 窗口阈值 → 触发</text>
+  <rect x="20"  y="58" width="130" height="40" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="85"  y="83" text-anchor="middle" font-size="11.5" fill="var(--accent-ink)">稳定前缀</text>
+  <rect x="150" y="58" width="280" height="40" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="290" y="83" text-anchor="middle" font-size="11.5" fill="var(--blue)">旧历史 · 中段（越来越长）</text>
+  <rect x="430" y="58" width="90" height="40" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="475" y="83" text-anchor="middle" font-size="11.5" fill="var(--amber)">最近轮</text>
+  <line x1="520" y1="50" x2="520" y2="104" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <rect x="522" y="58" width="138" height="40" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="591" y="83" text-anchor="middle" font-size="10.5" fill="var(--faint)">剩余窗口 · 缓冲</text>
+
+  <path d="M270 104 L270 132 M264 124 L270 134 L276 124" fill="none" stroke="var(--muted)" stroke-width="1.6"/>
+  <text x="284" y="124" font-size="11.5" fill="var(--muted)">压缩 · 保头 / 摘要中段 / 保尾（辅助模型）</text>
+
+  <text x="20" y="156" font-size="12" fill="var(--muted)">压缩后 · 重建前缀（缓存唯一一次作废）</text>
+  <rect x="20"  y="164" width="130" height="40" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="85"  y="189" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">新前缀 · 重建</text>
+  <rect x="150" y="164" width="150" height="40" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="225" y="184" text-anchor="middle" font-size="11" fill="var(--purple)">摘要要点</text>
+  <text x="225" y="197" text-anchor="middle" font-size="9.5" fill="var(--muted)">中段消息 · 不进前缀</text>
+  <rect x="300" y="164" width="90" height="40" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="345" y="189" text-anchor="middle" font-size="11.5" fill="var(--amber)">最近轮</text>
+  <text x="400" y="188" font-size="11" fill="var(--blue)">← 腾出空间，可继续对话</text>
+
+  <path d="M85 204 L85 222" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="3 3"/>
+  <rect x="20" y="224" width="640" height="50" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="32" y="244" font-size="11.5" font-weight="700" fill="var(--accent-ink)">唯一一次被允许动前缀：_invalidate_system_prompt() → _build_system_prompt() 重建</text>
+  <text x="32" y="263" font-size="11.5" fill="var(--accent-ink)">顺带 load_from_disk() 把本会话新记忆 / 技能折进新前缀，额外缓存代价 = 0</text>
+
+  <rect x="20" y="286" width="640" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="32" y="305" font-size="11.5" font-weight="700" fill="var(--red)">不压缩的代价 ＞ 一次缓存重置：</text>
+  <text x="32" y="323" font-size="11" fill="var(--red)">撞上下文窗口上限被 provider 拒绝 · A·中间遗失 · F·误差累积（上下文腐烂）</text>
+</svg>
+<div class="fig-cap"><b>压缩：缓存的唯一例外</b>：上下文增长到约 <b>50% 窗口</b>触发压缩——保头、用辅助模型把中段<b>摘要</b>成要点、保尾，随后 <span class="mono">_invalidate_system_prompt()</span> 清缓存、<span class="mono">_build_system_prompt()</span> 重建前缀。这是全书<b>唯一</b>被允许动缓存前缀的操作；同一刀顺带 <span class="mono">load_from_disk()</span> 把本会话新记忆 / 技能折进新前缀（连第 6 / 11 章），额外缓存代价为零。不压缩则会撞窗口上限并加剧中间遗失与误差累积，代价远大于一次缓存重置。</div>
+</div>
 
 <p>这里藏着一个<strong>省钱的合并</strong>:压缩横竖要重建前缀、缓存横竖要废一次,于是 Hermes 把「重载本会话新写的记忆」也<strong>搭在同一刀上</strong>——<span class="mono">invalidate_system_prompt</span> 顺手调 <span class="mono">load_from_disk()</span>(system_prompt.py:502-504)。若不这样,要么记忆得等到下次开新会话才生效,要么得在对话中途单独刷一次记忆、<strong>再额外废一次缓存</strong>。把两件本就要废缓存的事并到压缩这一个边界上,<strong>额外缓存代价归零</strong>。这正是第 6 章(缓存逐字节稳定)与第 11 章(记忆快照只在边界刷新)在此交汇的根由:不是它们各自巧合,而是同一条「缓存只在压缩边界破一次」的纪律推出来的必然结果。</p>
 
@@ -535,6 +616,46 @@ Ch.6 laid down the iron rule: <strong>the prompt cache is sacred, and the only e
 
 <p>Why set the threshold at <strong>50%</strong> rather than pushing to 90% before compacting? It's a <strong>buffer</strong> trade-off: from trigger to a finished summary still burns more tokens, and a real request (with tool schemas) often runs larger than the rough estimate, so leaving half the window keeps the compaction act itself from blowing past the limit and getting rejected by the provider. Conversely, why not compress <strong>every turn</strong>? Because each compression voids the cache once (this chapter's core), and frequent compression repeatedly zeros out ch.6's "the cache is sacred" payoff — costs explode. The 50% threshold plus anti-thrashing is exactly the balance point between "hit the wall too late" and "void the cache too early."</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 250" role="img" aria-label="Anti-thrashing: why not compress every turn — 50% threshold plus two ineffective passes before giving up">
+  <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--accent-ink)">Anti-thrashing: why not compress every turn</text>
+
+  <rect x="16" y="96" width="120" height="58" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="76" y="120" text-anchor="middle" font-size="11.5" fill="var(--ink)">every turn</text>
+  <text x="76" y="138" text-anchor="middle" font-size="10.5" fill="var(--muted)">should_compress</text>
+
+  <path d="M136 125 L168 125 M160 119 L170 125 L160 131" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+
+  <rect x="170" y="92" width="160" height="66" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="250" y="116" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">tokens ≥ threshold?</text>
+  <text x="250" y="134" text-anchor="middle" font-size="10" fill="var(--muted)">50% window · 85% small models</text>
+
+  <path d="M250 158 L250 186 M244 178 L250 188 L256 178" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+  <text x="258" y="176" font-size="10" fill="var(--muted)">No · below</text>
+  <rect x="120" y="190" width="260" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="250" y="217" text-anchor="middle" font-size="11" fill="var(--accent-ink)">don't compress · append to tail (cache hit)</text>
+
+  <path d="M330 125 L362 125 M354 119 L364 125 L354 131" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+  <text x="332" y="116" font-size="10" fill="var(--muted)">Yes</text>
+
+  <rect x="364" y="92" width="160" height="66" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="444" y="116" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">last 2 each saved &lt;10%?</text>
+  <text x="444" y="134" text-anchor="middle" font-size="10" fill="var(--muted)">the "nothing left" loop</text>
+
+  <path d="M444 92 L444 64 M438 72 L444 62 L450 72" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+  <text x="452" y="80" font-size="10" fill="var(--muted)">Yes</text>
+  <rect x="344" y="22" width="200" height="42" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="444" y="48" text-anchor="middle" font-size="11" fill="var(--muted)">skip · anti-thrashing</text>
+
+  <path d="M524 125 L552 125 M544 119 L554 125 L544 131" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+  <text x="528" y="116" font-size="10" fill="var(--muted)">No</text>
+  <rect x="556" y="96" width="112" height="58" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="612" y="118" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">compress once</text>
+  <text x="612" y="136" text-anchor="middle" font-size="9.5" fill="var(--red)">cache voided + rebuilt</text>
+</svg>
+<div class="fig-cap"><b>Anti-thrashing</b>: every turn calls <span class="mono">should_compress</span>, but two gates guard it — ① if tokens are below the threshold (default <b>50%</b> of the window, rising to <b>85%</b> for small models) it doesn't compress, just appends to the tail and hits the cache; ② even at the threshold, if the <b>last two</b> compressions each saved &lt;10%, there's nothing left to squeeze, so it <b>skips</b> to avoid a "remove 1–2 messages each time" loop. Only when both gates pass does it actually compress once — because each compression voids the cache, so compressing every turn = endlessly voiding the cache, costs explode.</div>
+</div>
+
 <p>The threshold is also <strong>model-adaptive</strong>, not a rigid 50%. <span class="mono">_compute_threshold_tokens</span> first subtracts the output reservation (<span class="mono">max_tokens</span>) from the window to get the real usable <strong>input budget</strong>, then applies the percentage; but if the 50% value, floored up to the minimum-context bound, would meet the window itself, a small-window model could <strong>never compress</strong> — the provider rejects the request before usage reaches 100%. So for such models it triggers at <strong>85%</strong> of the window (<span class="mono">_MIN_CTX_TRIGGER_RATIO</span>): letting a small model use most of its budget yet firing before rejection. This detail keeps "compress only near the limit" valid for <strong>both</strong> large- and small-window models, not just large ones.</p>
 
 <h2>The cache's only exception: rebuild the system prompt after compression</h2>
@@ -547,6 +668,47 @@ new_system_prompt = agent._build_system_prompt(system_message)  <span class="cm"
 agent._cached_system_prompt = new_system_prompt      <span class="cm"># write back the new prefix</span></pre>
 </div>
 <p>Normally (ch.6), once <span class="mono">_cached_system_prompt</span> is built it stays <strong>byte-stable</strong>, reused all session to hit the prefix cache. But compression <strong>rewrote the history prefix</strong> — keeping the old cache would be wrong. So here <span class="mono">_invalidate_system_prompt()</span> clears the cache (sets it <span class="kw">None</span>) and <span class="mono">_build_system_prompt()</span> rebuilds and writes back. And <span class="mono">invalidate_system_prompt</span> also <strong>reloads the memory snapshot</strong> (<span class="mono">load_from_disk()</span>) — exactly ch.11's "the memory snapshot refreshes only at a compression boundary": compression has to rebuild anyway, so it folds in the new memory written this session at <strong>no extra cache cost</strong>.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 348" role="img" aria-label="Compression is the cache's only exception: context grows to 50% of the window, triggers compression, rebuilds the prefix and folds in new memory">
+  <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--accent-ink)">Compression: the cache's only exception</text>
+
+  <text x="20" y="50" font-size="12" fill="var(--muted)">Before · context grows toward 50% of the window</text>
+  <text x="520" y="44" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">50% window → trigger</text>
+  <rect x="20"  y="58" width="130" height="40" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="85"  y="83" text-anchor="middle" font-size="11.5" fill="var(--accent-ink)">stable prefix</text>
+  <rect x="150" y="58" width="280" height="40" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="290" y="83" text-anchor="middle" font-size="11.5" fill="var(--blue)">old history · middle (growing)</text>
+  <rect x="430" y="58" width="90" height="40" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="475" y="83" text-anchor="middle" font-size="11.5" fill="var(--amber)">recent</text>
+  <line x1="520" y1="50" x2="520" y2="104" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <rect x="522" y="58" width="138" height="40" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="591" y="83" text-anchor="middle" font-size="10.5" fill="var(--faint)">remaining · buffer</text>
+
+  <path d="M270 104 L270 132 M264 124 L270 134 L276 124" fill="none" stroke="var(--muted)" stroke-width="1.6"/>
+  <text x="284" y="124" font-size="11.5" fill="var(--muted)">compress · keep head / summarize middle / keep tail (aux model)</text>
+
+  <text x="20" y="156" font-size="12" fill="var(--muted)">After · rebuild the prefix (cache voided this one time)</text>
+  <rect x="20"  y="164" width="130" height="40" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="85"  y="189" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">new prefix · rebuilt</text>
+  <rect x="150" y="164" width="150" height="40" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="225" y="184" text-anchor="middle" font-size="11" fill="var(--purple)">summary points</text>
+  <text x="225" y="197" text-anchor="middle" font-size="9.5" fill="var(--muted)">mid-conversation · not in prefix</text>
+  <rect x="300" y="164" width="90" height="40" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="345" y="189" text-anchor="middle" font-size="11.5" fill="var(--amber)">recent</text>
+  <text x="400" y="188" font-size="11" fill="var(--blue)">← room freed, conversation continues</text>
+
+  <path d="M85 204 L85 222" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="3 3"/>
+  <rect x="20" y="224" width="640" height="50" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="32" y="244" font-size="11.5" font-weight="700" fill="var(--accent-ink)">Only place the prefix may change: _invalidate_system_prompt() → _build_system_prompt() rebuild</text>
+  <text x="32" y="263" font-size="11.5" fill="var(--accent-ink)">Same cut folds in new memory / skills via load_from_disk() — extra cache cost = 0</text>
+
+  <rect x="20" y="286" width="640" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="32" y="305" font-size="11.5" font-weight="700" fill="var(--red)">Not compressing costs MORE than one cache reset:</text>
+  <text x="32" y="323" font-size="11" fill="var(--red)">hit the window limit (provider rejects) · A·lost-in-the-middle · F·error accumulation (rot)</text>
+</svg>
+<div class="fig-cap"><b>Compression: the cache's only exception</b>: when context grows to about <b>50% of the window</b> it triggers compression — keep the head, use the auxiliary model to <b>summarize</b> the middle into points, keep the tail, then <span class="mono">_invalidate_system_prompt()</span> clears the cache and <span class="mono">_build_system_prompt()</span> rebuilds the prefix. This is the <b>only</b> operation in the whole book allowed to touch the cached prefix; the same cut piggybacks <span class="mono">load_from_disk()</span> to fold this session's new memory / skills into the new prefix (ch.6 / 11) at zero extra cache cost. Not compressing hits the window limit and worsens lost-in-the-middle and error accumulation — far costlier than one cache reset.</div>
+</div>
 
 <p>There's a <strong>cost-saving merge</strong> hidden here: compression has to rebuild the prefix and the cache has to be voided once anyway, so Hermes <strong>piggybacks</strong> "reload the memory written this session" onto the same cut — <span class="mono">invalidate_system_prompt</span> calls <span class="mono">load_from_disk()</span> right there (system_prompt.py:502-504). Without this, either memory waits until the next fresh session to take effect, or you'd refresh memory mid-conversation on its own and <strong>void the cache a second time</strong>. Folding both cache-voiding acts onto the single compression boundary makes the <strong>extra cache cost zero</strong>. This is exactly why ch.6 (byte-stable cache) and ch.11 (the memory snapshot refreshes only at a boundary) intersect here — not coincidence, but a necessary consequence of the one rule "break the cache only at a compression boundary."</p>
 

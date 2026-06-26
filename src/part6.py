@@ -842,6 +842,47 @@ LESSON_23 = {
     "zh": r"""
 <p class="lead">前面 22 章,Hermes 的核心几乎没怎么"长大"——平台适配器、记忆后端、模型 provider、聊天技能,绝大多数能力都是从<strong>边缘</strong>挂上去的。这一章讲清那条贯穿全书的纪律:<strong>能力在边缘扩展,核心保持窄腰</strong>。机制有三:插件、技能、MCP。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 372" role="img" aria-label="三种边缘扩展机制都向核心挂载，但都不改动核心">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">三种边缘扩展 · 零核心改动</text>
+
+  <rect x="34" y="52" width="128" height="292" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="98" y="156" text-anchor="middle" font-size="15" font-weight="700" fill="var(--accent-ink)">核心 · 窄腰</text>
+  <text x="98" y="178" text-anchor="middle" font-size="11" fill="var(--accent-ink)">narrow waist</text>
+  <text x="98" y="212" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">_HERMES_CORE_TOOLS</text>
+  <text x="98" y="292" text-anchor="middle" font-size="10" fill="var(--muted)">schema 进</text>
+  <text x="98" y="307" text-anchor="middle" font-size="10" fill="var(--muted)">每次 API 调用</text>
+
+  <line x1="210" y1="52" x2="210" y2="344" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="210" y="46" text-anchor="middle" font-size="10" fill="var(--faint)">不改一行核心文件</text>
+
+  <line x1="296" y1="90" x2="166" y2="90" stroke="var(--blue)" stroke-width="2"/>
+  <polygon points="162,90 174,85 174,95" fill="var(--blue)"/>
+  <text x="231" y="82" text-anchor="middle" font-size="10" fill="var(--blue)">register(ctx)</text>
+  <rect x="296" y="58" width="360" height="64" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="312" y="80" font-size="12.5" font-weight="700" fill="var(--blue)">① 插件 plugins</text>
+  <text x="312" y="99" font-size="10.5" fill="var(--ink)">~/.hermes/plugins/ · 挂 工具 / 命令 / 钩子</text>
+  <text x="312" y="115" font-size="10.5" fill="var(--ink)">绝不改核心文件 · Teknium 铁律</text>
+
+  <line x1="296" y1="180" x2="166" y2="180" stroke="var(--purple)" stroke-width="2"/>
+  <polygon points="162,180 174,175 174,185" fill="var(--purple)"/>
+  <text x="231" y="172" text-anchor="middle" font-size="10" fill="var(--purple)">user msg 注入</text>
+  <rect x="296" y="148" width="360" height="64" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="312" y="170" font-size="12.5" font-weight="700" fill="var(--purple)">② 技能 skills</text>
+  <text x="312" y="189" font-size="10.5" fill="var(--ink)">SKILL.md · 注入为一条 user message</text>
+  <text x="312" y="205" font-size="10.5" fill="var(--ink)">不进 system prompt → 护缓存</text>
+
+  <line x1="296" y1="270" x2="166" y2="270" stroke="var(--amber)" stroke-width="2"/>
+  <polygon points="162,270 174,265 174,275" fill="var(--amber)"/>
+  <text x="231" y="262" text-anchor="middle" font-size="10" fill="var(--amber)">MCP client 连接</text>
+  <rect x="296" y="238" width="360" height="64" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="312" y="260" font-size="12.5" font-weight="700" fill="var(--amber)">③ MCP server</text>
+  <text x="312" y="279" font-size="10.5" fill="var(--ink)">进 catalog · 核心经内置 MCP client 连</text>
+  <text x="312" y="295" font-size="10.5" fill="var(--ink)">零核心 schema footprint</text>
+</svg>
+<div class="fig-cap"><b>三条边缘扩展路,一道不动的窄腰</b>:① <b>插件</b>用 <span class="mono">register(ctx)</span> 把工具/命令/钩子挂进同一个 registry,<b>一行核心文件都不碰</b>(Teknium 铁律);② <b>技能</b>把内容拼成一条 <b>user message</b> 注入,<b>不进 system prompt</b>,整会话缓存前缀不作废;③ <b>MCP server</b> 进 catalog,核心靠内置 MCP client 连接,<b>零核心 schema 足迹</b>。能力全长在边缘,核心那道窄腰始终不动——它的 schema 才是要在<b>每次 API 调用</b>都付钱的东西。</div>
+</div>
+
 <div class="card analogy">
   <div class="tag">🔌 类比 · 瑞士军刀 vs 工具箱</div>
   核心只该放最常用的几把刀(核心工具);其余工具放<strong>工具箱</strong>(插件/技能/MCP),用时才取。要是把所有工具都焊死在军刀上,军刀会重得<strong>拿不动</strong>——因为每次出门(每次 API 调用)都得带上<strong>全部工具的说明书</strong>(工具 schema 全进 context)。工具越多,真正要用的那把越<strong>淹没在说明书堆里</strong>。
@@ -868,6 +909,46 @@ LESSON_23 = {
 <p><span class="mono">register_tool</span> 只是<strong>委托</strong>给和内置工具<strong>同一个</strong> <span class="mono">tools.registry</span>(第 8 章)——插件工具和核心工具走完全相同的注册/分派/可用性检查路径。<span class="mono">check_fn</span> 让工具<strong>服务门控</strong>(没配凭据就不出现,零足迹);<span class="mono">override</span> 甚至能替换内置工具。铁律(Teknium):<strong>插件绝不能改核心文件</strong>(<span class="mono">run_agent.py</span>/<span class="mono">cli.py</span>…);要更多能力,就把通用插件面拓宽,而非在核心里硬编码插件逻辑。</p>
 
 <p>为什么这条"插件绝不能改核心文件"要立成<strong>铁律</strong>,而不是"尽量别改"?因为核心一旦被某个插件的特例逻辑<strong>硬编码</strong>污染,它就被那个插件<strong>绑架</strong>了——下次重构 <span class="mono">run_agent.py</span> 得先担心会不会踩坏某个插件的隐式约定,核心的可演化性就此<strong>冻结</strong>。把规则反过来立:插件需要新能力,不是在核心开一个特例,而是<strong>拓宽通用插件面</strong>(加一个新 hook、加一个新 <span class="mono">ctx</span> 方法)。这样核心面对的永远是<strong>有限、通用</strong>的扩展点,而不是无穷无尽的插件特例。AGENTS.md 记着 PR #5295 删掉 95 行硬编码进 <span class="mono">main.py</span> 的某插件 argparse——就是这条铁律的执行记录。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 274" role="img" aria-label="插件需要新能力时，开核心特例与拓宽通用插件面的对比">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">插件需要新能力时,往哪走</text>
+
+  <rect x="20" y="58" width="118" height="148" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="79" y="126" text-anchor="middle" font-size="11.5" fill="var(--ink)">插件需要</text>
+  <text x="79" y="144" text-anchor="middle" font-size="11.5" fill="var(--ink)">一个新能力</text>
+
+  <line x1="138" y1="96" x2="186" y2="96" stroke="var(--red)" stroke-width="2"/>
+  <polygon points="190,96 178,91 178,101" fill="var(--red)"/>
+  <rect x="192" y="64" width="206" height="64" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="202" y="86" font-size="11.5" font-weight="700" fill="var(--red)">❌ 在核心里开特例</text>
+  <text x="202" y="105" font-size="10.5" fill="var(--ink)">把插件逻辑硬编码进</text>
+  <text x="202" y="120" font-size="10.5" fill="var(--ink)">main.py / run_agent.py</text>
+  <line x1="398" y1="96" x2="446" y2="96" stroke="var(--red)" stroke-width="2"/>
+  <polygon points="450,96 438,91 438,101" fill="var(--red)"/>
+  <rect x="452" y="64" width="208" height="64" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="462" y="86" font-size="11.5" font-weight="700" fill="var(--red)">核心被该插件绑架</text>
+  <text x="462" y="105" font-size="10.5" fill="var(--ink)">重构怕踩坏隐式约定</text>
+  <text x="462" y="120" font-size="10.5" fill="var(--ink)">可演化性就此冻结</text>
+
+  <line x1="138" y1="168" x2="186" y2="168" stroke="var(--accent)" stroke-width="2"/>
+  <polygon points="190,168 178,163 178,173" fill="var(--accent)"/>
+  <rect x="192" y="136" width="206" height="64" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="202" y="158" font-size="11.5" font-weight="700" fill="var(--accent-ink)">✅ 拓宽通用插件面</text>
+  <text x="202" y="177" font-size="10.5" fill="var(--accent-ink)">加一个新 hook /</text>
+  <text x="202" y="192" font-size="10.5" fill="var(--accent-ink)">加一个新 ctx 方法</text>
+  <line x1="398" y1="168" x2="446" y2="168" stroke="var(--accent)" stroke-width="2"/>
+  <polygon points="450,168 438,163 438,173" fill="var(--accent)"/>
+  <rect x="452" y="136" width="208" height="64" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="462" y="158" font-size="11.5" font-weight="700" fill="var(--accent-ink)">核心只面对</text>
+  <text x="462" y="177" font-size="10.5" fill="var(--accent-ink)">有限、通用的扩展点</text>
+  <text x="462" y="192" font-size="10.5" fill="var(--accent-ink)">而非无穷插件特例</text>
+
+  <rect x="20" y="222" width="640" height="34" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="244" text-anchor="middle" font-size="11" fill="var(--muted)">执行记录 · PR #5295 删掉 95 行硬编码进 main.py 的某插件 argparse</text>
+</svg>
+<div class="fig-cap"><b>为什么插件绝不许碰核心</b>:核心一旦被某插件的特例逻辑<b>硬编码</b>污染,就被那个插件<b>绑架</b>了——下次重构 <span class="mono">run_agent.py</span> 得先担心踩坏它的隐式约定,核心的可演化性就此<b>冻结</b>。正确做法是把规则反过来立:插件要新能力,不在核心开特例,而是<b>拓宽通用插件面</b>(加 hook、加 ctx 方法),核心永远只面对<b>有限、通用</b>的扩展点。PR #5295 删掉 95 行硬编码进 <span class="mono">main.py</span> 的插件 argparse,正是这条铁律的执行记录。</div>
+</div>
 
 <p>注意 <span class="mono">register_tool</span> 委托的是和内置工具<strong>同一个</strong> <span class="mono">tools.registry</span>——这意味着插件工具不是"二等公民":它走相同的 schema 收集、相同的分派、相同的可用性检查。<span class="mono">check_fn</span> 是其中最关键的一环:工具<strong>只在前置条件满足时才出现</strong>(比如配了某个 API key),否则连 schema 都不进 context,真正做到<strong>零足迹</strong>。这正是 Footprint Ladder 第三阶"服务门控工具"的实现底座——核心工具集里那些 <span class="mono">ha_*</span>(Home Assistant)、<span class="mono">computer_use</span> 用的也是同一招:没配 token 就隐身。</p>
 
@@ -959,6 +1040,47 @@ LESSON_23 = {
     "en": r"""
 <p class="lead">Across the previous 22 chapters, Hermes's core has barely "grown" — platform adapters, memory backends, model providers, chat skills: the vast majority of capability is bolted on from the <strong>edges</strong>. This chapter pins down the discipline that runs through the whole book: <strong>capability extends at the edges, the core stays a narrow waist</strong>. Three mechanisms: plugins, skills, MCP.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 372" role="img" aria-label="all three edge-extension mechanisms attach to the core without modifying it">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">Three edge extensions · zero core change</text>
+
+  <rect x="34" y="52" width="128" height="292" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="98" y="156" text-anchor="middle" font-size="15" font-weight="700" fill="var(--accent-ink)">core</text>
+  <text x="98" y="178" text-anchor="middle" font-size="11" fill="var(--accent-ink)">narrow waist</text>
+  <text x="98" y="212" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">_HERMES_CORE_TOOLS</text>
+  <text x="98" y="292" text-anchor="middle" font-size="10" fill="var(--muted)">schema sent on</text>
+  <text x="98" y="307" text-anchor="middle" font-size="10" fill="var(--muted)">every API call</text>
+
+  <line x1="210" y1="52" x2="210" y2="344" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="210" y="46" text-anchor="middle" font-size="10" fill="var(--faint)">not one core file changed</text>
+
+  <line x1="296" y1="90" x2="166" y2="90" stroke="var(--blue)" stroke-width="2"/>
+  <polygon points="162,90 174,85 174,95" fill="var(--blue)"/>
+  <text x="231" y="82" text-anchor="middle" font-size="10" fill="var(--blue)">register(ctx)</text>
+  <rect x="296" y="58" width="360" height="64" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="312" y="80" font-size="12.5" font-weight="700" fill="var(--blue)">① plugins</text>
+  <text x="312" y="99" font-size="10.5" fill="var(--ink)">~/.hermes/plugins/ · tools / commands / hooks</text>
+  <text x="312" y="115" font-size="10.5" fill="var(--ink)">never touch core files · Teknium iron rule</text>
+
+  <line x1="296" y1="180" x2="166" y2="180" stroke="var(--purple)" stroke-width="2"/>
+  <polygon points="162,180 174,175 174,185" fill="var(--purple)"/>
+  <text x="231" y="172" text-anchor="middle" font-size="10" fill="var(--purple)">user-msg inject</text>
+  <rect x="296" y="148" width="360" height="64" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="312" y="170" font-size="12.5" font-weight="700" fill="var(--purple)">② skills</text>
+  <text x="312" y="189" font-size="10.5" fill="var(--ink)">SKILL.md · injected as a user message</text>
+  <text x="312" y="205" font-size="10.5" fill="var(--ink)">not the system prompt → cache safe</text>
+
+  <line x1="296" y1="270" x2="166" y2="270" stroke="var(--amber)" stroke-width="2"/>
+  <polygon points="162,270 174,265 174,275" fill="var(--amber)"/>
+  <text x="231" y="262" text-anchor="middle" font-size="10" fill="var(--amber)">MCP client link</text>
+  <rect x="296" y="238" width="360" height="64" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="312" y="260" font-size="12.5" font-weight="700" fill="var(--amber)">③ MCP server</text>
+  <text x="312" y="279" font-size="10.5" fill="var(--ink)">in the catalog · via built-in MCP client</text>
+  <text x="312" y="295" font-size="10.5" fill="var(--ink)">zero core-schema footprint</text>
+</svg>
+<div class="fig-cap"><b>Three edge paths, one unmoved waist</b>: ① <b>plugins</b> use <span class="mono">register(ctx)</span> to attach tools/commands/hooks to the same registry, <b>touching not a single core file</b> (the Teknium iron rule); ② <b>skills</b> assemble content into a <b>user message</b>, injected <b>outside the system prompt</b> so the conversation's cached prefix never voids; ③ an <b>MCP server</b> lives in the catalog, reached through the built-in MCP client, <b>zero core-schema footprint</b>. All capability grows at the edges; the narrow waist never moves — its schema is what you pay for on <b>every API call</b>.</div>
+</div>
+
 <div class="card analogy">
   <div class="tag">🔌 Analogy · the Swiss Army knife vs the toolbox</div>
   The core should hold only the few most-used blades (core tools); everything else goes in the <strong>toolbox</strong> (plugins/skills/MCP), pulled out only when needed. Weld every tool onto the knife and it gets <strong>too heavy to carry</strong> — because every outing (every API call) must lug <strong>the manual for all tools</strong> (every tool schema in the context). The more tools, the more the one you actually need <strong>drowns in the pile of manuals</strong>.
@@ -985,6 +1107,46 @@ LESSON_23 = {
 <p><span class="mono">register_tool</span> merely <strong>delegates</strong> to the <strong>same</strong> <span class="mono">tools.registry</span> as built-in tools (ch.8) — plugin tools and core tools take the exact same register/dispatch/availability path. <span class="mono">check_fn</span> makes a tool <strong>service-gated</strong> (absent until its credential is configured, zero footprint); <span class="mono">override</span> can even replace a built-in. The iron rule (Teknium): <strong>plugins must NOT modify core files</strong> (<span class="mono">run_agent.py</span>/<span class="mono">cli.py</span>…); if you need more, widen the generic plugin surface rather than hardcoding plugin logic into the core.</p>
 
 <p>Why make "plugins must NOT modify core files" an <strong>iron rule</strong> rather than "try not to"? Because the moment the core is polluted by one plugin's special-case logic <strong>hardcoded</strong> in, it's <strong>held hostage</strong> by that plugin — the next refactor of <span class="mono">run_agent.py</span> has to worry whether it'll break some plugin's implicit contract, and the core's evolvability <strong>freezes</strong>. Flip the rule instead: when a plugin needs a new capability, you don't carve a special case into the core, you <strong>widen the generic plugin surface</strong> (add a new hook, add a new <span class="mono">ctx</span> method). That way the core only ever faces a <strong>finite, generic</strong> set of extension points, not an endless stream of plugin special cases. AGENTS.md records PR #5295 deleting 95 lines of one plugin's hardcoded argparse from <span class="mono">main.py</span> — the enforcement log of exactly this rule.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 274" role="img" aria-label="when a plugin needs a new capability, carve a core special case versus widen the generic plugin surface">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">When a plugin needs a new capability</text>
+
+  <rect x="20" y="58" width="118" height="148" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="79" y="126" text-anchor="middle" font-size="11.5" fill="var(--ink)">a plugin needs</text>
+  <text x="79" y="144" text-anchor="middle" font-size="11.5" fill="var(--ink)">a new capability</text>
+
+  <line x1="138" y1="96" x2="186" y2="96" stroke="var(--red)" stroke-width="2"/>
+  <polygon points="190,96 178,91 178,101" fill="var(--red)"/>
+  <rect x="192" y="64" width="206" height="64" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="202" y="86" font-size="11.5" font-weight="700" fill="var(--red)">❌ carve a core special case</text>
+  <text x="202" y="105" font-size="10.5" fill="var(--ink)">hardcode plugin logic into</text>
+  <text x="202" y="120" font-size="10.5" fill="var(--ink)">main.py / run_agent.py</text>
+  <line x1="398" y1="96" x2="446" y2="96" stroke="var(--red)" stroke-width="2"/>
+  <polygon points="450,96 438,91 438,101" fill="var(--red)"/>
+  <rect x="452" y="64" width="208" height="64" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="462" y="86" font-size="11.5" font-weight="700" fill="var(--red)">core held hostage</text>
+  <text x="462" y="105" font-size="10.5" fill="var(--ink)">refactors fear breaking it</text>
+  <text x="462" y="120" font-size="10.5" fill="var(--ink)">evolvability freezes</text>
+
+  <line x1="138" y1="168" x2="186" y2="168" stroke="var(--accent)" stroke-width="2"/>
+  <polygon points="190,168 178,163 178,173" fill="var(--accent)"/>
+  <rect x="192" y="136" width="206" height="64" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="202" y="158" font-size="11.5" font-weight="700" fill="var(--accent-ink)">✅ widen the plugin surface</text>
+  <text x="202" y="177" font-size="10.5" fill="var(--accent-ink)">add a new hook /</text>
+  <text x="202" y="192" font-size="10.5" fill="var(--accent-ink)">add a new ctx method</text>
+  <line x1="398" y1="168" x2="446" y2="168" stroke="var(--accent)" stroke-width="2"/>
+  <polygon points="450,168 438,163 438,173" fill="var(--accent)"/>
+  <rect x="452" y="136" width="208" height="64" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="462" y="158" font-size="11.5" font-weight="700" fill="var(--accent-ink)">core faces only</text>
+  <text x="462" y="177" font-size="10.5" fill="var(--accent-ink)">finite, generic points</text>
+  <text x="462" y="192" font-size="10.5" fill="var(--accent-ink)">not endless special cases</text>
+
+  <rect x="20" y="222" width="640" height="34" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="244" text-anchor="middle" font-size="11" fill="var(--muted)">Enforcement log · PR #5295 deleted 95 lines of one plugin's hardcoded argparse from main.py</text>
+</svg>
+<div class="fig-cap"><b>Why plugins must never touch the core</b>: the moment the core is polluted by one plugin's <b>hardcoded</b> special-case logic, it is <b>held hostage</b> by that plugin — the next refactor of <span class="mono">run_agent.py</span> must worry about breaking its implicit contract, and the core's evolvability <b>freezes</b>. Flip the rule: when a plugin needs more, don't carve a core special case — <b>widen the generic plugin surface</b> (a new hook, a new ctx method), so the core only ever faces a <b>finite, generic</b> set of extension points. PR #5295, deleting 95 lines of hardcoded plugin argparse from <span class="mono">main.py</span>, is that rule's enforcement log.</div>
+</div>
 
 <p>Note that <span class="mono">register_tool</span> delegates to the <strong>same</strong> <span class="mono">tools.registry</span> as built-in tools — meaning plugin tools aren't "second-class citizens": they take the same schema collection, same dispatch, same availability check. <span class="mono">check_fn</span> is the crucial piece: a tool <strong>appears only when its prerequisite is met</strong> (e.g. a configured API key), otherwise not even its schema enters the context — truly <strong>zero footprint</strong>. This is the bedrock of rung three on the Footprint Ladder ("service-gated tool"); the core toolset's own <span class="mono">ha_*</span> (Home Assistant) and <span class="mono">computer_use</span> use the same trick — invisible until their token is configured.</p>
 

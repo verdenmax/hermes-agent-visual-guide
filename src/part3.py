@@ -823,6 +823,47 @@ LESSON_11 = {
 
 <p>但更该先问的是：记忆为什么<strong>非「外置」不可</strong>？回到第 2 章的 B·无状态——模型是<strong>纯函数</strong>，每次 API 调用都从零开始，上一轮刚说的偏好、上个会话踩过的坑，到了下一通「电话」全部清零；它没有「我」，只有这一次请求的输入。<span class="mono">MEMORY.md</span> 和 <span class="mono">USER.md</span> 就是这具「失忆内核」的<strong>外接硬盘</strong>：把跨会话该长期持有的「你是谁、项目是什么状态」沉淀到磁盘，开新会话时再读回来拼进 system prompt。没有这块外置存储，Hermes 每天都像初次见你，所谓「跨会话学习」根本无从谈起。而正因为它要进的是<strong>缓存前缀</strong>里最稳定的那一层（volatile），写入又随时发生，才逼出了「冻结快照」这条非走不可的设计——稳定的前缀和随时的写入，只能靠读写分离来同时满足。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 376" role="img" aria-label="记忆外置而不破缓存：失忆内核外接 MEMORY/USER 磁盘，会话开始拍冻结快照进稳定前缀，中途写入只落盘，仅压缩边界才重建前缀刷新快照">
+  <text x="340" y="24" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">外接记忆 · 磁盘（$HERMES_HOME/memories）</text>
+  <rect x="178" y="34" width="150" height="52" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="253" y="58" text-anchor="middle" font-size="12.5" fill="var(--ink)">MEMORY.md</text>
+  <text x="253" y="75" text-anchor="middle" font-size="9.5" fill="var(--muted)">agent 笔记 · ~2200 字</text>
+  <rect x="352" y="34" width="150" height="52" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="427" y="58" text-anchor="middle" font-size="12.5" fill="var(--ink)">USER.md</text>
+  <text x="427" y="75" text-anchor="middle" font-size="9.5" fill="var(--muted)">用户画像 · ~1375 字</text>
+  <text x="340" y="104" text-anchor="middle" font-size="10" fill="var(--muted)">写入随时落盘（durable）· 真实状态在磁盘 + live</text>
+
+  <line x1="340" y1="110" x2="340" y2="146" stroke="var(--accent)" stroke-width="2"/>
+  <polygon points="340,150 334,138 346,138" fill="var(--accent)"/>
+  <text x="354" y="132" text-anchor="start" font-size="10.5" fill="var(--accent-ink)">① 会话开始 load_from_disk → 拍冻结快照</text>
+
+  <rect x="120" y="150" width="440" height="66" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="178" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">稳定前缀 · system prompt（volatile 层）</text>
+  <text x="340" y="199" text-anchor="middle" font-size="10.5" fill="var(--muted)">整会话逐字节不变 → 命中前缀缓存</text>
+
+  <line x1="340" y1="216" x2="340" y2="248" stroke="var(--line)" stroke-width="2"/>
+  <polygon points="340,252 334,240 346,240" fill="var(--line)"/>
+  <text x="354" y="236" text-anchor="start" font-size="10.5" fill="var(--muted)">每轮原样复用（缓存命中）</text>
+
+  <rect x="120" y="252" width="440" height="62" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="278" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">失忆的模型内核 · 纯函数</text>
+  <text x="340" y="298" text-anchor="middle" font-size="10.5" fill="var(--muted)">每次 API 调用从零开始 · 治第 2 章 B·无状态</text>
+
+  <path d="M560 283 C 636 270, 636 92, 504 64" fill="none" stroke="var(--blue)" stroke-width="1.8" stroke-dasharray="5 4"/>
+  <polygon points="504,64 514,62 511,74" fill="var(--blue)"/>
+  <text x="652" y="190" text-anchor="middle" font-size="10" fill="var(--blue)" transform="rotate(90 652 190)">② 中途写入 → 只落盘，不碰快照/前缀</text>
+
+  <path d="M178 60 C 58 78, 58 150, 116 172" fill="none" stroke="var(--red)" stroke-width="1.8" stroke-dasharray="5 4"/>
+  <polygon points="116,172 106,167 110,179" fill="var(--red)"/>
+  <text x="30" y="118" text-anchor="middle" font-size="10" fill="var(--red)" transform="rotate(-90 30 118)">③ 会话内仅压缩(第15章) 才重建前缀+刷新快照</text>
+
+  <text x="340" y="344" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">记忆既「外置」治失忆，又「不破缓存」守第 6 章</text>
+  <text x="340" y="362" text-anchor="middle" font-size="9.5" fill="var(--muted)">读写分离：写在磁盘/live；注入只用 ①会话开始快照 ＋ ②当前用户消息副本</text>
+</svg>
+<div class="fig-cap"><b>记忆外置而不破缓存</b>：模型内核是<b>纯函数</b>、跨会话失忆（第 2 章 B），于是把「你是谁、项目什么状态」沉到 <span class="mono">MEMORY.md/USER.md</span> 磁盘当<b>外接硬盘</b>。但记忆要进的是缓存前缀里最稳定的 volatile 层——直接注入 live 记忆会每写一条就击穿缓存。解法是<b>读写分离</b>：① 会话开始 <span class="mono">load_from_disk</span> 拍一张<b>冻结快照</b>进系统前缀，整会话逐字节不变；② 中途写入只落盘、<b>不动快照</b>；③ 会话内唯有压缩边界（第 15 章）才重建前缀、用最新记忆刷新快照。于是记忆既外置又守住「缓存神圣」。</div>
+</div>
+
 <p>顺带一个容易被忽略的设计：<span class="mono">MEMORY.md</span> 约 2200 字符、<span class="mono">USER.md</span> 约 1375 字符的上限，并非抠门，而是直面第 A 条约束「中间遗失」——长上下文里靠中段的信息会被模型稀释、读不准。记忆既然要逐字进 system prompt 的稳定层、每轮都摆在模型眼前，就必须<strong>紧凑而高信号</strong>：宁可让 agent 周期性地用 <span class="mono">memory</span> 工具<strong>提炼、合并、淘汰</strong>旧条目，把「你是谁」压成一页能一眼读完的画像，也不让它无限堆积成一篇没人细读的流水账。这条上限和 nudge 的「定期回顾」是配套的——一个负责<strong>容量边界</strong>，一个负责<strong>持续整理</strong>，共同保证这块「外接硬盘」始终是高密度、可被每轮稳定复用的前缀。</p>
 
 <h2>第二条路：实时取回只贴当前用户消息的副本</h2>
@@ -871,6 +912,46 @@ should_review_memory = <span class="kw">False</span>
 <p>这套「<span class="mono">MemoryProvider</span> ABC ＋ <span class="mono">MemoryManager</span> 编排器」是 Hermes 收口同类扩展的<strong>范式</strong>（呼应第 23 章）：内置的 <span class="mono">MEMORY.md/USER.md</span> 不是特例，而是「<strong>第一个 provider</strong>」——编排器里内置 provider 永远排在最前，Honcho、Mem0、Supermemory 等第三方后端实现<strong>同一个 ABC</strong>、走<strong>同一条发现路径</strong>接入，生命周期都收敛到 <span class="mono">is_available</span> / <span class="mono">initialize</span> / <span class="mono">prefetch</span> / <span class="mono">sync_turn</span> / <span class="mono">shutdown</span> 这几个钩子上。核心代码不为每家后端写分支，而是定义一份契约让它们自证可用、自报工具——这正是「别重复造，定 ABC 收口同类扩展」。若不这样，每接一个记忆后端就要往主循环里塞 if-else，核心会被无数后端逻辑撑爆。</p>
 
 <p>为什么「同一时刻只允许一个外部 provider」、且 <span class="mono">plugins/memory/</span> 这棵树已经<strong>封闭</strong>？前者是为了守住核心的<strong>窄腰</strong>：每多一个 provider 就多一组工具 schema，而 schema 每轮都随请求发出，放任叠加就是无止境的体积膨胀——<span class="mono">add_provider</span> 里第二个外部 provider 会被直接拒绝并记一条警告日志。后者（2026 年 5 月的政策）是同一逻辑的延伸：新记忆后端不再往核心树里加目录，而要作为<strong>独立插件仓</strong>发布、用户装进 <span class="mono">~/.hermes/plugins/</span>，照样实现同一 ABC、走 <span class="mono">hermes memory setup</span> 与 <span class="mono">post_setup</span> 接入。能力长在<strong>边缘</strong>、核心只留一份契约，这与第 9 章技能、插件体系是同一条「窄腰宽边」的设计哲学。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 352" role="img" aria-label="MemoryProvider ABC 加编排器：内置是第一个 provider 永远排最前，第三方实现同一 ABC 接入，只允许一个外部 provider，第二个被拒并记警告">
+  <text x="340" y="22" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">核心只认一个抽象 · 一份 ABC ＋ 一个编排器（呼应第 23 章）</text>
+
+  <rect x="24" y="44" width="240" height="250" rx="10" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="144" y="68" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">MemoryProvider</text>
+  <text x="144" y="85" text-anchor="middle" font-size="9.5" fill="var(--muted)">抽象接口 / ABC · 一份契约</text>
+  <text x="42" y="116" text-anchor="start" font-size="10.5" fill="var(--ink)">is_available()  · 我可用吗</text>
+  <text x="42" y="146" text-anchor="start" font-size="10.5" fill="var(--ink)">initialize()    · 初始化</text>
+  <text x="42" y="176" text-anchor="start" font-size="10.5" fill="var(--ink)">prefetch(q)     · 取回上下文</text>
+  <text x="42" y="206" text-anchor="start" font-size="10.5" fill="var(--ink)">sync_turn(m)    · 同步本轮</text>
+  <text x="42" y="236" text-anchor="start" font-size="10.5" fill="var(--ink)">shutdown()      · 收尾</text>
+  <text x="144" y="272" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--purple)">核心不为每家后端写分支</text>
+
+  <line x1="264" y1="160" x2="294" y2="160" stroke="var(--muted)" stroke-width="2"/>
+  <polygon points="298,160 286,154 286,166" fill="var(--muted)"/>
+  <text x="279" y="150" text-anchor="middle" font-size="9" fill="var(--muted)" transform="rotate(-90 279 150)">实现同一 ABC · 同一发现路径</text>
+
+  <rect x="298" y="44" width="358" height="250" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="477" y="66" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">MemoryManager · 编排器</text>
+  <text x="477" y="83" text-anchor="middle" font-size="9.5" fill="var(--muted)">按顺序登记 provider · add_provider 守门</text>
+
+  <rect x="314" y="94" width="326" height="50" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="477" y="114" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">① 内置 provider：MEMORY.md / USER.md</text>
+  <text x="477" y="132" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">永远排最前 · 「第一个 provider」</text>
+
+  <rect x="314" y="152" width="326" height="56" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="477" y="172" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">② 外部 provider · 最多 1 个</text>
+  <text x="477" y="190" text-anchor="middle" font-size="9" fill="var(--blue)">Honcho / Mem0 / Supermemory… 同一 ABC、同一发现路径</text>
+
+  <rect x="314" y="216" width="326" height="52" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-dasharray="5 4"/>
+  <text x="477" y="236" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✕ 第二个外部 provider → 被拒 ＋ 警告日志</text>
+  <text x="477" y="253" text-anchor="middle" font-size="9" fill="var(--red)">守窄腰：每多一个 = 多一组每轮发送的工具 schema</text>
+
+  <text x="340" y="312" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">内置不是特例，而是「第一个 provider」；第三方实现同一 ABC 接入</text>
+  <text x="340" y="332" text-anchor="middle" font-size="9.5" fill="var(--muted)">取回都走 prefetch → 只贴当前用户消息副本，从不污染 system prompt</text>
+</svg>
+<div class="fig-cap"><b>MemoryProvider ABC ＋ 编排器</b>：核心不为每家记忆后端写分支，而是定义<b>一份 ABC 契约</b>（<span class="mono">is_available/initialize/prefetch/sync_turn/shutdown</span>），由 <span class="mono">MemoryManager</span> 编排。内置的 <span class="mono">MEMORY.md/USER.md</span> 不是特例，而是<b>「第一个 provider」</b>、永远排最前；Honcho/Mem0/Supermemory 等第三方实现<b>同一 ABC</b>、走<b>同一发现路径</b>接入。为守住<b>窄腰</b>，<span class="mono">add_provider</span> <b>只允许一个外部 provider</b>——第二个被直接拒绝并记一条警告（每多一个就多一组每轮随请求发送的工具 schema）。这正是「定 ABC 收口同类扩展」的范式（呼应第 23 章）。</div>
+</div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><strong>写入（durable）</strong>：memory 工具随时把条目落进 MEMORY.md / USER.md 磁盘 + live 状态</span></div>
@@ -942,6 +1023,47 @@ Memory lets Hermes remember across sessions "<strong>who you are and what you pr
 
 <p>But the prior question matters more: why must memory be <strong>external</strong> at all? Back to ch.2's B·statelessness — the model is a <strong>pure function</strong>, starting from zero on every API call; the preference you stated last turn, the pitfall you hit last session, are wiped clean by the next "phone call." It has no "self," only the input of this one request. <span class="mono">MEMORY.md</span> and <span class="mono">USER.md</span> are the <strong>external hard drive</strong> for this amnesiac core: they distill what should persist across sessions — "who you are, what state the project is in" — to disk, then read it back into the system prompt at the next session start. Without that external store, Hermes meets you for the first time every day, and "cross-session learning" is impossible. And precisely because it enters the <strong>most stable tier</strong> of the cache prefix (volatile) while writes happen anytime, the "frozen snapshot" becomes the only viable design — a stable prefix and anytime writes can be reconciled only by read/write separation.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 376" role="img" aria-label="Memory externalized yet cache-safe: an amnesiac kernel attaches MEMORY/USER disk files; a frozen snapshot enters the stable prefix at session start, mid-session writes only hit disk, and only a compression boundary rebuilds the prefix and refreshes the snapshot">
+  <text x="340" y="24" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">External memory · disk ($HERMES_HOME/memories)</text>
+  <rect x="178" y="34" width="150" height="52" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="253" y="58" text-anchor="middle" font-size="12.5" fill="var(--ink)">MEMORY.md</text>
+  <text x="253" y="75" text-anchor="middle" font-size="9.5" fill="var(--muted)">agent notes · ~2200 chars</text>
+  <rect x="352" y="34" width="150" height="52" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="427" y="58" text-anchor="middle" font-size="12.5" fill="var(--ink)">USER.md</text>
+  <text x="427" y="75" text-anchor="middle" font-size="9.5" fill="var(--muted)">user profile · ~1375 chars</text>
+  <text x="340" y="104" text-anchor="middle" font-size="10" fill="var(--muted)">writes hit disk anytime (durable) · truth lives on disk + live state</text>
+
+  <line x1="340" y1="110" x2="340" y2="146" stroke="var(--accent)" stroke-width="2"/>
+  <polygon points="340,150 334,138 346,138" fill="var(--accent)"/>
+  <text x="354" y="132" text-anchor="start" font-size="10.5" fill="var(--accent-ink)">① at session start load_from_disk → freeze a snapshot</text>
+
+  <rect x="120" y="150" width="440" height="66" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="178" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">Stable prefix · system prompt (volatile tier)</text>
+  <text x="340" y="199" text-anchor="middle" font-size="10.5" fill="var(--muted)">byte-stable all session → prefix-cache hit</text>
+
+  <line x1="340" y1="216" x2="340" y2="248" stroke="var(--line)" stroke-width="2"/>
+  <polygon points="340,252 334,240 346,240" fill="var(--line)"/>
+  <text x="354" y="236" text-anchor="start" font-size="10.5" fill="var(--muted)">reused verbatim every turn (cache hit)</text>
+
+  <rect x="120" y="252" width="440" height="62" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="278" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">Amnesiac model kernel · pure function</text>
+  <text x="340" y="298" text-anchor="middle" font-size="10.5" fill="var(--muted)">starts from zero every API call · treats ch.2 B·stateless</text>
+
+  <path d="M560 283 C 636 270, 636 92, 504 64" fill="none" stroke="var(--blue)" stroke-width="1.8" stroke-dasharray="5 4"/>
+  <polygon points="504,64 514,62 511,74" fill="var(--blue)"/>
+  <text x="652" y="190" text-anchor="middle" font-size="10" fill="var(--blue)" transform="rotate(90 652 190)">② mid-session writes → disk only, never the snapshot/prefix</text>
+
+  <path d="M178 60 C 58 78, 58 150, 116 172" fill="none" stroke="var(--red)" stroke-width="1.8" stroke-dasharray="5 4"/>
+  <polygon points="116,172 106,167 110,179" fill="var(--red)"/>
+  <text x="30" y="110" text-anchor="middle" font-size="10" fill="var(--red)" transform="rotate(-90 30 110)">③ in-session, only compression (ch.15) rebuilds + refreshes</text>
+
+  <text x="340" y="344" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">Memory is both external (cures amnesia) and cache-safe (guards ch.6)</text>
+  <text x="340" y="362" text-anchor="middle" font-size="9.5" fill="var(--muted)">read/write split: write to disk/live; inject only the ① session-start snapshot ＋ ② current user-message copy</text>
+</svg>
+<div class="fig-cap"><b>Memory externalized yet cache-safe</b>: the kernel is a <b>pure function</b> that forgets across sessions (ch.2 B), so "who you are, what state the project is in" is distilled onto <span class="mono">MEMORY.md/USER.md</span> disk — its <b>external hard drive</b>. But memory must enter the most stable (volatile) tier of the cache prefix, and injecting live memory would shatter the cache on every write. The fix is <b>read/write separation</b>: ① at session start <span class="mono">load_from_disk</span> takes a <b>frozen snapshot</b> into the prefix, byte-stable all session; ② mid-session writes hit disk only, <b>not the snapshot</b>; ③ in-session, only a compression boundary (ch.15) rebuilds the prefix and refreshes the snapshot from the latest memory. So memory is both external and honors "the cache is sacred."</div>
+</div>
+
 <p>An easily missed design point: the ~2200-char cap on <span class="mono">MEMORY.md</span> and ~1375-char cap on <span class="mono">USER.md</span> aren't stinginess but a direct answer to constraint A, "lost-in-the-middle" — information sitting in the middle of a long context gets diluted and read imprecisely. Since memory enters the system prompt's stable tier verbatim and sits before the model's eyes every turn, it must be <strong>compact and high-signal</strong>: better to have the agent periodically <strong>distill, merge, and retire</strong> old entries via the <span class="mono">memory</span> tool — compressing "who you are" into a one-page profile readable at a glance — than let it pile up into a running log nobody reads closely. This cap pairs with the nudge's "periodic review": one governs the <strong>capacity boundary</strong>, the other the <strong>ongoing tidying</strong>, together keeping this "external drive" dense and stably reusable as a prefix every turn.</p>
 
 <h2>Path two: real-time recall appends only to the current user message's copy</h2>
@@ -989,6 +1111,46 @@ should_review_memory = <span class="kw">False</span>
 <p>This "<span class="mono">MemoryProvider</span> ABC + <span class="mono">MemoryManager</span> orchestrator" is Hermes's <strong>paradigm</strong> for corralling a category of extension (echoing ch.23): the built-in <span class="mono">MEMORY.md/USER.md</span> isn't a special case but the "<strong>first provider</strong>" — the orchestrator always puts the built-in provider first, while third-party backends like Honcho, Mem0, and Supermemory plug in by implementing <strong>the same ABC</strong> over <strong>the same discovery path</strong>, with their lifecycles converging on the <span class="mono">is_available</span> / <span class="mono">initialize</span> / <span class="mono">prefetch</span> / <span class="mono">sync_turn</span> / <span class="mono">shutdown</span> hooks. The core code branches for no backend; it defines a contract that lets each one prove its own availability and declare its own tools — this is "don't reinvent, define an ABC to corral the category." Without it, every memory backend you add would stuff another if-else into the main loop, and the core would buckle under endless backend logic.</p>
 
 <p>Why "only one external provider at a time," and why is the <span class="mono">plugins/memory/</span> tree now <strong>closed</strong>? The former guards the core's <strong>narrow waist</strong>: each extra provider adds a set of tool schemas, and schemas ship on every request, so unchecked accumulation is endless bloat — <span class="mono">add_provider</span> rejects a second external provider outright and logs a warning. The latter (the May 2026 policy) extends the same logic: new memory backends no longer add a directory to the core tree but ship as <strong>standalone plugin repos</strong> users install into <span class="mono">~/.hermes/plugins/</span>, still implementing the same ABC and integrating via <span class="mono">hermes memory setup</span> and <span class="mono">post_setup</span>. Capability lives at the <strong>edges</strong> and the core keeps just one contract — the same "narrow-waist, wide-edges" philosophy as ch.9 skills and the plugin system.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 352" role="img" aria-label="MemoryProvider ABC plus orchestrator: the built-in is the first provider and always ordered first, third parties plug in via the same ABC, only one external provider is allowed, and a second one is rejected with a warning">
+  <text x="340" y="22" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">The core knows one abstraction · one ABC ＋ one orchestrator (echoing ch.23)</text>
+
+  <rect x="24" y="44" width="240" height="250" rx="10" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="144" y="68" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">MemoryProvider</text>
+  <text x="144" y="85" text-anchor="middle" font-size="9.5" fill="var(--muted)">abstract interface / ABC · one contract</text>
+  <text x="42" y="116" text-anchor="start" font-size="10.5" fill="var(--ink)">is_available()  · am I usable?</text>
+  <text x="42" y="146" text-anchor="start" font-size="10.5" fill="var(--ink)">initialize()    · set up</text>
+  <text x="42" y="176" text-anchor="start" font-size="10.5" fill="var(--ink)">prefetch(q)     · recall context</text>
+  <text x="42" y="206" text-anchor="start" font-size="10.5" fill="var(--ink)">sync_turn(m)    · sync this turn</text>
+  <text x="42" y="236" text-anchor="start" font-size="10.5" fill="var(--ink)">shutdown()      · tear down</text>
+  <text x="144" y="272" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--purple)">core branches for no backend</text>
+
+  <line x1="264" y1="160" x2="294" y2="160" stroke="var(--muted)" stroke-width="2"/>
+  <polygon points="298,160 286,154 286,166" fill="var(--muted)"/>
+  <text x="279" y="150" text-anchor="middle" font-size="9" fill="var(--muted)" transform="rotate(-90 279 150)">implement same ABC · same discovery</text>
+
+  <rect x="298" y="44" width="358" height="250" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="477" y="66" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">MemoryManager · orchestrator</text>
+  <text x="477" y="83" text-anchor="middle" font-size="9.5" fill="var(--muted)">registers providers in order · add_provider gatekeeps</text>
+
+  <rect x="314" y="94" width="326" height="50" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="477" y="114" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">① built-in provider: MEMORY.md / USER.md</text>
+  <text x="477" y="132" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">always ordered first · the "first provider"</text>
+
+  <rect x="314" y="152" width="326" height="56" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="477" y="172" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">② external provider · at most 1</text>
+  <text x="477" y="190" text-anchor="middle" font-size="9" fill="var(--blue)">Honcho / Mem0 / Supermemory… same ABC, same discovery</text>
+
+  <rect x="314" y="216" width="326" height="52" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-dasharray="5 4"/>
+  <text x="477" y="236" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✕ a second external provider → rejected ＋ warning log</text>
+  <text x="477" y="253" text-anchor="middle" font-size="9" fill="var(--red)">guards the waist: each one = another per-call tool schema</text>
+
+  <text x="340" y="312" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">the built-in isn't a special case but the "first provider"; third parties plug in via the same ABC</text>
+  <text x="340" y="332" text-anchor="middle" font-size="9.5" fill="var(--muted)">recall always takes prefetch → appended to the current user-message copy, never polluting the system prompt</text>
+</svg>
+<div class="fig-cap"><b>MemoryProvider ABC ＋ orchestrator</b>: the core branches for no memory backend; it defines <b>one ABC contract</b> (<span class="mono">is_available/initialize/prefetch/sync_turn/shutdown</span>) orchestrated by <span class="mono">MemoryManager</span>. The built-in <span class="mono">MEMORY.md/USER.md</span> isn't a special case but the <b>"first provider,"</b> always ordered first; third parties like Honcho/Mem0/Supermemory plug in via <b>the same ABC</b> over <b>the same discovery path</b>. To guard the <b>narrow waist</b>, <span class="mono">add_provider</span> allows <b>only one external provider</b> — a second is rejected outright and logs a warning (each extra one adds a set of tool schemas shipped on every request). This is the "define an ABC to corral the category" paradigm (echoing ch.23).</div>
+</div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><strong>Write (durable)</strong>: the memory tool drops entries into MEMORY.md / USER.md disk + live state anytime</span></div>

@@ -390,6 +390,60 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 
 <p>为什么是 stdio 上的 JSON-RPC,而不是另起一个 HTTP/REST 服务?因为 Node 前端是<strong>父进程直接 spawn 出 Python 后端</strong>的,两者天生共享一对管道——无需监听端口、无需网络鉴权、无需穿越 TCP 协议栈。一帧请求就是<strong>一行 JSON</strong>,换行即分帧,解析成本几乎为零,延迟也最低。这条进程边界还划得格外干净:<strong>TypeScript 只负责屏幕</strong>(Ink 渲染 transcript、composer、审批弹窗、活动指示),<strong>Python 独占会话、工具、模型调用,乃至 slash 命令的解析与分派</strong>(<span class="mono">slash.exec</span> 跑在常驻的 <span class="mono">_SlashWorker</span> 子进程里)。前端永不碰业务逻辑,后端永不碰像素——职责一刀两断,各自才能用各自最顺手的生态独立迭代。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 336" role="img" aria-label="TUI 两进程模型：Node 管屏幕、Python 管核心，经 stdio JSON-RPC 双向通信">
+  <text x="129" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="var(--blue)">TypeScript · 管屏幕</text>
+  <text x="551" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="var(--purple)">Python · 管核心（同一 AIAgent）</text>
+
+  <rect x="24" y="40" width="210" height="248" rx="11" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="129" y="64" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">Node (Ink / React)</text>
+  <line x1="40" y1="74" x2="218" y2="74" stroke="var(--line)"/>
+  <g font-size="11" text-anchor="middle">
+    <rect x="44" y="86"  width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="129" y="104" fill="var(--ink)">transcript · messageLine.tsx</text>
+    <rect x="44" y="122" width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="129" y="140" fill="var(--ink)">composer · 输入框</text>
+    <rect x="44" y="158" width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="129" y="176" fill="var(--ink)">审批 · prompts.tsx</text>
+    <rect x="44" y="194" width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="129" y="212" fill="var(--ink)">活动 · thinking.tsx</text>
+  </g>
+  <text x="129" y="252" text-anchor="middle" font-size="10.5" fill="var(--muted)">只渲染像素，不碰业务逻辑</text>
+
+  <rect x="446" y="40" width="210" height="248" rx="11" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="551" y="64" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">Python (tui_gateway)</text>
+  <line x1="462" y1="74" x2="640" y2="74" stroke="var(--line)"/>
+  <g font-size="11" text-anchor="middle">
+    <rect x="466" y="86"  width="170" height="28" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="551" y="104" fill="var(--accent-ink)">AIAgent 核心循环（第7章）</text>
+    <rect x="466" y="122" width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="551" y="140" fill="var(--ink)">会话 · 工具 · 模型调用</text>
+    <rect x="466" y="158" width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="551" y="176" fill="var(--ink)">handle_request 分派</text>
+    <rect x="466" y="194" width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="551" y="212" fill="var(--ink)">slash.exec · _SlashWorker</text>
+  </g>
+  <text x="551" y="252" text-anchor="middle" font-size="10.5" fill="var(--muted)">独占会话/工具/模型/slash</text>
+
+  <text x="340" y="58" text-anchor="middle" font-size="10.5" fill="var(--muted)">stdio 管道</text>
+  <rect x="268" y="66" width="144" height="22" rx="11" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="340" y="81" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">换行分隔 JSON-RPC</text>
+
+  <text x="340" y="140" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">prompt.submit →</text>
+  <text x="340" y="155" text-anchor="middle" font-size="9.5" fill="var(--faint)">方法调用 request</text>
+  <line x1="238" y1="170" x2="438" y2="170" stroke="var(--blue)" stroke-width="2"/>
+  <polygon points="444,170 434,165 434,175" fill="var(--blue)"/>
+
+  <text x="340" y="206" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--purple)">← message.delta / complete</text>
+  <text x="340" y="221" text-anchor="middle" font-size="9.5" fill="var(--faint)">事件 event 流（含 tool.* / approval.*）</text>
+  <line x1="246" y1="236" x2="442" y2="236" stroke="var(--purple)" stroke-width="2"/>
+  <polygon points="240,236 250,231 250,241" fill="var(--purple)"/>
+
+  <text x="340" y="312" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--muted)">同一个 Python 后端＝同一个 AIAgent 核心，前端可换可崩，核心只维护一份</text>
+</svg>
+<div class="fig-cap"><b>TUI 两进程模型</b>:<b>hermes --tui</b> 实为两个进程——Node(Ink/React) 只渲染屏幕(transcript/composer/审批/活动),Python(tui_gateway) 独占会话/工具/模型/slash 并复用同一个 <b>AIAgent 核心</b>;两者经 stdio 上换行分隔的 JSON-RPC 通信:前端发 <b>prompt.submit</b> 等方法调用(→),后端回推 <b>message.delta/complete</b> 事件流(←)。<b>TS 管屏,Python 管核心</b>。</div>
+</div>
+
 <p>为什么坚持走标准的 JSON-RPC 错误信封(<span class="mono">-32601 unknown method</span>、<span class="mono">4009 session busy</span>)而不是回一段错误文本?因为前端要<strong>程序化地</strong>区分「方法不存在」「会话忙」「参数非法」,据此决定重试、提示还是禁用按钮;自由文本只能给人读,机器得做脆弱的字符串匹配,后端一改措辞前端就崩。把 <span class="mono">result</span> 与 <span class="mono">error</span> 钉成契约,等于给两个独立演进的技术栈立了一份不随版本漂移的接口。而装饰器 <span class="mono">@method("名字")</span> + 全局 <span class="mono">_methods</span> 表,让「新增一个能力」退化成「挂一个名字」——分派器一行不改,新方法自动可被调用。这正是窄腰对扩展的友好:边界稳定,两端各自生长。</p>
 
 <p>这套「方法 + 事件」的二分,把每个交互面都摊成一张清晰的对应表:聊天流是 <span class="mono">prompt.submit</span> → <span class="mono">message.delta/complete</span>,对应 Ink 的 <span class="mono">app.tsx</span> + <span class="mono">messageLine.tsx</span>;工具活动是 <span class="mono">tool.start/progress/complete</span>,对应 <span class="mono">thinking.tsx</span>;审批是 <span class="mono">approval.request</span> ↔ <span class="mono">approval.respond</span>,对应 <span class="mono">prompts.tsx</span>;会话选择是 <span class="mono">session.list/resume</span> 对应 <span class="mono">sessionPicker.tsx</span>;补全走 <span class="mono">complete.slash/path</span>。每加一个交互面,只是再添一对「方法 ↔ 组件」,而不动既有任何一对——这种<strong>可叠加而不耦合</strong>的结构,正是窄腰接口能撑起越来越多前端功能的原因。</p>
@@ -443,6 +497,51 @@ html[data-lang="zh"] .lang-en { display: none !important; }
         ...                                 <span class="cm"># 否则原样写进 PTY</span></pre>
 </div>
 <p>浏览器端是 xterm.js,服务端 <span class="mono">spawn</span> 出和命令行<strong>一模一样</strong>的 <span class="mono">hermes --tui</span>,两个方向<strong>原样转发字节</strong>:PTY 输出 → <span class="mono">ws.send_bytes</span> → xterm.js 渲染;键盘输入 → PTY。只有 <span class="mono">\x1b[RESIZE:...]</span> 这样的尺寸转义在服务端本地拦截、用 <span class="mono">TIOCSWINSZ</span> 调整窗口。(PTY 桥本身也是窄腰:POSIX 用 <span class="mono">pty_bridge</span>(fcntl/termios)、Windows 用 <span class="mono">win_pty_bridge</span>(ConPTY),但 <span class="mono">spawn/read/write/resize/close</span> 是同一套公共接口,<span class="mono">/api/pty</span> handler 无需任何平台分支。)<strong>你给 Ink 加的任何新功能,仪表盘里自动就有了。</strong></p>
+
+<div class="figure">
+<svg viewBox="0 0 680 230" role="img" aria-label="仪表盘嵌入真实 TUI：浏览器 xterm.js 经 /api/pty 转发到真正的 hermes --tui 子进程">
+  <text x="340" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">同一个 hermes --tui，经 PTY 投进浏览器（不在 React 里重写）</text>
+
+  <g font-size="11" text-anchor="middle">
+    <rect x="16"  y="44" width="138" height="80" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+    <text x="85"  y="72" font-size="12.5" font-weight="700" fill="var(--ink)">浏览器 xterm.js</text>
+    <text x="85"  y="92" fill="var(--muted)">WebGL · Fit</text>
+    <text x="85"  y="108" fill="var(--muted)">Unicode11</text>
+
+    <rect x="186" y="44" width="138" height="80" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5"/>
+    <text x="255" y="72" font-size="12.5" font-weight="700" fill="var(--ink)">/api/pty WS</text>
+    <text x="255" y="92" fill="var(--muted)">?token= · 仅 loopback</text>
+    <text x="255" y="108" fill="var(--muted)">尺寸转义本地拦截</text>
+
+    <rect x="356" y="44" width="138" height="80" rx="10" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.5"/>
+    <text x="425" y="72" font-size="12.5" font-weight="700" fill="var(--ink)">pty_bridge.py</text>
+    <text x="425" y="92" fill="var(--muted)">PtyBridge.spawn</text>
+    <text x="425" y="108" fill="var(--muted)">POSIX/ConPTY 同接口</text>
+
+    <rect x="526" y="44" width="138" height="80" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+    <text x="595" y="72" font-size="12.5" font-weight="700" fill="var(--accent-ink)">hermes --tui</text>
+    <text x="595" y="92" fill="var(--accent-ink)">真实子进程</text>
+    <text x="595" y="108" fill="var(--accent-ink)">和命令行一模一样</text>
+  </g>
+
+  <g stroke="var(--muted)" fill="var(--muted)">
+    <line x1="160" y1="84" x2="180" y2="84" stroke-width="2"/>
+    <polygon points="154,84 162,80 162,88"/>
+    <polygon points="186,84 178,80 178,88"/>
+    <line x1="330" y1="84" x2="350" y2="84" stroke-width="2"/>
+    <polygon points="324,84 332,80 332,88"/>
+    <polygon points="356,84 348,80 348,88"/>
+    <line x1="500" y1="84" x2="520" y2="84" stroke-width="2"/>
+    <polygon points="494,84 502,80 502,88"/>
+    <polygon points="526,84 518,80 518,88"/>
+  </g>
+
+  <rect x="16" y="146" width="648" height="66" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="340" y="172" text-anchor="middle" font-size="11.5" fill="var(--accent-ink)">↔ 原始 PTY 字节·两个方向逐字转发；仅 RESIZE 转义在服务端拦截，用 TIOCSWINSZ 调窗口</text>
+  <text x="340" y="196" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">★ 绝不在 React 重写 transcript/composer——给 Ink 加的新功能，dashboard 自动就有</text>
+</svg>
+<div class="fig-cap"><b>仪表盘嵌入真实 TUI,不是 React 重写</b>:浏览器里的 xterm.js 经 <b>/api/pty</b> WebSocket 连到 pty_bridge.py,后者 <b>spawn</b> 出与命令行一模一样的真实 <b>hermes --tui</b> 子进程(POSIX PTY);PTY 字节在两个方向原样转发,仅 RESIZE 这类尺寸转义在服务端拦截。于是聊天体验只在 Ink 实现一次——<b>给 Ink 加的新功能,dashboard 自动继承</b>。</div>
+</div>
 
 <p>为什么<strong>绝不</strong>用 React 把主聊天体验重写一遍?因为那等于让 transcript、composer、PTY 终端有<strong>两套实现</strong>,注定随时间漂移——给 Ink 修了个光标 bug、加了个审批弹窗,React 版却忘了跟,用户在命令行和浏览器里看到的就是两个 Hermes。嵌入同一个 <span class="mono">hermes --tui</span> 则只有<strong>一份真相</strong>:浏览器端 <span class="mono">ChatPage.tsx</span> 挂一个 xterm.js 终端,配上 <span class="mono">WebglAddon</span>(WebGL 渲染、吃大屏滚动)、<span class="mono">FitAddon</span>(随容器自适应列宽行高)、<span class="mono">Unicode11Addon</span>(现代宽字符宽度),只负责把后端原样吐来的 ANSI 字节<strong>画</strong>出来,而不重新发明任何聊天逻辑。AGENTS.md 因此立了硬规矩:发现自己在为仪表盘重建 transcript 或 composer,就停下来,去扩 Ink。</p>
 
@@ -555,6 +654,60 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 
 <p>Why JSON-RPC over stdio rather than standing up an HTTP/REST service? Because the Node frontend <strong>spawns the Python backend as a child process</strong>, so the two already share a pipe pair — no port to bind, no network auth, no TCP stack to cross. One request is <strong>one line of JSON</strong>, newline-framed, with near-zero parse cost and minimal latency. The process boundary is also drawn cleanly: <strong>TypeScript only owns the screen</strong> (Ink renders the transcript, composer, approval prompts, activity), while <strong>Python owns sessions, tools, model calls, and even slash-command parsing/dispatch</strong> (<span class="mono">slash.exec</span> runs in a persistent <span class="mono">_SlashWorker</span> subprocess). The frontend never touches business logic, the backend never touches pixels — a clean split lets each evolve in its own ecosystem.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 336" role="img" aria-label="TUI two-process model: Node owns the screen, Python owns the core, talking over stdio JSON-RPC">
+  <text x="129" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="var(--blue)">TypeScript · owns the screen</text>
+  <text x="551" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="var(--purple)">Python · owns the core</text>
+
+  <rect x="24" y="40" width="210" height="248" rx="11" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="129" y="64" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">Node (Ink / React)</text>
+  <line x1="40" y1="74" x2="218" y2="74" stroke="var(--line)"/>
+  <g font-size="11" text-anchor="middle">
+    <rect x="44" y="86"  width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="129" y="104" fill="var(--ink)">transcript · messageLine.tsx</text>
+    <rect x="44" y="122" width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="129" y="140" fill="var(--ink)">composer · input</text>
+    <rect x="44" y="158" width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="129" y="176" fill="var(--ink)">approvals · prompts.tsx</text>
+    <rect x="44" y="194" width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="129" y="212" fill="var(--ink)">activity · thinking.tsx</text>
+  </g>
+  <text x="129" y="252" text-anchor="middle" font-size="10.5" fill="var(--muted)">paints pixels, no business logic</text>
+
+  <rect x="446" y="40" width="210" height="248" rx="11" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="551" y="64" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">Python (tui_gateway)</text>
+  <line x1="462" y1="74" x2="640" y2="74" stroke="var(--line)"/>
+  <g font-size="11" text-anchor="middle">
+    <rect x="466" y="86"  width="170" height="28" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="551" y="104" fill="var(--accent-ink)">AIAgent core loop (ch.7)</text>
+    <rect x="466" y="122" width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="551" y="140" fill="var(--ink)">sessions · tools · model</text>
+    <rect x="466" y="158" width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="551" y="176" fill="var(--ink)">handle_request dispatch</text>
+    <rect x="466" y="194" width="170" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="551" y="212" fill="var(--ink)">slash.exec · _SlashWorker</text>
+  </g>
+  <text x="551" y="252" text-anchor="middle" font-size="10.5" fill="var(--muted)">owns sessions/tools/model/slash</text>
+
+  <text x="340" y="58" text-anchor="middle" font-size="10.5" fill="var(--muted)">stdio pipe</text>
+  <rect x="262" y="66" width="156" height="22" rx="11" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="340" y="81" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">newline-delimited JSON-RPC</text>
+
+  <text x="340" y="140" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">prompt.submit →</text>
+  <text x="340" y="155" text-anchor="middle" font-size="9.5" fill="var(--faint)">method call (request)</text>
+  <line x1="238" y1="170" x2="438" y2="170" stroke="var(--blue)" stroke-width="2"/>
+  <polygon points="444,170 434,165 434,175" fill="var(--blue)"/>
+
+  <text x="340" y="206" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--purple)">← message.delta / complete</text>
+  <text x="340" y="221" text-anchor="middle" font-size="9.5" fill="var(--faint)">event stream (tool.* / approval.*)</text>
+  <line x1="246" y1="236" x2="442" y2="236" stroke="var(--purple)" stroke-width="2"/>
+  <polygon points="240,236 250,231 250,241" fill="var(--purple)"/>
+
+  <text x="340" y="312" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--muted)">One Python backend = one AIAgent core; swap or crash a frontend, the core is maintained once</text>
+</svg>
+<div class="fig-cap"><b>TUI two-process model</b>: <b>hermes --tui</b> is really two processes — Node(Ink/React) only paints the screen (transcript/composer/approvals/activity), while Python(tui_gateway) owns sessions/tools/model/slash and reuses the one <b>AIAgent core</b>; they talk over newline-delimited JSON-RPC on stdio: the frontend sends method calls like <b>prompt.submit</b> (→), the backend pushes the <b>message.delta/complete</b> event stream (←). <b>TS owns the screen, Python owns the core.</b></div>
+</div>
+
 <p>Why insist on the standard JSON-RPC error envelope (<span class="mono">-32601 unknown method</span>, <span class="mono">4009 session busy</span>) instead of returning error text? Because the frontend must <strong>programmatically</strong> tell "no such method" from "session busy" from "bad params" to decide whether to retry, prompt, or disable a button; free text is for humans, machines resort to brittle string matching that breaks the moment the backend rewords. Pinning <span class="mono">result</span> and <span class="mono">error</span> into a contract gives two independently evolving stacks an interface that won't drift across versions. And the <span class="mono">@method("name")</span> decorator + global <span class="mono">_methods</span> table reduce "add a capability" to "hang a name" — the dispatcher never changes. That's the narrow waist being friendly to extension.</p>
 
 <p>This "methods + events" split lays every interaction surface out as a clean mapping table: chat streaming is <span class="mono">prompt.submit</span> → <span class="mono">message.delta/complete</span>, mapped to Ink's <span class="mono">app.tsx</span> + <span class="mono">messageLine.tsx</span>; tool activity is <span class="mono">tool.start/progress/complete</span> → <span class="mono">thinking.tsx</span>; approvals are <span class="mono">approval.request</span> ↔ <span class="mono">approval.respond</span> → <span class="mono">prompts.tsx</span>; session picking is <span class="mono">session.list/resume</span> → <span class="mono">sessionPicker.tsx</span>; completions ride <span class="mono">complete.slash/path</span>. Each new surface is just one more "method ↔ component" pair, touching none of the existing ones — that <strong>additive, non-coupled</strong> structure is exactly why a narrow-waist interface can carry ever more frontend features.</p>
@@ -608,6 +761,51 @@ html[data-lang="zh"] .lang-en { display: none !important; }
         ...                                 <span class="cm"># otherwise written straight to the PTY</span></pre>
 </div>
 <p>The browser side is xterm.js; the server <span class="mono">spawn</span>s the <strong>exact same</strong> <span class="mono">hermes --tui</span> as the CLI, forwarding bytes <strong>verbatim</strong> in both directions: PTY output → <span class="mono">ws.send_bytes</span> → xterm.js renders; keystrokes → PTY. Only sizing escapes like <span class="mono">\x1b[RESIZE:...]</span> are intercepted server-side and applied with <span class="mono">TIOCSWINSZ</span>. (The PTY bridge is itself a narrow waist: POSIX uses <span class="mono">pty_bridge</span> (fcntl/termios), Windows uses <span class="mono">win_pty_bridge</span> (ConPTY), but <span class="mono">spawn/read/write/resize/close</span> is one shared interface, so the <span class="mono">/api/pty</span> handler needs no platform branches.) <strong>Any new feature you add to Ink shows up in the dashboard automatically.</strong></p>
+
+<div class="figure">
+<svg viewBox="0 0 680 230" role="img" aria-label="The dashboard embeds the real TUI: browser xterm.js forwarded over /api/pty to the real hermes --tui child">
+  <text x="340" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">The same hermes --tui, piped into the browser via PTY (no React rewrite)</text>
+
+  <g font-size="11" text-anchor="middle">
+    <rect x="16"  y="44" width="138" height="80" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+    <text x="85"  y="72" font-size="12.5" font-weight="700" fill="var(--ink)">Browser xterm.js</text>
+    <text x="85"  y="92" fill="var(--muted)">WebGL · Fit</text>
+    <text x="85"  y="108" fill="var(--muted)">Unicode11</text>
+
+    <rect x="186" y="44" width="138" height="80" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5"/>
+    <text x="255" y="72" font-size="12.5" font-weight="700" fill="var(--ink)">/api/pty WS</text>
+    <text x="255" y="92" fill="var(--muted)">?token= · loopback</text>
+    <text x="255" y="108" fill="var(--muted)">resize intercepted</text>
+
+    <rect x="356" y="44" width="138" height="80" rx="10" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.5"/>
+    <text x="425" y="72" font-size="12.5" font-weight="700" fill="var(--ink)">pty_bridge.py</text>
+    <text x="425" y="92" fill="var(--muted)">PtyBridge.spawn</text>
+    <text x="425" y="108" fill="var(--muted)">POSIX/ConPTY · 1 API</text>
+
+    <rect x="526" y="44" width="138" height="80" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+    <text x="595" y="72" font-size="12.5" font-weight="700" fill="var(--accent-ink)">hermes --tui</text>
+    <text x="595" y="92" fill="var(--accent-ink)">real subprocess</text>
+    <text x="595" y="108" fill="var(--accent-ink)">same as the CLI</text>
+  </g>
+
+  <g stroke="var(--muted)" fill="var(--muted)">
+    <line x1="160" y1="84" x2="180" y2="84" stroke-width="2"/>
+    <polygon points="154,84 162,80 162,88"/>
+    <polygon points="186,84 178,80 178,88"/>
+    <line x1="330" y1="84" x2="350" y2="84" stroke-width="2"/>
+    <polygon points="324,84 332,80 332,88"/>
+    <polygon points="356,84 348,80 348,88"/>
+    <line x1="500" y1="84" x2="520" y2="84" stroke-width="2"/>
+    <polygon points="494,84 502,80 502,88"/>
+    <polygon points="526,84 518,80 518,88"/>
+  </g>
+
+  <rect x="16" y="146" width="648" height="66" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="340" y="172" text-anchor="middle" font-size="11.5" fill="var(--accent-ink)">↔ raw PTY bytes forwarded verbatim both ways; only RESIZE escapes intercepted server-side via TIOCSWINSZ</text>
+  <text x="340" y="196" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">★ Never rewrite transcript/composer in React — add a feature to Ink, the dashboard just has it</text>
+</svg>
+<div class="fig-cap"><b>The dashboard embeds the real TUI, it's not a React rewrite</b>: the browser's xterm.js connects over the <b>/api/pty</b> WebSocket to pty_bridge.py, which <b>spawn</b>s the exact same real <b>hermes --tui</b> child (POSIX PTY); PTY bytes are forwarded verbatim both ways, only RESIZE-style sizing escapes are intercepted server-side. So the chat experience is built once in Ink — <b>add a feature to Ink and the dashboard inherits it</b>.</div>
+</div>
 
 <p>Why <strong>never</strong> rewrite the primary chat experience in React? Because that means <strong>two implementations</strong> of the transcript, composer, and PTY terminal, doomed to drift — fix a cursor bug or add an approval prompt in Ink and the React copy forgets to follow, so the CLI and the browser show two different Hermeses. Embedding the same <span class="mono">hermes --tui</span> keeps <strong>one source of truth</strong>: the browser's <span class="mono">ChatPage.tsx</span> mounts an xterm.js terminal with <span class="mono">WebglAddon</span> (WebGL rendering, smooth on big scrollback), <span class="mono">FitAddon</span> (column/row autosize to the container), and <span class="mono">Unicode11Addon</span> (modern wide-char widths), whose only job is to <strong>paint</strong> the ANSI bytes the backend forwards verbatim — reinventing no chat logic. AGENTS.md makes it a hard rule: catch yourself rebuilding the transcript or composer for the dashboard, stop and extend Ink.</p>
 
