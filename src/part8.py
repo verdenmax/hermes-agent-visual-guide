@@ -1059,12 +1059,12 @@ def detect_dangerous_command(command: str) -&gt; tuple:  # :657 → 61 条，命
 
 <h3>🔬 E4 · 别写快照测试，锁行为不变量</h3>
 <p>给 catalog、config、provider 列表写测试时，最顺手的写法是把<strong>当前的具体值</strong>抄进断言：「<span class="mono">gemini-2.5-pro</span> 一定在 models 里」「<span class="mono">_config_version</span> 一定等于 21」「huggingface 一定有 8 个模型」。这类<strong>快照测试（change-detector）</strong>没有任何行为覆盖——它唯一保证的，是<strong>每次例行更新（加个模型、升个版本）都把 CI 弄红</strong>、逼你回去「修测试」，纯属内耗。正确做法是断言<strong>两份数据之间该有的关系（不变量）</strong>，而不是冻结某个会变的值：与其锁死「正好有这 8 个模型」，不如断言「catalog 至少有一个条目」「<strong>每个 catalog 条目都必须有对应的 context-length</strong>」。前者随便加删模型就红，后者只要 plumbing 还对就一直绿——测试<strong>随系统演化</strong>，而不是拖着系统。判据很简单：<strong>读起来像「当前数据快照」的删掉，读起来像「两份数据的契约」的留下。</strong></p>
-<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ change-detector（别这么写）</span></div><pre># 快照测试：锁死一个会变的具体值
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ 反例 · change-detector（别这么写）</span></div><pre># 快照测试：锁死一个会变的具体值
 assert "gemini-2.5-pro" in _PROVIDER_MODELS["gemini"]   # 模型一改名就红
 assert DEFAULT_CONFIG["_config_version"] == 21           # config 一升版就红
 assert len(_PROVIDER_MODELS["huggingface"]) == 8         # 加一个 provider 就红
 # 没有任何行为覆盖，只是逼着每次例行更新都去「修测试」</pre></div>
-<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ AGENTS.md:1340 · 锁不变量</span></div><pre># 不变量：断言两份数据之间该有的关系（随系统演化恒真）
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ 正例 · AGENTS.md:1340 · 锁不变量</span></div><pre># 不变量：断言两份数据之间该有的关系（随系统演化恒真）
 assert "gemini" in _PROVIDER_MODELS
 assert len(_PROVIDER_MODELS["gemini"]) &gt;= 1              # catalog 至少有一个条目
 # 每个 catalog 条目都必须有 context-length
@@ -2237,12 +2237,12 @@ def detect_dangerous_command(command: str) -&gt; tuple:  # :657 → 61 patterns,
 
 <h3>🔬 E4 · Don't write snapshot tests — lock behavior invariants</h3>
 <p>When you test a catalog, config, or provider list, the handiest thing is to copy <strong>today's specific value</strong> into the assertion: "<span class="mono">gemini-2.5-pro</span> must be in models", "<span class="mono">_config_version</span> must equal 21", "huggingface must have 8 models". Such <strong>snapshot tests (change-detectors)</strong> carry no behavioral coverage — the one thing they guarantee is that <strong>every routine update (add a model, bump a version) turns CI red</strong> and drags you back to "fix the test", pure churn. The right move is to assert <strong>the relationship two pieces of data must hold (an invariant)</strong>, not freeze a value that's meant to change: instead of locking "there are exactly these 8 models", assert "the catalog has at least one entry" and "<strong>every catalog entry must have a corresponding context-length</strong>". The former reddens on any add/remove; the latter stays green as long as the plumbing is right — the test <strong>evolves with the system</strong> instead of dragging on it. The rule is simple: <strong>if it reads like a snapshot of current data, delete it; if it reads like a contract between two pieces of data, keep it.</strong></p>
-<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ change-detector (don't write this)</span></div><pre># Snapshot test: freezes a specific value that's meant to change
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ wrong · change-detector (don't write this)</span></div><pre># Snapshot test: freezes a specific value that's meant to change
 assert "gemini-2.5-pro" in _PROVIDER_MODELS["gemini"]   # reddens on any rename
 assert DEFAULT_CONFIG["_config_version"] == 21           # reddens on any bump
 assert len(_PROVIDER_MODELS["huggingface"]) == 8         # reddens on any new provider
 # No behavioral coverage — just forces "fix the test" on every routine update</pre></div>
-<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ AGENTS.md:1340 · lock the invariant</span></div><pre># Invariant: assert the relationship two pieces of data must hold (stays true as the system evolves)
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ right · AGENTS.md:1340 · lock the invariant</span></div><pre># Invariant: assert the relationship two pieces of data must hold (stays true as the system evolves)
 assert "gemini" in _PROVIDER_MODELS
 assert len(_PROVIDER_MODELS["gemini"]) &gt;= 1              # catalog has at least one entry
 # every catalog entry must have a context-length
