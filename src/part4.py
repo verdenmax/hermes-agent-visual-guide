@@ -1198,9 +1198,114 @@ Agent 要「动手」就得跑命令——但跑在<strong>哪里</strong>？你
 <p>注意分工:<strong>子类只实现 <span class="mono">_run_bash()</span>(怎么 spawn 进程)和 <span class="mono">cleanup()</span>(怎么释放资源)</strong>;而 <span class="mono">execute()</span>——会话快照恢复、CWD 跟踪、中断处理、超时强制——这些<strong>跨后端通用的流程</strong>由基类<strong>统一提供</strong>,六个后端复用同一套。于是 docker 后端只关心「怎么在容器里跑 bash」,ssh 后端只关心「怎么在远程跑」,通用的会话状态管理它们<strong>都不用重写</strong>。</p>
 <p>为什么偏偏让基类握住 <span class="mono">execute()</span>、只把 <span class="mono">_run_bash()</span> 和 <span class="mono">cleanup()</span> 两个洞留给子类?因为会话快照、CWD 跟踪、中断、超时这套流程是<strong>跨后端不变的难点</strong>——一旦写错(CWD 没跟上、超时没强制),六个后端会同时犯病。把它收进基类,等于<strong>写一次、修一次,六个后端同时受益</strong>;新加后端也<strong>无从绕过</strong>这些保护,不会因为作者偷懒就丢掉超时或中断。反过来,若让每个后端各写一份 <span class="mono">execute()</span>,就是六份几乎一样的快照逻辑、六处潜在 bug——这正是「通用骨架沉到基类、可变步骤留给子类」的价值,也是边缘子类能保持<strong>薄而专注</strong>的前提。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 308" role="img" aria-label="多后端统一抽象：核心只认一个 terminal 工具与 BaseEnvironment.execute()，六种后端差异关进各自子类">
+  <text x="340" y="15" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">核心只认一个抽象 · 后端差异沉到边缘子类</text>
+
+  <rect x="240" y="26" width="200" height="40" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="43" text-anchor="middle" font-size="11.5" fill="var(--blue)">模型只调一个</text>
+  <text x="340" y="59" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">terminal 工具</text>
+  <polygon points="335,67 345,67 340,75" fill="var(--muted)"/>
+
+  <rect x="150" y="80" width="380" height="66" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="103" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--accent-ink)">BaseEnvironment.execute() · 统一流程</text>
+  <text x="340" y="122" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">会话快照 · CWD 跟踪 · 中断 · 超时（基类统一提供）</text>
+  <text x="340" y="138" text-anchor="middle" font-size="10" fill="var(--accent-ink)">— 窄腰：核心薄，只认这一个接口 —</text>
+  <polygon points="335,146 345,146 340,154" fill="var(--muted)"/>
+
+  <rect x="230" y="159" width="220" height="40" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="340" y="176" text-anchor="middle" font-size="12" font-weight="700" fill="var(--purple)">_create_environment 工厂</text>
+  <text x="340" y="191" text-anchor="middle" font-size="10" fill="var(--purple)">按 TERMINAL_ENV 分派（默认 local）</text>
+
+  <path d="M340 199 L340 210" stroke="var(--line)" stroke-width="1.5"/>
+  <path d="M70 210 L610 210" stroke="var(--line)" stroke-width="1.5"/>
+  <g font-size="11" font-weight="700" text-anchor="middle">
+    <polygon points="66,212 74,212 70,220" fill="var(--muted)"/>
+    <rect x="20"  y="220" width="100" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="70"  y="245" fill="var(--ink)">local</text>
+    <polygon points="174,212 182,212 178,220" fill="var(--muted)"/>
+    <rect x="128" y="220" width="100" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="178" y="245" fill="var(--ink)">docker</text>
+    <polygon points="282,212 290,212 286,220" fill="var(--muted)"/>
+    <rect x="236" y="220" width="100" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="286" y="245" fill="var(--ink)">ssh</text>
+    <polygon points="390,212 398,212 394,220" fill="var(--muted)"/>
+    <rect x="344" y="220" width="100" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="394" y="245" fill="var(--ink)">modal</text>
+    <polygon points="498,212 506,212 502,220" fill="var(--muted)"/>
+    <rect x="452" y="220" width="100" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="502" y="245" fill="var(--ink)">daytona</text>
+    <polygon points="606,212 614,212 610,220" fill="var(--muted)"/>
+    <rect x="560" y="220" width="100" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="610" y="245" fill="var(--ink)">singularity</text>
+  </g>
+  <g font-size="9" text-anchor="middle" fill="var(--muted)">
+    <text x="70"  y="264">本地子进程</text>
+    <text x="178" y="264">容器 · 挂载</text>
+    <text x="286" y="264">远程 · 同步</text>
+    <text x="394" y="264">serverless</text>
+    <text x="502" y="264">云 · 同步</text>
+    <text x="610" y="264">容器 · HPC</text>
+  </g>
+  <text x="340" y="297" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--muted)">▼ 六种后端：隔离 / 文件可见性 / 资源回收的差异，全关进各自子类</text>
+</svg>
+<div class="fig-cap"><b>多后端统一抽象</b>：模型永远只调一个 <span class="mono">terminal</span>，核心也只认一个 <span class="mono">BaseEnvironment.execute()</span> 抽象（会话快照 / CWD / 中断 / 超时由基类统一兜底）；<span class="mono">_create_environment</span> 工厂按 <span class="mono">TERMINAL_ENV</span> 分派到六个子类。这就是<b>窄腰</b>（第 4 章）在执行层的投影——<span class="mono">terminal</span> 是「该进核心」的工具（第 8 章），而六种环境的差异全沉到<b>边缘子类</b>，加一个后端核心一行不动。</div>
+</div>
+
 <p>那么「会话快照」到底是什么?以 local 后端为例,设计很巧:<strong>每次 <span class="mono">execute()</span> 都重新 spawn 一个全新的 bash 进程</strong>(spawn-per-call),命令跑完进程即退。可这样一来,上一条命令 <span class="mono">export</span> 的环境变量、<span class="mono">cd</span> 切换的目录,下一条岂不全丢?基类的「会话快照」正为此:<strong>每条命令结束后把环境变量快照进文件、当前工作目录也写进文件;下一条命令开跑前先回读、source 回来</strong>。于是一串无状态的短命 bash 进程,被串成一个「有记忆」的会话——这正是<strong>约束 B(无状态)</strong>在 shell 执行层的对策:底层进程无状态,靠外部文件快照重建连续性。</p>
 <p>那为何不干脆开一个<strong>常驻的交互式 bash</strong>、让状态天然留住,省去快照这套?因为常驻 shell 是<strong>有状态且脆弱</strong>的:进程可能挂死、被某条命令污染,在 docker/ssh/modal 各后端行为还各不相同,难以统一中断与超时。<span class="mono">spawn-per-call</span> 反其道而行——每条命令一个干净的 <span class="mono">bash -c</span>,跑完即弃,<strong>幂等、可重入、六个后端共用一套模型</strong>;状态不靠进程记忆,而靠外部快照文件重建。这与第 2 章「模型调用本身无状态、状态外置」是<strong>同一招在 shell 层的复刻</strong>:底座越无状态,越好移植、越好恢复——daytona 后端被中断后还能从停止的 sandbox 重启接着跑,正得益于这种「状态不在进程里」的设计。</p>
 <p>快照里还藏着一处「就地取材」的巧思:环境变量好办——<span class="mono">export -p</span> 重导进快照文件即可;但<strong>当前目录</strong>怎么跨进程传?本地后端直接把 <span class="mono">pwd</span> 写进一个临时文件、下条命令开跑前回读;可远程后端(ssh)没有共享文件系统,于是改用<strong>带内 stdout 标记</strong>——命令尾部 <span class="mono">printf</span> 出一对独有标记包住 <span class="mono">pwd</span>,基类再从输出里把它解析、剥离。同一个「记住 CWD」的需求,本地与远程用了<strong>两条物理通道</strong>,却都收敛到基类同一套 CWD 跟踪逻辑——这又是「通用契约在基类、落地差异在子类」的微观一例。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 312" role="img" aria-label="spawn-per-call 会话快照：每条命令一个全新 bash -c，开跑前 re-source 快照、跑完写回，状态因此延续">
+  <text x="340" y="15" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">spawn-per-call：无状态进程 + 外部快照 = 连续会话</text>
+
+  <rect x="20" y="30" width="120" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="80" y="51" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">init 拍快照</text>
+  <text x="80" y="67" text-anchor="middle" font-size="9.5" fill="var(--blue)">函数 / 别名</text>
+  <polygon points="148,49 148,57 156,53" fill="var(--muted)"/>
+
+  <rect x="158" y="30" width="502" height="46" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="409" y="50" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">会话快照文件 · env vars / 函数 / 别名 + CWD</text>
+  <text x="409" y="67" text-anchor="middle" font-size="10" fill="var(--accent-ink)">（跨命令持久，下一条命令的“记忆”来源）</text>
+
+  <text x="340" y="97" text-anchor="middle" font-size="10" fill="var(--muted)">每条命令开跑前 re-source 快照（↓），跑完把 env + CWD 写回（↑）——无状态进程被串成连续会话</text>
+
+  <g>
+    <line x1="87"  y1="104" x2="87"  y2="134" stroke="var(--accent)" stroke-width="1.5"/>
+    <polygon points="83,132 91,132 87,140" fill="var(--accent)"/>
+    <line x1="163" y1="138" x2="163" y2="108" stroke="var(--blue)" stroke-width="1.5"/>
+    <polygon points="159,110 167,110 163,102" fill="var(--blue)"/>
+    <line x1="302" y1="104" x2="302" y2="134" stroke="var(--accent)" stroke-width="1.5"/>
+    <polygon points="298,132 306,132 302,140" fill="var(--accent)"/>
+    <line x1="378" y1="138" x2="378" y2="108" stroke="var(--blue)" stroke-width="1.5"/>
+    <polygon points="374,110 382,110 378,102" fill="var(--blue)"/>
+    <line x1="517" y1="104" x2="517" y2="134" stroke="var(--accent)" stroke-width="1.5"/>
+    <polygon points="513,132 521,132 517,140" fill="var(--accent)"/>
+    <line x1="593" y1="138" x2="593" y2="108" stroke="var(--blue)" stroke-width="1.5"/>
+    <polygon points="589,110 597,110 593,102" fill="var(--blue)"/>
+  </g>
+
+  <g text-anchor="middle">
+    <rect x="40"  y="140" width="170" height="64" rx="9" fill="var(--panel-2)" stroke="var(--line)" stroke-dasharray="5 4"/>
+    <text x="125" y="166" font-size="12.5" font-weight="700" fill="var(--ink)">bash -c "cmd₁"</text>
+    <text x="125" y="186" font-size="9.5" fill="var(--muted)">全新进程，跑完即退</text>
+    <rect x="255" y="140" width="170" height="64" rx="9" fill="var(--panel-2)" stroke="var(--line)" stroke-dasharray="5 4"/>
+    <text x="340" y="166" font-size="12.5" font-weight="700" fill="var(--ink)">bash -c "cmd₂"</text>
+    <text x="340" y="186" font-size="9.5" fill="var(--muted)">全新进程，跑完即退</text>
+    <rect x="470" y="140" width="170" height="64" rx="9" fill="var(--panel-2)" stroke="var(--line)" stroke-dasharray="5 4"/>
+    <text x="555" y="166" font-size="12.5" font-weight="700" fill="var(--ink)">bash -c "cmd₃"</text>
+    <text x="555" y="186" font-size="9.5" fill="var(--muted)">全新进程，跑完即退</text>
+  </g>
+
+  <rect x="40" y="224" width="600" height="44" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="340" y="244" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">CWD 怎么跨进程传？</text>
+  <text x="340" y="261" text-anchor="middle" font-size="9.5" fill="var(--muted)">本地后端 → 写临时文件、下条回读　|　远程(ssh) → stdout 标记包住 pwd，基类解析剥离</text>
+
+  <text x="340" y="296" text-anchor="middle" font-size="11" font-weight="700" fill="var(--muted)">底层 bash 无状态（约束 B）→ 靠外部快照重建连续性</text>
+</svg>
+<div class="fig-cap"><b>spawn-per-call 会话快照</b>：模型每轮失忆（第 2 章 B），终端却要维持状态。解法是底层每条命令都起一个<b>全新 <span class="mono">bash -c</span></b>（跑完即退、无状态），但开跑前先 <b>re-source</b> 一份会话快照（env / 函数 / 别名）、跑完把 <span class="mono">env + CWD</span> 写回——一串短命进程因此被串成「有记忆」的连续会话。CWD 经<b>临时文件</b>（本地）或 <b>stdout 标记</b>（远程 ssh）跨进程传递。</div>
+</div>
 
 <h2>工厂:按 TERMINAL_ENV 挑后端</h2>
 <p>选哪个后端,由一个工厂函数按配置分派——这是「换设备只换后端」的开关:</p>
@@ -1316,9 +1421,114 @@ For an agent to "act" it must run commands — but <strong>where</strong>? Your 
 <p>Note the division: <strong>subclasses implement only <span class="mono">_run_bash()</span> (how to spawn a process) and <span class="mono">cleanup()</span> (how to release resources)</strong>; while <span class="mono">execute()</span> — session snapshot restoration, CWD tracking, interrupt handling, timeout enforcement — these <strong>cross-backend common flows</strong> are <strong>provided uniformly by the base class</strong>, reused by all six backends. So the docker backend cares only about "how to run bash in a container," the ssh backend only about "how to run remotely," and neither <strong>rewrites</strong> the common session-state management.</p>
 <p>Why let the base class own <span class="mono">execute()</span> and leave subclasses only the two holes <span class="mono">_run_bash()</span> and <span class="mono">cleanup()</span>? Because session snapshot, CWD tracking, interrupt, and timeout are the <strong>cross-backend invariant hard parts</strong> — get one wrong (CWD doesn't follow, timeout isn't enforced) and all six backends break at once. Folding it into the base class means <strong>write once, fix once, all six benefit</strong>; a new backend <strong>can't bypass</strong> these protections or drop timeouts/interrupts through author laziness. Conversely, letting each backend write its own <span class="mono">execute()</span> would mean six near-identical copies of snapshot logic and six places for bugs — this is the value of "common skeleton sinks to the base, variable steps stay in subclasses," and the precondition for edge subclasses staying <strong>thin and focused</strong>.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 308" role="img" aria-label="A unified multi-backend abstraction: the core knows only one terminal tool and BaseEnvironment.execute(); six backends' differences are caged in subclasses">
+  <text x="340" y="15" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">The core knows one abstraction · backend differences sink to edge subclasses</text>
+
+  <rect x="240" y="26" width="200" height="40" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="43" text-anchor="middle" font-size="11.5" fill="var(--blue)">the model calls one</text>
+  <text x="340" y="59" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">terminal tool</text>
+  <polygon points="335,67 345,67 340,75" fill="var(--muted)"/>
+
+  <rect x="150" y="80" width="380" height="66" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="103" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--accent-ink)">BaseEnvironment.execute() · common flow</text>
+  <text x="340" y="122" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">session snapshot · CWD · interrupt · timeout (base-provided)</text>
+  <text x="340" y="138" text-anchor="middle" font-size="10" fill="var(--accent-ink)">— narrow waist: a thin core, one interface only —</text>
+  <polygon points="335,146 345,146 340,154" fill="var(--muted)"/>
+
+  <rect x="230" y="159" width="220" height="40" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="340" y="176" text-anchor="middle" font-size="12" font-weight="700" fill="var(--purple)">_create_environment factory</text>
+  <text x="340" y="191" text-anchor="middle" font-size="10" fill="var(--purple)">dispatch by TERMINAL_ENV (default local)</text>
+
+  <path d="M340 199 L340 210" stroke="var(--line)" stroke-width="1.5"/>
+  <path d="M70 210 L610 210" stroke="var(--line)" stroke-width="1.5"/>
+  <g font-size="11" font-weight="700" text-anchor="middle">
+    <polygon points="66,212 74,212 70,220" fill="var(--muted)"/>
+    <rect x="20"  y="220" width="100" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="70"  y="245" fill="var(--ink)">local</text>
+    <polygon points="174,212 182,212 178,220" fill="var(--muted)"/>
+    <rect x="128" y="220" width="100" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="178" y="245" fill="var(--ink)">docker</text>
+    <polygon points="282,212 290,212 286,220" fill="var(--muted)"/>
+    <rect x="236" y="220" width="100" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="286" y="245" fill="var(--ink)">ssh</text>
+    <polygon points="390,212 398,212 394,220" fill="var(--muted)"/>
+    <rect x="344" y="220" width="100" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="394" y="245" fill="var(--ink)">modal</text>
+    <polygon points="498,212 506,212 502,220" fill="var(--muted)"/>
+    <rect x="452" y="220" width="100" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="502" y="245" fill="var(--ink)">daytona</text>
+    <polygon points="606,212 614,212 610,220" fill="var(--muted)"/>
+    <rect x="560" y="220" width="100" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="610" y="245" fill="var(--ink)">singularity</text>
+  </g>
+  <g font-size="9" text-anchor="middle" fill="var(--muted)">
+    <text x="70"  y="264">local subproc</text>
+    <text x="178" y="264">container · mount</text>
+    <text x="286" y="264">remote · sync</text>
+    <text x="394" y="264">serverless</text>
+    <text x="502" y="264">cloud · sync</text>
+    <text x="610" y="264">container · HPC</text>
+  </g>
+  <text x="340" y="297" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--muted)">▼ Six backends: isolation / file visibility / cleanup differences all caged in subclasses</text>
+</svg>
+<div class="fig-cap"><b>Unified multi-backend abstraction</b>: the model always calls one <span class="mono">terminal</span>, and the core knows only one <span class="mono">BaseEnvironment.execute()</span> abstraction (session snapshot / CWD / interrupt / timeout handled by the base class); the <span class="mono">_create_environment</span> factory dispatches to six subclasses by <span class="mono">TERMINAL_ENV</span>. This is the <b>narrow waist</b> (ch.4) projected onto the execution layer — <span class="mono">terminal</span> is a tool that "belongs in the core" (ch.8), while six environments' differences sink to <b>edge subclasses</b>: add a backend, the core doesn't change a line.</div>
+</div>
+
 <p>So what exactly is that "session snapshot"? Take the local backend — the design is elegant: <strong>every <span class="mono">execute()</span> spawns a brand-new bash process</strong> (spawn-per-call) that exits the moment the command finishes. But then wouldn't the env vars <span class="mono">export</span>ed by the previous command, and the directory it <span class="mono">cd</span>'d into, be lost for the next one? The base class's "session snapshot" is exactly for this: <strong>after each command it snapshots env vars into a file and writes the current working directory to a file too; before the next command runs, it reads them back and sources them in</strong>. So a string of stateless, short-lived bash processes is woven into a session "with memory" — precisely the countermeasure for <strong>constraint B (statelessness)</strong> at the shell-execution layer: the underlying processes are stateless, and continuity is rebuilt from external file snapshots.</p>
 <p>So why not just open a <strong>long-lived interactive bash</strong> and let state persist naturally, skipping the snapshot machinery? Because a persistent shell is <strong>stateful and fragile</strong>: the process can hang, get polluted by some command, and behaves differently across docker/ssh/modal backends, making unified interrupt and timeout hard. <span class="mono">spawn-per-call</span> goes the other way — each command gets a clean <span class="mono">bash -c</span>, discarded once done, <strong>idempotent, re-entrant, one model shared by all six backends</strong>; state isn't kept in process memory but rebuilt from external snapshot files. This is <strong>the same move as ch.2's "the model call itself is stateless, state lives outside," replayed at the shell layer</strong>: the more stateless the substrate, the easier to port and recover — the daytona backend can even restart a stopped sandbox and resume after an interrupt, precisely thanks to this "state isn't in the process" design.</p>
 <p>The snapshot also hides a "use what's already there" trick: env vars are easy — just <span class="mono">export -p</span> them back into the snapshot file; but how do you carry the <strong>current directory</strong> across processes? The local backend writes <span class="mono">pwd</span> into a temp file and reads it back before the next command; but a remote backend (ssh) has no shared filesystem, so it switches to an <strong>in-band stdout marker</strong> — the command tail <span class="mono">printf</span>s a unique pair of markers wrapping <span class="mono">pwd</span>, and the base class parses and strips it from the output. The very same "remember the CWD" need uses <strong>two physical channels</strong> for local vs remote, yet both converge on the base class's single CWD-tracking logic — another micro example of "common contract in the base, landing differences in subclasses."</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 312" role="img" aria-label="spawn-per-call session snapshot: each command is a fresh bash -c; re-source the snapshot before, write it back after, so state carries across">
+  <text x="340" y="15" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">spawn-per-call: stateless processes + an external snapshot = a continuous session</text>
+
+  <rect x="20" y="30" width="120" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="80" y="51" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">init snapshot</text>
+  <text x="80" y="67" text-anchor="middle" font-size="9.5" fill="var(--blue)">functions / aliases</text>
+  <polygon points="148,49 148,57 156,53" fill="var(--muted)"/>
+
+  <rect x="158" y="30" width="502" height="46" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="409" y="50" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">session snapshot file · env vars / functions / aliases + CWD</text>
+  <text x="409" y="67" text-anchor="middle" font-size="10" fill="var(--accent-ink)">(persists across commands — the next command's "memory")</text>
+
+  <text x="340" y="97" text-anchor="middle" font-size="10" fill="var(--muted)">before each command re-source the snapshot (↓), after it write env + CWD back (↑) — stateless processes woven into a session</text>
+
+  <g>
+    <line x1="87"  y1="104" x2="87"  y2="134" stroke="var(--accent)" stroke-width="1.5"/>
+    <polygon points="83,132 91,132 87,140" fill="var(--accent)"/>
+    <line x1="163" y1="138" x2="163" y2="108" stroke="var(--blue)" stroke-width="1.5"/>
+    <polygon points="159,110 167,110 163,102" fill="var(--blue)"/>
+    <line x1="302" y1="104" x2="302" y2="134" stroke="var(--accent)" stroke-width="1.5"/>
+    <polygon points="298,132 306,132 302,140" fill="var(--accent)"/>
+    <line x1="378" y1="138" x2="378" y2="108" stroke="var(--blue)" stroke-width="1.5"/>
+    <polygon points="374,110 382,110 378,102" fill="var(--blue)"/>
+    <line x1="517" y1="104" x2="517" y2="134" stroke="var(--accent)" stroke-width="1.5"/>
+    <polygon points="513,132 521,132 517,140" fill="var(--accent)"/>
+    <line x1="593" y1="138" x2="593" y2="108" stroke="var(--blue)" stroke-width="1.5"/>
+    <polygon points="589,110 597,110 593,102" fill="var(--blue)"/>
+  </g>
+
+  <g text-anchor="middle">
+    <rect x="40"  y="140" width="170" height="64" rx="9" fill="var(--panel-2)" stroke="var(--line)" stroke-dasharray="5 4"/>
+    <text x="125" y="166" font-size="12.5" font-weight="700" fill="var(--ink)">bash -c "cmd₁"</text>
+    <text x="125" y="186" font-size="9.5" fill="var(--muted)">fresh process, exits when done</text>
+    <rect x="255" y="140" width="170" height="64" rx="9" fill="var(--panel-2)" stroke="var(--line)" stroke-dasharray="5 4"/>
+    <text x="340" y="166" font-size="12.5" font-weight="700" fill="var(--ink)">bash -c "cmd₂"</text>
+    <text x="340" y="186" font-size="9.5" fill="var(--muted)">fresh process, exits when done</text>
+    <rect x="470" y="140" width="170" height="64" rx="9" fill="var(--panel-2)" stroke="var(--line)" stroke-dasharray="5 4"/>
+    <text x="555" y="166" font-size="12.5" font-weight="700" fill="var(--ink)">bash -c "cmd₃"</text>
+    <text x="555" y="186" font-size="9.5" fill="var(--muted)">fresh process, exits when done</text>
+  </g>
+
+  <rect x="40" y="224" width="600" height="44" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="340" y="244" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">How is CWD carried across processes?</text>
+  <text x="340" y="261" text-anchor="middle" font-size="9.5" fill="var(--muted)">local backend → temp file, read back next time　|　remote (ssh) → stdout markers wrap pwd, base class parses &amp; strips</text>
+
+  <text x="340" y="296" text-anchor="middle" font-size="11" font-weight="700" fill="var(--muted)">underlying bash is stateless (constraint B) → continuity rebuilt from external snapshots</text>
+</svg>
+<div class="fig-cap"><b>spawn-per-call session snapshot</b>: the model is amnesiac every turn (ch.2 B), yet the terminal must keep state. The fix: each command spawns a <b>fresh <span class="mono">bash -c</span></b> (exits when done, stateless), but before it runs it <b>re-sources</b> a session snapshot (env / functions / aliases) and after it writes <span class="mono">env + CWD</span> back — a string of short-lived processes woven into a session "with memory." CWD travels across processes via a <b>temp file</b> (local) or <b>stdout markers</b> (remote ssh).</div>
+</div>
 
 <h2>The factory: pick the backend by TERMINAL_ENV</h2>
 <p>Which backend is chosen is dispatched by a factory function from config — the switch for "swap the device by swapping the backend":</p>

@@ -1358,6 +1358,72 @@ _apply_profile_override()   <span class="cm"># 模块级:在其余 import 之前
 <p>为什么是一个<strong>函数</strong>而不是一个模块级常量?因为常量在 import 时就被求值、之后再也无法改变;而 profile、子代理、并发线程都可能要在运行期临时切换 home。<span class="mono">get_hermes_home()</span> 每次调用先看 <span class="mono">ContextVar</span> 覆盖——让同一进程内并发的子代理各认各的实例,呼应第 16 章委派的隔离——再看 <span class="mono">HERMES_HOME</span> 环境变量,最后才回退平台默认。源码还特意保留一段逻辑:当环境变量缺失、但 <span class="mono">active_profile</span> 文件指向一个非默认 profile 时,往 <span class="mono">errors.log</span> 打一条响亮的一次性告警。为什么是告警而不是抛异常?因为这函数有 30+ 个模块级调用方在 import 期就会执行它,一旦抛异常会把它们全部弄崩,所以宁可告警、留下可诊断的线索,也绝不阻断启动。</p>
 <p>这个回退设计透露的工程哲学值得品味:<span class="mono">get_hermes_home()</span> 宁可在 <span class="mono">HERMES_HOME</span> 缺失时<strong>安静回退默认 + 留一条告警</strong>,也不肯把自己变成一个会抛异常的「严格守门人」。原因前面说过——它是被 30+ 个模块在 import 期同步调用的底座,任何会失败的底座都会让整个进程的启动变脆。把不确定性挡在 import 之外、用环境变量在最前面一次性定死,再让所有调用方无脑信任这唯一入口,正是「无状态内核 + 外部一个变量定乾坤」在路径层面的具体落地。也正因如此,子进程派生(<span class="mono">systemd</span> 模板、kanban 调度器)必须显式把 <span class="mono">HERMES_HOME</span> 透传下去,否则子进程读不到环境变量,会悄悄退回默认实例、写错 profile——这是分布式跑多实例时最隐蔽的一类污染源。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 392" role="img" aria-label="Profiles 是独立的岛:每个 profile 有独立 HERMES_HOME,彼此完全隔离、不做实时继承">
+  <rect x="20" y="20" width="300" height="46" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="170" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">_apply_profile_override()</text>
+  <text x="170" y="57" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">任何 import 之前 · 抢设 HERMES_HOME</text>
+  <line x1="320" y1="43" x2="356" y2="43" stroke="var(--muted)" stroke-width="2"/>
+  <polygon points="356,38 366,43 356,48" fill="var(--muted)"/>
+  <rect x="368" y="20" width="292" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="514" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">get_hermes_home()</text>
+  <text x="514" y="57" text-anchor="middle" font-size="10.5" fill="var(--blue)">单一入口 · 所有路径都问它</text>
+
+  <text x="340" y="86" text-anchor="middle" font-size="11" fill="var(--muted)">每个进程的 HERMES_HOME 只指向其中<tspan font-weight="700" fill="var(--ink)">一座岛</tspan>;岛之间完全隔离</text>
+
+  <path d="M118 132 Q229 96 340 132" fill="none" stroke="var(--purple)" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <polygon points="335,123 343,134 329,132" fill="var(--purple)"/>
+  <text x="229" y="108" text-anchor="middle" font-size="10" fill="var(--purple)">--clone:创建时一次性拷贝(之后各走各路)</text>
+
+  <rect x="20" y="134" width="196" height="216" rx="12" fill="var(--panel-2)" stroke="var(--line)" stroke-width="1.5"/>
+  <text x="118" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">default</text>
+  <text x="118" y="173" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="monospace">~/.hermes</text>
+  <line x1="34" y1="182" x2="202" y2="182" stroke="var(--line)"/>
+  <g font-size="10.5" fill="var(--ink)">
+    <text x="34" y="203">· config.yaml</text>
+    <text x="34" y="222">· .env(密钥)</text>
+    <text x="34" y="241">· 记忆 memory</text>
+    <text x="34" y="260">· 会话 sessions</text>
+    <text x="34" y="279">· 技能 skills</text>
+    <text x="34" y="298">· 网关 gateway</text>
+  </g>
+
+  <rect x="242" y="134" width="196" height="216" rx="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="340" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">coder</text>
+  <text x="340" y="173" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="monospace">~/.hermes/profiles/coder</text>
+  <line x1="256" y1="182" x2="424" y2="182" stroke="var(--blue)" stroke-opacity="0.4"/>
+  <g font-size="10.5" fill="var(--ink)">
+    <text x="256" y="203">· config.yaml</text>
+    <text x="256" y="222">· .env(密钥)</text>
+    <text x="256" y="241">· 记忆 memory</text>
+    <text x="256" y="260">· 会话 sessions</text>
+    <text x="256" y="279">· 技能 skills</text>
+    <text x="256" y="298">· 网关 gateway</text>
+  </g>
+
+  <rect x="464" y="134" width="196" height="216" rx="12" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="562" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">personal</text>
+  <text x="562" y="173" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="monospace">~/.hermes/profiles/personal</text>
+  <line x1="478" y1="182" x2="646" y2="182" stroke="var(--purple)" stroke-opacity="0.4"/>
+  <g font-size="10.5" fill="var(--ink)">
+    <text x="478" y="203">· config.yaml</text>
+    <text x="478" y="222">· .env(密钥)</text>
+    <text x="478" y="241">· 记忆 memory</text>
+    <text x="478" y="260">· 会话 sessions</text>
+    <text x="478" y="279">· 技能 skills</text>
+    <text x="478" y="298">· 网关 gateway</text>
+  </g>
+
+  <line x1="229" y1="190" x2="229" y2="344" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="4 4"/>
+  <text x="229" y="261" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">✕</text>
+  <line x1="451" y1="190" x2="451" y2="344" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="4 4"/>
+  <text x="451" y="261" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">✕</text>
+
+  <text x="340" y="378" text-anchor="middle" font-size="10.5" fill="var(--muted)"><tspan fill="var(--red)" font-weight="700">✕</tspan> 不做实时继承　·　硬编码 ~/.hermes 会击穿隔离(PR #3575)</text>
+</svg>
+<div class="fig-cap"><b>Profiles:独立的岛</b>:<span class="mono">_apply_profile_override()</span> 在任何 import 前抢设 <span class="mono">HERMES_HOME</span>,全代码库再走 <span class="mono">get_hermes_home()</span> 单一入口——于是每个 profile 的 config/密钥/记忆/会话/技能/网关<b>各落各的目录、完全隔离</b>。岛与岛之间<b>刻意不做实时继承</b>(避免改一处污染全体);要「从默认起步」就用创建时一次性拷贝的 <span class="mono">--clone</span>。</div>
+</div>
+
 <h2>配置分层:行为进 yaml,密钥进 env</h2>
 <p>profile 隔离的是「存哪」;而「存什么」分两层,泾渭分明:</p>
 
@@ -1380,6 +1446,50 @@ OPTIONAL_ENV_VARS = {
 <p>为什么一定要把密钥和行为设置劈成两个文件?因为它们的生命周期与信任级别天差地别:密钥绝不能进版本控制,<span class="mono">.env</span> 因此能被单独 <span class="mono">gitignore</span>、单独收紧权限;而 <span class="mono">config.yaml</span> 是可读、可 diff、可随项目迁移的行为快照,团队成员照着改也不怕泄密。这里还藏着一个工程红利:<span class="mono">DEFAULT_CONFIG</span> 与用户 yaml 走 <span class="mono">_deep_merge</span> 合并,<strong>新增一个键会被自动补全</strong>,所以只有改键名、改结构这种破坏性迁移才需要 bump <span class="mono">_config_version</span>。代价是配置读取分了三条路径——CLI 的 <span class="mono">load_cli_config</span>、子命令的 <span class="mono">load_config</span>、网关直读 yaml——加键时三条都得覆盖到,否则会出现「CLI 看得见、网关看不见」的诡异不一致。</p>
 <p>这里必须对「<span class="mono">.env</span> 里全是密钥」保持诚实:那是<strong>设计政策与理想</strong>,现实并不绝对。翻一翻 <span class="mono">OPTIONAL_ENV_VARS</span>,会看到不少标着 <span class="mono">password: False</span> 的非密项,例如 <span class="mono">NOUS_BASE_URL</span>、<span class="mono">GEMINI_BASE_URL</span>、<span class="mono">XAI_BASE_URL</span> 这类 base URL 覆盖——它们出于历史与兼容,至今仍寄居在 <span class="mono">.env</span> 里。所以准确的说法是:<strong>政策上 <span class="mono">.env</span> 应只放凭据,但历史包袱让它仍混着少量非密的连接项</strong>。判断一个新设置该放哪,标准很简单——看它是不是秘密:是 API key、token 就进 <span class="mono">.env</span>;是超时、阈值、开关、显示偏好就进 <span class="mono">config.yaml</span>,别被现存的反例带偏。</p>
 <p>把 <span class="mono">config.yaml</span> 单独拎出来还有个全局意义:它几乎是全书各章行为的<strong>总开关面板</strong>。一个 yaml 文件里,<span class="mono">model</span> 决定路由、<span class="mono">compression</span> 调压缩阈值、<span class="mono">delegation</span> 管子代理并发与深度(第 16 章)、<span class="mono">curator</span> 控技能生命周期(第 10 章)、<span class="mono">gateway</span> 配各平台网关(第 17 章)、<span class="mono">memory</span> 选记忆后端(第 11 章)。正因为这些行为设置全是可读、可 diff 的纯数据,profile 才能靠「复制一个目录」就连同<strong>整套行为策略</strong>一起克隆;若它们散落在代码常量或 <span class="mono">.env</span> 里,profile 隔离就只能隔离密钥、隔离不了行为,多实例的价值会大打折扣。配置分层与 profile 隔离,本质上是同一个「状态外置、目录即实例」理念的一体两面。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 348" role="img" aria-label="config.yaml 放行为设置、.env 放凭据的分工,以及 .env 里仍有少量非密项">
+  <rect x="170" y="18" width="340" height="48" rx="10" fill="var(--panel-2)" stroke="var(--line)" stroke-width="1.5"/>
+  <text x="340" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">新设置该放哪?</text>
+  <text x="340" y="58" text-anchor="middle" font-size="11" fill="var(--muted)">判断:它是秘密吗(API key / token)?</text>
+
+  <line x1="250" y1="66" x2="172" y2="102" stroke="var(--blue)" stroke-width="1.8"/>
+  <polygon points="168,94 170,106 179,99" fill="var(--blue)"/>
+  <text x="196" y="90" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--blue)">否 → 行为</text>
+  <line x1="430" y1="66" x2="508" y2="102" stroke="var(--accent)" stroke-width="1.8"/>
+  <polygon points="512,94 510,106 501,99" fill="var(--accent)"/>
+  <text x="486" y="90" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">是 → 凭据</text>
+
+  <rect x="20" y="110" width="312" height="218" rx="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="36" y="134" font-size="12.5" font-weight="700" fill="var(--blue)">config.yaml · DEFAULT_CONFIG</text>
+  <text x="36" y="151" font-size="10.5" fill="var(--muted)">行为设置(非密 · _deep_merge 自动补键)</text>
+  <line x1="34" y1="160" x2="318" y2="160" stroke="var(--blue)" stroke-opacity="0.4"/>
+  <g font-size="11" fill="var(--ink)">
+    <text x="36" y="182">· 超时 timeouts</text>
+    <text x="36" y="203">· 阈值 thresholds</text>
+    <text x="36" y="224">· 功能开关 feature flags</text>
+    <text x="36" y="245">· 显示偏好 display</text>
+    <text x="36" y="266">· model / compression / gateway 区块</text>
+    <text x="36" y="287">· _config_version(迁移用)</text>
+  </g>
+
+  <rect x="348" y="110" width="312" height="218" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="364" y="134" font-size="12.5" font-weight="700" fill="var(--accent-ink)">.env · OPTIONAL_ENV_VARS</text>
+  <text x="364" y="151" font-size="10.5" fill="var(--muted)">凭据/密钥(password:True · setup 掩码)</text>
+  <line x1="362" y1="160" x2="646" y2="160" stroke="var(--accent)" stroke-opacity="0.5"/>
+  <g font-size="11" fill="var(--ink)">
+    <text x="364" y="182">🔒 OPENROUTER_API_KEY　password:True</text>
+    <text x="364" y="203">🔒 TELEGRAM_BOT_TOKEN　password:True</text>
+  </g>
+  <rect x="362" y="216" width="284" height="100" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="374" y="236" font-size="10.5" font-weight="700" fill="var(--ink)">⚠ 历史包袱 · 并非绝对</text>
+  <text x="374" y="255" font-size="10" fill="var(--ink)">仍混入少量 password:False 非密项:</text>
+  <text x="374" y="273" font-size="10" fill="var(--muted)" font-family="monospace">NOUS_BASE_URL / GEMINI_BASE_URL</text>
+  <text x="374" y="288" font-size="10" fill="var(--muted)" font-family="monospace">/ XAI_BASE_URL(base URL 覆盖)</text>
+  <text x="374" y="307" font-size="10" fill="var(--ink)">政策上应只放凭据,现实并不绝对。</text>
+</svg>
+<div class="fig-cap"><b>config.yaml vs .env 分工</b>:判断标准只有一句——<b>是不是秘密</b>。行为设置(超时/阈值/开关/显示)进 <span class="mono">config.yaml</span>(<span class="mono">DEFAULT_CONFIG</span>,<span class="mono">_deep_merge</span> 自动补键);凭据(API key/token)进 <span class="mono">.env</span>(<span class="mono">OPTIONAL_ENV_VARS</span>,密钥标 <span class="mono">password:True</span> 掩码输入)。但别把它绝对化:<span class="mono">OPTIONAL_ENV_VARS</span> 里至今仍混着少量 <span class="mono">password:False</span> 的非密连接项(如各种 <span class="mono">*_BASE_URL</span>),是历史包袱而非理想。</div>
+</div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><span class="mono">hermes -p coder ...</span> 启动</span></div>
@@ -1473,6 +1583,72 @@ _apply_profile_override()   <span class="cm"># module-level: runs before the oth
 <p>The engineering philosophy behind this fallback is worth savoring: <span class="mono">get_hermes_home()</span> would rather <strong>quietly fall back to the default plus a warning</strong> when <span class="mono">HERMES_HOME</span> is missing than turn itself into a strict gatekeeper that throws. The reason, as above: it's the foundation called synchronously by 30+ modules at import time, and any foundation that can fail makes the whole process's startup brittle. Keep uncertainty out of the import phase, pin it once up front via the env var, then let every caller blindly trust this one entry — that's the book's "stateless core plus one external variable to rule them all" realized at the path layer. That is also exactly why subprocess spawners (the <span class="mono">systemd</span> template, the kanban dispatcher) must propagate <span class="mono">HERMES_HOME</span> explicitly; otherwise the child can't read the env var, silently falls back to the default instance, and writes to the wrong profile — the most insidious source of contamination when running many instances.</p>
 <p>Why a <strong>function</strong> and not a module-level constant? Because a constant is evaluated at import time and can never change afterward, whereas profiles, subagents, and concurrent threads may all need to switch home at runtime. Each call to <span class="mono">get_hermes_home()</span> first checks a <span class="mono">ContextVar</span> override — letting concurrent subagents in the same process each honor their own instance, echoing the delegation isolation of ch.16 — then the <span class="mono">HERMES_HOME</span> env var, and only then falls back to the platform default. The source even keeps a deliberate branch: when the env var is missing but an <span class="mono">active_profile</span> file points at a non-default profile, it logs a loud one-shot warning to <span class="mono">errors.log</span>. Why warn instead of raise? Because this function has 30+ module-level callers that run it at import time; raising would crash them all, so it prefers a diagnosable warning over blocking startup.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 392" role="img" aria-label="Profiles are independent islands: each profile has its own HERMES_HOME, fully isolated, with no live inheritance">
+  <rect x="20" y="20" width="300" height="46" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="170" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">_apply_profile_override()</text>
+  <text x="170" y="57" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">before any import · sets HERMES_HOME first</text>
+  <line x1="320" y1="43" x2="356" y2="43" stroke="var(--muted)" stroke-width="2"/>
+  <polygon points="356,38 366,43 356,48" fill="var(--muted)"/>
+  <rect x="368" y="20" width="292" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="514" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">get_hermes_home()</text>
+  <text x="514" y="57" text-anchor="middle" font-size="10.5" fill="var(--blue)">single entry · every path asks it</text>
+
+  <text x="340" y="86" text-anchor="middle" font-size="11" fill="var(--muted)">each process's HERMES_HOME points at only <tspan font-weight="700" fill="var(--ink)">one island</tspan>; islands stay isolated</text>
+
+  <path d="M118 132 Q229 96 340 132" fill="none" stroke="var(--purple)" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <polygon points="335,123 343,134 329,132" fill="var(--purple)"/>
+  <text x="229" y="108" text-anchor="middle" font-size="10" fill="var(--purple)">--clone: one-time copy at creation (separate ever after)</text>
+
+  <rect x="20" y="134" width="196" height="216" rx="12" fill="var(--panel-2)" stroke="var(--line)" stroke-width="1.5"/>
+  <text x="118" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">default</text>
+  <text x="118" y="173" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="monospace">~/.hermes</text>
+  <line x1="34" y1="182" x2="202" y2="182" stroke="var(--line)"/>
+  <g font-size="10.5" fill="var(--ink)">
+    <text x="34" y="203">· config.yaml</text>
+    <text x="34" y="222">· .env (secrets)</text>
+    <text x="34" y="241">· memory</text>
+    <text x="34" y="260">· sessions</text>
+    <text x="34" y="279">· skills</text>
+    <text x="34" y="298">· gateway</text>
+  </g>
+
+  <rect x="242" y="134" width="196" height="216" rx="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="340" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">coder</text>
+  <text x="340" y="173" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="monospace">~/.hermes/profiles/coder</text>
+  <line x1="256" y1="182" x2="424" y2="182" stroke="var(--blue)" stroke-opacity="0.4"/>
+  <g font-size="10.5" fill="var(--ink)">
+    <text x="256" y="203">· config.yaml</text>
+    <text x="256" y="222">· .env (secrets)</text>
+    <text x="256" y="241">· memory</text>
+    <text x="256" y="260">· sessions</text>
+    <text x="256" y="279">· skills</text>
+    <text x="256" y="298">· gateway</text>
+  </g>
+
+  <rect x="464" y="134" width="196" height="216" rx="12" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="562" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">personal</text>
+  <text x="562" y="173" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="monospace">~/.hermes/profiles/personal</text>
+  <line x1="478" y1="182" x2="646" y2="182" stroke="var(--purple)" stroke-opacity="0.4"/>
+  <g font-size="10.5" fill="var(--ink)">
+    <text x="478" y="203">· config.yaml</text>
+    <text x="478" y="222">· .env (secrets)</text>
+    <text x="478" y="241">· memory</text>
+    <text x="478" y="260">· sessions</text>
+    <text x="478" y="279">· skills</text>
+    <text x="478" y="298">· gateway</text>
+  </g>
+
+  <line x1="229" y1="190" x2="229" y2="344" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="4 4"/>
+  <text x="229" y="261" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">✕</text>
+  <line x1="451" y1="190" x2="451" y2="344" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="4 4"/>
+  <text x="451" y="261" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">✕</text>
+
+  <text x="340" y="378" text-anchor="middle" font-size="10.5" fill="var(--muted)"><tspan fill="var(--red)" font-weight="700">✕</tspan> no live inheritance　·　hardcoding ~/.hermes pierces isolation (PR #3575)</text>
+</svg>
+<div class="fig-cap"><b>Profiles: independent islands</b>: <span class="mono">_apply_profile_override()</span> sets <span class="mono">HERMES_HOME</span> before any import, and the whole codebase then goes through the single <span class="mono">get_hermes_home()</span> entry — so each profile's config/secrets/memory/sessions/skills/gateway <b>land in their own directory, fully isolated</b>. Islands <b>deliberately do no live inheritance</b> (so one edit can't pollute all); to "start from default," use the one-time copy-at-creation <span class="mono">--clone</span>.</div>
+</div>
+
 <h2>Config layering: behavior in yaml, secrets in env</h2>
 <p>Profiles isolate "where to store"; "what to store" splits cleanly in two:</p>
 
@@ -1495,6 +1671,50 @@ OPTIONAL_ENV_VARS = {
 <p>Why insist on splitting secrets and behavioral settings into two files? Because their lifecycle and trust level are worlds apart: secrets must never enter version control, so <span class="mono">.env</span> can be separately <span class="mono">gitignore</span>d and separately permission-locked, while <span class="mono">config.yaml</span> is a readable, diffable behavioral snapshot that travels with the project — teammates can edit it without fear of leaking anything. There's a hidden engineering dividend too: <span class="mono">DEFAULT_CONFIG</span> and the user yaml merge via <span class="mono">_deep_merge</span>, so adding a new key is auto-filled, and only destructive migrations (renaming keys, changing structure) need a <span class="mono">_config_version</span> bump. The cost is three config-read paths — the CLI's <span class="mono">load_cli_config</span>, subcommands' <span class="mono">load_config</span>, and the gateway reading yaml raw — and a new key must cover all three, or you get the weird "the CLI sees it but the gateway doesn't" inconsistency.</p>
 <p>Here we must stay honest about "<span class="mono">.env</span> is all secrets": that's the <strong>design policy and ideal</strong>, not the absolute reality. Browse <span class="mono">OPTIONAL_ENV_VARS</span> and you'll find plenty of non-secret entries marked <span class="mono">password: False</span> — for example <span class="mono">NOUS_BASE_URL</span>, <span class="mono">GEMINI_BASE_URL</span>, <span class="mono">XAI_BASE_URL</span> and other base-URL overrides — that, for historical and compatibility reasons, still live in <span class="mono">.env</span>. So the accurate phrasing is: <strong>by policy <span class="mono">.env</span> should hold only credentials, but historical baggage means it still mixes in a few non-secret connection entries</strong>. The test for where a new setting belongs is simple — is it a secret? An API key or token goes in <span class="mono">.env</span>; a timeout, threshold, flag, or display pref goes in <span class="mono">config.yaml</span>. Don't let the existing exceptions mislead you.</p>
 <p>Pulling <span class="mono">config.yaml</span> out on its own carries a global significance too: it is essentially the <strong>master switchboard</strong> for the behaviors of every chapter in this book. In one yaml file, <span class="mono">model</span> drives routing, <span class="mono">compression</span> tunes the compression threshold, <span class="mono">delegation</span> governs subagent concurrency and depth (ch.16), <span class="mono">curator</span> controls skill lifecycle (ch.10), <span class="mono">gateway</span> configures the per-platform gateways (ch.17), and <span class="mono">memory</span> selects the memory backend (ch.11). Precisely because these behavioral settings are all readable, diffable pure data, a profile can clone an <strong>entire behavioral policy</strong> just by copying a directory; if they were scattered across code constants or <span class="mono">.env</span>, profile isolation could only isolate secrets, not behavior, and the value of multi-instance would be badly diminished. Config layering and profile isolation are two sides of the same "state externalized, a directory is an instance" idea.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 348" role="img" aria-label="config.yaml holds behavioral settings, .env holds credentials, and .env still mixes in a few non-secret entries">
+  <rect x="170" y="18" width="340" height="48" rx="10" fill="var(--panel-2)" stroke="var(--line)" stroke-width="1.5"/>
+  <text x="340" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">Where does a new setting go?</text>
+  <text x="340" y="58" text-anchor="middle" font-size="11" fill="var(--muted)">Test: is it a secret (API key / token)?</text>
+
+  <line x1="250" y1="66" x2="172" y2="102" stroke="var(--blue)" stroke-width="1.8"/>
+  <polygon points="168,94 170,106 179,99" fill="var(--blue)"/>
+  <text x="196" y="90" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--blue)">no → behavior</text>
+  <line x1="430" y1="66" x2="508" y2="102" stroke="var(--accent)" stroke-width="1.8"/>
+  <polygon points="512,94 510,106 501,99" fill="var(--accent)"/>
+  <text x="486" y="90" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">yes → secret</text>
+
+  <rect x="20" y="110" width="312" height="218" rx="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="36" y="134" font-size="12.5" font-weight="700" fill="var(--blue)">config.yaml · DEFAULT_CONFIG</text>
+  <text x="36" y="151" font-size="10.5" fill="var(--muted)">behavioral (non-secret · _deep_merge auto-fills)</text>
+  <line x1="34" y1="160" x2="318" y2="160" stroke="var(--blue)" stroke-opacity="0.4"/>
+  <g font-size="11" fill="var(--ink)">
+    <text x="36" y="182">· timeouts</text>
+    <text x="36" y="203">· thresholds</text>
+    <text x="36" y="224">· feature flags</text>
+    <text x="36" y="245">· display prefs</text>
+    <text x="36" y="266">· model / compression / gateway blocks</text>
+    <text x="36" y="287">· _config_version (migration)</text>
+  </g>
+
+  <rect x="348" y="110" width="312" height="218" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="364" y="134" font-size="12.5" font-weight="700" fill="var(--accent-ink)">.env · OPTIONAL_ENV_VARS</text>
+  <text x="364" y="151" font-size="10.5" fill="var(--muted)">credentials (password:True · masked in setup)</text>
+  <line x1="362" y1="160" x2="646" y2="160" stroke="var(--accent)" stroke-opacity="0.5"/>
+  <g font-size="11" fill="var(--ink)">
+    <text x="364" y="182">🔒 OPENROUTER_API_KEY　password:True</text>
+    <text x="364" y="203">🔒 TELEGRAM_BOT_TOKEN　password:True</text>
+  </g>
+  <rect x="362" y="216" width="284" height="100" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="374" y="236" font-size="10.5" font-weight="700" fill="var(--ink)">⚠ Historical baggage · not absolute</text>
+  <text x="374" y="255" font-size="10" fill="var(--ink)">a few password:False non-secret entries:</text>
+  <text x="374" y="273" font-size="10" fill="var(--muted)" font-family="monospace">NOUS_BASE_URL / GEMINI_BASE_URL</text>
+  <text x="374" y="288" font-size="10" fill="var(--muted)" font-family="monospace">/ XAI_BASE_URL (base-URL overrides)</text>
+  <text x="374" y="307" font-size="10" fill="var(--ink)">policy: secrets only — reality differs.</text>
+</svg>
+<div class="fig-cap"><b>config.yaml vs .env split</b>: the test is one question — <b>is it a secret?</b> Behavioral settings (timeouts/thresholds/flags/display) go in <span class="mono">config.yaml</span> (<span class="mono">DEFAULT_CONFIG</span>, <span class="mono">_deep_merge</span> auto-fills keys); credentials (API key/token) go in <span class="mono">.env</span> (<span class="mono">OPTIONAL_ENV_VARS</span>, secrets marked <span class="mono">password:True</span>, masked input). But don't take it as absolute: <span class="mono">OPTIONAL_ENV_VARS</span> still mixes in a few <span class="mono">password:False</span> non-secret connection entries (various <span class="mono">*_BASE_URL</span>) — historical baggage, not the ideal.</div>
+</div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><span class="mono">hermes -p coder ...</span> starts</span></div>

@@ -427,6 +427,56 @@ merges all of that into a single calling shape with no mode parameter,
 <h2>四种模式 + 召回不破缓存</h2>
 <p>工具 <span class="mono">session_search</span> 用<strong>参数推断</strong>四种模式（无显式 mode 参数）：给 <span class="mono">query</span> 是 <strong>DISCOVERY</strong>（FTS5 检索）；给 <span class="mono">session_id + around_message_id</span> 是 <strong>SCROLL</strong>（锚点翻页）；只给 <span class="mono">session_id</span> 是 <strong>READ</strong>（整会话）；什么都不给是 <strong>BROWSE</strong>（最近会话列表）。无论哪种，结果都<strong>原文</strong>作为 <strong>tool 消息 append</strong> 到对话末尾——不改 system prompt、不改任何历史轮次，所以缓存前缀<strong>逐字节不变</strong>。另外，会话标题由 <span class="mono">title_generator</span> 在首轮后<strong>后台线程 fire-and-forget</strong> 生成，绝不给用户响应加延迟。</p>
 <p>为什么命中后不只给 ±N 条邻居，还要附上会话的<strong>首尾书签</strong>（bookend）？因为一次 FTS5 命中往往落在长会话的<strong>中段</strong>——你看到了「那句话」，却不知道这场对话<strong>当初要解决什么</strong>、<strong>最后怎么收尾</strong>。<span class="mono">get_anchored_view</span> 因此切三片：锚点附近的窗口给<strong>局部上下文</strong>，<span class="mono">bookend_start</span>（前 3 条用户/助手消息）给<strong>目标</strong>，<span class="mono">bookend_end</span>（后 3 条）给<strong>结局</strong>——一次调用就让 agent 同时拿到「起因—命中—结果」，而<strong>无需载入整段几百轮的转录</strong>。这是上下文经济（第 2 章 A）在召回侧的具体落地：只取最有信息量的切片，不淹没注意力。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 300" role="img" aria-label="召回而非全载：FTS5 从旧会话只取相关片段，而不是把所有旧会话塞回上下文">
+  <defs>
+    <marker id="mF1z" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto">
+      <path d="M0 0 L6.5 3 L0 6 Z" fill="var(--muted)"/>
+    </marker>
+  </defs>
+
+  <text x="20" y="22" font-size="13" font-weight="700" fill="var(--accent-ink)">✅ 召回：FTS5 只取相关片段</text>
+
+  <rect x="14" y="42" width="146" height="56" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="87" y="68" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">新会话提问</text>
+  <text x="87" y="86" text-anchor="middle" font-size="10.5" fill="var(--ink)">「以前那个方案?」</text>
+
+  <path d="M160 70 L180 70" stroke="var(--muted)" stroke-width="2" fill="none" marker-end="url(#mF1z)"/>
+
+  <rect x="182" y="42" width="146" height="56" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="255" y="68" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">session_search</text>
+  <text x="255" y="86" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">零 LLM · 服务门控</text>
+
+  <path d="M328 70 L348 70" stroke="var(--muted)" stroke-width="2" fill="none" marker-end="url(#mF1z)"/>
+
+  <rect x="350" y="42" width="146" height="56" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="423" y="66" text-anchor="middle" font-size="12" font-weight="700" fill="var(--purple)">SQLite FTS5 索引</text>
+  <text x="423" y="85" text-anchor="middle" font-size="10.5" fill="var(--ink)">MATCH · BM25 · snippet</text>
+
+  <path d="M496 70 L516 70" stroke="var(--muted)" stroke-width="2" fill="none" marker-end="url(#mF1z)"/>
+
+  <rect x="518" y="42" width="146" height="56" rx="9" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="591" y="66" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">旧会话库</text>
+  <text x="591" y="85" text-anchor="middle" font-size="10.5" fill="var(--ink)">只召回相关片段</text>
+
+  <text x="340" y="128" text-anchor="middle" font-size="11" fill="var(--muted)">命中片段 append 为 tool 消息（中文走 trigram 兜底）→ 上下文干净 · 不破缓存 · 零运维</text>
+
+  <line x1="14" y1="148" x2="666" y2="148" stroke="var(--line)" stroke-width="1"/>
+
+  <text x="20" y="172" font-size="13" font-weight="700" fill="var(--red)">❌ 反模式：把所有旧会话全量塞回上下文</text>
+
+  <rect x="14" y="184" width="470" height="70" rx="8" fill="none" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="24" y="200" font-size="10.5" fill="var(--muted)">上下文窗口（容量有限）</text>
+
+  <rect x="28" y="206" width="560" height="40" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="250" y="231" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">数百次旧会话全文一次性载入…</text>
+  <text x="606" y="230" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">✕ 溢出</text>
+
+  <text x="20" y="282" font-size="11" fill="var(--muted)">① 撑爆上下文窗口　② A·中间遗失：关键信息淹没在长尾中段 → 召回质量反降</text>
+</svg>
+<div class="fig-cap"><b>召回而非全载</b>：新会话遇到问题，<b>session_search</b> 走本地 <b>SQLite FTS5</b> 全文索引（BM25 排序 + snippet 高亮，中文用 trigram 子串兜底），从<b>数百次旧会话</b>里<b>只</b>捞回最相关的几条片段、作为 tool 消息 append——零 LLM、零运维、不破缓存。反过来把所有旧会话<b>全量载入</b>，只会<b>撑爆上下文窗口</b>并撞上<b>中间遗失</b>（第 2 章 A）：关键信息淹没在长尾里，召回质量不升反降。</div>
+</div>
 <p>DISCOVERY 还做了一件容易被忽略的事：<strong>按会话血缘去重</strong>。一段长对话可能被切成父子多个 session（例如压缩派生子会话），若直接返回原始命中，同一段逻辑对话会<strong>反复占满结果列表</strong>。源码用 <span class="mono">_resolve_to_parent</span> 沿 <span class="mono">parent_session_id</span> 链回溯到血缘根，把命中折叠成<strong>每条会话一行</strong>，再附窗口与书签。它还默认隐藏 <span class="mono">subagent</span> 与 <span class="mono">tool</span> 来源的会话——子代理跑批和第三方集成的痕迹不属于用户的对话史，混进来只会污染浏览体验。这些过滤让 BROWSE/DISCOVERY 返回的是<strong>人类视角的会话</strong>，而非数据库视角的原始行。</p>
 <p>为什么把四种行为塞进<strong>一个工具、靠参数推断</strong>，而不是开四个工具或加一个显式 <span class="mono">mode</span> 参数？因为每多一个工具、每多一个枚举参数，都会<strong>占用发给模型的 schema 预算</strong>，而这套工具在每次 API 调用都要带上（第 8 章）。单一调用形态让模型按手头线索<strong>自然选形</strong>：有关键词就检索，有锚点就翻页，只有会话号就整读，什么都没有就浏览——schema 更小，模型也更难选错。这正是 PR #20238 的双模设计被 #26419 <strong>合并成单一形态</strong>的初衷：把「模式」从参数里拿掉，换来更窄的核心表面与更稳的调用。</p>
 
@@ -454,6 +504,46 @@ merges all of that into a single calling shape with no mode parameter,
   <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——模型跨会话什么都记不住，靠本地 FTS5 索引把<strong>所有历史对话</strong>变成可检索的外部记忆；
   <span class="badge constraint">A·中间遗失</span>——召回用 <strong>BM25 排序 + 锚点书签</strong> 只取最相关的片段（按需取回），而非把整段历史塞回上下文淹没注意力。反模式：为了「更聪明的召回」而引入一次 LLM 总结——它既加成本、加延迟，若把总结塞进 system prompt 还会<strong>击穿缓存</strong>。Hermes 反其道：原文交给主 agent 自己读。</p>
   <p style="margin:.5rem 0 0">再往深一层看，这一章其实回答了「跨会话记忆该由谁来做」。把记忆交给 LLM 去「理解并复述」很诱人，但那会同时踩中三个坑：<strong>加成本</strong>（每次召回多一次模型调用）、<strong>加延迟</strong>（用户要多等一轮）、以及一旦把总结写回 system prompt 就<strong>击穿缓存</strong>（第 6 章）。Hermes 的答案是把「理解」留给本来就要读这些原文的<strong>主 agent</strong>，把「查找」交给本地、零运维、够快的 <span class="mono">FTS5</span>——一个不需要向量库、不需要外部服务的方案。它和第 9–11 章合成自我进化闭环的「召回」环：技能被抽取、Curator 养护、记忆沉淀，最终都要靠跨会话搜索<strong>把它们重新找回来</strong>，否则前面学到的一切都用不上。少了这一环，自我进化就只进不出，学得再多也无从调用。</p>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 358" role="img" aria-label="自我进化的召回环：第9章抽取技能、第10章Curator养护、第11章记忆沉淀都是写入，第12章跨会话搜索把它们召回，闭环才闭合">
+  <defs>
+    <marker id="mF2z" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto">
+      <path d="M0 0 L6.5 3 L0 6 Z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--accent-ink)">自我进化的闭环：写入 → 养护 → 沉淀 →（召回）</text>
+
+  <ellipse cx="340" cy="180" rx="88" ry="44" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="340" y="176" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">自我进化闭环</text>
+  <text x="340" y="196" text-anchor="middle" font-size="11" fill="var(--accent-ink)">写入 ↔ 召回</text>
+
+  <rect x="250" y="34" width="180" height="58" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="59" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">第 9 章 · 抽取技能</text>
+  <text x="340" y="78" text-anchor="middle" font-size="10.5" fill="var(--ink)">把做过的事固化成技能</text>
+
+  <rect x="470" y="150" width="194" height="60" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="567" y="176" text-anchor="middle" font-size="12" font-weight="700" fill="var(--purple)">第 10 章 · Curator 养护</text>
+  <text x="567" y="195" text-anchor="middle" font-size="10.5" fill="var(--ink)">归档陈旧 · 留住有用</text>
+
+  <rect x="250" y="268" width="180" height="58" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="340" y="293" text-anchor="middle" font-size="12" font-weight="700" fill="var(--amber)">第 11 章 · 记忆沉淀</text>
+  <text x="340" y="312" text-anchor="middle" font-size="10.5" fill="var(--ink)">记忆 / USER.md 写盘</text>
+
+  <rect x="16" y="150" width="200" height="60" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="116" y="176" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">★ 第 12 章 · 跨会话搜索</text>
+  <text x="116" y="195" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">FTS5 把它们找回来</text>
+
+  <path d="M430 64 Q548 64 548 150" stroke="var(--accent)" stroke-width="2.2" fill="none" marker-end="url(#mF2z)"/>
+  <path d="M567 210 Q567 296 432 296" stroke="var(--accent)" stroke-width="2.2" fill="none" marker-end="url(#mF2z)"/>
+  <path d="M250 296 Q116 296 116 212" stroke="var(--accent)" stroke-width="2.2" fill="none" marker-end="url(#mF2z)"/>
+  <path d="M116 150 Q116 64 248 64" stroke="var(--accent)" stroke-width="2.2" fill="none" marker-end="url(#mF2z)"/>
+
+  <text x="116" y="232" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">缺这一环 = 只写不读</text>
+</svg>
+<div class="fig-cap"><b>自我进化的召回环</b>：第 9 章把经验抽成<b>技能</b>、第 10 章 <b>Curator</b> 养护、第 11 章<b>记忆</b>沉淀——这些都是「写入」。但只写不读没有意义：必须靠第 12 章<b>跨会话搜索</b>把旧会话与技能<b>重新找回来</b>，这个环才闭合。缺了召回这一环，前面学到的一切都<b>调不出来</b>——自我进化就只进不出。</div>
 </div>
 
 <div class="card key">
@@ -573,6 +663,56 @@ merges all of that into a single calling shape with no mode parameter,
 <h2>Four modes + recall that doesn't break the cache</h2>
 <p>The <span class="mono">session_search</span> tool infers <strong>four modes from parameters</strong> (no explicit mode arg): a <span class="mono">query</span> is <strong>DISCOVERY</strong> (FTS5 search); <span class="mono">session_id + around_message_id</span> is <strong>SCROLL</strong> (anchored paging); just <span class="mono">session_id</span> is <strong>READ</strong> (whole session); nothing is <strong>BROWSE</strong> (recent sessions list). Either way, results are <strong>appended verbatim as a tool message</strong> at the end of the conversation — without changing the system prompt or any prior turn, so the cache prefix stays <strong>byte-identical</strong>. Separately, session titles are generated by <span class="mono">title_generator</span> in a <strong>fire-and-forget background thread</strong> after the first turn, never adding latency to the user's reply.</p>
 <p>Why, after a hit, return not just ±N neighbors but the session's <strong>bookends</strong>? Because an FTS5 hit usually lands <strong>mid-session</strong> in a long conversation — you see "that line," but not <strong>what the conversation set out to solve</strong> or <strong>how it ended</strong>. So <span class="mono">get_anchored_view</span> takes three slices: the window around the anchor gives <strong>local context</strong>, <span class="mono">bookend_start</span> (first 3 user/assistant messages) gives the <strong>goal</strong>, and <span class="mono">bookend_end</span> (last 3) gives the <strong>resolution</strong> — one call hands the agent "cause — hit — outcome" together, <strong>without loading a several-hundred-turn transcript</strong>. This is context economy (ch.2 A) on the recall side: take only the most informative slices, don't drown attention.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 300" role="img" aria-label="Recall, not full-load: FTS5 returns only relevant fragments from old sessions instead of dumping all old sessions back into context">
+  <defs>
+    <marker id="mF1e" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto">
+      <path d="M0 0 L6.5 3 L0 6 Z" fill="var(--muted)"/>
+    </marker>
+  </defs>
+
+  <text x="20" y="22" font-size="13" font-weight="700" fill="var(--accent-ink)">✅ Recall: FTS5 takes only relevant fragments</text>
+
+  <rect x="14" y="42" width="146" height="56" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="87" y="68" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">New session</text>
+  <text x="87" y="86" text-anchor="middle" font-size="10.5" fill="var(--ink)">"that plan before?"</text>
+
+  <path d="M160 70 L180 70" stroke="var(--muted)" stroke-width="2" fill="none" marker-end="url(#mF1e)"/>
+
+  <rect x="182" y="42" width="146" height="56" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="255" y="68" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">session_search</text>
+  <text x="255" y="86" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">zero LLM · gated</text>
+
+  <path d="M328 70 L348 70" stroke="var(--muted)" stroke-width="2" fill="none" marker-end="url(#mF1e)"/>
+
+  <rect x="350" y="42" width="146" height="56" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="423" y="66" text-anchor="middle" font-size="12" font-weight="700" fill="var(--purple)">SQLite FTS5 index</text>
+  <text x="423" y="85" text-anchor="middle" font-size="10.5" fill="var(--ink)">MATCH · BM25 · snippet</text>
+
+  <path d="M496 70 L516 70" stroke="var(--muted)" stroke-width="2" fill="none" marker-end="url(#mF1e)"/>
+
+  <rect x="518" y="42" width="146" height="56" rx="9" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="591" y="66" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">Old sessions</text>
+  <text x="591" y="85" text-anchor="middle" font-size="10.5" fill="var(--ink)">only relevant hits</text>
+
+  <text x="340" y="128" text-anchor="middle" font-size="11" fill="var(--muted)">Hits appended as a tool message (CJK via trigram) → clean context · cache intact · zero-ops</text>
+
+  <line x1="14" y1="148" x2="666" y2="148" stroke="var(--line)" stroke-width="1"/>
+
+  <text x="20" y="172" font-size="13" font-weight="700" fill="var(--red)">❌ Anti-pattern: dump ALL old sessions back into context</text>
+
+  <rect x="14" y="184" width="470" height="70" rx="8" fill="none" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="24" y="200" font-size="10.5" fill="var(--muted)">context window (finite)</text>
+
+  <rect x="28" y="206" width="560" height="40" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="250" y="231" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">hundreds of old sessions loaded verbatim…</text>
+  <text x="606" y="230" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">✕ overflow</text>
+
+  <text x="20" y="282" font-size="11" fill="var(--muted)">① blows the context window　② lost-in-the-middle: key info buried in the long tail → recall quality drops</text>
+</svg>
+<div class="fig-cap"><b>Recall, not full-load</b>: a new session hits a problem; <b>session_search</b> queries the local <b>SQLite FTS5</b> index (BM25 ranking + snippet highlighting, CJK via a trigram substring fallback) and pulls back <b>only</b> the few most relevant fragments from <b>hundreds of old sessions</b>, appended as a tool message — zero LLM, zero-ops, no cache break. Loading <b>all</b> old sessions instead only <b>blows the context window</b> and triggers <b>lost-in-the-middle</b> (ch.2 A): key info drowns in the long tail and recall quality falls.</div>
+</div>
 <p>DISCOVERY also does something easy to miss: it <strong>dedupes by session lineage</strong>. A long conversation may be split across parent/child sessions (e.g. compaction-derived children); returning raw hits would let one logical conversation <strong>flood the result list</strong>. The code uses <span class="mono">_resolve_to_parent</span> to walk the <span class="mono">parent_session_id</span> chain to the lineage root and folds hits down to <strong>one row per conversation</strong>, then attaches the window and bookends. It also hides <span class="mono">subagent</span> and <span class="mono">tool</span> sources by default — subagent batch runs and third-party integration traces aren't part of the user's conversation history, and would only pollute browsing if mixed in. These filters make BROWSE/DISCOVERY return <strong>conversations as a human sees them</strong>, not raw database rows.</p>
 <p>Why pack four behaviors into <strong>one tool inferred from parameters</strong> rather than four tools or an explicit <span class="mono">mode</span> argument? Because every extra tool and every extra enum parameter <strong>spends schema budget sent to the model</strong> — and this tool ships on every API call (ch.8). A single calling shape lets the model <strong>pick the shape naturally</strong> from what it has: a keyword means search, an anchor means scroll, a bare session id means read the whole thing, nothing means browse — a smaller schema, and harder to mis-select. That's exactly why PR #20238's dual mode was <strong>merged into a single shape</strong> by #26419: take "mode" out of the parameters in exchange for a narrower core surface and steadier calls.</p>
 
@@ -600,6 +740,46 @@ merges all of that into a single calling shape with no mode parameter,
   <p style="margin:.5rem 0 0"><span class="badge constraint">B·stateless</span> — the model remembers nothing across sessions, so a local FTS5 index turns <strong>all past conversations</strong> into searchable external memory;
   <span class="badge constraint">A·lost-in-the-middle</span> — recall uses <strong>BM25 ranking + anchored bookends</strong> to take only the most relevant fragments (on-demand), rather than dumping whole histories back into context to drown attention. The anti-pattern: adding an LLM summary for "smarter recall" — it adds cost and latency, and if the summary is dropped into the system prompt it also <strong>shatters the cache</strong>. Hermes does the opposite: hand the originals to the main agent to read.</p>
   <p style="margin:.5rem 0 0">One level deeper, this chapter answers "who should do cross-session memory." Handing memory to an LLM to "understand and restate" is tempting, but it trips three wires at once: <strong>more cost</strong> (an extra model call per recall), <strong>more latency</strong> (one more round the user waits), and — if the summary is written back into the system prompt — <strong>a shattered cache</strong> (ch.6). Hermes's answer is to leave "understanding" to the <strong>main agent</strong> that has to read these originals anyway, and leave "finding" to local, zero-ops, fast-enough <span class="mono">FTS5</span> — no vector store, no external service. It is the "recall" loop of the self-evolution cycle from ch.9–11: skills get extracted, the Curator tends them, memory settles — and all of it must be <strong>found again</strong> via cross-session search, or everything learned earlier goes unused. Without this loop, self-evolution only writes and never reads — no matter how much is learned, none of it can be called upon.</p>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 358" role="img" aria-label="The self-evolution recall loop: ch.9 extract skills, ch.10 Curator tends them, ch.11 memory settles are all writes; ch.12 cross-session search recalls them and closes the loop">
+  <defs>
+    <marker id="mF2e" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto">
+      <path d="M0 0 L6.5 3 L0 6 Z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--accent-ink)">The self-evolution loop: write → tend → settle →(recall)</text>
+
+  <ellipse cx="340" cy="180" rx="92" ry="44" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="340" y="176" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">self-evolution loop</text>
+  <text x="340" y="196" text-anchor="middle" font-size="11" fill="var(--accent-ink)">write ↔ recall</text>
+
+  <rect x="248" y="34" width="184" height="58" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="59" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">Ch.9 · extract skills</text>
+  <text x="340" y="78" text-anchor="middle" font-size="10.5" fill="var(--ink)">freeze what you did into skills</text>
+
+  <rect x="468" y="150" width="198" height="60" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="567" y="176" text-anchor="middle" font-size="12" font-weight="700" fill="var(--purple)">Ch.10 · Curator tends</text>
+  <text x="567" y="195" text-anchor="middle" font-size="10.5" fill="var(--ink)">archive stale · keep useful</text>
+
+  <rect x="248" y="268" width="184" height="58" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="340" y="293" text-anchor="middle" font-size="12" font-weight="700" fill="var(--amber)">Ch.11 · memory settles</text>
+  <text x="340" y="312" text-anchor="middle" font-size="10.5" fill="var(--ink)">memory / USER.md to disk</text>
+
+  <rect x="14" y="150" width="204" height="60" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="116" y="176" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">★ Ch.12 · cross-session search</text>
+  <text x="116" y="195" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">FTS5 finds them again</text>
+
+  <path d="M432 64 Q548 64 548 150" stroke="var(--accent)" stroke-width="2.2" fill="none" marker-end="url(#mF2e)"/>
+  <path d="M567 210 Q567 296 432 296" stroke="var(--accent)" stroke-width="2.2" fill="none" marker-end="url(#mF2e)"/>
+  <path d="M248 296 Q116 296 116 212" stroke="var(--accent)" stroke-width="2.2" fill="none" marker-end="url(#mF2e)"/>
+  <path d="M116 150 Q116 64 246 64" stroke="var(--accent)" stroke-width="2.2" fill="none" marker-end="url(#mF2e)"/>
+
+  <text x="116" y="232" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">miss this rung = write-only</text>
+</svg>
+<div class="fig-cap"><b>The self-evolution recall loop</b>: ch.9 distills experience into <b>skills</b>, ch.10's <b>Curator</b> tends them, ch.11 settles <b>memory</b> — all of these are "writes." But writing without reading is pointless: only ch.12's <b>cross-session search</b> can <b>find old sessions and skills again</b> to close the loop. Drop the recall rung and everything learned earlier becomes <b>uncallable</b> — self-evolution only writes, never reads.</div>
 </div>
 
 <div class="card key">

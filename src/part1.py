@@ -1716,7 +1716,81 @@ LESSON_05 = {
   <div class="lane"><div class="lane-label">三种退出</div><div class="tslot">达到 max_iterations</div><div class="tslot">预算耗尽</div><div class="tslot now">用户中断</div></div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 366" role="img" aria-label="同步主循环：顶部一道 while 闸门，循环体调模型→有 tool_calls 就执行并 append→否则返回 final_response">
+  <rect x="30" y="14" width="620" height="48" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="340" y="35" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">顶部闸门 · while （api_call_count &lt; max_iterations 默认 90）且（iteration_budget.remaining &gt; 0）</text>
+  <text x="340" y="52" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">＋ _budget_grace_call：预留一次宽限放行（核心默认 False，正常对话不触发）</text>
+
+  <line x1="300" y1="62" x2="300" y2="72" stroke="var(--muted)"/>
+  <polygon points="295,64 305,64 300,72" fill="var(--muted)"/>
+  <rect x="110" y="72" width="380" height="30" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="300" y="91" text-anchor="middle" font-size="11" fill="var(--red)">每圈最开头：if _interrupt_requested → break（用户中断，可随时喊停）</text>
+
+  <line x1="300" y1="102" x2="300" y2="116" stroke="var(--muted)"/>
+  <polygon points="295,108 305,108 300,116" fill="var(--muted)"/>
+  <rect x="200" y="116" width="200" height="54" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="300" y="140" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">① 调用模型</text>
+  <text x="300" y="158" text-anchor="middle" font-size="10" fill="var(--muted)">client…create(messages, tools)</text>
+
+  <line x1="300" y1="170" x2="300" y2="190" stroke="var(--muted)"/>
+  <polygon points="295,184 305,184 300,192" fill="var(--muted)"/>
+  <polygon points="300,192 374,232 300,272 226,232" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="300" y="236" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">有 tool_calls?</text>
+
+  <line x1="374" y1="232" x2="418" y2="232" stroke="var(--accent)" stroke-width="2"/>
+  <polygon points="412,227 412,237 420,232" fill="var(--accent)"/>
+  <text x="392" y="224" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">是</text>
+  <rect x="420" y="205" width="235" height="54" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="538" y="228" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">② 逐个执行工具</text>
+  <text x="538" y="247" text-anchor="middle" font-size="10" fill="var(--accent-ink)">结果 append 进 messages</text>
+
+  <path d="M538 205 L538 150 L408 150" fill="none" stroke="var(--accent)" stroke-width="2"/>
+  <polygon points="408,145 408,155 400,150" fill="var(--accent)"/>
+  <text x="473" y="168" text-anchor="middle" font-size="10" fill="var(--muted)">↺ 同步：完成才进下一圈</text>
+
+  <line x1="300" y1="272" x2="300" y2="300" stroke="var(--muted)"/>
+  <polygon points="295,294 305,294 300,302" fill="var(--muted)"/>
+  <text x="315" y="290" font-size="11" font-weight="700" fill="var(--muted)">否</text>
+  <rect x="200" y="302" width="200" height="52" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="300" y="325" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">③ 返回 final_response</text>
+  <text x="300" y="343" text-anchor="middle" font-size="10" fill="var(--accent-ink)">模型不再调工具 → 收尾</text>
+</svg>
+<div class="fig-cap"><b>同步主循环（一圈一圈）</b>：顶部闸门把 while 条件钉死——<b>api_call_count &lt; max_iterations（默认 90）</b> 且 <b>iteration_budget.remaining &gt; 0</b>（外加恒为 False 的 _budget_grace_call 宽限钩子）；每圈<b>最开头</b>查 _interrupt_requested，可随时被新消息截停。循环体只做三件事：调模型 → 有 tool_calls 就逐个执行、把结果 append 回 messages 再回到 ①；没有就返回 final_response。完全<b>同步、可中断、可预测</b>。</div>
+</div>
+
 <p>把这颗心脏的影响往外铺，你会发现它是整个系统的<strong>发动机</strong>，后面章节讲的机制几乎都<strong>挂在这条循环上</strong>跑。工具分派（第 8 章）就是循环体里「有 <span class="mono">tool_calls</span> 就执行」那一步；委派子代理（第 13 章）是某个工具在循环里启动一台<strong>自带独立循环</strong>的小发动机；上下文压缩（第 15 章）是循环在调模型前做的 preflight 检查——<span class="mono">conversation_loop.py</span> 里就藏着 <span class="mono">compression_attempts</span> 的重试计数；而轨迹记录（第 22 章）落盘的，正是这条循环每圈往 <span class="mono">messages</span> 追加的那串消息。换句话说，看懂这一章等于拿到了读后面所有章节的<strong>骨架</strong>：它们都是在往这台同步发动机上挂零件，而不是另起炉灶。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 320" role="img" aria-label="这台同步循环就是发动机：工具分派、委派、压缩、轨迹记录都挂在它身上">
+  <rect x="30" y="22" width="215" height="60" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="137" y="46" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">🛠 工具分派 · 第 8 章</text>
+  <text x="137" y="66" text-anchor="middle" font-size="10" fill="var(--muted)">循环体「有 tool_calls 就执行」</text>
+
+  <rect x="435" y="22" width="215" height="60" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="542" y="46" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">🤝 委派子代理 · 第 13 章</text>
+  <text x="542" y="66" text-anchor="middle" font-size="10" fill="var(--muted)">工具内点火，自带独立循环</text>
+
+  <rect x="30" y="238" width="215" height="60" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="137" y="262" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">🗜 上下文压缩 · 第 15 章</text>
+  <text x="137" y="282" text-anchor="middle" font-size="10" fill="var(--muted)">调模型前的 preflight 检查</text>
+
+  <rect x="435" y="238" width="215" height="60" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="542" y="262" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">🧾 轨迹记录 · 第 22 章</text>
+  <text x="542" y="282" text-anchor="middle" font-size="10" fill="var(--muted)">每圈 append 的消息落盘</text>
+
+  <line x1="245" y1="82" x2="235" y2="126" stroke="var(--line)" stroke-width="2"/>
+  <line x1="435" y1="82" x2="445" y2="126" stroke="var(--line)" stroke-width="2"/>
+  <line x1="245" y1="238" x2="235" y2="194" stroke="var(--line)" stroke-width="2"/>
+  <line x1="435" y1="238" x2="445" y2="194" stroke="var(--line)" stroke-width="2"/>
+
+  <rect x="235" y="126" width="210" height="68" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="153" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">Agent 核心循环</text>
+  <text x="340" y="172" text-anchor="middle" font-size="10" fill="var(--accent-ink)">while 同步循环 · conversation_loop.py:589</text>
+  <text x="340" y="187" text-anchor="middle" font-size="10" fill="var(--accent-ink)">⚙ 整个系统的发动机</text>
+</svg>
+<div class="fig-cap"><b>这台同步循环就是发动机</b>：后面几乎每章的机制都<b>挂在它身上</b>——工具分派（8）是循环体里「有 tool_calls 就执行」那一步；委派子代理（13）是某个工具在循环内点火、启动一台<b>自带独立循环</b>的小发动机；上下文压缩（15）是调模型前的 preflight；轨迹记录（22）落盘的正是每圈往 messages 追加的消息。读懂这一圈，就拿到了读后面所有章节的<b>骨架</b>。</div>
+</div>
 
 <h2>迭代预算：防止失控长循环</h2>
 <p>第 5 步每调一次模型，就先 <span class="mono">consume()</span> 一格预算。这把"门闩"由 <span class="mono">IterationBudget</span> 把守（<span class="mono">agent/iteration_budget.py</span>），<strong>线程安全</strong>，parent 默认上限 <strong>90</strong>、每个 subagent 独立默认 <strong>50</strong>。它的两个核心方法短得能背下来：</p>
@@ -1888,7 +1962,81 @@ From the moment you hit enter to the moment Hermes hands back a final answer, wh
   <div class="lane"><div class="lane-label">three exits</div><div class="tslot">hit max_iterations</div><div class="tslot">budget exhausted</div><div class="tslot now">user interrupt</div></div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 366" role="img" aria-label="The synchronous main loop: a while gate on top, then call model, check tool_calls, run tools and append, or return final_response">
+  <rect x="30" y="14" width="620" height="48" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="340" y="35" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">Top gate · while (api_call_count &lt; max_iterations, default 90) and (iteration_budget.remaining &gt; 0)</text>
+  <text x="340" y="52" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">＋ _budget_grace_call: a reserved one-shot grace hook (core default False, never fires in normal chat)</text>
+
+  <line x1="300" y1="62" x2="300" y2="72" stroke="var(--muted)"/>
+  <polygon points="295,64 305,64 300,72" fill="var(--muted)"/>
+  <rect x="110" y="72" width="380" height="30" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="300" y="91" text-anchor="middle" font-size="11" fill="var(--red)">Start of every turn: if _interrupt_requested → break (user can halt any time)</text>
+
+  <line x1="300" y1="102" x2="300" y2="116" stroke="var(--muted)"/>
+  <polygon points="295,108 305,108 300,116" fill="var(--muted)"/>
+  <rect x="200" y="116" width="200" height="54" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="300" y="140" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">① call the model</text>
+  <text x="300" y="158" text-anchor="middle" font-size="10" fill="var(--muted)">client…create(messages, tools)</text>
+
+  <line x1="300" y1="170" x2="300" y2="190" stroke="var(--muted)"/>
+  <polygon points="295,184 305,184 300,192" fill="var(--muted)"/>
+  <polygon points="300,192 374,232 300,272 226,232" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="300" y="236" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">tool_calls?</text>
+
+  <line x1="374" y1="232" x2="418" y2="232" stroke="var(--accent)" stroke-width="2"/>
+  <polygon points="412,227 412,237 420,232" fill="var(--accent)"/>
+  <text x="392" y="224" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">yes</text>
+  <rect x="420" y="205" width="235" height="54" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="538" y="228" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">② run each tool</text>
+  <text x="538" y="247" text-anchor="middle" font-size="10" fill="var(--accent-ink)">append results into messages</text>
+
+  <path d="M538 205 L538 150 L408 150" fill="none" stroke="var(--accent)" stroke-width="2"/>
+  <polygon points="408,145 408,155 400,150" fill="var(--accent)"/>
+  <text x="473" y="168" text-anchor="middle" font-size="10" fill="var(--muted)">↺ synchronous: finish before next turn</text>
+
+  <line x1="300" y1="272" x2="300" y2="300" stroke="var(--muted)"/>
+  <polygon points="295,294 305,294 300,302" fill="var(--muted)"/>
+  <text x="315" y="290" font-size="11" font-weight="700" fill="var(--muted)">no</text>
+  <rect x="200" y="302" width="200" height="52" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="300" y="325" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">③ return final_response</text>
+  <text x="300" y="343" text-anchor="middle" font-size="10" fill="var(--accent-ink)">model stops calling tools → finish</text>
+</svg>
+<div class="fig-cap"><b>The synchronous main loop (turn by turn)</b>: the top gate pins the while condition — <b>api_call_count &lt; max_iterations (default 90)</b> and <b>iteration_budget.remaining &gt; 0</b> (plus the always-False _budget_grace_call hook); the <b>start</b> of every turn checks _interrupt_requested, so a new message can halt it any time. The body does just three things: call the model → if tool_calls, run each and append the results back into messages, then loop to ①; otherwise return final_response. Fully <b>synchronous, interruptible, predictable</b>.</div>
+</div>
+
 <p>Spread this heart's influence outward and you find it is the system's <strong>engine</strong> — nearly every mechanism later chapters cover <strong>hangs off this loop</strong>. Tool dispatch (Ch. 8) is the "if tool_calls, execute" step in the body; subagent delegation (Ch. 13) is a tool that, from inside the loop, fires up a small engine <strong>with its own independent loop</strong>; context compression (Ch. 15) is a preflight check the loop runs before calling the model — <span class="mono">conversation_loop.py</span> even hides a <span class="mono">compression_attempts</span> retry counter; and trajectory recording (Ch. 22) persists exactly the message string this loop appends to <span class="mono">messages</span> each turn. In other words, understanding this chapter hands you the <strong>skeleton</strong> for reading all the rest: they bolt parts onto this synchronous engine rather than build a new one.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 320" role="img" aria-label="This synchronous loop is the engine: tool dispatch, delegation, compression and trajectory recording all hang off it">
+  <rect x="30" y="22" width="215" height="60" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="137" y="46" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">🛠 tool dispatch · Ch. 8</text>
+  <text x="137" y="66" text-anchor="middle" font-size="10" fill="var(--muted)">the "if tool_calls, execute" step</text>
+
+  <rect x="435" y="22" width="215" height="60" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="542" y="46" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">🤝 delegation · Ch. 13</text>
+  <text x="542" y="66" text-anchor="middle" font-size="10" fill="var(--muted)">a tool fires its own inner loop</text>
+
+  <rect x="30" y="238" width="215" height="60" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="137" y="262" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">🗜 compression · Ch. 15</text>
+  <text x="137" y="282" text-anchor="middle" font-size="10" fill="var(--muted)">a preflight before calling the model</text>
+
+  <rect x="435" y="238" width="215" height="60" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="542" y="262" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">🧾 trajectory · Ch. 22</text>
+  <text x="542" y="282" text-anchor="middle" font-size="10" fill="var(--muted)">persists what each turn appends</text>
+
+  <line x1="245" y1="82" x2="235" y2="126" stroke="var(--line)" stroke-width="2"/>
+  <line x1="435" y1="82" x2="445" y2="126" stroke="var(--line)" stroke-width="2"/>
+  <line x1="245" y1="238" x2="235" y2="194" stroke="var(--line)" stroke-width="2"/>
+  <line x1="435" y1="238" x2="445" y2="194" stroke="var(--line)" stroke-width="2"/>
+
+  <rect x="235" y="126" width="210" height="68" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="153" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">the agent core loop</text>
+  <text x="340" y="172" text-anchor="middle" font-size="10" fill="var(--accent-ink)">synchronous while · conversation_loop.py:589</text>
+  <text x="340" y="187" text-anchor="middle" font-size="10" fill="var(--accent-ink)">⚙ the engine of the whole system</text>
+</svg>
+<div class="fig-cap"><b>This synchronous loop is the engine</b>: nearly every later mechanism <b>hangs off it</b> — tool dispatch (8) is the "if tool_calls, execute" step in the body; subagent delegation (13) is a tool that, from inside the loop, fires up a small engine with its <b>own independent loop</b>; context compression (15) is a preflight before the model call; trajectory recording (22) persists exactly the messages each turn appends to messages. Read this one loop and you hold the <b>skeleton</b> for every chapter that follows.</div>
+</div>
 
 <h2>Iteration budget: stopping runaway loops</h2>
 <p>At step 5, every model call first <span class="mono">consume()</span>s one unit of budget. That latch is guarded by <span class="mono">IterationBudget</span> (<span class="mono">agent/iteration_budget.py</span>), <strong>thread-safe</strong>, with a parent cap of <strong>90</strong> by default and each subagent capped independently at <strong>50</strong>. Its two core methods are short enough to memorize:</p>
