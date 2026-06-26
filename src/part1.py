@@ -910,6 +910,40 @@ Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cro
 
 <p>这笔成本还会同时撞上前面两章讲过的两个约束。一是<strong>注意力稀释</strong>（第 2 章）：工具 schema 越长，关键指令越容易「中间遗失」，模型的工具选择质量随之下降——这正是第 3 章 F「工具越多越不准」的来源。二是<strong>缓存前缀变长</strong>（第 6 章）：工具列表是系统前缀的一部分，臃肿的腰会让每一轮要缓存、要比对的前缀更大、更贵。所以这里的「克制」不是工程洁癖，而是在替用户省下被<strong>反复乘加</strong>的真金白银——这也呼应了 AGENTS.md 把「核心 agent + model 工具 schema」单列为「每一笔加法都按每次调用付费」的那一处。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 472" role="img" aria-label="窄腰沙漏模型：能力在两端扩张，都要穿过中间的核心窄腰">
+  <text x="340" y="20" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--blue)">▲ 边缘 · 能力奔放扩张</text>
+  <g font-size="12.5" text-anchor="middle">
+    <rect x="35"  y="34" width="145" height="40" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="107" y="59" fill="var(--ink)">技能 skills</text>
+    <rect x="190" y="34" width="145" height="40" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="262" y="59" fill="var(--ink)">插件 plugins</text>
+    <rect x="345" y="34" width="145" height="40" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="417" y="59" fill="var(--ink)">MCP server</text>
+    <rect x="500" y="34" width="145" height="40" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="572" y="59" fill="var(--ink)">平台适配器</text>
+  </g>
+  <path d="M35 90 L645 90 L408 196 L272 196 Z" fill="var(--panel-2)" stroke="var(--line)" stroke-linejoin="round"/>
+  <rect x="262" y="196" width="156" height="62" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="221" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent-ink)">核心 · 窄腰</text>
+  <text x="340" y="242" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">_HERMES_CORE_TOOLS</text>
+  <path d="M272 258 L408 258 L645 364 L35 364 Z" fill="var(--panel-2)" stroke="var(--line)" stroke-linejoin="round"/>
+  <g font-size="12.5" text-anchor="middle">
+    <rect x="35"  y="380" width="145" height="40" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="107" y="405" fill="var(--ink)">local</text>
+    <rect x="190" y="380" width="145" height="40" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="262" y="405" fill="var(--ink)">docker</text>
+    <rect x="345" y="380" width="145" height="40" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="417" y="405" fill="var(--ink)">ssh</text>
+    <rect x="500" y="380" width="145" height="40" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="572" y="405" fill="var(--ink)">modal / daytona</text>
+  </g>
+  <text x="340" y="446" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--muted)">▼ 边缘 · 多种执行后端</text>
+  <text x="652" y="230" text-anchor="end" font-size="10.5" fill="var(--faint)" transform="rotate(90 652 230)">× 每一次 API 调用</text>
+</svg>
+<div class="fig-cap"><b>窄腰沙漏</b>：能力在两端尽情扩张（技能/插件/MCP/平台 ↔ local/docker/ssh/modal），但都必须穿过中间那道<b>窄腰</b>——少数核心工具。每个核心工具的 schema 都搭在<b>每一次 API 调用</b>上，所以加一个核心工具＝向每个用户的每一轮收税。这就是「边缘奔放、腰部保守」。</div>
+</div>
+
 <h2>新能力往哪放：Footprint Ladder</h2>
 <p>Hermes 用一个<strong>阶梯</strong>决定“新能力放哪一层”——<strong>选能正确解决问题的、footprint 最小的那一级</strong>：</p>
 <div class="vflow">
@@ -1046,6 +1080,40 @@ very high.</p>
 <p>Why is a core tool called the <strong>"most expensive exception"</strong> rather than "one more or less, who cares"? AGENTS.md digs to the root: <strong>every model tool we add is sent on every API call</strong>. That means a core tool's cost isn't "added once" — it's <strong>multiplied across every turn you'll ever have</strong>. This is the narrow waist's <strong>economic basis</strong>: the core is the narrow channel every capability must pass through, so anything that occupies it is a <strong>global, permanent</strong> cost. A broken edge plugin hurts one user; one redundant core tool taxes <strong>every user on every turn</strong>.</p>
 
 <p>That cost also collides with the two constraints from earlier chapters at once. First, <strong>attention dilution</strong> (ch.2): the longer the tool schema, the easier it is for key instructions to get "lost in the middle," degrading the model's tool selection — which is exactly where ch.3's F "more tools = worse accuracy" comes from. Second, a <strong>longer cache prefix</strong> (ch.6): the tool list is part of the system prefix, so a bloated waist makes the prefix that must be cached and compared each turn bigger and pricier. So this "discipline" isn't engineering fastidiousness — it's saving the user real money that would otherwise be <strong>multiplied and added up</strong> — echoing AGENTS.md singling out "the core agent + the model tool schema" as "the one place where every addition is paid for on every API call."</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 472" role="img" aria-label="Narrow-waist hourglass: capability expands at both ends, all passing through the core waist">
+  <text x="340" y="20" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--blue)">▲ Edges · capability expands freely</text>
+  <g font-size="12.5" text-anchor="middle">
+    <rect x="35"  y="34" width="145" height="40" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="107" y="59" fill="var(--ink)">skills</text>
+    <rect x="190" y="34" width="145" height="40" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="262" y="59" fill="var(--ink)">plugins</text>
+    <rect x="345" y="34" width="145" height="40" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="417" y="59" fill="var(--ink)">MCP server</text>
+    <rect x="500" y="34" width="145" height="40" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="572" y="59" fill="var(--ink)">platform adapters</text>
+  </g>
+  <path d="M35 90 L645 90 L408 196 L272 196 Z" fill="var(--panel-2)" stroke="var(--line)" stroke-linejoin="round"/>
+  <rect x="262" y="196" width="156" height="62" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="221" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent-ink)">core · narrow waist</text>
+  <text x="340" y="242" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">_HERMES_CORE_TOOLS</text>
+  <path d="M272 258 L408 258 L645 364 L35 364 Z" fill="var(--panel-2)" stroke="var(--line)" stroke-linejoin="round"/>
+  <g font-size="12.5" text-anchor="middle">
+    <rect x="35"  y="380" width="145" height="40" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="107" y="405" fill="var(--ink)">local</text>
+    <rect x="190" y="380" width="145" height="40" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="262" y="405" fill="var(--ink)">docker</text>
+    <rect x="345" y="380" width="145" height="40" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="417" y="405" fill="var(--ink)">ssh</text>
+    <rect x="500" y="380" width="145" height="40" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="572" y="405" fill="var(--ink)">modal / daytona</text>
+  </g>
+  <text x="340" y="446" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--muted)">▼ Edges · multiple execution backends</text>
+  <text x="652" y="230" text-anchor="end" font-size="10.5" fill="var(--faint)" transform="rotate(90 652 230)">× every API call</text>
+</svg>
+<div class="fig-cap"><b>The narrow-waist hourglass</b>: capability expands freely at both ends (skills/plugins/MCP/platforms ↔ local/docker/ssh/modal), but everything must pass through the <b>narrow waist</b> in the middle — the few core tools. Every core tool's schema rides on <b>every single API call</b>, so adding one core tool taxes every user on every turn. That's "expansive at the edges, conservative at the waist."</div>
+</div>
 
 <h2>Where new capability goes: the Footprint Ladder</h2>
 <p>Hermes uses a <strong>ladder</strong> to decide which rung a new capability lands on — <strong>pick the smallest-footprint

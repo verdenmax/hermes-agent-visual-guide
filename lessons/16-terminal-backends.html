@@ -312,6 +312,22 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   padding: 0 .5rem; text-align: center; white-space: nowrap; }
 .trace svg { max-width: 100%; height: auto; display: block; margin: .3rem auto; }
 @media (max-width: 640px) { .trace .stations { flex-direction: column; } .trace .op { padding: .3rem 0; } }
+/* 🖼️ standalone SVG figure (hand-drawn diagrams, colors via CSS vars for light/dark) */
+.figure { margin: 1.4rem 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.1rem .7rem; box-shadow: var(--shadow); }
+.figure svg { width: 100%; height: auto; display: block; font-family: var(--ui, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif); }
+.figure .fig-cap { font-size: .8rem; color: var(--muted); margin-top: .55rem; text-align: center; line-height: 1.5; }
+.figure .fig-cap b { color: var(--accent-ink); font-weight: 700; }
+.figure .svg-t { fill: var(--ink); }
+.figure .svg-m { fill: var(--muted); }
+.figure .svg-f { fill: var(--faint); }
+.figure .svg-line { stroke: var(--line); }
+.figure .svg-acc { fill: var(--accent); }
+.figure .svg-accs { fill: var(--accent-soft); }
+.figure .svg-blue { fill: var(--blue); }
+.figure .svg-blues { fill: var(--blue-soft); }
+.figure .svg-panel { fill: var(--panel); }
+.figure .svg-panel2 { fill: var(--panel-2); }
 /* 🧩 collaboration-mechanism card */
 .card.collab { border-left: 4px solid var(--blue); background: var(--blue-soft); }
 .card.collab .tag { color: var(--blue); }

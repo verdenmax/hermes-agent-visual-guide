@@ -39,7 +39,7 @@ PRE_INLINE = ("span", "strong", "b", "em", "u", "a")
 SOFT_EXEMPT = {"25-design-principles-glossary.html"}
 
 # Visual-block density (soft): containers that count as a "diagram/table".
-DIAGRAM_CLASSES = ("layers", "vflow", "flow", "cols", "cellgroup", "timeline", "trace")
+DIAGRAM_CLASSES = ("layers", "vflow", "flow", "cols", "cellgroup", "timeline", "trace", "figure")
 MIN_DIAGRAMS = 6  # per lesson, counting BOTH languages (>= 3 per language)
 MIN_CJK = 3000  # per-lesson zh CJK chars (soft floor; authoring target ~4000+)
 

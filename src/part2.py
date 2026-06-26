@@ -104,6 +104,29 @@ LESSON_06 = {
 
 <p>为什么是 <strong>~75%</strong> 而不是 100%？因为缓存命中并非<strong>免费</strong>，而是<strong>打折</strong>：命中的前缀按<strong>缓存读取价</strong>计费（通常只有原价的一小部分），没命中的新增尾部仍按全价算。一次多轮长对话里，绝大部分 token 都是<strong>反复重发的固定前缀</strong>——它们每轮都吃折扣价，于是整段对话的输入成本被压到约四分之一。这也解释了<strong>反过来的代价</strong>：你只要在会话中途动了前缀一个字节，本轮起前缀<strong>整体丢失缓存、按全价重算一遍</strong>，对话越往后这一下越贵。所以“别碰前缀”不是洁癖，是真金白银。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 300" role="img" aria-label="缓存命中与缓存击穿的成本对比">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--accent-ink)">✅ 前缀逐字节不变 → 缓存命中</text>
+  <rect x="20"  y="38" width="430" height="48" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="235" y="67" text-anchor="middle" font-size="12.5" fill="var(--accent-ink)">system + 历史前缀（稳定）</text>
+  <rect x="458" y="38" width="202" height="48" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="559" y="67" text-anchor="middle" font-size="12.5" fill="var(--blue)">最近 3 条新增</text>
+  <text x="235" y="104" text-anchor="middle" font-size="11" fill="var(--muted)">按缓存读取价 ≈ 原价 1/10</text>
+  <text x="559" y="104" text-anchor="middle" font-size="11" fill="var(--muted)">全价</text>
+  <text x="668" y="64" text-anchor="end" font-size="11.5" font-weight="700" fill="var(--muted)">本轮成本 ↓</text>
+
+  <text x="20" y="168" font-size="13.5" font-weight="700" fill="var(--red)">❌ 会话中途改了前缀一个字节 → 缓存击穿</text>
+  <rect x="20"  y="180" width="165" height="48" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="102" y="209" text-anchor="middle" font-size="12.5" fill="var(--accent-ink)">命中</text>
+  <text x="197" y="211" text-anchor="middle" font-size="18" font-weight="700" fill="var(--red)">✕</text>
+  <rect x="210" y="180" width="450" height="48" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="435" y="209" text-anchor="middle" font-size="12.5" fill="var(--red)">从改动点起整体失效，按全价重算一遍</text>
+  <text x="435" y="248" text-anchor="middle" font-size="11" fill="var(--muted)">对话越往后，这一下越贵</text>
+  <text x="668" y="206" text-anchor="end" font-size="11.5" font-weight="700" fill="var(--red)">本轮成本 ↑↑</text>
+</svg>
+<div class="fig-cap"><b>缓存的两副面孔</b>：前缀逐字节不变时，长长的固定前缀按<b>缓存读取价</b>（约原价 1/10）计费，整段对话成本压到约四分之一；可一旦在会话中途动了前缀<b>一个字节</b>，从那点起的缓存<b>整体丢失、按全价重算</b>——这就是「每个会话的 prompt 缓存神圣不可侵犯」的代价根源。</div>
+</div>
+
 <h2>守住前缀的最后一道闸：注入前扫描</h2>
 <p>三层里的 <span class="mono">context</span> 会把 <strong>AGENTS.md / .cursorrules</strong> 等文件原样塞进 system prompt。问题是：这些文件可能来自 clone 来的仓库，里面可能藏着 <strong>prompt 注入</strong>。一旦进了 system prompt，它就成了<strong>会话期固定前缀的一部分</strong>，用户<strong>没有任何机会</strong>拦截。所以 Hermes 在注入<strong>之前</strong>先扫一遍：</p>
 
@@ -285,6 +308,29 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
 </div>
 
 <p>Why <strong>~75%</strong> and not 100%? Because a cache hit isn't <strong>free</strong> — it's a <strong>discount</strong>: the hit prefix bills at the <strong>cache-read price</strong> (usually a small fraction of full price), while the new tail still bills at full price. In a long multi-turn conversation the vast majority of tokens are the <strong>same fixed prefix resent every turn</strong> — each turn they pay the discounted price, so the conversation's input cost collapses to roughly a quarter. This also explains the <strong>reverse cost</strong>: change a single byte of the prefix mid-session and, from that turn on, the <strong>whole prefix loses the cache and is recomputed at full price</strong> — the deeper the conversation, the more that one slip hurts. “Don't touch the prefix” isn't fussiness; it's real money.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 300" role="img" aria-label="Cost comparison of cache hit versus cache miss">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--accent-ink)">✅ Prefix byte-identical → cache hit</text>
+  <rect x="20"  y="38" width="430" height="48" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="235" y="67" text-anchor="middle" font-size="12.5" fill="var(--accent-ink)">system + history prefix (stable)</text>
+  <rect x="458" y="38" width="202" height="48" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="559" y="67" text-anchor="middle" font-size="12.5" fill="var(--blue)">last 3 new</text>
+  <text x="235" y="104" text-anchor="middle" font-size="11" fill="var(--muted)">billed at cache-read ≈ 1/10 of full</text>
+  <text x="559" y="104" text-anchor="middle" font-size="11" fill="var(--muted)">full price</text>
+  <text x="668" y="64" text-anchor="end" font-size="11.5" font-weight="700" fill="var(--muted)">turn cost ↓</text>
+
+  <text x="20" y="168" font-size="13.5" font-weight="700" fill="var(--red)">❌ One byte of the prefix changed mid-session → cache miss</text>
+  <rect x="20"  y="180" width="165" height="48" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="102" y="209" text-anchor="middle" font-size="12.5" fill="var(--accent-ink)">hit</text>
+  <text x="197" y="211" text-anchor="middle" font-size="18" font-weight="700" fill="var(--red)">✕</text>
+  <rect x="210" y="180" width="450" height="48" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="435" y="209" text-anchor="middle" font-size="12.5" fill="var(--red)">everything from the edit point is recomputed at full price</text>
+  <text x="435" y="248" text-anchor="middle" font-size="11" fill="var(--muted)">the deeper the conversation, the costlier this slip</text>
+  <text x="668" y="206" text-anchor="end" font-size="11.5" font-weight="700" fill="var(--red)">turn cost ↑↑</text>
+</svg>
+<div class="fig-cap"><b>The two faces of caching</b>: when the prefix is byte-identical, the long fixed prefix bills at the <b>cache-read price</b> (~1/10 of full), collapsing the whole conversation to roughly a quarter of the cost; but change <b>a single byte</b> mid-session and the cache from that point is <b>lost and recomputed at full price</b> — the root reason why "per-conversation prompt caching is sacred."</div>
+</div>
 
 <h2>The last gate guarding the prefix: scan before injection</h2>
 <p>The <span class="mono">context</span> tier drops files like <strong>AGENTS.md / .cursorrules</strong> verbatim into the system prompt. The catch: these files may come from a cloned repo and may hide a <strong>prompt injection</strong>. Once it enters the system prompt it becomes <strong>part of the session's fixed prefix</strong>, and the user has <strong>no chance whatsoever</strong> to intercept. So Hermes scans <strong>before</strong> injecting:</p>
