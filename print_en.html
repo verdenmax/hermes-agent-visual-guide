@@ -6258,7 +6258,7 @@ dependencies = [
   </ol>
   <details class="accordion" open>
     <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
-    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. Safety decisions are nailed to deterministic code: detect_dangerous_command uses a regex blacklist (12 HARDLINE + 47 DANGEROUS), not the model — the model gets injected/hallucinates. The distinction: /yolo can clear DANGEROUS, but HARDLINE red lines (rm delete-root, mkfs, dd raw-disk, fork bomb) block unconditionally, before the yolo check.</div></div></div>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. Safety decisions are nailed to deterministic code: detect_dangerous_command uses a regex blacklist (12 HARDLINE + 61 DANGEROUS), not the model — the model gets injected/hallucinates. The distinction: /yolo can clear DANGEROUS, but HARDLINE red lines (rm delete-root, mkfs, dd raw-disk, fork bomb) block unconditionally, before the yolo check.</div></div></div>
   </details>
 </div>
 <div class="quiz">

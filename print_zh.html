@@ -6192,7 +6192,7 @@ dependencies = [
   </ol>
   <details class="accordion" open>
     <summary>看答案与解析 <span class="hint">点击展开</span></summary>
-    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。安全决策钉在确定性代码上:detect_dangerous_command 用正则黑名单(12 HARDLINE + 47 DANGEROUS),不问模型——模型会被注入/幻觉骗。区别在:/yolo 能放行 DANGEROUS,但 HARDLINE 红线(rm 删根、mkfs、dd 写裸盘、fork 炸弹)在 yolo 检查之前就无条件拦截。</div></div></div>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。安全决策钉在确定性代码上:detect_dangerous_command 用正则黑名单(12 HARDLINE + 61 DANGEROUS),不问模型——模型会被注入/幻觉骗。区别在:/yolo 能放行 DANGEROUS,但 HARDLINE 红线(rm 删根、mkfs、dd 写裸盘、fork 炸弹)在 yolo 检查之前就无条件拦截。</div></div></div>
   </details>
 </div>
 <div class="quiz">

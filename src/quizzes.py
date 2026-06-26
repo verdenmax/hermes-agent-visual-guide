@@ -835,8 +835,8 @@ QUIZZES = {
                     {"zh": "不检查,直接跑", "en": "Don't check, just run"},
                 ],
                 "answer": 1,
-                "why": {"zh": "安全决策钉在确定性代码上:detect_dangerous_command 用正则黑名单(12 HARDLINE + 47 DANGEROUS),不问模型——模型会被注入/幻觉骗。区别在:/yolo 能放行 DANGEROUS,但 HARDLINE 红线(rm 删根、mkfs、dd 写裸盘、fork 炸弹)在 yolo 检查之前就无条件拦截。",
-                        "en": "Safety decisions are nailed to deterministic code: detect_dangerous_command uses a regex blacklist (12 HARDLINE + 47 DANGEROUS), not the model — the model gets injected/hallucinates. The distinction: /yolo can clear DANGEROUS, but HARDLINE red lines (rm delete-root, mkfs, dd raw-disk, fork bomb) block unconditionally, before the yolo check."},
+                "why": {"zh": "安全决策钉在确定性代码上:detect_dangerous_command 用正则黑名单(12 HARDLINE + 61 DANGEROUS),不问模型——模型会被注入/幻觉骗。区别在:/yolo 能放行 DANGEROUS,但 HARDLINE 红线(rm 删根、mkfs、dd 写裸盘、fork 炸弹)在 yolo 检查之前就无条件拦截。",
+                        "en": "Safety decisions are nailed to deterministic code: detect_dangerous_command uses a regex blacklist (12 HARDLINE + 61 DANGEROUS), not the model — the model gets injected/hallucinates. The distinction: /yolo can clear DANGEROUS, but HARDLINE red lines (rm delete-root, mkfs, dd raw-disk, fork bomb) block unconditionally, before the yolo check."},
             },
             {
                 "q": {"zh": "派给子代理干活时,为什么先从它手里拿掉 delegate_task/memory/send_message 等工具?",
