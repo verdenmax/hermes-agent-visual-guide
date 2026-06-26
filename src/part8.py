@@ -375,8 +375,8 @@ while True:                       # 永不退出的自主回路
   <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ 循环顶部三道闸门，任一不满足即停</text>
   <rect x="360" y="62" width="300" height="278" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
   <rect x="372" y="100" width="276" height="52" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
-  <text x="510" y="122" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">while ( count &lt; 90　AND　budget &gt; 0</text>
-  <text x="510" y="140" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">AND　not interrupt ) — 三道闸门</text>
+  <text x="510" y="122" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">while ( count &lt; 90 AND budget &gt; 0</text>
+  <text x="510" y="140" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">AND not interrupt ) — 三道闸门</text>
   <rect x="430" y="168" width="160" height="42" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="510" y="194" text-anchor="middle" font-size="12" fill="var(--blue)">call_model()</text>
   <text x="510" y="227" text-anchor="middle" font-size="14" fill="var(--muted)">↓</text>
@@ -877,7 +877,7 @@ while True:                       # an autonomy loop that never exits
   <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">B1 · unbounded self-loop vs a gate at the loop top that stops on top-out</text>
   <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ while True · no ceiling at all</text>
   <rect x="20" y="62" width="300" height="278" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
-  <text x="170" y="90" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">while True:　(no gate)</text>
+  <text x="170" y="90" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">while True: (no gate)</text>
   <rect x="90" y="104" width="160" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="170" y="132" text-anchor="middle" font-size="12" fill="var(--blue)">call_model()</text>
   <text x="170" y="173" text-anchor="middle" font-size="15" fill="var(--muted)">↓</text>
@@ -890,8 +890,8 @@ while True:                       # an autonomy loop that never exits
   <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ three gates at the loop top, stop if any fails</text>
   <rect x="360" y="62" width="300" height="278" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
   <rect x="372" y="100" width="276" height="52" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
-  <text x="510" y="122" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">while ( count &lt; 90　AND　budget &gt; 0</text>
-  <text x="510" y="140" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">AND　not interrupt ) — three gates</text>
+  <text x="510" y="122" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">while ( count &lt; 90 AND budget &gt; 0</text>
+  <text x="510" y="140" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">AND not interrupt ) — three gates</text>
   <rect x="430" y="168" width="160" height="42" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="510" y="194" text-anchor="middle" font-size="12" fill="var(--blue)">call_model()</text>
   <text x="510" y="227" text-anchor="middle" font-size="14" fill="var(--muted)">↓</text>
