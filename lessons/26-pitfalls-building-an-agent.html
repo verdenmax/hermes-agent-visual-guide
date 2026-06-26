@@ -1285,6 +1285,268 @@ def detect_dangerous_command(command: str) -&gt; tuple:  # :657 → 61 条，命
 </svg>
 <div class="fig-cap"><b>D4 · 最小权限</b>：父代理握有全套工具，但 leaf 子代理在创建时就被 <span class="mono">DELEGATE_BLOCKED_TOOLS</span>（delegate_tool.py:45）<strong>剥掉</strong> <span class="mono">delegate_task</span> / <span class="mono">clarify</span> / <span class="mono">memory</span> / <span class="mono">send_message</span> / <span class="mono">execute_code</span> 这 5 个高危工具，只留干活必需的那几样——能力不在场，跨平台副作用、写坏记忆、递归失控就都无从发生。</div>
 </div>
+
+<h2>E 类 · 实践工程坑</h2>
+<p>前四类压在缓存、自主循环、工具足迹、安全这几条「设计线」上；第五类不太一样——它们大多<strong>不在哪条 LLM 缺陷的正中央</strong>，而是你<strong>真自己动手做一个 agent</strong> 时，那些指南没专门讲透、却<strong>几乎人人都会撞</strong>的工程现场：账单悄悄爆掉、流式中断没接好、并发把会话搞「假死」、测试天天变红、provider 一抖整条龙停摆、以为后台任务会续跑、一个工具失败把整个 agent 拖垮。它们更靠近第七缺陷 <strong>G·运维脆弱</strong>，根子是「把 demo 跑通」和「把系统跑稳」之间那段<strong>没人替你写好</strong>的距离。先用 7 张陷阱卡速览，再挑最容易反复踩的 <strong>E1 / E3 / E4</strong> 拆成深度块。</p>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E1</span><span class="pit-title">账单悄悄爆掉，长对话尤其贵</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">账单<strong>远超预期</strong>，<strong>长对话</strong>尤其贵。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">三个来源叠加——<strong>不监控 token</strong> + <strong>不用 prompt 缓存</strong> + <strong>长对话不压缩</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v">缓存前缀复用（省 <strong>~75%</strong>）+ 到阈值 <strong>0.50</strong> 压缩 + 每轮监控 token。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch6 / ch15</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E2</span><span class="pit-title">流式没接好中断 / 污染 reasoning</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">流式输出时<strong>无法及时中断</strong>，reasoning <strong>丢失或污染前缀</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">流式与<strong>中断 / reasoning 存储</strong>的交互没处理好。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v">流式回调里<strong>查中断标志</strong>；reasoning 单独存 <span class="mono">assistant_msg["reasoning"]</span>、下一轮 <span class="mono">pop</span>，<strong>不进可缓存前缀</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch5 / ch7</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E3</span><span class="pit-title">并发竞态把会话搞「假死」</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">agent 跑着跑着，新消息永远卡在<strong>「正在处理」</strong>、<strong>会话假死</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">多消息 / 多会话<strong>并发竞态</strong>——旧任务清理 race、<strong>stale-busy 锁</strong>没自愈。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v"><strong>owner-task 映射</strong> + 进门先 <span class="mono">_heal_stale_session_lock</span>；控制命令<strong>旁路两道守卫</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch18</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E4</span><span class="pit-title">写了快照测试，天天在「修测试」</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">模型 / config 一更新，<strong>CI 测试就红一片</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">写了<strong>快照测试</strong>（断言具体模型名 / 版本号）而非<strong>不变量</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v">锁<strong>行为不变量</strong>（如「每个 catalog 条目都有 context length」），让测试<strong>随系统演化</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch22</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E5</span><span class="pit-title">provider 一抖整条龙停摆 / 方言解析失败</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">provider 挂了<strong>整个 agent 停摆</strong>；换个模型工具调用就<strong>解析失败</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">没做 <strong>fallback</strong>、忽略<strong>模型方言差异</strong>（reasoning 字段 / 工具调用格式 / 空响应补空格）。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v"><span class="mono">fallback_model</span> + 按 provider <strong>方言适配</strong>（<span class="mono">api_mode</span>、客户端替换）。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch7</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E6</span><span class="pit-title">以为后台任务能跨重启续跑</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">进程重启后<strong>后台任务全没了</strong>，以为会续跑。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">误以为 <strong>background 委派能持久</strong>（其实是<strong>进程内</strong>，detach 也只到会话结束）。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v">要跨重启用 <span class="mono">cron</span> 或 <span class="mono">terminal(background=True, notify_on_complete=True)</span>。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch13 / ch21</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E7</span><span class="pit-title">一个工具失败，整个 agent 崩 / 卡死</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">某个工具失败 / API 超时，<strong>整个 agent 崩溃或卡死</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">工具错误<strong>没优雅降级</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v">dispatch <strong>统一包裹异常</strong>成 tool 消息回灌、<strong>超时有界</strong>、失败可重试（批量则 <span class="mono">resume</span>）。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch8 / ch22</span></div>
+</div>
+
+<h3>🔬 E1 · 成本失控的三个来源叠加，逐个堵</h3>
+<p>账单失控很少是「模型本身太贵」这一个原因，而是<strong>三个来源同时在漏</strong>、叠起来滚成雪球。<strong>① 不监控 token</strong>：每轮花了多少 token 不进任何计数，钱花在哪都不知道，自然谈不上优化。<strong>② 不用 prompt 缓存</strong>：长对话每轮把整段前缀按全价重发，而 Hermes 让<strong>逐字节不变的前缀</strong>命中缓存读取价、复用上一轮——能省 <strong>~75%</strong>（缓存为什么神圣见 ch6，A 类四张卡讲的就是别把它击穿）。<strong>③ 长对话不压缩</strong>：上下文一路堆到爆，token 越堆越多、每轮越来越贵；Hermes 到使用率 <strong>0.50</strong> 阈值才触发一次压缩（ch15），把历史折叠成摘要、把每轮的「底盘成本」压回去。三者任意一个单独出现都还能扛，<strong>叠加</strong>起来就是长对话账单雪球——所以对策也三管齐下：<strong>每轮监控 token + 复用缓存前缀 + 到阈值压缩</strong>，缺一个雪球都停不下来。这一类以机制为主，没有「一行就错」的反例代码，但漏掉任意一环都会在账单上现形。</p>
+<div class="figure">
+<svg viewBox="0 0 680 400" role="img" aria-label="E1：成本失控三来源叠成一个越滚越大的成本雪球，不监控 token 加 不用缓存本可省约 75 百分比 加 长对话不压缩阈值 0.50，三层叠加把账单推高、长对话尤其贵">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">E1 · 三个来源叠加 → 成本雪球越滚越大</text>
+  <text x="20" y="48" font-size="11" fill="var(--muted)">不监控 token + 不用缓存 + 不压缩，三者叠加 = 长对话账单雪球</text>
+  <rect x="24" y="62" width="200" height="46" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="124" y="82" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">① 不监控 token</text>
+  <text x="124" y="100" text-anchor="middle" font-size="10.5" fill="var(--amber)">不知道钱花在哪</text>
+  <rect x="240" y="62" width="200" height="46" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="340" y="82" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">② 不用 prompt 缓存</text>
+  <text x="340" y="100" text-anchor="middle" font-size="10.5" fill="var(--amber)">前缀本可省 ~75%</text>
+  <rect x="456" y="62" width="200" height="46" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="556" y="82" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">③ 长对话不压缩</text>
+  <text x="556" y="100" text-anchor="middle" font-size="10.5" fill="var(--amber)">到阈值 0.50 才压</text>
+  <text x="124" y="128" text-anchor="middle" font-size="14" fill="var(--muted)">↓</text>
+  <text x="340" y="128" text-anchor="middle" font-size="14" fill="var(--muted)">↓</text>
+  <text x="556" y="128" text-anchor="middle" font-size="14" fill="var(--muted)">↓</text>
+  <line x1="60" y1="150" x2="640" y2="344" stroke="var(--line)" stroke-width="2" stroke-dasharray="5 5"/>
+  <circle cx="130" cy="176" r="20" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="130" y="180" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">1×</text>
+  <text x="130" y="214" text-anchor="middle" font-size="10.5" fill="var(--muted)">起始成本</text>
+  <text x="232" y="222" text-anchor="middle" font-size="15" fill="var(--red)">→</text>
+  <circle cx="340" cy="236" r="34" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="340" y="233" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">叠加</text>
+  <text x="340" y="250" text-anchor="middle" font-size="10.5" fill="var(--amber)">缓存全 miss</text>
+  <text x="432" y="284" text-anchor="middle" font-size="15" fill="var(--red)">→</text>
+  <circle cx="560" cy="306" r="54" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2.5"/>
+  <text x="560" y="300" text-anchor="middle" font-size="13" font-weight="800" fill="var(--red)">$$$</text>
+  <text x="560" y="318" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">账单雪球</text>
+  <text x="340" y="388" text-anchor="middle" font-size="10.5" fill="var(--muted)">每多一层、每多一轮，雪球都更大 —— 长对话尤其贵</text>
+</svg>
+<div class="fig-cap"><b>E1 · 成本雪球</b>：不监控 token、不用缓存（本可省 <strong>~75%</strong>）、不压缩（阈值 <strong>0.50</strong>）三层叠加，账单随对话越滚越大、长对话尤其贵；对策三管齐下，缺一个雪球都停不下来。</div>
+</div>
+
+<h3>🔬 E3 · 并发竞态把会话搞假死，进门先自愈</h3>
+<p>同一会话短时间来了多条消息、或多个会话并发时，最隐蔽的 bug 不在 agent 循环里，而在<strong>会话生命周期的清理时机</strong>上。剧本是这样：旧任务跑完，在 <span class="mono">finally</span> 里清理自己的会话守卫，恰好和新任务<strong>刚装上守卫</strong>这一步并发相撞——旧任务的清理把新任务刚写进 <span class="mono">_active_sessions[key]</span> 的守卫<strong>误删了</strong>。结果是一个 <strong>split-brain</strong>：adapter 以为这个会话<strong>还活着、有人在处理</strong>，实际上没有任何任务在跑，于是后来的每条消息都被挡在「正在处理…」后面、会话<strong>永久假死</strong>，只能重启网关。Hermes 的修法不是把锁越加越重，而是<strong>进门先自愈</strong>：每条消息进来先跑一遍 <span class="mono">_heal_stale_session_lock</span>——如果 owner task 已经退出，就判定这把锁是 stale、当场清掉，再落到正常 dispatch；配合 <strong>owner-task 映射</strong>把「谁是当前 owner」记清楚，死锁就没机会留存。这正是源码里 <strong>issue #11016</strong> 分析点名要的那道 on-entry safety net。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ 正例 · gateway/platforms/base.py:4024</span></div><pre>def _heal_stale_session_lock(self, session_key: str) -&gt; bool:
+    &quot;&quot;&quot;Clear a stale session lock if the owner task is already gone.
+
+    Returns True if a stale lock was healed.  Returns False if there is
+    no lock, or the owner task is still alive (the normal busy case).
+
+    This is the on-entry safety net sidbin's issue #11016 analysis calls
+    for: without it, a split-brain — adapter still thinks the session is
+    active, but nothing is actually processing — traps the chat in
+    infinite "Interrupting current task..." until the gateway is
+    restarted.
+    &quot;&quot;&quot;</pre></div>
+<div class="figure">
+<svg viewBox="0 0 680 400" role="img" aria-label="E3：stale-busy 竞态时序，旧任务 finally 清理 与 新任务 装守卫 在同一刻并发 race，守卫被误删导致会话卡 busy 的 split-brain，下条消息进门先跑 _heal_stale_session_lock 自愈放行">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">E3 · stale-busy 竞态：守卫被误删 → 会话假死 → 进门自愈</text>
+  <text x="20" y="46" font-size="11" fill="var(--muted)">时间 → 两条并发路径在同一刻相撞</text>
+  <text x="22" y="92" font-size="11" font-weight="700" fill="var(--muted)">旧任务</text>
+  <text x="22" y="156" font-size="11" font-weight="700" fill="var(--muted)">新任务</text>
+  <line x1="80" y1="96" x2="650" y2="96" stroke="var(--line)"/>
+  <line x1="80" y1="160" x2="650" y2="160" stroke="var(--line)"/>
+  <rect x="96" y="74" width="150" height="34" rx="8" fill="var(--panel-2)" stroke="var(--blue)"/>
+  <text x="171" y="95" text-anchor="middle" font-size="10.5" fill="var(--blue)">运行中</text>
+  <rect x="372" y="72" width="190" height="38" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="467" y="88" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">finally 清理（race）</text>
+  <text x="467" y="103" text-anchor="middle" font-size="10.5" fill="var(--red)">误删别人刚装的守卫</text>
+  <rect x="246" y="138" width="120" height="34" rx="8" fill="var(--panel-2)" stroke="var(--blue)"/>
+  <text x="306" y="159" text-anchor="middle" font-size="10.5" fill="var(--blue)">新消息到达</text>
+  <rect x="388" y="136" width="174" height="38" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="475" y="152" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--blue)">装守卫</text>
+  <text x="475" y="167" text-anchor="middle" font-size="10.5" fill="var(--blue)">_active_sessions[key]</text>
+  <text x="468" y="128" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✗ race</text>
+  <line x1="467" y1="110" x2="475" y2="136" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <text x="340" y="196" text-anchor="middle" font-size="15" fill="var(--red)">↓</text>
+  <rect x="60" y="206" width="560" height="48" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="340" y="226" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">守卫被误删 → 会话永久卡 busy（split-brain）</text>
+  <text x="340" y="244" text-anchor="middle" font-size="10.5" fill="var(--red)">adapter 以为会话还活着，其实没人在处理 → 一直「正在处理…」</text>
+  <text x="340" y="276" text-anchor="middle" font-size="15" fill="var(--accent)">↓</text>
+  <rect x="60" y="286" width="560" height="92" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="340" y="308" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">对策 · 进门先自愈：下条消息一到</text>
+  <text x="340" y="330" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">先跑 _heal_stale_session_lock：owner task 已退出 → 判 stale → 清死锁</text>
+  <text x="340" y="352" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">再用 owner-task 映射记下新 owner → 落到正常 dispatch、放行</text>
+  <text x="340" y="370" text-anchor="middle" font-size="10.5" fill="var(--muted)">gateway/platforms/base.py:4024 · 进门 on-entry safety net（issue #11016）</text>
+</svg>
+<div class="fig-cap"><b>E3 · 进门自愈</b>：旧任务 <span class="mono">finally</span> 清理与新任务装守卫并发相撞、守卫被误删 → 会话卡 busy 的 <strong>split-brain</strong>（adapter 以为还活着、其实没人处理）；下条消息进门先跑 <span class="mono">_heal_stale_session_lock</span>，owner task 已退出即判 stale、清死锁放行（base.py:4024 · issue #11016）。</div>
+</div>
+
+<h3>🔬 E4 · 别写快照测试，锁行为不变量</h3>
+<p>给 catalog、config、provider 列表写测试时，最顺手的写法是把<strong>当前的具体值</strong>抄进断言：「<span class="mono">gemini-2.5-pro</span> 一定在 models 里」「<span class="mono">_config_version</span> 一定等于 21」「huggingface 一定有 8 个模型」。这类<strong>快照测试（change-detector）</strong>没有任何行为覆盖——它唯一保证的，是<strong>每次例行更新（加个模型、升个版本）都把 CI 弄红</strong>、逼你回去「修测试」，纯属内耗。正确做法是断言<strong>两份数据之间该有的关系（不变量）</strong>，而不是冻结某个会变的值：与其锁死「正好有这 8 个模型」，不如断言「catalog 至少有一个条目」「<strong>每个 catalog 条目都必须有对应的 context-length</strong>」。前者随便加删模型就红，后者只要 plumbing 还对就一直绿——测试<strong>随系统演化</strong>，而不是拖着系统。判据很简单：<strong>读起来像「当前数据快照」的删掉，读起来像「两份数据的契约」的留下。</strong></p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ change-detector（别这么写）</span></div><pre># 快照测试：锁死一个会变的具体值
+assert "gemini-2.5-pro" in _PROVIDER_MODELS["gemini"]   # 模型一改名就红
+assert DEFAULT_CONFIG["_config_version"] == 21           # config 一升版就红
+assert len(_PROVIDER_MODELS["huggingface"]) == 8         # 加一个 provider 就红
+# 没有任何行为覆盖，只是逼着每次例行更新都去「修测试」</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ AGENTS.md:1340 · 锁不变量</span></div><pre># 不变量：断言两份数据之间该有的关系（随系统演化恒真）
+assert "gemini" in _PROVIDER_MODELS
+assert len(_PROVIDER_MODELS["gemini"]) &gt;= 1              # catalog 至少有一个条目
+# 每个 catalog 条目都必须有 context-length
+for m in _PROVIDER_MODELS["huggingface"]:
+    assert m.lower() in DEFAULT_CONTEXT_LENGTHS_LOWER
+# 加 / 删模型都不会红 —— 关系没变</pre></div>
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="E4：左边快照测试断言具体模型名 gemini-2.5-pro，模型周更后 CI 红一片；右边不变量测试断言 catalog 至少有一个且每条都有 context length，随系统演化恒绿">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">E4 · 快照测试（随数据变红）vs 不变量测试（随系统演化恒绿）</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ 快照测试 · 锁具体值</text>
+  <rect x="20" y="62" width="300" height="276" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <rect x="40" y="80" width="260" height="56" rx="8" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="52" y="101" font-size="10.5" fill="var(--red)">assert "gemini-2.5-pro" in models</text>
+  <text x="52" y="119" font-size="10.5" fill="var(--red)">assert _config_version == 21</text>
+  <text x="52" y="132" font-size="10.5" fill="var(--muted)">断言一个会变的具体值</text>
+  <text x="170" y="158" text-anchor="middle" font-size="14" fill="var(--red)">↓</text>
+  <rect x="40" y="166" width="260" height="34" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="170" y="187" text-anchor="middle" font-size="10.5" fill="var(--amber)">模型周更：改了名 / 加了条目</text>
+  <text x="170" y="222" text-anchor="middle" font-size="14" fill="var(--red)">↓</text>
+  <rect x="40" y="232" width="260" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="170" y="252" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">CI 红一片</text>
+  <text x="170" y="269" text-anchor="middle" font-size="10.5" fill="var(--red)">天天在「修测试」</text>
+  <text x="170" y="304" text-anchor="middle" font-size="10.5" fill="var(--muted)">没有行为覆盖，只是变更探测器</text>
+  <text x="170" y="324" text-anchor="middle" font-size="10.5" fill="var(--muted)">断言越具体，越易碎</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ 不变量测试 · 锁关系</text>
+  <rect x="360" y="62" width="300" height="276" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="380" y="80" width="260" height="56" rx="8" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="392" y="101" font-size="10.5" fill="var(--accent-ink)">assert len(models) &gt;= 1</text>
+  <text x="392" y="119" font-size="10.5" fill="var(--accent-ink)">for m: m.lower() in CONTEXT_LEN</text>
+  <text x="392" y="132" font-size="10.5" fill="var(--muted)">断言两份数据该有的关系</text>
+  <text x="510" y="158" text-anchor="middle" font-size="14" fill="var(--accent)">↓</text>
+  <rect x="380" y="166" width="260" height="34" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="510" y="187" text-anchor="middle" font-size="10.5" fill="var(--amber)">模型周更：改了名 / 加了条目</text>
+  <text x="510" y="222" text-anchor="middle" font-size="14" fill="var(--accent)">↓</text>
+  <rect x="380" y="232" width="260" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="510" y="252" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">CI 恒绿</text>
+  <text x="510" y="269" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">关系不变，测试随系统演化</text>
+  <text x="510" y="304" text-anchor="middle" font-size="10.5" fill="var(--muted)">锁行为不变量，不锁具体值</text>
+  <text x="510" y="324" text-anchor="middle" font-size="10.5" fill="var(--muted)">AGENTS.md:1340 · 每条都有 context length</text>
+</svg>
+<div class="fig-cap"><b>E4 · 不变量 vs 快照</b>：断言 <span class="mono">"gemini-2.5-pro" in models</span> 这种具体值，模型一周更就红、天天「修测试」；改断言「catalog 至少一个条目」「每条都有 context length」这种<strong>不变量</strong>，加删模型都不红——测试随系统演化（AGENTS.md:1340）。</div>
+</div>
+
+<p>剩下三张卡（E5 / E6 / E7）都关于<strong>「别让单点把整条龙拖垮」</strong>，再各配一张图收尾。先看 <strong>E5 · provider 韧性</strong>：把所有请求押在一个 provider 上，它一超时 / 限流 / 5xx，整个 agent 就停摆；而且不同 provider 的<strong>方言</strong>并不一致——reasoning 字段放哪、工具调用怎么序列化、能不能接受空响应，各有各的脾气。对策是两手：一手 <span class="mono">fallback_model</span> 在主 provider 挂掉时自动顶上（run_agent.py:421），一手按 provider <strong>方言适配</strong>（<span class="mono">api_mode</span> 切换、客户端替换、空响应补一个空格）。</p>
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="E5：左边主 provider 超时限流 5xx 挂掉时 fallback_model 自动顶上保持会话可用，右边三种 provider 方言 reasoning 字段 工具调用格式 空响应补空格 各自按 api_mode 适配">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">E5 · provider 挂掉有 fallback · 方言差异要各自适配</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--blue)">① fallback_model 顶上</text>
+  <rect x="20" y="62" width="300" height="276" rx="10" fill="var(--panel-2)" stroke="var(--blue)"/>
+  <rect x="44" y="86" width="252" height="40" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="104" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">主 provider 超时 / 限流 / 5xx</text>
+  <text x="170" y="120" text-anchor="middle" font-size="10.5" fill="var(--red)">单点挂掉 → 整个 agent 停摆？</text>
+  <text x="170" y="148" text-anchor="middle" font-size="14" fill="var(--accent)">↓ 自动切换</text>
+  <rect x="44" y="158" width="252" height="40" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="170" y="176" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">fallback_model 顶上</text>
+  <text x="170" y="192" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">run_agent.py:421</text>
+  <text x="170" y="220" text-anchor="middle" font-size="14" fill="var(--accent)">↓</text>
+  <rect x="44" y="230" width="252" height="40" rx="8" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="170" y="254" text-anchor="middle" font-size="11" fill="var(--accent-ink)">✓ 会话继续 · 不中断</text>
+  <text x="170" y="300" text-anchor="middle" font-size="10.5" fill="var(--muted)">单点故障不再拖垮整个 agent</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--purple)">② provider 方言各自适配</text>
+  <rect x="360" y="62" width="300" height="276" rx="10" fill="var(--panel-2)" stroke="var(--purple)"/>
+  <rect x="380" y="82" width="260" height="46" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="392" y="102" font-size="10.5" font-weight="700" fill="var(--purple)">reasoning 字段位置不同</text>
+  <text x="392" y="119" font-size="10.5" fill="var(--purple)">→ 单独存、下轮 pop，不进前缀</text>
+  <rect x="380" y="138" width="260" height="46" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="392" y="158" font-size="10.5" font-weight="700" fill="var(--purple)">工具调用格式不同</text>
+  <text x="392" y="175" font-size="10.5" fill="var(--purple)">→ 按 api_mode 解析（chat / responses）</text>
+  <rect x="380" y="194" width="260" height="46" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="392" y="214" font-size="10.5" font-weight="700" fill="var(--purple)">空响应不被接受</text>
+  <text x="392" y="231" font-size="10.5" fill="var(--purple)">→ 补一个空格占位再发</text>
+  <text x="510" y="266" text-anchor="middle" font-size="10.5" fill="var(--muted)">方言不抹平 → 偶发解析失败 / 污染前缀</text>
+  <text x="510" y="300" text-anchor="middle" font-size="10.5" fill="var(--muted)">同一套循环，按 provider 各自适配</text>
+</svg>
+<div class="fig-cap"><b>E5 · provider 韧性</b>：主 provider 超时 / 限流 / 5xx 时 <span class="mono">fallback_model</span> 自动顶上、会话不中断；不同 provider 的方言（reasoning 字段、工具调用格式、空响应补空格）按 <span class="mono">api_mode</span> 各自适配——单点故障不再拖垮整个 agent。</div>
+</div>
+
+<p>再看 <strong>E6 · 持久性的错觉</strong>：用 <span class="mono">delegate_task(background=true)</span> 把活儿丢到后台，很容易默认它会一直跑下去；但 background 委派只是<strong>脱离当前这一轮</strong>，本质仍是<strong>进程内</strong>的——进程一重启它就没了，连 <span class="mono">detach</span> 也只把命撑到<strong>会话结束</strong>。真要让任务<strong>跨重启存活</strong>，得用真正落地的机制：<span class="mono">cron</span> 定时任务（ch21），或 <span class="mono">terminal(background=True, notify_on_complete=True)</span> 把进程交给系统、完成时再回调通知。把「脱离本轮」误当成「持久化」，正是后台任务凭空消失的根因。</p>
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="E6：左边 background 委派只脱离当前轮仍是进程内，进程重启或会话结束就丢；右边要跨重启存活得用 cron 或 terminal background notify_on_complete 把进程交给系统">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">E6 · 「脱离本轮」≠「持久化」：跨重启要用对机制</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ 以为 background 能持久</text>
+  <rect x="20" y="62" width="300" height="276" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <rect x="44" y="84" width="252" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="170" y="105" text-anchor="middle" font-size="10.5" fill="var(--blue)">delegate_task(background=true)</text>
+  <text x="170" y="138" text-anchor="middle" font-size="14" fill="var(--muted)">↓</text>
+  <rect x="44" y="148" width="252" height="38" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="170" y="166" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--amber)">脱离当前轮，但仍是进程内</text>
+  <text x="170" y="181" text-anchor="middle" font-size="10.5" fill="var(--amber)">detach 也只撑到会话结束</text>
+  <text x="170" y="206" text-anchor="middle" font-size="14" fill="var(--red)">↓</text>
+  <rect x="44" y="216" width="252" height="34" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="170" y="237" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">进程重启 / 会话结束</text>
+  <text x="170" y="276" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">✗ 后台任务凭空消失</text>
+  <text x="170" y="300" text-anchor="middle" font-size="10.5" fill="var(--muted)">以为会续跑，其实早没了</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ 跨重启用持久机制</text>
+  <rect x="360" y="62" width="300" height="276" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="380" y="84" width="260" height="50" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="392" y="104" font-size="10.5" font-weight="700" fill="var(--accent-ink)">cron 定时任务（ch21）</text>
+  <text x="392" y="122" font-size="10.5" fill="var(--accent-ink)">系统调度 · 进程重启也续跑</text>
+  <rect x="380" y="144" width="260" height="50" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="392" y="164" font-size="10.5" font-weight="700" fill="var(--accent-ink)">terminal(background=True,</text>
+  <text x="392" y="182" font-size="10.5" fill="var(--accent-ink)">notify_on_complete=True)</text>
+  <rect x="380" y="204" width="260" height="40" rx="8" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="510" y="228" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">交给系统 · 完成时回调通知</text>
+  <text x="510" y="268" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">✓ 跨进程重启存活</text>
+  <text x="510" y="300" text-anchor="middle" font-size="10.5" fill="var(--muted)">durable，而不是进程内挂靠</text>
+</svg>
+<div class="fig-cap"><b>E6 · 持久性的错觉</b>：<span class="mono">background</span> 委派只脱离当前轮、仍是进程内，进程重启即丢、<span class="mono">detach</span> 也只到会话结束；要跨重启存活得用 <span class="mono">cron</span> 或 <span class="mono">terminal(background, notify_on_complete)</span> 把进程交给系统。</div>
+</div>
+
+<p><strong>E7 · 优雅降级</strong>收尾这一章最朴素也最关键的一条：任何单个工具都可能失败、任何一次 API 都可能超时，而这<strong>绝不该让整个 agent 崩溃或卡死</strong>。Hermes 的兜底是结构性的——<span class="mono">handle_function_call</span> 的 dispatch 把工具异常<strong>统一包成一条 tool 消息</strong>回灌给模型（ch8 的统一契约、C3 那张图就是这件事），超时<strong>有界</strong>、失败<strong>可重试</strong>，批量任务还能 <span class="mono">resume</span> 续跑（ch22）。一个工具失败只是模型下一步要处理的<strong>一条普通结果</strong>，而不是把整条会话带走的致命错误——这正是「<strong>把脆弱关进局部</strong>」这条贯穿全书的纪律，在工具层的最后一次落地。</p>
 </div>
   <div class="lang-en">
 <p class="lead">The pitfalls of building an agent are almost all <strong>crime scenes</strong> of the LLM's seven flaws (A–G) showing up in practice. This chapter is the <strong>accident file</strong> of agent engineering: turning pits others fell into rules.</p>
@@ -2201,6 +2463,268 @@ def detect_dangerous_command(command: str) -&gt; tuple:  # :657 → 61 patterns,
 </svg>
 <div class="fig-cap"><b>D4 · least privilege</b>: the parent holds the full toolset, but a leaf subagent is <strong>stripped</strong> at creation by <span class="mono">DELEGATE_BLOCKED_TOOLS</span> (delegate_tool.py:45) of the 5 high-risk tools <span class="mono">delegate_task</span> / <span class="mono">clarify</span> / <span class="mono">memory</span> / <span class="mono">send_message</span> / <span class="mono">execute_code</span>, keeping only what the work needs — a capability that isn't present can't cause cross-platform side effects, corrupt memory, or spawn out of control.</div>
 </div>
+
+<h2>Category E · Practical Engineering</h2>
+<p>The first four classes sit on cache, the autonomy loop, tool footprint, and security — the "design lines." The fifth is different: most of these aren't dead-center on any one LLM flaw, they're the engineering reality you hit when you <strong>actually build an agent yourself</strong> — the things the guides don't spell out but <strong>almost everyone runs into</strong>: the bill quietly explodes, streaming interrupts aren't wired up, concurrency leaves a session "wedged", tests go red every week, one provider hiccup stalls the whole stack, you assume background tasks survive, one tool failure takes the whole agent down. They sit closest to the seventh flaw <strong>G·operational fragility</strong>, rooted in the gap between "make the demo run" and "make the system run reliably" that <strong>nobody writes for you</strong>. Skim the 7 trap cards, then unpack the three you'll trip on most — <strong>E1 / E3 / E4</strong>.</p>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E1</span><span class="pit-title">The bill quietly explodes, long chats most of all</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">The bill is <strong>far over expectation</strong>; <strong>long conversations</strong> are especially expensive.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">Three sources stack — <strong>not monitoring tokens</strong> + <strong>not using prompt caching</strong> + <strong>not compressing long chats</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v">Reuse the cached prefix (saves <strong>~75%</strong>) + compress at the <strong>0.50</strong> threshold + monitor tokens each turn.</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch6 / ch15</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E2</span><span class="pit-title">Streaming breaks interrupts / pollutes reasoning</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">During streaming you <strong>can't interrupt in time</strong>; reasoning is <strong>lost or pollutes the prefix</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">The interaction of streaming with <strong>interrupts / reasoning storage</strong> isn't handled.</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v">Check the interrupt flag in the stream callback; store reasoning separately in <span class="mono">assistant_msg["reasoning"]</span>, <span class="mono">pop</span> it next turn, <strong>keep it out of the cacheable prefix</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch5 / ch7</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E3</span><span class="pit-title">A concurrency race wedges the session</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">The agent runs a while, then new messages stick forever at <strong>"processing"</strong> — the session is <strong>wedged</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">Multi-message / multi-session <strong>concurrency race</strong> — the old task's cleanup races, the <strong>stale-busy lock</strong> never self-heals.</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v"><strong>owner-task map</strong> + run <span class="mono">_heal_stale_session_lock</span> on entry; control commands <strong>bypass both guards</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch18</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E4</span><span class="pit-title">You wrote snapshot tests, now you "fix tests" daily</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">A model / config update turns <strong>CI red across the board</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">You wrote <strong>snapshot tests</strong> (asserting specific model names / version numbers) instead of <strong>invariants</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v">Lock <strong>behavior invariants</strong> (e.g. "every catalog entry has a context length") so tests <strong>evolve with the system</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch22</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E5</span><span class="pit-title">One provider hiccup stalls everything / dialect parse fails</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">A provider goes down and <strong>the whole agent stalls</strong>; switch models and tool calls <strong>fail to parse</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">No <strong>fallback</strong>, ignoring <strong>model dialect differences</strong> (reasoning field / tool-call format / empty-response padding).</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v"><span class="mono">fallback_model</span> + adapt per provider <strong>dialect</strong> (<span class="mono">api_mode</span>, client swap).</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch7</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E6</span><span class="pit-title">Assuming background tasks survive a restart</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">After a process restart the <strong>background tasks are all gone</strong> — you assumed they'd keep running.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">Assuming <strong>background delegation is durable</strong> (it's actually <strong>in-process</strong>; even detach only lasts until session end).</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v">For cross-restart work use <span class="mono">cron</span> or <span class="mono">terminal(background=True, notify_on_complete=True)</span>.</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch13 / ch21</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">E7</span><span class="pit-title">One tool fails, the whole agent crashes / hangs</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">A tool fails / an API times out and <strong>the whole agent crashes or hangs</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">Tool errors <strong>aren't degraded gracefully</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v">Dispatch <strong>wraps exceptions uniformly</strong> into a tool message fed back, <strong>bounded timeouts</strong>, retryable failures (batch then <span class="mono">resume</span>).</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch8 / ch22</span></div>
+</div>
+
+<h3>🔬 E1 · Cost blowups are three sources stacking — plug each one</h3>
+<p>A runaway bill is rarely "the model is just expensive"; it's <strong>three leaks at once</strong> rolling into a snowball. <strong>① Not monitoring tokens</strong>: how many tokens each turn spends goes into no counter, so you don't even know where the money goes — you can't optimize what you can't see. <strong>② Not using prompt caching</strong>: a long chat re-sends the whole prefix at full price every turn, whereas Hermes lets a <strong>byte-stable prefix</strong> hit the cache read price and reuse the prior turn — saving <strong>~75%</strong> (why cache is sacred is ch6; the four A cards are all about not shattering it). <strong>③ Not compressing long chats</strong>: context piles up to the brim, tokens grow, every turn gets pricier; Hermes only triggers one compression at the <strong>0.50</strong> usage threshold (ch15), folding history into a summary and pushing the per-turn floor cost back down. Any one alone is survivable; <strong>stacked</strong> they become the long-chat bill snowball — so the fix is three-pronged too: <strong>monitor tokens each turn + reuse the cached prefix + compress at threshold</strong>; drop any one and the snowball won't stop. This class is mechanism-first — no "one wrong line" example, but missing any link shows up on the bill.</p>
+<div class="figure">
+<svg viewBox="0 0 680 400" role="img" aria-label="E1: cost blowup is three sources stacking into a growing cost snowball, not monitoring tokens plus not caching could save about 75 percent plus not compressing long chats threshold 0.50, three layers push the bill up especially on long chats">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">E1 · three sources stack → the cost snowball grows</text>
+  <text x="20" y="48" font-size="11" fill="var(--muted)">no token monitoring + no caching + no compression = the long-chat bill snowball</text>
+  <rect x="24" y="62" width="200" height="46" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="124" y="82" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">① no token monitoring</text>
+  <text x="124" y="100" text-anchor="middle" font-size="10.5" fill="var(--amber)">don't know where money goes</text>
+  <rect x="240" y="62" width="200" height="46" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="340" y="82" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">② no prompt caching</text>
+  <text x="340" y="100" text-anchor="middle" font-size="10.5" fill="var(--amber)">prefix could save ~75%</text>
+  <rect x="456" y="62" width="200" height="46" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="556" y="82" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">③ no compression</text>
+  <text x="556" y="100" text-anchor="middle" font-size="10.5" fill="var(--amber)">only at the 0.50 threshold</text>
+  <text x="124" y="128" text-anchor="middle" font-size="14" fill="var(--muted)">↓</text>
+  <text x="340" y="128" text-anchor="middle" font-size="14" fill="var(--muted)">↓</text>
+  <text x="556" y="128" text-anchor="middle" font-size="14" fill="var(--muted)">↓</text>
+  <line x1="60" y1="150" x2="640" y2="344" stroke="var(--line)" stroke-width="2" stroke-dasharray="5 5"/>
+  <circle cx="130" cy="176" r="20" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="130" y="180" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">1×</text>
+  <text x="130" y="214" text-anchor="middle" font-size="10.5" fill="var(--muted)">base cost</text>
+  <text x="232" y="222" text-anchor="middle" font-size="15" fill="var(--red)">→</text>
+  <circle cx="340" cy="236" r="34" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="340" y="233" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">stacked</text>
+  <text x="340" y="250" text-anchor="middle" font-size="10.5" fill="var(--amber)">cache all miss</text>
+  <text x="432" y="284" text-anchor="middle" font-size="15" fill="var(--red)">→</text>
+  <circle cx="560" cy="306" r="54" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2.5"/>
+  <text x="560" y="300" text-anchor="middle" font-size="13" font-weight="800" fill="var(--red)">$$$</text>
+  <text x="560" y="318" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">bill snowball</text>
+  <text x="340" y="388" text-anchor="middle" font-size="10.5" fill="var(--muted)">each extra layer and turn grows the ball — long chats most of all</text>
+</svg>
+<div class="fig-cap"><b>E1 · cost snowball</b>: no token monitoring, no caching (could save <strong>~75%</strong>), no compression (threshold <strong>0.50</strong>) — three layers stack and the bill grows with the chat, long chats most of all; the fix is three-pronged, drop one and the snowball won't stop.</div>
+</div>
+
+<h3>🔬 E3 · A concurrency race wedges the session — self-heal on entry</h3>
+<p>When one session gets several messages in quick succession, or multiple sessions run concurrently, the sneakiest bug isn't in the agent loop — it's in the <strong>timing of session-lifecycle cleanup</strong>. The script: the old task finishes and, in its <span class="mono">finally</span>, clears its own session guard — racing exactly against the new task <strong>having just installed its guard</strong>; the old task's cleanup <strong>deletes by mistake</strong> the guard the new task just wrote into <span class="mono">_active_sessions[key]</span>. The result is a <strong>split-brain</strong>: the adapter thinks the session is <strong>still alive and being processed</strong>, but nothing is actually running, so every later message is held behind "processing..." and the session is <strong>wedged for good</strong> until the gateway restarts. Hermes' fix isn't piling on locks — it's to <strong>self-heal on entry</strong>: each incoming message first runs <span class="mono">_heal_stale_session_lock</span> — if the owner task has already exited, the lock is deemed stale, cleared on the spot, and it falls through to normal dispatch; paired with an <strong>owner-task map</strong> that records who the current owner is, the deadlock never lingers. This is exactly the on-entry safety net the source's <strong>issue #11016</strong> analysis calls for.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ right · gateway/platforms/base.py:4024</span></div><pre>def _heal_stale_session_lock(self, session_key: str) -&gt; bool:
+    &quot;&quot;&quot;Clear a stale session lock if the owner task is already gone.
+
+    Returns True if a stale lock was healed.  Returns False if there is
+    no lock, or the owner task is still alive (the normal busy case).
+
+    This is the on-entry safety net sidbin's issue #11016 analysis calls
+    for: without it, a split-brain — adapter still thinks the session is
+    active, but nothing is actually processing — traps the chat in
+    infinite "Interrupting current task..." until the gateway is
+    restarted.
+    &quot;&quot;&quot;</pre></div>
+<div class="figure">
+<svg viewBox="0 0 680 400" role="img" aria-label="E3: stale-busy race timeline, the old task finally cleanup and the new task installing its guard race at the same instant, the guard is deleted by mistake leaving the session wedged busy in a split-brain, the next message runs _heal_stale_session_lock on entry to self-heal and proceed">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">E3 · stale-busy race: guard mis-deleted → wedged → heal on entry</text>
+  <text x="20" y="46" font-size="11" fill="var(--muted)">time → two concurrent paths collide at the same instant</text>
+  <text x="22" y="92" font-size="11" font-weight="700" fill="var(--muted)">old task</text>
+  <text x="22" y="156" font-size="11" font-weight="700" fill="var(--muted)">new task</text>
+  <line x1="80" y1="96" x2="650" y2="96" stroke="var(--line)"/>
+  <line x1="80" y1="160" x2="650" y2="160" stroke="var(--line)"/>
+  <rect x="96" y="74" width="150" height="34" rx="8" fill="var(--panel-2)" stroke="var(--blue)"/>
+  <text x="171" y="95" text-anchor="middle" font-size="10.5" fill="var(--blue)">running</text>
+  <rect x="372" y="72" width="190" height="38" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="467" y="88" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">finally cleanup (race)</text>
+  <text x="467" y="103" text-anchor="middle" font-size="10.5" fill="var(--red)">deletes the guard just set</text>
+  <rect x="246" y="138" width="120" height="34" rx="8" fill="var(--panel-2)" stroke="var(--blue)"/>
+  <text x="306" y="159" text-anchor="middle" font-size="10.5" fill="var(--blue)">new message arrives</text>
+  <rect x="388" y="136" width="174" height="38" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="475" y="152" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--blue)">installs guard</text>
+  <text x="475" y="167" text-anchor="middle" font-size="10.5" fill="var(--blue)">_active_sessions[key]</text>
+  <text x="468" y="128" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✗ race</text>
+  <line x1="467" y1="110" x2="475" y2="136" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <text x="340" y="196" text-anchor="middle" font-size="15" fill="var(--red)">↓</text>
+  <rect x="60" y="206" width="560" height="48" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="340" y="226" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">guard mis-deleted → session wedged busy (split-brain)</text>
+  <text x="340" y="244" text-anchor="middle" font-size="10.5" fill="var(--red)">adapter thinks it's alive, nothing is processing → stuck "processing..."</text>
+  <text x="340" y="276" text-anchor="middle" font-size="15" fill="var(--accent)">↓</text>
+  <rect x="60" y="286" width="560" height="92" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="340" y="308" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">fix · self-heal on entry: as the next message arrives</text>
+  <text x="340" y="330" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">run _heal_stale_session_lock first: owner task exited → deem stale → clear</text>
+  <text x="340" y="352" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">then record the new owner via the owner-task map → fall to normal dispatch</text>
+  <text x="340" y="370" text-anchor="middle" font-size="10.5" fill="var(--muted)">gateway/platforms/base.py:4024 · on-entry safety net (issue #11016)</text>
+</svg>
+<div class="fig-cap"><b>E3 · heal on entry</b>: the old task's <span class="mono">finally</span> cleanup races the new task installing its guard, the guard is mis-deleted → session wedged busy, a <strong>split-brain</strong> (adapter thinks it's alive, nothing processing); the next message runs <span class="mono">_heal_stale_session_lock</span> on entry, deems it stale once the owner task exited, clears it and proceeds (base.py:4024 · issue #11016).</div>
+</div>
+
+<h3>🔬 E4 · Don't write snapshot tests — lock behavior invariants</h3>
+<p>When you test a catalog, config, or provider list, the handiest thing is to copy <strong>today's specific value</strong> into the assertion: "<span class="mono">gemini-2.5-pro</span> must be in models", "<span class="mono">_config_version</span> must equal 21", "huggingface must have 8 models". Such <strong>snapshot tests (change-detectors)</strong> carry no behavioral coverage — the one thing they guarantee is that <strong>every routine update (add a model, bump a version) turns CI red</strong> and drags you back to "fix the test", pure churn. The right move is to assert <strong>the relationship two pieces of data must hold (an invariant)</strong>, not freeze a value that's meant to change: instead of locking "there are exactly these 8 models", assert "the catalog has at least one entry" and "<strong>every catalog entry must have a corresponding context-length</strong>". The former reddens on any add/remove; the latter stays green as long as the plumbing is right — the test <strong>evolves with the system</strong> instead of dragging on it. The rule is simple: <strong>if it reads like a snapshot of current data, delete it; if it reads like a contract between two pieces of data, keep it.</strong></p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ change-detector (don't write this)</span></div><pre># Snapshot test: freezes a specific value that's meant to change
+assert "gemini-2.5-pro" in _PROVIDER_MODELS["gemini"]   # reddens on any rename
+assert DEFAULT_CONFIG["_config_version"] == 21           # reddens on any bump
+assert len(_PROVIDER_MODELS["huggingface"]) == 8         # reddens on any new provider
+# No behavioral coverage — just forces "fix the test" on every routine update</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ AGENTS.md:1340 · lock the invariant</span></div><pre># Invariant: assert the relationship two pieces of data must hold (stays true as the system evolves)
+assert "gemini" in _PROVIDER_MODELS
+assert len(_PROVIDER_MODELS["gemini"]) &gt;= 1              # catalog has at least one entry
+# every catalog entry must have a context-length
+for m in _PROVIDER_MODELS["huggingface"]:
+    assert m.lower() in DEFAULT_CONTEXT_LENGTHS_LOWER
+# add / remove models without reddening — the relationship hasn't changed</pre></div>
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="E4: on the left a snapshot test asserts the specific model name gemini-2.5-pro and weekly model updates turn CI red, on the right an invariant test asserts the catalog has at least one entry and every entry has a context length and stays green as the system evolves">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">E4 · snapshot test (reddens with data) vs invariant test (green as it evolves)</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ snapshot test · locks a value</text>
+  <rect x="20" y="62" width="300" height="276" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <rect x="40" y="80" width="260" height="56" rx="8" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="52" y="101" font-size="10.5" fill="var(--red)">assert "gemini-2.5-pro" in models</text>
+  <text x="52" y="119" font-size="10.5" fill="var(--red)">assert _config_version == 21</text>
+  <text x="52" y="132" font-size="10.5" fill="var(--muted)">asserts a value that will change</text>
+  <text x="170" y="158" text-anchor="middle" font-size="14" fill="var(--red)">↓</text>
+  <rect x="40" y="166" width="260" height="34" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="170" y="187" text-anchor="middle" font-size="10.5" fill="var(--amber)">weekly model update: rename / add entry</text>
+  <text x="170" y="222" text-anchor="middle" font-size="14" fill="var(--red)">↓</text>
+  <rect x="40" y="232" width="260" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="170" y="252" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">CI red across the board</text>
+  <text x="170" y="269" text-anchor="middle" font-size="10.5" fill="var(--red)">you "fix tests" daily</text>
+  <text x="170" y="304" text-anchor="middle" font-size="10.5" fill="var(--muted)">no behavior coverage, just a change-detector</text>
+  <text x="170" y="324" text-anchor="middle" font-size="10.5" fill="var(--muted)">the more specific, the more brittle</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ invariant test · locks a relation</text>
+  <rect x="360" y="62" width="300" height="276" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="380" y="80" width="260" height="56" rx="8" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="392" y="101" font-size="10.5" fill="var(--accent-ink)">assert len(models) &gt;= 1</text>
+  <text x="392" y="119" font-size="10.5" fill="var(--accent-ink)">for m: m.lower() in CONTEXT_LEN</text>
+  <text x="392" y="132" font-size="10.5" fill="var(--muted)">asserts the relation two data must hold</text>
+  <text x="510" y="158" text-anchor="middle" font-size="14" fill="var(--accent)">↓</text>
+  <rect x="380" y="166" width="260" height="34" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="510" y="187" text-anchor="middle" font-size="10.5" fill="var(--amber)">weekly model update: rename / add entry</text>
+  <text x="510" y="222" text-anchor="middle" font-size="14" fill="var(--accent)">↓</text>
+  <rect x="380" y="232" width="260" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="510" y="252" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">CI stays green</text>
+  <text x="510" y="269" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">relation holds, test evolves with the system</text>
+  <text x="510" y="304" text-anchor="middle" font-size="10.5" fill="var(--muted)">lock the invariant, not the value</text>
+  <text x="510" y="324" text-anchor="middle" font-size="10.5" fill="var(--muted)">AGENTS.md:1340 · every entry has a context length</text>
+</svg>
+<div class="fig-cap"><b>E4 · invariant vs snapshot</b>: assert a specific value like <span class="mono">"gemini-2.5-pro" in models</span> and a weekly model update reddens it — you "fix tests" daily; switch to an <strong>invariant</strong> ("catalog has at least one entry", "every entry has a context length") and adds/removes don't redden — the test evolves with the system (AGENTS.md:1340).</div>
+</div>
+
+<p>The last three cards (E5 / E6 / E7) are all about <strong>"don't let a single point drag the whole stack down"</strong>, each capped with a figure. First <strong>E5 · provider resilience</strong>: bet every request on one provider and a single timeout / rate-limit / 5xx stalls the whole agent; worse, providers' <strong>dialects</strong> differ — where the reasoning field lives, how tool calls serialize, whether an empty response is accepted, each has its own quirks. The fix is two-handed: one hand, <span class="mono">fallback_model</span> takes over automatically when the primary provider goes down (run_agent.py:421); the other, adapt per provider <strong>dialect</strong> (<span class="mono">api_mode</span> switch, client swap, pad an empty response with a space).</p>
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="E5: on the left when the primary provider times out rate-limits or 5xx fails fallback_model takes over and keeps the session alive, on the right three provider dialects reasoning field tool-call format empty-response padding each adapted via api_mode">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">E5 · a down provider has a fallback · dialects each need adapting</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--blue)">① fallback_model takes over</text>
+  <rect x="20" y="62" width="300" height="276" rx="10" fill="var(--panel-2)" stroke="var(--blue)"/>
+  <rect x="44" y="86" width="252" height="40" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="104" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">primary: timeout / rate-limit / 5xx</text>
+  <text x="170" y="120" text-anchor="middle" font-size="10.5" fill="var(--red)">single point down → whole agent stalls?</text>
+  <text x="170" y="148" text-anchor="middle" font-size="14" fill="var(--accent)">↓ auto switch</text>
+  <rect x="44" y="158" width="252" height="40" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="170" y="176" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">fallback_model takes over</text>
+  <text x="170" y="192" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">run_agent.py:421</text>
+  <text x="170" y="220" text-anchor="middle" font-size="14" fill="var(--accent)">↓</text>
+  <rect x="44" y="230" width="252" height="40" rx="8" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="170" y="254" text-anchor="middle" font-size="11" fill="var(--accent-ink)">✓ session continues · uninterrupted</text>
+  <text x="170" y="300" text-anchor="middle" font-size="10.5" fill="var(--muted)">a single point no longer drags the agent down</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--purple)">② adapt each provider dialect</text>
+  <rect x="360" y="62" width="300" height="276" rx="10" fill="var(--panel-2)" stroke="var(--purple)"/>
+  <rect x="380" y="82" width="260" height="46" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="392" y="102" font-size="10.5" font-weight="700" fill="var(--purple)">reasoning field sits elsewhere</text>
+  <text x="392" y="119" font-size="10.5" fill="var(--purple)">→ store apart, pop next turn, off-prefix</text>
+  <rect x="380" y="138" width="260" height="46" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="392" y="158" font-size="10.5" font-weight="700" fill="var(--purple)">tool-call format differs</text>
+  <text x="392" y="175" font-size="10.5" fill="var(--purple)">→ parse by api_mode (chat / responses)</text>
+  <rect x="380" y="194" width="260" height="46" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="392" y="214" font-size="10.5" font-weight="700" fill="var(--purple)">empty response rejected</text>
+  <text x="392" y="231" font-size="10.5" fill="var(--purple)">→ pad with a single space, then send</text>
+  <text x="510" y="266" text-anchor="middle" font-size="10.5" fill="var(--muted)">leave a dialect un-smoothed → flaky parse / polluted prefix</text>
+  <text x="510" y="300" text-anchor="middle" font-size="10.5" fill="var(--muted)">one loop, adapted per provider</text>
+</svg>
+<div class="fig-cap"><b>E5 · provider resilience</b>: on a primary timeout / rate-limit / 5xx, <span class="mono">fallback_model</span> takes over and the session isn't interrupted; each provider's dialect (reasoning field, tool-call format, empty-response padding) is adapted per <span class="mono">api_mode</span> — a single point no longer drags the whole agent down.</div>
+</div>
+
+<p>Next, <strong>E6 · the illusion of durability</strong>: hand work off with <span class="mono">delegate_task(background=true)</span> and it's easy to assume it just keeps running; but background delegation only <strong>detaches from the current turn</strong> — it's still <strong>in-process</strong> — so a process restart loses it, and even <span class="mono">detach</span> only keeps it alive <strong>until session end</strong>. To make a task <strong>survive a restart</strong>, use a mechanism that actually lands: a <span class="mono">cron</span> job (ch21), or <span class="mono">terminal(background=True, notify_on_complete=True)</span> which hands the process to the system and calls back on completion. Mistaking "detached from this turn" for "made durable" is exactly why background tasks vanish into thin air.</p>
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="E6: on the left background delegation only detaches from the current turn and is still in-process so a restart or session end loses it, on the right to survive a restart use cron or terminal background notify_on_complete to hand the process to the system">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">E6 · "detached from this turn" ≠ "durable": use the right mechanism</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ assuming background is durable</text>
+  <rect x="20" y="62" width="300" height="276" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <rect x="44" y="84" width="252" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="170" y="105" text-anchor="middle" font-size="10.5" fill="var(--blue)">delegate_task(background=true)</text>
+  <text x="170" y="138" text-anchor="middle" font-size="14" fill="var(--muted)">↓</text>
+  <rect x="44" y="148" width="252" height="38" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="170" y="166" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--amber)">detaches from this turn, still in-process</text>
+  <text x="170" y="181" text-anchor="middle" font-size="10.5" fill="var(--amber)">detach only lasts until session end</text>
+  <text x="170" y="206" text-anchor="middle" font-size="14" fill="var(--red)">↓</text>
+  <rect x="44" y="216" width="252" height="34" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="170" y="237" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">process restart / session end</text>
+  <text x="170" y="276" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">✗ background task vanishes</text>
+  <text x="170" y="300" text-anchor="middle" font-size="10.5" fill="var(--muted)">you thought it kept running; it's long gone</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ durable across restarts</text>
+  <rect x="360" y="62" width="300" height="276" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="380" y="84" width="260" height="50" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="392" y="104" font-size="10.5" font-weight="700" fill="var(--accent-ink)">cron job (ch21)</text>
+  <text x="392" y="122" font-size="10.5" fill="var(--accent-ink)">system-scheduled · survives a restart</text>
+  <rect x="380" y="144" width="260" height="50" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="392" y="164" font-size="10.5" font-weight="700" fill="var(--accent-ink)">terminal(background=True,</text>
+  <text x="392" y="182" font-size="10.5" fill="var(--accent-ink)">notify_on_complete=True)</text>
+  <rect x="380" y="204" width="260" height="40" rx="8" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="510" y="228" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">handed to the system · callback on done</text>
+  <text x="510" y="268" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">✓ survives a process restart</text>
+  <text x="510" y="300" text-anchor="middle" font-size="10.5" fill="var(--muted)">durable, not piggybacked in-process</text>
+</svg>
+<div class="fig-cap"><b>E6 · the illusion of durability</b>: <span class="mono">background</span> delegation only detaches from this turn and stays in-process — a restart loses it, and <span class="mono">detach</span> only lasts until session end; to survive a restart use <span class="mono">cron</span> or <span class="mono">terminal(background, notify_on_complete)</span> to hand the process to the system.</div>
+</div>
+
+<p><strong>E7 · graceful degradation</strong> closes the chapter on its plainest, most important note: any single tool can fail, any one API can time out, and that <strong>must never crash or hang the whole agent</strong>. Hermes' backstop is structural — the dispatch in <span class="mono">handle_function_call</span> wraps a tool exception <strong>uniformly into one tool message</strong> fed back to the model (ch8's uniform contract, the C3 figure is exactly this), timeouts are <strong>bounded</strong>, failures are <strong>retryable</strong>, and batch jobs can <span class="mono">resume</span> (ch22). One tool failing is just <strong>an ordinary result</strong> for the model to handle next, not a fatal error that takes the whole conversation with it — the final landing, at the tool layer, of the book-long discipline of <strong>confining fragility to the local</strong>.</p>
 </div>
   <div class="footnav"><a class="prev" href="25-design-principles.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">设计原则横向收束</span><span class="lang-en">Design principles synthesis</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
 </div>
