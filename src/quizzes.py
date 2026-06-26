@@ -921,7 +921,7 @@ QUIZZES = {
             },
         ],
         "open": [
-            {"zh": "举一个你自己做 agent 最可能踩的坑，写出它的「症状 → 根因（对应哪条 A–G 缺陷）→ 对策」，并说明它对应 hermes 的哪条设计线（缓存神圣 / 自我进化 / 窄腰 / 安全横切）。",
+            {"zh": "举一个你自己做 agent 最可能踩的坑，写出它的「症状 → 根因（对应哪条 A–G 缺陷）→ 对策」，并说明它对应 Hermes 的哪条设计线（缓存神圣 / 自我进化 / 窄腰 / 安全横切）。",
              "en": "Name a pitfall you'd most likely hit building your own agent. Write out its 'symptom → root cause (which A–G flaw) → countermeasure,' and say which Hermes design line it maps to (sacred cache / self-evolution / narrow waist / cross-cutting safety)."},
         ],
     },
