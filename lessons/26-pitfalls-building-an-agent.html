@@ -884,6 +884,220 @@ if result.summary.endswith("done") or "success" in result.summary:
 </svg>
 <div class="fig-cap"><b>B4 · 短回路</b>：一条超长回路里早期小错会被后续每一步放大，越跑越偏；用委派把大任务拆成各自隔离、独立收敛的短回路，误差没有跨回路累积的机会。</div>
 </div>
+
+<h2>C 类 · 工具与扩展</h2>
+<p>前两类坑压在「缓存」和「自主循环」上；第三类发生在你给 agent <strong>加能力</strong>的那一刻。直觉是「需要什么能力，就加一个工具」——但 Hermes 的核心是一条<strong>窄腰</strong>：<em>每加一个核心工具，它的 schema 就随<strong>每一次 API 调用</strong>发给模型</em>，所以「新增核心工具的门槛很高」。什么都往核心塞，代价是三连击：工具一多模型<strong>选错</strong>（C1）、注意力被 schema <strong>稀释</strong>（C2）、返回格式不统一让 dispatch <strong>到处特判、偶发崩溃</strong>（C3）。对策是同一套扩展纪律——<strong>按 Footprint Ladder 把能力往下沉、给工具统一契约</strong>。先用三张陷阱卡速览，再拆 <strong>C1 / C3</strong> 两个 <strong>❌ 反例 → ✅ 正例</strong>。</p>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">C1</span><span class="pit-title">什么能力都加成核心工具</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">工具一多，模型<strong>选错工具</strong>、整体变慢变贵，且<strong>每个用户</strong>都受影响。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">什么能力都加成核心工具（<strong>A·中间遗失</strong> + 缓存线）→ 每个核心工具 schema <strong>每次 API 调用都发</strong>、向每个用户收税。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v">按 <strong>Footprint Ladder</strong> 把能力下沉到 CLI+技能 / service-gated / 插件 / MCP，核心是<strong>最后手段</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch8 / ch23</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">C2</span><span class="pit-title">工具太多 / schema 太大稀释注意力</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">工具选择质量<strong>随工具数下降</strong>、关键工具被忽略。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">工具太多 / schema 太大 → <strong>注意力稀释</strong>（<strong>A·中间遗失</strong>）。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v"><strong>service-gated</strong> 门控按环境裁掉、<strong>tool_search</strong> 折叠非核心工具。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch8</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">C3</span><span class="pit-title">工具 handler 返回格式不统一</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">工具返回<strong>有时 dict 有时 str</strong>、错误处理到处特判、<strong>偶发崩溃</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">handler 返回格式不统一（<strong>E·结构化脆弱</strong>）。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v">统一契约——所有 handler 返回 <strong>JSON string</strong>，dispatch 统一包裹异常。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch8</span></div>
+</div>
+
+<h3>🔬 C1 · 别什么能力都加成核心工具，按 Footprint Ladder 往下沉</h3>
+<p>给 agent 加能力最顺手的写法，就是 <span class="mono">registry.register(name=..., toolset=...)</span> 再开一个核心工具——需要什么就加什么。但 Hermes 的核心是一条<strong>窄腰</strong>，AGENTS.md 说得很直白：<em>「every model tool we add is sent on every API call, so the bar for a new core tool is high」</em>。每个核心工具的 schema 都<strong>随每一次 API 调用发给模型</strong>，等于向<strong>每一个用户、每一轮对话</strong>收一笔「schema 税」；工具越堆越多，模型还会在一堆选项里<strong>选错</strong>、注意力被稀释——这正是 <strong>A·中间遗失</strong> 在工具层的现身。</p>
+<p>正确姿势是先问<strong>足迹</strong>：把能力放在「足迹最小」的那一级。Hermes 的 <strong>Footprint Ladder</strong> 从上到下足迹依次变大——能<strong>扩展现有代码</strong>就别加工具；能用 <strong>CLI 命令 + 技能</strong>表达就走 shell（零工具足迹）；需要结构化参数就做 <strong>service-gated 工具</strong>（只在前置条件配好时才出现，否则零足迹）；再不行才是插件 / MCP；<strong>新增核心工具是最后手段</strong>。这样绝大多数新能力都落在阶梯上半段，核心 schema 始终只有少数几个、对每个用户都便宜。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ 反例 · 你可能会这么写</span></div><pre># 反例：需要什么能力，就开一个核心工具
+registry.register(
+    name="my_tool",
+    toolset="terminal",   # 进了一个 always-on 工具集
+    schema={"name": "my_tool", "description": "...",
+            "parameters": {...}},   # 这份 schema 每次 API 调用都发
+    handler=lambda args, **kw: my_tool(args),
+)
+# 核心工具越加越多 → 每轮都向每个用户发全部 schema、收「schema 税」；模型还会选错</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ 正例 · AGENTS.md:171</span></div><pre>### The Footprint Ladder (new capability decision)
+
+Each rung adds more permanent surface than the one above. Choose the highest
+(least-footprint) rung that correctly solves the problem:
+
+1. **Extend existing code** — the capability is a variation of something that
+   already exists. Zero new surface.
+2. **CLI command + skill** — manages config/state/infra expressible as shell
+   commands. The agent runs `hermes &lt;subcommand&gt;` guided by a skill. Zero
+   model-tool footprint. Default choice for subscriptions, scheduled tasks,
+   service setup. Examples: `hermes webhook`, `hermes cron`, `hermes tools`.
+3. **Service-gated tool (`check_fn`)** — needs structured params/returns AND
+   only appears when a prerequisite is configured. Zero footprint otherwise.
+   Examples: Home Assistant tools (gated on token), memory-provider tools.</pre></div>
+<div class="figure">
+<svg viewBox="0 0 680 400" role="img" aria-label="C1：左边什么都加成核心工具、所有 schema 每次 API 调用都发向每个用户收税，右边按 Footprint Ladder 把能力往下沉、核心只留少数">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">C1 · 什么都加成核心工具 vs 按 Footprint Ladder 把能力往下沉</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ 什么能力都加成核心工具</text>
+  <rect x="20" y="62" width="300" height="300" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <text x="170" y="86" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">每一次 API 调用都携带全部 schema</text>
+  <rect x="40" y="98" width="260" height="150" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <rect x="50" y="108" width="116" height="34" rx="7" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="108" y="130" text-anchor="middle" font-size="10.5" fill="var(--red)">schema · terminal</text>
+  <rect x="174" y="108" width="116" height="34" rx="7" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="232" y="130" text-anchor="middle" font-size="10.5" fill="var(--red)">schema · browser</text>
+  <rect x="50" y="148" width="116" height="34" rx="7" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="108" y="170" text-anchor="middle" font-size="10.5" fill="var(--red)">schema · search</text>
+  <rect x="174" y="148" width="116" height="34" rx="7" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="232" y="170" text-anchor="middle" font-size="10.5" fill="var(--red)">schema · memory</text>
+  <rect x="50" y="188" width="116" height="34" rx="7" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="108" y="210" text-anchor="middle" font-size="10.5" fill="var(--red)">schema · vision</text>
+  <rect x="174" y="188" width="116" height="34" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="232" y="210" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">+ 还有十几个…</text>
+  <text x="170" y="270" text-anchor="middle" font-size="10.5" fill="var(--red)">💰 每轮 × 每个用户都发 = schema 税</text>
+  <text x="170" y="300" text-anchor="middle" font-size="11" fill="var(--muted)">工具一多，模型还要在一堆选项里挑</text>
+  <text x="170" y="332" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">✗ 选错工具 · 变慢变贵 · 人人受税</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ 按 Footprint Ladder 把能力往下沉</text>
+  <rect x="360" y="62" width="300" height="300" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="372" y="92" width="176" height="30" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="380" y="112" font-size="10.5" font-weight="700" fill="var(--red)">6 · 核心工具（最后手段）</text>
+  <rect x="386" y="128" width="176" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="394" y="148" font-size="10.5" font-weight="700" fill="var(--purple)">5 · MCP 服务器</text>
+  <rect x="400" y="164" width="176" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="408" y="184" font-size="10.5" font-weight="700" fill="var(--purple)">4 · 插件 plugin</text>
+  <rect x="414" y="200" width="176" height="30" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="422" y="220" font-size="10.5" font-weight="700" fill="var(--blue)">3 · service-gated 工具</text>
+  <rect x="428" y="236" width="176" height="30" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="436" y="256" font-size="10.5" font-weight="700" fill="var(--blue)">2 · CLI 命令 + 技能</text>
+  <rect x="442" y="272" width="176" height="30" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="450" y="292" font-size="10.5" font-weight="700" fill="var(--accent-ink)">1 · 扩展现有代码（首选）</text>
+  <text x="640" y="104" text-anchor="middle" font-size="10.5" fill="var(--red)">足迹大</text>
+  <line x1="640" y1="112" x2="640" y2="286" stroke="var(--accent)" stroke-width="1.5"/>
+  <polyline points="635,278 640,288 645,278" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="640" y="302" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">足迹小</text>
+  <text x="510" y="334" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">✓ 核心只留少数 schema · 人人便宜</text>
+</svg>
+<div class="fig-cap"><b>C1 · 足迹阶梯</b>：什么能力都加成核心工具，schema 就随<strong>每次 API 调用</strong>发给<strong>每个用户</strong>、还让模型选错；按 Footprint Ladder 把能力往下沉（扩展现有 → CLI+技能 → service-gated → 插件 → MCP），核心只留少数、人人便宜。</div>
+</div>
+
+<p>C2 没有单独的 ❌/✅ 代码块——它的对策是<strong>配置</strong>而非重写：<span class="mono">service-gated</span> 工具在前置条件没配好时<strong>根本不出现</strong>，<span class="mono">tool_search</span> 把非核心工具<strong>折叠</strong>到一次查找之后。两者都让<strong>在场工具数</strong>保持很小、注意力不被稀释。下图对比这两条趋势。</p>
+<div class="figure">
+<svg viewBox="0 0 680 320" role="img" aria-label="C2：左边工具数越多选错率越高、注意力被稀释，右边 service-gated 门控加 tool_search 折叠让在场工具数回落、选对率回升">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">C2 · 工具一多注意力稀释 vs 门控 + 折叠让在场工具数回落</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ 工具越多 → 选错率越高</text>
+  <rect x="20" y="62" width="300" height="238" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <line x1="56" y1="98" x2="56" y2="262" stroke="var(--line)"/>
+  <line x1="56" y1="262" x2="300" y2="262" stroke="var(--line)"/>
+  <text x="24" y="90" font-size="10.5" fill="var(--muted)">选错率↑</text>
+  <text x="296" y="280" text-anchor="end" font-size="10.5" fill="var(--muted)">工具数 →</text>
+  <polyline points="60,254 110,242 156,222 200,188 244,140 296,96" fill="none" stroke="var(--red)" stroke-width="2.5"/>
+  <circle cx="60" cy="254" r="3.5" fill="var(--red)"/>
+  <circle cx="156" cy="222" r="3.5" fill="var(--red)"/>
+  <circle cx="244" cy="140" r="3.5" fill="var(--red)"/>
+  <circle cx="296" cy="96" r="4.5" fill="var(--red)"/>
+  <text x="66" y="124" font-size="10.5" fill="var(--red)">schema 太多 → 注意力被稀释</text>
+  <text x="170" y="294" text-anchor="middle" font-size="12" font-weight="700" fill="var(--red)">✗ 关键工具被忽略 · 选错攀升</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ 门控 + 折叠：在场工具数回落</text>
+  <rect x="360" y="62" width="300" height="238" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="372" y="74" width="135" height="30" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="439" y="93" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--blue)">service-gated 门控</text>
+  <rect x="513" y="74" width="135" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="580" y="93" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--purple)">tool_search 折叠</text>
+  <line x1="396" y1="118" x2="396" y2="262" stroke="var(--line)"/>
+  <line x1="396" y1="262" x2="640" y2="262" stroke="var(--line)"/>
+  <polyline points="400,250 452,150 504,120 560,116 636,112" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="462" y="130" font-size="10" fill="var(--muted)">已注册工具数（仍在涨）</text>
+  <polyline points="400,250 452,242 504,236 560,232 636,230" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="470" y="222" font-size="10.5" font-weight="700" fill="var(--accent-ink)">在场工具数（门控后）</text>
+  <text x="510" y="294" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">✓ 在场少 → 选对率回升</text>
+</svg>
+<div class="fig-cap"><b>C2 · 在场工具数回落</b>：工具越堆越多，schema 稀释注意力、关键工具被忽略、选错率攀升；service-gated 按环境裁掉未配置的工具、tool_search 把非核心工具折叠起来，<strong>在场工具数</strong>回落，选对率才回升。</div>
+</div>
+
+<h3>🔬 C3 · 给工具一个统一契约：handler 全返回 JSON string，dispatch 统一包裹异常</h3>
+<p>工具多了之后，最容易出事的不是某个工具本身，而是它们<strong>返回的形状各不相同</strong>：有的 <span class="mono">return {"ok": True}</span>（dict）、有的 <span class="mono">return "ok"</span>（str）、有的干脆忘了 return（None）。dispatch 想把结果塞回对话流，就只能<strong>到处 <span class="mono">isinstance</span> 特判</strong>，漏一个分支就偶发崩溃——这是 <strong>E·结构化脆弱</strong> 的典型现场。</p>
+<p>Hermes 用一条<strong>铁律</strong>把这层脆性消灭：<em>「All handlers MUST return a JSON string.」</em>（AGENTS.md:538，registry.py:550 再注一遍「Every tool handler must return a JSON string.」）。于是 dispatch 只有<strong>一条返回路径</strong>（下面这段是 dispatch 那个 try/except 的尾部）：成功就把 handler 的 JSON string 原样返回，未知工具返回 <span class="mono">json.dumps({"error": ...})</span>，任何异常都被 <span class="mono">except</span> 兜住、经 <span class="mono">_sanitize_tool_error</span> 清洗后照样 <span class="mono">json.dumps</span> 成 JSON string。调用方永远只面对「一个 JSON string」，再不用为返回类型写特判。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ 反例 · 你可能会这么写</span></div><pre># 反例：每个工具各返回各的，类型不统一
+def search_tool(args):
+    return {"results": [...]}   # 返回 dict
+def status_tool(args):
+    return "ok"                 # 返回 str
+def cleanup_tool(args):
+    pass                        # 忘了 return → None
+# dispatch 只能到处特判，漏一个分支就崩
+out = TOOLS[name](args)
+if isinstance(out, dict):
+    payload = json.dumps(out)
+elif isinstance(out, str):
+    payload = out
+# else: None 没处理 → 后面 .strip() 直接 crash</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ 正例 · tools/registry.py:399</span></div><pre>            return json.dumps({"error": f"Unknown tool: {name}"})
+        try:
+            if entry.is_async:
+                from model_tools import _run_async
+                return _run_async(entry.handler(args, **kwargs))
+            return entry.handler(args, **kwargs)
+        except Exception as e:
+            logger.exception("Tool %s dispatch error: %s", name, e)
+            # Route through the sanitizer so framing tokens / CDATA / fences
+            # in exception strings don't reach the model as structural noise.
+            # See model_tools._sanitize_tool_error for rationale.
+            raw = f"Tool execution failed: {type(e).__name__}: {e}"
+            try:
+                from model_tools import _sanitize_tool_error
+                sanitized = _sanitize_tool_error(raw)
+            except Exception:
+                sanitized = raw  # defensive: never let the sanitizer block error propagation
+            return json.dumps({"error": sanitized})</pre></div>
+<div class="figure">
+<svg viewBox="0 0 680 340" role="img" aria-label="C3：左边三个工具分别返回 dict 与 str 与 None 导致 dispatch 到处 isinstance 特判偶发崩溃，右边全部返回 JSON string 走一条统一路径加异常统一包裹">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">C3 · 返回类型不一到处特判 vs 全返回 JSON string 一条路径</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ 每个工具各返回各的类型</text>
+  <rect x="20" y="62" width="300" height="258" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <rect x="36" y="80" width="86" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="79" y="100" text-anchor="middle" font-size="10.5" fill="var(--red)">search</text>
+  <text x="79" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">→ dict</text>
+  <rect x="127" y="80" width="86" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="100" text-anchor="middle" font-size="10.5" fill="var(--red)">status</text>
+  <text x="170" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">→ "ok"</text>
+  <rect x="218" y="80" width="86" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="261" y="100" text-anchor="middle" font-size="10.5" fill="var(--red)">cleanup</text>
+  <text x="261" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">→ None</text>
+  <text x="79" y="142" text-anchor="middle" font-size="14" fill="var(--red)">↓</text>
+  <text x="170" y="142" text-anchor="middle" font-size="14" fill="var(--red)">↓</text>
+  <text x="261" y="142" text-anchor="middle" font-size="14" fill="var(--red)">↓</text>
+  <rect x="36" y="150" width="268" height="96" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="172" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">dispatch 到处特判</text>
+  <text x="170" y="194" text-anchor="middle" font-size="10.5" fill="var(--red)">if isinstance(dict): json.dumps(...)</text>
+  <text x="170" y="212" text-anchor="middle" font-size="10.5" fill="var(--red)">elif isinstance(str): ...</text>
+  <text x="170" y="232" text-anchor="middle" font-size="10.5" fill="var(--red)">else: None 没处理 → crash</text>
+  <text x="170" y="296" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">✗ 漏一个分支就偶发崩溃</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ 全返回 JSON string · 一条路径</text>
+  <rect x="360" y="62" width="300" height="258" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="376" y="80" width="86" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="419" y="100" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">search</text>
+  <text x="419" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">→ JSON</text>
+  <rect x="467" y="80" width="86" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="100" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">status</text>
+  <text x="510" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">→ JSON</text>
+  <rect x="558" y="80" width="86" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="601" y="100" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">cleanup</text>
+  <text x="601" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">→ JSON</text>
+  <text x="419" y="142" text-anchor="middle" font-size="14" fill="var(--accent)">↓</text>
+  <text x="510" y="142" text-anchor="middle" font-size="14" fill="var(--accent)">↓</text>
+  <text x="601" y="142" text-anchor="middle" font-size="14" fill="var(--accent)">↓</text>
+  <rect x="376" y="150" width="268" height="96" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="174" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">dispatch 一条返回路径</text>
+  <text x="510" y="196" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">成功 → return handler 的 JSON string</text>
+  <text x="510" y="216" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">异常 → _sanitize_tool_error 兜住</text>
+  <text x="510" y="234" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">→ json.dumps({"error": ...})</text>
+  <text x="510" y="296" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✓ 调用方只见一个 JSON string</text>
+</svg>
+<div class="fig-cap"><b>C3 · 统一契约</b>：三个工具分别返回 <span class="mono">dict</span> / <span class="mono">"str"</span> / <span class="mono">None</span>，dispatch 只能到处 <span class="mono">isinstance</span> 特判、漏一个就崩；统一成「全返回 JSON string」后，dispatch 只有一条路径——成功原样返回、异常经 <span class="mono">_sanitize_tool_error</span> 兜住再 <span class="mono">json.dumps</span>。</div>
+</div>
 </div>
   <div class="lang-en">
 <p class="lead">The pitfalls of building an agent are almost all <strong>crime scenes</strong> of the LLM's seven flaws (A–G) showing up in practice. This chapter is the <strong>accident file</strong> of agent engineering: turning pits others fell into rules.</p>
@@ -1398,6 +1612,220 @@ if result.summary.endswith("done") or "success" in result.summary:
   <text x="510" y="288" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">✓ short loops → early cutoff, no blowup</text>
 </svg>
 <div class="fig-cap"><b>B4 · short loops</b>: in one over-long loop an early small error gets magnified by every later step and drifts further off; delegation splits the big task into isolated, independently-converging short loops, so error has no chance to accumulate across loops.</div>
+</div>
+
+<h2>Category C · Tools &amp; extension</h2>
+<p>The first two classes sit on "cache" and "the autonomy loop"; the third shows up the moment you <strong>add capability</strong> to the agent. The instinct is "need a capability? add a tool" — but Hermes's core is a <strong>narrow waist</strong>: <em>every model tool is sent on <strong>every API call</strong></em>, so the bar for a new core tool is high. Stuff everything into the core and you pay a triple hit: with many tools the model <strong>picks the wrong one</strong> (C1), attention is <strong>diluted</strong> by schema (C2), and inconsistent return shapes make dispatch <strong>special-case everywhere and crash occasionally</strong> (C3). The fix is one discipline of extension — <strong>push capability down the Footprint Ladder, give tools one contract</strong>. Skim the three trap cards, then unpack <strong>C1 / C3</strong> as <strong>❌ wrong → ✅ right</strong>.</p>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">C1</span><span class="pit-title">Turning every capability into a core tool</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">With many tools the model <strong>picks the wrong one</strong>, everything gets slower and pricier, and <strong>every user</strong> pays.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">Every capability becomes a core tool (<strong>A·lost-in-the-middle</strong> + the cache line) → each core tool's schema is <strong>sent on every API call</strong>, taxing every user.</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v">Push capability down the <strong>Footprint Ladder</strong> — CLI+skill / service-gated / plugin / MCP; a core tool is the <strong>last resort</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch8 / ch23</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">C2</span><span class="pit-title">Too many tools / too much schema dilutes attention</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">Tool-selection quality <strong>drops as the tool count grows</strong>; key tools get ignored.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">Too many tools / too-large schema → <strong>diluted attention</strong> (<strong>A·lost-in-the-middle</strong>).</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v"><strong>service-gated</strong> trims by environment; <strong>tool_search</strong> folds non-core tools away.</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch8</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">C3</span><span class="pit-title">Tool handlers return inconsistent shapes</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">Tools return <strong>dict sometimes, str other times</strong>; error handling special-cases everywhere and <strong>crashes occasionally</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">Handler return shapes aren't unified (<strong>E·structural brittleness</strong>).</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v">One contract — every handler returns a <strong>JSON string</strong>; dispatch wraps exceptions uniformly.</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch8</span></div>
+</div>
+
+<h3>🔬 C1 · Don't make every capability a core tool — push it down the Footprint Ladder</h3>
+<p>The handiest way to add capability is <span class="mono">registry.register(name=..., toolset=...)</span> — open one more core tool for whatever you need. But Hermes's core is a <strong>narrow waist</strong>, and AGENTS.md is blunt about it: <em>"every model tool we add is sent on every API call, so the bar for a new core tool is high."</em> Each core tool's schema rides along on <strong>every single API call</strong> — a "schema tax" on <strong>every user, every turn</strong>; pile on more tools and the model also <strong>picks the wrong one</strong> from the crowd, attention diluted — exactly <strong>A·lost-in-the-middle</strong> at the tool layer.</p>
+<p>The right move is to ask about <strong>footprint</strong> first: place the capability on the <strong>least-footprint</strong> rung that works. Hermes's <strong>Footprint Ladder</strong> grows in footprint top-to-bottom — if you can <strong>extend existing code</strong>, don't add a tool; if a <strong>CLI command + skill</strong> expresses it, go through the shell (zero tool footprint); if you need structured params, make a <strong>service-gated tool</strong> (it appears only when its prerequisite is configured, zero footprint otherwise); only then plugin / MCP; and a <strong>new core tool is the last resort</strong>. Most new capability lands high on the ladder, so the core schema stays a handful — cheap for every user.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ wrong · how you might write it</span></div><pre># Anti-pattern: need a capability? open one more core tool
+registry.register(
+    name="my_tool",
+    toolset="terminal",   # lands in an always-on toolset
+    schema={"name": "my_tool", "description": "...",
+            "parameters": {...}},   # this schema ships on every API call
+    handler=lambda args, **kw: my_tool(args),
+)
+# more core tools → every turn ships all schemas to every user, a "schema tax"; the model also mis-picks</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ right · AGENTS.md:171</span></div><pre>### The Footprint Ladder (new capability decision)
+
+Each rung adds more permanent surface than the one above. Choose the highest
+(least-footprint) rung that correctly solves the problem:
+
+1. **Extend existing code** — the capability is a variation of something that
+   already exists. Zero new surface.
+2. **CLI command + skill** — manages config/state/infra expressible as shell
+   commands. The agent runs `hermes &lt;subcommand&gt;` guided by a skill. Zero
+   model-tool footprint. Default choice for subscriptions, scheduled tasks,
+   service setup. Examples: `hermes webhook`, `hermes cron`, `hermes tools`.
+3. **Service-gated tool (`check_fn`)** — needs structured params/returns AND
+   only appears when a prerequisite is configured. Zero footprint otherwise.
+   Examples: Home Assistant tools (gated on token), memory-provider tools.</pre></div>
+<div class="figure">
+<svg viewBox="0 0 680 400" role="img" aria-label="C1: on the left every capability becomes a core tool so all schemas ship on every API call and tax every user, on the right the Footprint Ladder pushes capability down and the core keeps only a few">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">C1 · everything a core tool vs push capability down the Footprint Ladder</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ every capability becomes a core tool</text>
+  <rect x="20" y="62" width="300" height="300" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <text x="170" y="86" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">every API call carries all schemas</text>
+  <rect x="40" y="98" width="260" height="150" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <rect x="50" y="108" width="116" height="34" rx="7" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="108" y="130" text-anchor="middle" font-size="10.5" fill="var(--red)">schema · terminal</text>
+  <rect x="174" y="108" width="116" height="34" rx="7" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="232" y="130" text-anchor="middle" font-size="10.5" fill="var(--red)">schema · browser</text>
+  <rect x="50" y="148" width="116" height="34" rx="7" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="108" y="170" text-anchor="middle" font-size="10.5" fill="var(--red)">schema · search</text>
+  <rect x="174" y="148" width="116" height="34" rx="7" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="232" y="170" text-anchor="middle" font-size="10.5" fill="var(--red)">schema · memory</text>
+  <rect x="50" y="188" width="116" height="34" rx="7" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="108" y="210" text-anchor="middle" font-size="10.5" fill="var(--red)">schema · vision</text>
+  <rect x="174" y="188" width="116" height="34" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="232" y="210" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">+ a dozen more…</text>
+  <text x="170" y="270" text-anchor="middle" font-size="10.5" fill="var(--red)">💰 every turn × every user = a schema tax</text>
+  <text x="170" y="300" text-anchor="middle" font-size="11" fill="var(--muted)">more tools → model picks from a crowd</text>
+  <text x="170" y="332" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">✗ mis-picks · slower · everyone taxed</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ push capability down the Footprint Ladder</text>
+  <rect x="360" y="62" width="300" height="300" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="372" y="92" width="176" height="30" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="380" y="112" font-size="10.5" font-weight="700" fill="var(--red)">6 · core tool (last resort)</text>
+  <rect x="386" y="128" width="176" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="394" y="148" font-size="10.5" font-weight="700" fill="var(--purple)">5 · MCP server</text>
+  <rect x="400" y="164" width="176" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="408" y="184" font-size="10.5" font-weight="700" fill="var(--purple)">4 · plugin</text>
+  <rect x="414" y="200" width="176" height="30" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="422" y="220" font-size="10.5" font-weight="700" fill="var(--blue)">3 · service-gated tool</text>
+  <rect x="428" y="236" width="176" height="30" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="436" y="256" font-size="10.5" font-weight="700" fill="var(--blue)">2 · CLI command + skill</text>
+  <rect x="442" y="272" width="176" height="30" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="450" y="292" font-size="10.5" font-weight="700" fill="var(--accent-ink)">1 · extend code (first)</text>
+  <text x="640" y="104" text-anchor="middle" font-size="10.5" fill="var(--red)">more</text>
+  <line x1="640" y1="112" x2="640" y2="286" stroke="var(--accent)" stroke-width="1.5"/>
+  <polyline points="635,278 640,288 645,278" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="640" y="302" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">less</text>
+  <text x="510" y="334" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">✓ core keeps a few schemas · cheap for all</text>
+</svg>
+<div class="fig-cap"><b>C1 · the footprint ladder</b>: make every capability a core tool and its schema ships on <strong>every API call</strong> to <strong>every user</strong> while the model mis-picks; push capability down the Footprint Ladder (extend existing → CLI+skill → service-gated → plugin → MCP) and the core keeps only a few — cheap for everyone.</div>
+</div>
+
+<p>C2 has no separate ❌/✅ code block — its fix is configuration, not a rewrite: <span class="mono">service-gated</span> tools simply <strong>don't appear</strong> until their prerequisite is set, and <span class="mono">tool_search</span> <strong>folds</strong> non-core tools behind a lookup. Both keep the <strong>in-scope tool count</strong> small so attention isn't diluted. The chart contrasts the two trends.</p>
+<div class="figure">
+<svg viewBox="0 0 680 320" role="img" aria-label="C2: on the left more tools means a higher mis-pick rate as attention is diluted, on the right service-gated trimming plus tool_search folding bring the in-scope tool count back down and the right-pick rate back up">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">C2 · more tools dilute attention vs gating + folding cap the in-scope count</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ more tools → higher mis-pick rate</text>
+  <rect x="20" y="62" width="300" height="238" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <line x1="56" y1="98" x2="56" y2="262" stroke="var(--line)"/>
+  <line x1="56" y1="262" x2="300" y2="262" stroke="var(--line)"/>
+  <text x="24" y="90" font-size="10.5" fill="var(--muted)">mis-pick↑</text>
+  <text x="296" y="280" text-anchor="end" font-size="10.5" fill="var(--muted)">tool count →</text>
+  <polyline points="60,254 110,242 156,222 200,188 244,140 296,96" fill="none" stroke="var(--red)" stroke-width="2.5"/>
+  <circle cx="60" cy="254" r="3.5" fill="var(--red)"/>
+  <circle cx="156" cy="222" r="3.5" fill="var(--red)"/>
+  <circle cx="244" cy="140" r="3.5" fill="var(--red)"/>
+  <circle cx="296" cy="96" r="4.5" fill="var(--red)"/>
+  <text x="66" y="124" font-size="10.5" fill="var(--red)">more schema → diluted attention</text>
+  <text x="170" y="294" text-anchor="middle" font-size="12" font-weight="700" fill="var(--red)">✗ key tools ignored · mis-picks climb</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ gate + fold: in-scope count drops</text>
+  <rect x="360" y="62" width="300" height="238" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="372" y="74" width="135" height="30" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="439" y="93" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--blue)">service-gated trim</text>
+  <rect x="513" y="74" width="135" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="580" y="93" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--purple)">tool_search fold</text>
+  <line x1="396" y1="118" x2="396" y2="262" stroke="var(--line)"/>
+  <line x1="396" y1="262" x2="640" y2="262" stroke="var(--line)"/>
+  <polyline points="400,250 452,150 504,120 560,116 636,112" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="462" y="130" font-size="10" fill="var(--muted)">registered tools (still rising)</text>
+  <polyline points="400,250 452,242 504,236 560,232 636,230" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="470" y="222" font-size="10.5" font-weight="700" fill="var(--accent-ink)">in-scope tools (after gating)</text>
+  <text x="510" y="294" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">✓ fewer in scope → right-picks recover</text>
+</svg>
+<div class="fig-cap"><b>C2 · the in-scope count comes back down</b>: pile on tools and schema dilutes attention, key tools get ignored, mis-picks climb; service-gated trims unconfigured tools by environment and tool_search folds non-core tools away, so the <strong>in-scope tool count</strong> drops and right-picks recover.</div>
+</div>
+
+<h3>🔬 C3 · Give tools one contract: every handler returns a JSON string, dispatch wraps exceptions</h3>
+<p>Once there are many tools, what breaks is rarely a single tool — it's that they <strong>return different shapes</strong>: some <span class="mono">return {"ok": True}</span> (dict), some <span class="mono">return "ok"</span> (str), some forget to return at all (None). To put a result back on the conversation stream, dispatch has to <strong><span class="mono">isinstance</span>-special-case everywhere</strong>, and a missing branch crashes occasionally — the textbook face of <strong>E·structural brittleness</strong>.</p>
+<p>Hermes kills that brittleness with one <strong>iron rule</strong>: <em>"All handlers MUST return a JSON string."</em> (AGENTS.md:538; registry.py:550 repeats "Every tool handler must return a JSON string."). So dispatch has <strong>one return path</strong> (the block below is the tail of that try/except in dispatch): on success it returns the handler's JSON string as-is; an unknown tool returns <span class="mono">json.dumps({"error": ...})</span>; any exception is caught, cleaned by <span class="mono">_sanitize_tool_error</span>, and still <span class="mono">json.dumps</span>'d into a JSON string. The caller always faces exactly one JSON string — no return-type special-casing.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ wrong · how you might write it</span></div><pre># Anti-pattern: every tool returns its own shape
+def search_tool(args):
+    return {"results": [...]}   # returns dict
+def status_tool(args):
+    return "ok"                 # returns str
+def cleanup_tool(args):
+    pass                        # forgot to return → None
+# dispatch must special-case everywhere; miss a branch and it crashes
+out = TOOLS[name](args)
+if isinstance(out, dict):
+    payload = json.dumps(out)
+elif isinstance(out, str):
+    payload = out
+# else: None unhandled → a later .strip() crashes</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ right · tools/registry.py:399</span></div><pre>            return json.dumps({"error": f"Unknown tool: {name}"})
+        try:
+            if entry.is_async:
+                from model_tools import _run_async
+                return _run_async(entry.handler(args, **kwargs))
+            return entry.handler(args, **kwargs)
+        except Exception as e:
+            logger.exception("Tool %s dispatch error: %s", name, e)
+            # Route through the sanitizer so framing tokens / CDATA / fences
+            # in exception strings don't reach the model as structural noise.
+            # See model_tools._sanitize_tool_error for rationale.
+            raw = f"Tool execution failed: {type(e).__name__}: {e}"
+            try:
+                from model_tools import _sanitize_tool_error
+                sanitized = _sanitize_tool_error(raw)
+            except Exception:
+                sanitized = raw  # defensive: never let the sanitizer block error propagation
+            return json.dumps({"error": sanitized})</pre></div>
+<div class="figure">
+<svg viewBox="0 0 680 340" role="img" aria-label="C3: on the left three tools return dict and str and None so dispatch isinstance-special-cases everywhere and crashes occasionally, on the right all return a JSON string down one unified path with exceptions wrapped uniformly">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">C3 · inconsistent returns special-cased everywhere vs all JSON string, one path</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ each tool returns its own type</text>
+  <rect x="20" y="62" width="300" height="258" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <rect x="36" y="80" width="86" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="79" y="100" text-anchor="middle" font-size="10.5" fill="var(--red)">search</text>
+  <text x="79" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">→ dict</text>
+  <rect x="127" y="80" width="86" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="100" text-anchor="middle" font-size="10.5" fill="var(--red)">status</text>
+  <text x="170" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">→ "ok"</text>
+  <rect x="218" y="80" width="86" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="261" y="100" text-anchor="middle" font-size="10.5" fill="var(--red)">cleanup</text>
+  <text x="261" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">→ None</text>
+  <text x="79" y="142" text-anchor="middle" font-size="14" fill="var(--red)">↓</text>
+  <text x="170" y="142" text-anchor="middle" font-size="14" fill="var(--red)">↓</text>
+  <text x="261" y="142" text-anchor="middle" font-size="14" fill="var(--red)">↓</text>
+  <rect x="36" y="150" width="268" height="96" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="172" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">dispatch special-cases everywhere</text>
+  <text x="170" y="194" text-anchor="middle" font-size="10.5" fill="var(--red)">if isinstance(dict): json.dumps(...)</text>
+  <text x="170" y="212" text-anchor="middle" font-size="10.5" fill="var(--red)">elif isinstance(str): ...</text>
+  <text x="170" y="232" text-anchor="middle" font-size="10.5" fill="var(--red)">else: None unhandled → crash</text>
+  <text x="170" y="296" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">✗ miss a branch and it crashes</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ all return JSON string · one path</text>
+  <rect x="360" y="62" width="300" height="258" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="376" y="80" width="86" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="419" y="100" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">search</text>
+  <text x="419" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">→ JSON</text>
+  <rect x="467" y="80" width="86" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="100" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">status</text>
+  <text x="510" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">→ JSON</text>
+  <rect x="558" y="80" width="86" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="601" y="100" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">cleanup</text>
+  <text x="601" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">→ JSON</text>
+  <text x="419" y="142" text-anchor="middle" font-size="14" fill="var(--accent)">↓</text>
+  <text x="510" y="142" text-anchor="middle" font-size="14" fill="var(--accent)">↓</text>
+  <text x="601" y="142" text-anchor="middle" font-size="14" fill="var(--accent)">↓</text>
+  <rect x="376" y="150" width="268" height="96" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="174" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">dispatch · one return path</text>
+  <text x="510" y="196" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">success → return handler's JSON string</text>
+  <text x="510" y="216" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">exception → caught by _sanitize_tool_error</text>
+  <text x="510" y="234" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">→ json.dumps({"error": ...})</text>
+  <text x="510" y="296" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✓ caller faces one JSON string</text>
+</svg>
+<div class="fig-cap"><b>C3 · one contract</b>: three tools return <span class="mono">dict</span> / <span class="mono">"str"</span> / <span class="mono">None</span>, so dispatch <span class="mono">isinstance</span>-special-cases everywhere and one missing branch crashes; unify on "every handler returns a JSON string" and dispatch has a single path — return as-is on success, catch via <span class="mono">_sanitize_tool_error</span> then <span class="mono">json.dumps</span> on error.</div>
 </div>
 </div>
   <div class="footnav"><a class="prev" href="25-design-principles.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">设计原则横向收束</span><span class="lang-en">Design principles synthesis</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
