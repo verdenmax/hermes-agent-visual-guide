@@ -543,7 +543,7 @@ if result.summary.endswith("done") or "success" in result.summary:
 
 <h3>🔬 C1 · 别什么能力都加成核心工具，按 Footprint Ladder 往下沉</h3>
 <p>给 agent 加能力最顺手的写法，就是 <span class="mono">registry.register(name=..., toolset=...)</span> 再开一个核心工具——需要什么就加什么。但 Hermes 的核心是一条<strong>窄腰</strong>，AGENTS.md 说得很直白：<em>「every model tool we add is sent on every API call, so the bar for a new core tool is high」</em>。每个核心工具的 schema 都<strong>随每一次 API 调用发给模型</strong>，等于向<strong>每一个用户、每一轮对话</strong>收一笔「schema 税」；工具越堆越多，模型还会在一堆选项里<strong>选错</strong>、注意力被稀释——这正是 <strong>A·中间遗失</strong> 在工具层的现身。</p>
-<p>正确姿势是先问<strong>足迹</strong>：把能力放在「足迹最小」的那一级。Hermes 的 <strong>Footprint Ladder</strong> 从上到下足迹依次变大——能<strong>扩展现有代码</strong>就别加工具；能用 <strong>CLI 命令 + 技能</strong>表达就走 shell（零工具足迹）；需要结构化参数就做 <strong>service-gated 工具</strong>（只在前置条件配好时才出现，否则零足迹）；再不行才是插件 / MCP；<strong>新增核心工具是最后手段</strong>。这样绝大多数新能力都落在阶梯上半段，核心 schema 始终只有少数几个、对每个用户都便宜。</p>
+<p>正确姿势是先问<strong>足迹</strong>：把能力放在「足迹最小」的那一级。Hermes 的 <strong>Footprint Ladder</strong> 从上到下足迹依次变小——能<strong>扩展现有代码</strong>就别加工具；能用 <strong>CLI 命令 + 技能</strong>表达就走 shell（零工具足迹）；需要结构化参数就做 <strong>service-gated 工具</strong>（只在前置条件配好时才出现，否则零足迹）；再不行才是插件 / MCP；<strong>新增核心工具是最后手段</strong>。这样绝大多数新能力都落在阶梯下半段，核心 schema 始终只有少数几个、对每个用户都便宜。</p>
 <div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ 反例 · 你可能会这么写</span></div><pre># 反例：需要什么能力，就开一个核心工具
 registry.register(
     name="my_tool",
@@ -609,7 +609,7 @@ Each rung adds more permanent surface than the one above. Choose the highest
   <text x="640" y="302" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">足迹小</text>
   <text x="510" y="334" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">✓ 核心只留少数 schema · 人人便宜</text>
 </svg>
-<div class="fig-cap"><b>C1 · 足迹阶梯</b>：什么能力都加成核心工具，schema 就随<strong>每次 API 调用</strong>发给<strong>每个用户</strong>、还让模型选错；按 Footprint Ladder 把能力往下沉（扩展现有 → CLI+技能 → service-gated → 插件 → MCP），核心只留少数、人人便宜。</div>
+<div class="fig-cap"><b>C1 · 足迹阶梯</b>：什么能力都加成核心工具，schema 就随<strong>每次 API 调用</strong>发给<strong>每个用户</strong>、还让模型选错；按 Footprint Ladder 把能力往下沉到更轻的那几级（扩展现有 / CLI+技能 / service-gated / 插件 / MCP），核心只留少数、人人便宜。</div>
 </div>
 
 <p>C2 没有单独的 ❌/✅ 代码块——它的对策是<strong>配置</strong>而非重写：<span class="mono">service-gated</span> 工具在前置条件没配好时<strong>根本不出现</strong>，<span class="mono">tool_search</span> 把非核心工具<strong>折叠</strong>到一次查找之后。两者都让<strong>在场工具数</strong>保持很小、注意力不被稀释。下图对比这两条趋势。</p>
@@ -1272,7 +1272,7 @@ if result.summary.endswith("done") or "success" in result.summary:
 
 <h3>🔬 C1 · Don't make every capability a core tool — push it down the Footprint Ladder</h3>
 <p>The handiest way to add capability is <span class="mono">registry.register(name=..., toolset=...)</span> — open one more core tool for whatever you need. But Hermes's core is a <strong>narrow waist</strong>, and AGENTS.md is blunt about it: <em>"every model tool we add is sent on every API call, so the bar for a new core tool is high."</em> Each core tool's schema rides along on <strong>every single API call</strong> — a "schema tax" on <strong>every user, every turn</strong>; pile on more tools and the model also <strong>picks the wrong one</strong> from the crowd, attention diluted — exactly <strong>A·lost-in-the-middle</strong> at the tool layer.</p>
-<p>The right move is to ask about <strong>footprint</strong> first: place the capability on the <strong>least-footprint</strong> rung that works. Hermes's <strong>Footprint Ladder</strong> grows in footprint top-to-bottom — if you can <strong>extend existing code</strong>, don't add a tool; if a <strong>CLI command + skill</strong> expresses it, go through the shell (zero tool footprint); if you need structured params, make a <strong>service-gated tool</strong> (it appears only when its prerequisite is configured, zero footprint otherwise); only then plugin / MCP; and a <strong>new core tool is the last resort</strong>. Most new capability lands high on the ladder, so the core schema stays a handful — cheap for every user.</p>
+<p>The right move is to ask about <strong>footprint</strong> first: place the capability on the <strong>least-footprint</strong> rung that works. Hermes's <strong>Footprint Ladder</strong> shrinks in footprint top-to-bottom — if you can <strong>extend existing code</strong>, don't add a tool; if a <strong>CLI command + skill</strong> expresses it, go through the shell (zero tool footprint); if you need structured params, make a <strong>service-gated tool</strong> (it appears only when its prerequisite is configured, zero footprint otherwise); only then plugin / MCP; and a <strong>new core tool is the last resort</strong>. Most new capability lands low on the ladder, so the core schema stays a handful — cheap for every user.</p>
 <div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ wrong · how you might write it</span></div><pre># Anti-pattern: need a capability? open one more core tool
 registry.register(
     name="my_tool",
@@ -1338,7 +1338,7 @@ Each rung adds more permanent surface than the one above. Choose the highest
   <text x="640" y="302" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">less</text>
   <text x="510" y="334" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">✓ core keeps a few schemas · cheap for all</text>
 </svg>
-<div class="fig-cap"><b>C1 · the footprint ladder</b>: make every capability a core tool and its schema ships on <strong>every API call</strong> to <strong>every user</strong> while the model mis-picks; push capability down the Footprint Ladder (extend existing → CLI+skill → service-gated → plugin → MCP) and the core keeps only a few — cheap for everyone.</div>
+<div class="fig-cap"><b>C1 · the footprint ladder</b>: make every capability a core tool and its schema ships on <strong>every API call</strong> to <strong>every user</strong> while the model mis-picks; push capability down to the lighter rungs (extend existing / CLI+skill / service-gated / plugin / MCP) and the core keeps only a few — cheap for everyone.</div>
 </div>
 
 <p>C2 has no separate ❌/✅ code block — its fix is configuration, not a rewrite: <span class="mono">service-gated</span> tools simply <strong>don't appear</strong> until their prerequisite is set, and <span class="mono">tool_search</span> <strong>folds</strong> non-core tools behind a lookup. Both keep the <strong>in-scope tool count</strong> small so attention isn't diluted. The chart contrasts the two trends.</p>
