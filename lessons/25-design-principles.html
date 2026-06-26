@@ -352,6 +352,8 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <strong>无状态、易被淹没、分不清指令与数据的概率模型,要在真实世界里长期自主干活。</strong>Hermes 的全部工程,就是围绕这句话的 7 个隐患(A–G)展开:把状态<strong>外置</strong>、把上下文<strong>守住</strong>、把能力<strong>推到边缘</strong>、把安全<strong>钉进代码</strong>。三条最粗的线:<strong>缓存神圣线、自我进化线、窄腰线</strong>。
 </div>
 
+<p>怎么读这一章?三条<strong>设计线</strong>是<strong>纵</strong>的(每条线串起好几章,讲一个一以贯之的工程主张),A–G <strong>约束矩阵</strong>是<strong>横</strong>的(每条约束被哪些章治)。纵横交织,就是 Hermes 的<strong>设计骨架</strong>。先看三条线感受"它为什么长成这样",再用矩阵回查"每个缺陷怎么被治"——两遍下来,这台机器在你脑子里就<strong>立体</strong>了。下面先纵后横。</p>
+
 <h2>线一:每个会话的 prompt 缓存神圣不可侵犯</h2>
 <p>这是全书<strong>出现最多</strong>的一条线。长对话每轮复用缓存前缀,任何改动过去上下文的操作都让缓存作废、成本翻倍。于是每个部件都为它让路:</p>
 
@@ -363,6 +365,8 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <div class="step"><span class="num">23</span><span class="sc">技能注入为 <strong>user message</strong>(append-only),不进 system prompt</span></div>
 </div>
 
+<p>为什么<strong>一条缓存策略</strong>值得全书让路、甚至被称作"神圣不可侵犯"?算笔账就懂:长对话每轮把整个历史重新发给模型,如果前缀逐字节没变,这部分按<strong>缓存价</strong>计费(往往便宜数倍);可只要你在中间<strong>改一个字</strong>——重排工具、塞条系统通知、刷新记忆——缓存就从那一点起<strong>全部作废</strong>,后面每轮都按<strong>全价</strong>重算。对一个会聊成百上千轮的 agent,这不是省一点,而是<strong>成本量级</strong>的差别。所以缓存在 Hermes 里不是"性能优化"而是"<strong>架构铁律</strong>":system prompt 必须稳、控制命令必须旁路、后台任务必须开独立会话——全是为了别碰那段已经焐热的前缀。</p>
+
 <h2>线二:自我进化(跨会话学习)</h2>
 <p>Hermes 的招牌——它会<strong>越用越懂你</strong>。这条线把"一次性对话"升级成"持续成长的伙伴":</p>
 
@@ -372,6 +376,10 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <div class="step"><span class="num">11</span><span class="sc"><strong>记忆</strong>:MEMORY/USER 双层 + provider,把"你是谁"沉淀下来</span></div>
   <div class="step"><span class="num">12</span><span class="sc"><strong>跨会话搜索</strong>(FTS5):新会话能翻出旧会话的相关片段</span></div>
 </div>
+
+<p>这里有个<strong>绝妙的张力</strong>:自我进化要<strong>写新东西</strong>(学到的技能、沉淀的记忆),而缓存铁律<strong>禁止改动已发出的上下文</strong>——两条线看似冲突。Hermes 的解法是把进化的产物<strong>全部外置成文件</strong>,再用"<strong>只追加、不修改</strong>"的方式喂回去:技能不写进 system prompt,而是当<strong>新的 user message</strong> 追加在对话末尾(第 23 章);记忆沉淀进 MEMORY.md 文件,下次<strong>开新会话</strong>时作为稳定前缀的一部分载入,而非中途插入(第 11 章);Curator 在<strong>后台</strong>整理技能,绝不在对话进行时改上下文(第 10 章)。于是"越用越懂你"和"别碰缓存"<strong>同时成立</strong>——进化发生在文件系统和会话边界上,而不是在那段神圣的前缀里。</p>
+
+<p>进化这条线还有个<strong>克制</strong>之处常被忽略:Curator 只敢动<strong>agent 自己建的</strong>技能,你手写的、官方装的技能它<strong>碰都不碰</strong>,而且"归档"是它<strong>最重的动作</strong>——绝不删除,归档了还能恢复(第 10 章)。为什么这么小心?因为自我进化一旦"自作主张"删错东西,用户对它的<strong>信任就崩了</strong>。一个会成长的系统,成长的<strong>边界感</strong>比成长本身更重要:它可以越来越懂你,但不能在你没允许时<strong>替你做不可逆的决定</strong>。这和安全线的"不可逆操作零容忍"是<strong>同一种克制</strong>。</p>
 
 <h2>线三:窄腰(核心薄,能力在边缘)</h2>
 <p>每个核心工具都在<strong>每次 API 调用</strong>发送,所以核心面的每寸都金贵。Hermes 把核心做成一根<strong>窄腰</strong>,能力全长在边缘:</p>
@@ -383,6 +391,10 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <div class="step"><span class="num">17</span><span class="sc">28+ <strong>平台适配器</strong>把差异翻译成统一 MessageEvent,核心只认抽象</span></div>
   <div class="step"><span class="num">23</span><span class="sc"><strong>插件/技能/MCP</strong>:连主流平台适配器都是边缘插件</span></div>
 </div>
+
+<p>窄腰线和缓存线其实是<strong>一条藤上的两个瓜</strong>:核心工具越少,每次 API 调用发出去的<strong>工具 schema 就越短</strong>,缓存前缀也就越小越稳——加一个核心工具,等于给<strong>每一次调用、每一个用户</strong>都永久加上一段 token,这既撞 A·中间遗失(把模型注意力摊薄),又让前缀变长。所以 Footprint Ladder 的"最后才考虑加核心工具"(第 8 章),本质上是在<strong>替缓存和注意力省钱</strong>。能力推到边缘还有第二重好处:边缘的插件、技能、MCP server <strong>坏了、加了、改了都不动核心</strong>——核心保持稳定,又正好喂饱了缓存。三条线在这里<strong>交汇</strong>:窄腰让核心稳,核心稳让缓存活,缓存活让成本低。</p>
+
+<p>窄腰不是"核心越小越好"的教条——它也有<strong>反面</strong>:terminal(跑命令)、read_file(读文件)、web_search(搜网)这些<strong>几乎每个用户每个任务都要、又无法用别的工具拼出来</strong>的能力,就<strong>该</strong>放进核心。Footprint Ladder 的判据从来不是"能不能不加",而是"<strong>这是不是真的根本、真的人人要、真的没有边缘替代</strong>"。判断"什么该窄、什么该厚"本身就是设计的<strong>手艺</strong>:把根本能力做薄做稳,把长尾能力推到边缘——错放任何一边,要么核心臃肿,要么人人重复造轮子。</p>
 
 <div class="card collab">
   <div class="tag">🧩 A–G 约束矩阵 · 每个 LLM 缺陷由哪些章治</div>
@@ -396,13 +408,19 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   (第 3 章引入)→ F 治:审查(第 14 章)、评测(第 22 章)、压缩(第 15 章);G 治:几乎每章——网关(17)、Cron(21)、Profiles(20)、安全(24)都是运维基础设施。
 </div>
 
+<p>读这张矩阵别漏了一个规律:<strong>同一处工程往往同时治好几条约束</strong>。委派(第 13 章)既把中间过程关进子上下文治 A·中间遗失,又用独立会话快照治 B·无状态,还顺带剥离高危工具做安全;审查(第 14 章)既治 C·幻觉又治 F·误差累积;压缩(第 15 章)既救 A 又拦 F。这说明 A–G 不是七个孤立的待办,而是<strong>同一个"概率内核 vs 真实世界"矛盾的七个切面</strong>——所以好的设计常常一箭多雕。反过来,这也是为什么 Hermes 的部件<strong>高度复用、彼此咬合</strong>:不是堆功能,而是用尽量少的机制覆盖尽量多的约束面。</p>
+
 <div class="card design">
   <div class="tag">🎯 元设计哲学 · 全书的取舍总账</div>
   把 7 条约束收成一句:<strong>无状态、概率性、易被淹没、分不清指令与数据的内核 + 一切确定性都外置到代码与文件</strong>。
   <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span> <span class="badge constraint">B·无状态</span> <span class="badge constraint">C·幻觉</span> <span class="badge constraint">D·指令=数据</span> <span class="badge constraint">E·结构化脆弱</span> <span class="badge constraint">F·误差累积</span> <span class="badge constraint">G·运维</span></p>
   <p style="margin:.5rem 0 0">三句话记住 Hermes 的设计基因:① <strong>状态外置</strong>——内核无记忆,记忆/技能/profile 都在外部文件,模型只是个纯函数;② <strong>上下文神圣</strong>——缓存前缀逐字节稳定,只有压缩这唯一例外;③ <strong>窄腰厚边</strong>——核心薄到能放进脑子,能力全长在插件/技能/MCP 的边缘。安全则是横切:<strong>绝不让概率性的模型当裁判</strong>,信任边界一律钉在确定性的代码上。</p>
   <p style="margin:.5rem 0 0">反模式(全书共同的敌人):把状态塞进模型、改动已缓存的上下文、什么能力都加成核心工具、让模型自己判断安全——每一个都直接撞上某条 A–G 约束。</p>
+  <p style="margin:.5rem 0 0">为什么是<strong>这三条线</strong>,而不是别的?因为它们各自压住了 agent 最致命的一个失败模式:不守缓存,产品会<strong>贵到没人用</strong>;不会进化,它就只是个<strong>更聪明的聊天框</strong>、记不住你;核心不窄,每加一个功能都让<strong>所有调用变慢变贵</strong>、最终尾大不掉。三条线分别对应 agent 的<strong>经济性、成长性、可演化性</strong>——缺一条,这个"长期自主的伙伴"都立不住。拧成一句话,就是全书的设计基因:<strong>内核保持又薄又稳,把状态、能力、智慧全部外置到边缘的文件与插件里。</strong></p>
+  <p style="margin:.5rem 0 0">三条线之外,其实还有更细的<strong>暗线</strong>等你自己去连:比如"<strong>一切可观测</strong>"(每轮对话可存成轨迹、每个工具调用有日志、每个会话可被搜索回查),又比如"<strong>失败要安全降级</strong>"(provider 挂了切备用、压缩出错有回退、子代理超时不拖垮父代理)。读完全书再回头,你会发现这些暗线和三条主线<strong>同源</strong>——都是那个"概率内核必须在真实世界里长期可靠运行"的命题的不同侧面。</p>
 </div>
+
+<p>把这三条线和这张矩阵记牢,你就拿到了读懂 Hermes 的<strong>钥匙</strong>:之后再看任何一个新功能、任何一行新代码,都可以反问一句——"<strong>它在治哪条 A–G 约束?它有没有碰那段神圣的缓存?它属于窄腰还是厚边?</strong>"能答上这三问,你就不只是"会用"这个 agent,而是<strong>理解</strong>了它为什么这么设计。这也正是面试官想听的:不是背功能清单,而是讲清<strong>每个取舍背后那个不变的敌人——一个无状态、会幻觉、分不清指令与数据的概率模型</strong>。</p>
 
 <div class="card key">
   <div class="tag">📌 术语表 · 速查</div>
@@ -463,6 +481,8 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <strong>A stateless, easily-drowned, instruction-vs-data-blind probabilistic model must work autonomously, long-term, in the real world.</strong> All of Hermes's engineering revolves around the 7 hazards (A–G) of that sentence: <strong>externalize</strong> state, <strong>guard</strong> the context, <strong>push</strong> capability to the edges, <strong>nail</strong> security into code. The three thickest lines: <strong>the sacred-cache line, the self-evolution line, the narrow-waist line</strong>.
 </div>
 
+<p>How to read this chapter? The three <strong>design lines</strong> run <strong>vertically</strong> (each threads several chapters into one consistent engineering claim); the A–G <strong>constraint matrix</strong> runs <strong>horizontally</strong> (which chapters treat each constraint). Warp and weft together are Hermes's <strong>design skeleton</strong>. Read the three lines first to feel "why it's shaped this way," then use the matrix to look up "how each flaw gets treated" — two passes and the machine stands <strong>in 3D</strong> in your head. Vertical first, then horizontal.</p>
+
 <h2>Line 1: per-conversation prompt caching is sacred</h2>
 <p>The <strong>most recurring</strong> line in the book. A long conversation reuses the cached prefix each turn; anything that mutates past context voids the cache and doubles the cost. So every part gives way to it:</p>
 
@@ -474,6 +494,8 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <div class="step"><span class="num">23</span><span class="sc">skills inject as a <strong>user message</strong> (append-only), never into the system prompt</span></div>
 </div>
 
+<p>Why does <strong>one caching policy</strong> deserve the whole book giving way, even called "sacred"? Do the math: a long conversation re-sends the entire history each turn; if the prefix is byte-for-byte unchanged, that part bills at the <strong>cache price</strong> (often several times cheaper); but change <strong>a single character</strong> in the middle — reorder tools, inject a system notice, refresh memory — and the cache is <strong>voided from that point on</strong>, every later turn recomputed at <strong>full price</strong>. For an agent that runs hundreds or thousands of turns, that's not a small saving but a <strong>cost order-of-magnitude</strong>. So caching in Hermes isn't a "performance optimization" but an "<strong>architectural iron law</strong>": the system prompt must stay stable, control commands must bypass, background tasks must open isolated sessions — all to avoid touching that already-warm prefix.</p>
+
 <h2>Line 2: self-evolution (cross-session learning)</h2>
 <p>Hermes's signature — it <strong>gets to know you the more you use it</strong>. This line upgrades a one-off chat into a continuously growing partner:</p>
 
@@ -483,6 +505,10 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <div class="step"><span class="num">11</span><span class="sc"><strong>Memory</strong>: a MEMORY/USER two-layer + provider, distilling "who you are"</span></div>
   <div class="step"><span class="num">12</span><span class="sc"><strong>Cross-session search</strong> (FTS5): a new session can dig out relevant slices of old ones</span></div>
 </div>
+
+<p>Here's an <strong>elegant tension</strong>: self-evolution must <strong>write new things</strong> (learned skills, distilled memory), while the cache iron law <strong>forbids mutating already-sent context</strong> — the two lines seem to clash. Hermes's resolution: <strong>externalize every evolution product into files</strong>, then feed it back <strong>append-only, never-modify</strong>: skills don't go into the system prompt but append as a <strong>new user message</strong> at the conversation's tail (ch.23); memory distills into the MEMORY.md file and loads as part of the <strong>stable prefix on the next new session</strong>, not injected mid-stream (ch.11); the Curator tidies skills <strong>in the background</strong>, never editing context mid-conversation (ch.10). So "gets to know you better" and "don't touch the cache" <strong>hold simultaneously</strong> — evolution happens on the filesystem and at session boundaries, not inside that sacred prefix.</p>
+
+<p>The evolution line has an easily-missed <strong>restraint</strong>: the Curator only dares touch <strong>agent-created</strong> skills; your hand-written or officially-installed skills it <strong>won't touch at all</strong>, and "archive" is its <strong>heaviest action</strong> — never delete, an archived skill can still be restored (ch.10). Why so careful? Because the moment self-evolution "takes liberties" and deletes the wrong thing, the user's <strong>trust collapses</strong>. For a growing system, the <strong>sense of boundary</strong> matters more than the growth itself: it may understand you better and better, but it must not <strong>make irreversible decisions for you</strong> without permission. This is the <strong>same restraint</strong> as the security line's "zero tolerance for irreversible operations."</p>
 
 <h2>Line 3: the narrow waist (thin core, capability at the edges)</h2>
 <p>Every core tool is sent on <strong>every API call</strong>, so each inch of core surface is precious. Hermes makes the core a <strong>narrow waist</strong>, with capability growing at the edges:</p>
@@ -494,6 +520,10 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <div class="step"><span class="num">17</span><span class="sc">28+ <strong>platform adapters</strong> translate differences into a unified MessageEvent; the core knows only the abstraction</span></div>
   <div class="step"><span class="num">23</span><span class="sc"><strong>plugins/skills/MCP</strong>: even mainstream platform adapters are edge plugins</span></div>
 </div>
+
+<p>The narrow-waist line and the cache line are really <strong>two melons on one vine</strong>: the fewer the core tools, the <strong>shorter the tool schema</strong> sent on every API call, and the smaller and stabler the cached prefix — adding one core tool permanently adds a span of tokens to <strong>every call, every user</strong>, which both hits A·lost-in-the-middle (thinning the model's attention) and lengthens the prefix. So the Footprint Ladder's "consider a new core tool only last" (ch.8) is essentially <strong>saving money for the cache and the attention budget</strong>. Pushing capability to the edge has a second payoff: an edge plugin, skill, or MCP server <strong>breaking, being added, or changing touches nothing in the core</strong> — the core stays stable, which again feeds the cache. The three lines <strong>converge</strong> here: the narrow waist keeps the core stable, the stable core keeps the cache alive, the live cache keeps cost low.</p>
+
+<p>The narrow waist isn't a dogma of "the smaller the core the better" — it has a <strong>flip side</strong>: capabilities like terminal (run commands), read_file, and web_search — needed by <strong>nearly every user on every task and impossible to compose from other tools</strong> — <strong>belong</strong> in the core. The Footprint Ladder's test was never "can we avoid adding it," but "<strong>is this truly fundamental, truly universal, truly without an edge substitute</strong>." Judging "what should be thin and what should be thick" is itself the <strong>craft</strong> of design: make fundamental capabilities thin and stable, push long-tail ones to the edge — misplace either way and you get a bloated core or everyone reinventing the wheel.</p>
 
 <div class="card collab">
   <div class="tag">🧩 The A–G constraint matrix · which chapters treat each LLM flaw</div>
@@ -507,13 +537,19 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   (introduced ch.3) → F: review (ch.14), eval (ch.22), compression (ch.15); G: nearly every chapter — gateway (17), Cron (21), Profiles (20), security (24) are all operational infrastructure.
 </div>
 
+<p>Don't miss a pattern in this matrix: <strong>one piece of engineering often treats several constraints at once</strong>. Delegation (ch.13) cages the intermediate process in a sub-context to treat A·lost-in-the-middle, uses an isolated session snapshot to treat B·statelessness, and incidentally strips high-risk tools for security; review (ch.14) treats both C·hallucination and F·error-accumulation; compression (ch.15) both rescues A and blocks F. This shows A–G aren't seven isolated to-dos but <strong>seven facets of the same "probabilistic core vs. real world" contradiction</strong> — so good design often kills several birds with one stone. Conversely, this is why Hermes's parts are <strong>highly reused and tightly meshed</strong>: not piling on features, but covering as many constraint facets as possible with as few mechanisms as possible.</p>
+
 <div class="card design">
   <div class="tag">🎯 The meta-design philosophy · the book's ledger of trade-offs</div>
   Collapse the 7 constraints into one sentence: <strong>a stateless, probabilistic, easily-drowned, instruction-vs-data-blind core + all determinism externalized to code and files</strong>.
   <p style="margin:.5rem 0 0"><span class="badge constraint">A·lost-in-the-middle</span> <span class="badge constraint">B·statelessness</span> <span class="badge constraint">C·hallucination</span> <span class="badge constraint">D·instr=data</span> <span class="badge constraint">E·brittle output</span> <span class="badge constraint">F·error accumulation</span> <span class="badge constraint">G·ops</span></p>
   <p style="margin:.5rem 0 0">Three sentences to remember Hermes's design DNA: ① <strong>externalize state</strong> — the core has no memory; memory/skills/profile live in external files, the model is a pure function; ② <strong>the context is sacred</strong> — the cached prefix is byte-stable, with compression the one exception; ③ <strong>narrow waist, thick edges</strong> — the core is thin enough to hold in your head, capability all grows at the plugin/skill/MCP edge. Security is the cross-cut: <strong>never let the probabilistic model be the judge</strong>; the trust boundary is nailed to deterministic code.</p>
   <p style="margin:.5rem 0 0">The anti-pattern (the book's shared enemy): stuffing state into the model, mutating cached context, making every capability a core tool, letting the model judge safety — each crashes straight into one of the A–G constraints.</p>
+  <p style="margin:.5rem 0 0">Why <strong>these three lines</strong> and not others? Because each pins down one of an agent's most fatal failure modes: break caching and the product gets <strong>too expensive for anyone to use</strong>; without evolution it's just a <strong>smarter chat box</strong> that can't remember you; a non-narrow core makes every added feature <strong>slow and costly for all calls</strong>, eventually too bloated to move. The three lines map to an agent's <strong>economics, growth, and evolvability</strong> — drop one and the "long-term autonomous partner" can't stand. Twist them into one sentence and you get the book's design DNA: <strong>keep the core thin and stable; externalize state, capability, and wisdom to the files and plugins at the edge.</strong></p>
+  <p style="margin:.5rem 0 0">Beyond the three lines there are finer <strong>hidden threads</strong> for you to connect yourself: "<strong>everything observable</strong>" (every turn can be saved as a trajectory, every tool call logged, every session searchable), or "<strong>fail safe, degrade gracefully</strong>" (a dead provider fails over, a botched compression has a fallback, a timed-out subagent doesn't drag down its parent). Re-read the book and you'll find these threads <strong>share a source</strong> with the three main lines — all facets of the same proposition: a probabilistic core must run reliably, long-term, in the real world.</p>
 </div>
+
+<p>Lock in these three lines and this matrix and you hold the <strong>key</strong> to reading Hermes: faced with any new feature or any new line of code, you can ask back — "<strong>which A–G constraint does it treat? does it touch the sacred cache? does it belong to the narrow waist or the thick edge?</strong>" Answer those three and you don't merely "use" the agent, you <strong>understand</strong> why it's designed this way. That's exactly what an interviewer wants: not reciting a feature list, but articulating <strong>the unchanging enemy behind every trade-off — a stateless, hallucinating, instruction-vs-data-blind probabilistic model</strong>.</p>
 
 <div class="card key">
   <div class="tag">📌 Glossary · quick reference</div>
