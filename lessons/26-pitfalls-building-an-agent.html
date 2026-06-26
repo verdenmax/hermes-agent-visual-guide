@@ -674,6 +674,216 @@ messages = [
 </svg>
 <div class="fig-cap"><b>A4 · 压缩抖动 vs 平稳</b>：阈值太低 → 反复触顶、每次压缩废一次缓存、来回抖动；阈值 <strong>~50%</strong> 且连续 <strong>2 次无效压缩</strong>才停 → 少压缩、缓存保温、体感平稳。</div>
 </div>
+
+<h2>B 类 · 自主循环</h2>
+<p>第一类坑压在「缓存神圣」这条线上；第二类坑则发生在你把<strong>单次调用串成自主回路</strong>的那一刻。单次调用本身就有 C·幻觉、F·误差累积、G·运维难三个毛病（第 2–3 章），一旦让模型<strong>自己决定下一步、循环往复</strong>，这些毛病会被回路<strong>放大、复利</strong>：没有上限它就无限烧（B1），自报「已完成」你就信它（B2），让子代理共享你的上下文它就污染你的缓存（B3），把一条回路拉太长早期小错就一路放大（B4）。四张卡的对策其实是同一套自主性纪律——<strong>给回路钉死上限、把子代理隔离、只认可验证的把手</strong>。先用四张陷阱卡速览，再拆 <strong>B1 / B2</strong> 两个 <strong>❌ 反例 → ✅ 正例</strong>。</p>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">B1</span><span class="pit-title">自主循环没有硬上限</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">一个任务跑了几十上百轮停不下来、账单爆炸。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">循环没有硬上限（<strong>G·运维</strong> + <strong>F·误差累积</strong>）——模型自言自语、无限烧。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v"><strong>max_iterations</strong> + iteration_budget + 每轮中断检查给循环钉死上限。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch5</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">B2</span><span class="pit-title">把子代理的自然语言自报当成事实</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">子代理报告「已完成 / 已修复」，实际没做或做错，错误被当事实继续用。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">信任子代理的自然语言自报（<strong>C·幻觉</strong>）——SELF-REPORTS 不可信。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v">要求<strong>可验证把手</strong>（URL / ID / 路径 / HTTP 状态），父代理独立核验。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch14</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">B3</span><span class="pit-title">让子代理共享父代理的上下文</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">父代理上下文被子任务的中间噪声淹没、缓存被污染、注意力下降。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">子代理共享父上下文、不隔离（<strong>A·中间遗失</strong> + 缓存线）。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v">子代理独立 context + terminal，<strong>只回摘要</strong>。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch13</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">B4</span><span class="pit-title">单条自主回路拉得太长</span></div>
+  <div class="pit-row"><span class="pit-k sym">症状</span><span class="pit-v">自主链路越跑越歪、后期全是基于早期小错的放大。</span></div>
+  <div class="pit-row"><span class="pit-k root">根因</span><span class="pit-v">单条回路拉太长、误差累积无截断（<strong>F·误差累积</strong>）。</span></div>
+  <div class="pit-row"><span class="pit-k fix">对策</span><span class="pit-v">用委派把大任务拆成各自隔离、<strong>独立收敛</strong>的短回路。</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ 章</span><span class="pit-v">ch13</span></div>
+</div>
+
+<h3>🔬 B1 · 给自主循环钉死上限：迭代数 + 预算 + 每轮中断检查</h3>
+<p>写 agent 主循环最自然的姿势就是 <span class="mono">while True:</span>——不停地把消息喂给模型、执行它要的工具、再喂回去。可模型是<strong>按概率续写</strong>的（G/F）：一旦没有硬天花板，一个困惑的模型能<strong>自言自语几十上百轮</strong>，每一轮都是一次完整 API 调用，账单就这么爆了。这正是单次调用的毛病在自主回路里被<strong>复利放大</strong>的样子。</p>
+<p>Hermes 把上限钉在核心循环的<strong>最顶端</strong>：那行 <span class="mono">while</span> 是三道相互独立的闸门<strong>同时成立</strong>才继续——<span class="mono">api_call_count &lt; max_iterations</span>（硬迭代上限，默认 <strong>90</strong>，见 <span class="mono">agent/agent_init.py:165</span>）、<span class="mono">iteration_budget.remaining &gt; 0</span>（与子代理共享的独立预算），以及进入循环体后<strong>每轮第一件事</strong>就是查 <span class="mono">_interrupt_requested</span>（用户一发新消息就能立刻打断）。末尾的 <span class="mono">_budget_grace_call</span> 只留一轮「收尾恩典」，让 agent 把最后一句话说完而不是半句猝死。三道闸门<strong>任一不满足，循环立即结束</strong>——再也不会失控烧钱。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ 反例 · 你可能会这么写</span></div><pre># 反例：核心循环没有任何硬上限
+while True:                       # 永不退出的自主回路
+    resp = call_model(messages)  # 每轮一次 API 调用 = 真金白银
+    if not resp.tool_calls:
+        break
+    run_tools(resp.tool_calls)   # 模型困惑时会反复试、自言自语
+    messages.append(resp)
+# 没有 max_iterations / iteration_budget / 中断检查 → 几十上百轮停不下来、账单爆炸</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ 正例 · agent/conversation_loop.py:589</span></div><pre>    while (api_call_count &lt; agent.max_iterations and agent.iteration_budget.remaining &gt; 0) or agent._budget_grace_call:
+        # Reset per-turn checkpoint dedup so each iteration can take one snapshot
+        agent._checkpoint_mgr.new_turn()
+
+        # Check for interrupt request (e.g., user sent new message)
+        if agent._interrupt_requested:
+            interrupted = True</pre></div>
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="B1：左边 while True 没有任何上限、自我回绕无限烧钱，右边循环顶部一道闸门 count 小于 90 且预算大于 0 且无中断，任一不满足即停">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">B1 · 无上限自我回绕 vs 循环顶部一道闸门，到顶即停</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ while True · 没有任何上限</text>
+  <rect x="20" y="62" width="300" height="278" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <text x="170" y="90" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">while True:　（无闸门）</text>
+  <rect x="90" y="104" width="160" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="170" y="132" text-anchor="middle" font-size="12" fill="var(--blue)">call_model()</text>
+  <text x="170" y="173" text-anchor="middle" font-size="15" fill="var(--muted)">↓</text>
+  <rect x="90" y="184" width="160" height="46" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="212" text-anchor="middle" font-size="12" fill="var(--red)">run_tools()</text>
+  <path d="M90,207 C44,207 44,127 90,127" fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="5 4"/>
+  <text x="52" y="173" text-anchor="middle" font-size="22" fill="var(--red)">↺</text>
+  <text x="170" y="268" text-anchor="middle" font-size="11" fill="var(--muted)">模型困惑 → 自言自语、永不退出</text>
+  <text x="170" y="306" text-anchor="middle" font-size="15" font-weight="700" fill="var(--red)">∞ 烧钱 · 账单爆炸</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ 循环顶部三道闸门，任一不满足即停</text>
+  <rect x="360" y="62" width="300" height="278" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="372" y="100" width="276" height="52" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="510" y="122" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">while ( count &lt; 90　AND　budget &gt; 0</text>
+  <text x="510" y="140" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">AND　not interrupt ) — 三道闸门</text>
+  <rect x="430" y="168" width="160" height="42" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="510" y="194" text-anchor="middle" font-size="12" fill="var(--blue)">call_model()</text>
+  <text x="510" y="227" text-anchor="middle" font-size="14" fill="var(--muted)">↓</text>
+  <rect x="430" y="234" width="160" height="42" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="260" text-anchor="middle" font-size="12" fill="var(--accent-ink)">run_tools()</text>
+  <path d="M430,255 C388,255 388,152 420,152" fill="none" stroke="var(--accent)" stroke-width="2"/>
+  <text x="398" y="210" text-anchor="middle" font-size="20" fill="var(--accent)">↺</text>
+  <text x="510" y="300" text-anchor="middle" font-size="11" fill="var(--muted)">任一不满足 → break</text>
+  <text x="510" y="324" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✓ 有界收敛 · 不会失控</text>
+</svg>
+<div class="fig-cap"><b>B1 · 钉死上限</b>：<span class="mono">while True</span> 没有任何天花板，困惑的模型自言自语几十上百轮、账单爆炸；Hermes 在循环顶端用 <span class="mono">count &lt; 90</span>、<span class="mono">budget &gt; 0</span>、每轮中断检查三道闸门，任一不满足立即收敛。</div>
+</div>
+
+<h3>🔬 B2 · 不信子代理的自报，只信可验证的把手</h3>
+<p>子代理干完活，会用自然语言给你一句总结：「文件已上传」「测试已修复」。最危险的写法就是<strong>按这句话的字面意思往下走</strong>——<span class="mono">if summary.endswith(&quot;done&quot;): mark_complete()</span>。但子代理同样是 LLM、同样会<strong>幻觉</strong>（C）：它可能真心以为上传成功了，实际请求早已失败；它的 summary 是<strong>自报</strong>，不是<strong>已核验的事实</strong>。你把自报当事实，错误就从这里一路下传，最后 publish 给用户的是个假「成功」。</p>
+<p>Hermes 的 delegate 工具在给子代理的 prompt 里把这条纪律写成一段明文：子代理的 summary 是 SELF-REPORTS、不是已核验事实；凡是有外部副作用的操作（HTTP POST/PUT、远程写、共享路径建文件、发布），都必须让子代理<strong>返回一个可验证的把手</strong>（URL / ID / 绝对路径 / HTTP 状态），父代理<strong>自己去核验</strong>——fetch 那个 URL、stat 那个文件、读回内容——确认无误<strong>之后</strong>才告诉用户成功。一句话：<strong>把手能被独立验证，自报不能。</strong></p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ 反例 · 你可能会这么写</span></div><pre># 反例：直接相信子代理自报的一句话
+result = run_subagent("把季度报告上传到 S3")
+if result.summary.endswith("done") or "success" in result.summary:
+    mark_complete()            # 没核验：文件可能根本没上传
+    tell_user("已上传 ✓")      # 把 SELF-REPORT 当成已核验事实
+# 子代理也会幻觉：summary 说成功 ≠ 真的成功 → 假成功一路下传给用户</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ 正例 · tools/delegate_tool.py:2923</span></div><pre>        "- Subagent summaries are SELF-REPORTS, not verified facts. A subagent "
+        "that claims \"uploaded successfully\" or \"file written\" may be wrong. "
+        "For operations with external side-effects (HTTP POST/PUT, remote "
+        "writes, file creation at shared paths, publishing), require the "
+        "subagent to return a verifiable handle (URL, ID, absolute path, HTTP "
+        "status) and verify it yourself — fetch the URL, stat the file, read "
+        "back the content — before telling the user the operation succeeded.\n"</pre></div>
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="B2：左边子代理自报 done 被父代理当事实导致假成功一路下传，右边子代理返回可验证把手、父代理独立 fetch 与 stat 核验通过才采信">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">B2 · 信「自报」一路下传 vs 要「可验证把手」独立核验</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ 直接信子代理自报的一句话</text>
+  <rect x="20" y="62" width="300" height="278" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <line x1="40" y1="118" x2="40" y2="300" stroke="var(--red)" stroke-width="2" stroke-dasharray="4 4"/>
+  <text x="34" y="92" font-size="10.5" fill="var(--red)">红链：未核验</text>
+  <rect x="60" y="100" width="220" height="42" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="170" y="126" text-anchor="middle" font-size="12" fill="var(--blue)">子代理 · 生成者</text>
+  <text x="170" y="162" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">↓ 自报「done ✓」</text>
+  <rect x="60" y="172" width="220" height="42" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="198" text-anchor="middle" font-size="12" fill="var(--red)">父代理：当成事实</text>
+  <text x="170" y="234" text-anchor="middle" font-size="11" fill="var(--red)">↓ 未核验</text>
+  <rect x="60" y="244" width="220" height="42" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-dasharray="5 4"/>
+  <text x="170" y="270" text-anchor="middle" font-size="12" fill="var(--red)">假「成功」publish 出去</text>
+  <text x="170" y="312" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">✗ 幻觉一路下传</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ 要可验证把手 + 父代理独立核验</text>
+  <rect x="360" y="62" width="300" height="278" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <line x1="380" y1="118" x2="380" y2="300" stroke="var(--accent)" stroke-width="2"/>
+  <text x="374" y="92" font-size="10.5" fill="var(--accent-ink)">把手：可独立验证</text>
+  <rect x="400" y="100" width="220" height="42" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="510" y="126" text-anchor="middle" font-size="12" fill="var(--blue)">子代理 · 生成者</text>
+  <text x="510" y="162" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">↓ 返回把手 URL / ID / path / HTTP</text>
+  <rect x="400" y="172" width="220" height="42" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="198" text-anchor="middle" font-size="12" fill="var(--accent-ink)">父代理：独立核验</text>
+  <text x="510" y="234" text-anchor="middle" font-size="10.5" fill="var(--muted)">fetch URL · stat file · read back</text>
+  <rect x="400" y="244" width="220" height="42" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="270" text-anchor="middle" font-size="12" fill="var(--accent-ink)">核实通过才告诉用户成功</text>
+  <text x="510" y="312" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✓ 把手可被独立验证</text>
+</svg>
+<div class="fig-cap"><b>B2 · 可验证把手</b>：子代理的 summary 是<strong>自报</strong>不是已核验事实，照单全收就让假「成功」一路下传；正确做法是要一个能被独立验证的<strong>把手</strong>（URL / ID / 路径 / HTTP 状态），父代理自己 fetch / stat / 读回，确认后才采信。</div>
+</div>
+
+<p>剩下两类坑（B3 / B4）共享同一条出路——<strong>委派即隔离</strong>。第 13 章的 <span class="mono">delegate_task</span> 给每个子代理<strong>独立的 context 与 terminal 会话</strong>，默认父代理只等子代理回一条<strong>摘要</strong>再继续：这同时治了 B3（子代理的中间噪声不会涌进父代理的缓存前缀）和 B4（把一条会无限放大误差的超长回路，拆成若干各自隔离、独立收敛的短回路）。两张图分别对应这两种破法。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 340" role="img" aria-label="B3：左边子代理共享父上下文、中间噪声涌入污染父缓存、注意力下降，右边子代理独立 context 加 terminal 沙箱、只回一条摘要">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">B3 · 共享上下文被噪声淹没 vs 独立沙箱只回摘要</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ 子代理共享父代理上下文</text>
+  <rect x="20" y="62" width="300" height="258" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <rect x="44" y="86" width="252" height="64" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="112" text-anchor="middle" font-size="12" font-weight="700" fill="var(--red)">父代理上下文窗口</text>
+  <text x="170" y="134" text-anchor="middle" font-size="11" fill="var(--red)">被子任务中间噪声塞满</text>
+  <text x="84" y="186" text-anchor="middle" font-size="16" fill="var(--red)">↑</text>
+  <text x="170" y="186" text-anchor="middle" font-size="16" fill="var(--red)">↑</text>
+  <text x="258" y="186" text-anchor="middle" font-size="16" fill="var(--red)">↑</text>
+  <rect x="44" y="196" width="80" height="40" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="84" y="220" text-anchor="middle" font-size="10.5" fill="var(--red)">子任务A噪声</text>
+  <rect x="130" y="196" width="80" height="40" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="220" text-anchor="middle" font-size="10.5" fill="var(--red)">子任务B噪声</text>
+  <rect x="216" y="196" width="80" height="40" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="256" y="220" text-anchor="middle" font-size="10.5" fill="var(--red)">工具长输出</text>
+  <text x="170" y="266" text-anchor="middle" font-size="11" fill="var(--muted)">缓存污染 · 注意力 ↓</text>
+  <text x="170" y="298" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">✗ 父代理被淹没、越跑越糊</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ 独立 context + terminal，只回摘要</text>
+  <rect x="360" y="62" width="300" height="258" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="384" y="86" width="252" height="58" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="112" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">父代理上下文</text>
+  <text x="510" y="132" text-anchor="middle" font-size="11" fill="var(--accent-ink)">保持干净 · 缓存保温</text>
+  <text x="510" y="180" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">↑ 只回一条摘要</text>
+  <rect x="420" y="196" width="180" height="58" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-dasharray="5 4"/>
+  <text x="510" y="220" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">子代理沙箱</text>
+  <text x="510" y="240" text-anchor="middle" font-size="10.5" fill="var(--blue)">独立 context + terminal</text>
+  <text x="510" y="278" text-anchor="middle" font-size="10.5" fill="var(--muted)">中间噪声留在沙箱内、不外泄</text>
+  <text x="510" y="304" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✓ 父缓存保温 · 注意力集中</text>
+</svg>
+<div class="fig-cap"><b>B3 · 隔离即保护</b>：子代理共享父上下文，中间噪声会涌进父缓存、污染前缀、拉低注意力；独立 context + terminal 沙箱让噪声留在子代理内部，父代理只收一条摘要、缓存保温。</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 320" role="img" aria-label="B4：左边一条超长回路误差逐段放大、偏离目标线，右边委派拆成多条各自隔离、独立收敛的短回路">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">B4 · 一条超长回路误差逐段放大 vs 委派拆成多条短回路</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ 单条回路拉太长 · 误差逐段放大</text>
+  <rect x="20" y="62" width="300" height="238" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <line x1="44" y1="108" x2="296" y2="108" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="48" y="102" font-size="10.5" fill="var(--accent-ink)">目标线（该收敛到这）</text>
+  <polyline points="48,116 100,128 152,150 210,186 276,238" fill="none" stroke="var(--red)" stroke-width="2.5"/>
+  <circle cx="48" cy="116" r="4" fill="var(--red)"/>
+  <circle cx="100" cy="128" r="4" fill="var(--red)"/>
+  <circle cx="152" cy="150" r="4" fill="var(--red)"/>
+  <circle cx="210" cy="186" r="4" fill="var(--red)"/>
+  <circle cx="276" cy="238" r="5" fill="var(--red)"/>
+  <text x="150" y="170" font-size="10.5" fill="var(--red)">小错</text>
+  <text x="206" y="208" font-size="10.5" fill="var(--red)">放大</text>
+  <text x="200" y="262" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">全是早期错的放大</text>
+  <text x="170" y="290" text-anchor="middle" font-size="12" font-weight="700" fill="var(--red)">✗ 越跑越歪、无处截断</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ 委派：拆成各自隔离的短回路</text>
+  <rect x="360" y="62" width="300" height="238" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="470" y="84" width="120" height="36" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="530" y="107" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">委派 delegate</text>
+  <line x1="530" y1="120" x2="420" y2="168" stroke="var(--accent)" stroke-width="1.5"/>
+  <line x1="530" y1="120" x2="530" y2="168" stroke="var(--accent)" stroke-width="1.5"/>
+  <line x1="530" y1="120" x2="622" y2="168" stroke="var(--accent)" stroke-width="1.5"/>
+  <rect x="378" y="170" width="84" height="50" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="420" y="190" text-anchor="middle" font-size="10.5" fill="var(--blue)">短回路A</text>
+  <text x="420" y="208" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">✓收敛</text>
+  <rect x="488" y="170" width="84" height="50" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="530" y="190" text-anchor="middle" font-size="10.5" fill="var(--blue)">短回路B</text>
+  <text x="530" y="208" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">✓收敛</text>
+  <rect x="598" y="170" width="48" height="50" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="622" y="190" text-anchor="middle" font-size="10.5" fill="var(--blue)">C</text>
+  <text x="622" y="208" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">✓</text>
+  <text x="510" y="250" text-anchor="middle" font-size="10.5" fill="var(--muted)">各自隔离 · 独立收敛 · 误差无处累积</text>
+  <text x="510" y="288" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">✓ 短回路 → 早截断、不放大</text>
+</svg>
+<div class="fig-cap"><b>B4 · 短回路</b>：一条超长回路里早期小错会被后续每一步放大，越跑越偏；用委派把大任务拆成各自隔离、独立收敛的短回路，误差没有跨回路累积的机会。</div>
+</div>
 </div>
   <div class="lang-en">
 <p class="lead">The pitfalls of building an agent are almost all <strong>crime scenes</strong> of the LLM's seven flaws (A–G) showing up in practice. This chapter is the <strong>accident file</strong> of agent engineering: turning pits others fell into rules.</p>
@@ -978,6 +1188,216 @@ messages = [
   <text x="364" y="258" font-size="11" fill="var(--muted)">few compactions, cache stays warm</text>
 </svg>
 <div class="fig-cap"><b>A4 · compression thrash vs smooth</b>: threshold too low → repeated top-outs, a cache voided per compaction, constant thrash; threshold <strong>~50%</strong> and stopping after <strong>2 ineffective compactions</strong> → fewer compactions, a warm cache, a smooth feel.</div>
+</div>
+
+<h2>Category B · The autonomy loop</h2>
+<p>The first class of pits sits on the "sacred-cache" line; the second shows up the moment you <strong>string single calls into an autonomous loop</strong>. A single call already carries three flaws — C·hallucination, F·error accumulation, G·hard-to-operate (ch.2–3); once you let the model <strong>decide its own next step and loop</strong>, the loop <strong>amplifies and compounds</strong> them: with no ceiling it burns forever (B1), trust its "done" self-report and you inherit its mistakes (B2), let a subagent share your context and it pollutes your cache (B3), make one loop too long and an early small error gets magnified all the way down (B4). The four fixes are really one discipline of autonomy — <strong>cap the loop, isolate the subagents, trust only verifiable handles</strong>. Skim the four trap cards first, then unpack <strong>B1 / B2</strong> as <strong>❌ wrong → ✅ right</strong>.</p>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">B1</span><span class="pit-title">An autonomy loop with no hard ceiling</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">One task runs for dozens or hundreds of turns and won't stop — the bill explodes.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">The loop has no hard ceiling (<strong>G·hard-to-operate</strong> + <strong>F·error accumulation</strong>) — the model talks to itself and burns endlessly.</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v"><strong>max_iterations</strong> + iteration_budget + a per-turn interrupt check nail a ceiling onto the loop.</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch5</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">B2</span><span class="pit-title">Taking a subagent's natural-language self-report as fact</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">A subagent reports "done / fixed," but it never did it or did it wrong, and the error rides on as fact.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">Trusting the subagent's natural-language self-report (<strong>C·hallucination</strong>) — SELF-REPORTS are not trustworthy.</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v">Demand a <strong>verifiable handle</strong> (URL / ID / path / HTTP status); the parent verifies it independently.</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch14</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">B3</span><span class="pit-title">Letting a subagent share the parent's context</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">The parent's context drowns in the subtask's intermediate noise, the cache is polluted, attention drops.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">The subagent shares the parent context with no isolation (<strong>A·lost-in-the-middle</strong> + the cache line).</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v">Give the subagent its own context + terminal, and <strong>return only a summary</strong>.</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch13</span></div>
+</div>
+
+<div class="pit">
+  <div class="pit-h"><span class="pit-id">B4</span><span class="pit-title">Stretching one autonomy loop too long</span></div>
+  <div class="pit-row"><span class="pit-k sym">Symptom</span><span class="pit-v">The autonomy chain drifts further off course; later turns are all magnifications of an early small error.</span></div>
+  <div class="pit-row"><span class="pit-k root">Root</span><span class="pit-v">One loop stretched too long, error accumulation with no cutoff (<strong>F·error accumulation</strong>).</span></div>
+  <div class="pit-row"><span class="pit-k fix">Fix</span><span class="pit-v">Use delegation to split the big task into isolated, <strong>independently-converging</strong> short loops.</span></div>
+  <div class="pit-row"><span class="pit-k ch">→ ch</span><span class="pit-v">ch13</span></div>
+</div>
+
+<h3>🔬 B1 · Nail a ceiling onto the autonomy loop: iterations + budget + a per-turn interrupt check</h3>
+<p>The most natural way to write an agent loop is <span class="mono">while True:</span> — keep feeding messages to the model, run whatever tools it asks for, feed them back. But the model <strong>continues by probability</strong> (G/F): with no hard ceiling, a confused model can <strong>talk to itself for dozens or hundreds of turns</strong>, each turn a full API call, and the bill explodes. This is exactly the single-call flaws <strong>compounding</strong> inside an autonomous loop.</p>
+<p>Hermes nails the ceiling at the very <strong>top</strong> of the core loop: that <span class="mono">while</span> line is three independent brakes that must <strong>all hold</strong> to continue — <span class="mono">api_call_count &lt; max_iterations</span> (a hard iteration cap, default <strong>90</strong>, see <span class="mono">agent/agent_init.py:165</span>), <span class="mono">iteration_budget.remaining &gt; 0</span> (a separate budget shared with subagents), and the <strong>first thing each turn</strong> inside the body is a check of <span class="mono">_interrupt_requested</span> (one new user message stops it immediately). The trailing <span class="mono">_budget_grace_call</span> is a single one-turn "grace" so the agent can finish its last sentence instead of dying mid-thought. If <strong>any one brake fails, the loop ends at once</strong> — no runaway burn.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ wrong · how you might write it</span></div><pre># Anti-pattern: a core loop with no hard ceiling at all
+while True:                       # an autonomy loop that never exits
+    resp = call_model(messages)  # one API call per turn = real money
+    if not resp.tool_calls:
+        break
+    run_tools(resp.tool_calls)   # a confused model retries and talks to itself
+    messages.append(resp)
+# no max_iterations / iteration_budget / interrupt check → dozens-to-hundreds of turns, bill explodes</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ right · agent/conversation_loop.py:589</span></div><pre>    while (api_call_count &lt; agent.max_iterations and agent.iteration_budget.remaining &gt; 0) or agent._budget_grace_call:
+        # Reset per-turn checkpoint dedup so each iteration can take one snapshot
+        agent._checkpoint_mgr.new_turn()
+
+        # Check for interrupt request (e.g., user sent new message)
+        if agent._interrupt_requested:
+            interrupted = True</pre></div>
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="B1: on the left while True with no ceiling loops back on itself and burns forever, on the right a gate at the loop top count under 90 and budget over 0 and no interrupt stops the moment any one fails">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">B1 · unbounded self-loop vs a gate at the loop top that stops on top-out</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ while True · no ceiling at all</text>
+  <rect x="20" y="62" width="300" height="278" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <text x="170" y="90" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">while True:　(no gate)</text>
+  <rect x="90" y="104" width="160" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="170" y="132" text-anchor="middle" font-size="12" fill="var(--blue)">call_model()</text>
+  <text x="170" y="173" text-anchor="middle" font-size="15" fill="var(--muted)">↓</text>
+  <rect x="90" y="184" width="160" height="46" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="212" text-anchor="middle" font-size="12" fill="var(--red)">run_tools()</text>
+  <path d="M90,207 C44,207 44,127 90,127" fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="5 4"/>
+  <text x="52" y="173" text-anchor="middle" font-size="22" fill="var(--red)">↺</text>
+  <text x="170" y="268" text-anchor="middle" font-size="11" fill="var(--muted)">confused model → talks to itself, never exits</text>
+  <text x="170" y="306" text-anchor="middle" font-size="15" font-weight="700" fill="var(--red)">∞ burn · bill explodes</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ three gates at the loop top, stop if any fails</text>
+  <rect x="360" y="62" width="300" height="278" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="372" y="100" width="276" height="52" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="510" y="122" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">while ( count &lt; 90　AND　budget &gt; 0</text>
+  <text x="510" y="140" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">AND　not interrupt ) — three gates</text>
+  <rect x="430" y="168" width="160" height="42" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="510" y="194" text-anchor="middle" font-size="12" fill="var(--blue)">call_model()</text>
+  <text x="510" y="227" text-anchor="middle" font-size="14" fill="var(--muted)">↓</text>
+  <rect x="430" y="234" width="160" height="42" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="260" text-anchor="middle" font-size="12" fill="var(--accent-ink)">run_tools()</text>
+  <path d="M430,255 C388,255 388,152 420,152" fill="none" stroke="var(--accent)" stroke-width="2"/>
+  <text x="398" y="210" text-anchor="middle" font-size="20" fill="var(--accent)">↺</text>
+  <text x="510" y="300" text-anchor="middle" font-size="11" fill="var(--muted)">any one fails → break</text>
+  <text x="510" y="324" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✓ bounded · no runaway</text>
+</svg>
+<div class="fig-cap"><b>B1 · nail a ceiling</b>: <span class="mono">while True</span> has no ceiling, so a confused model talks to itself for dozens-to-hundreds of turns and the bill explodes; Hermes puts three gates at the loop top — <span class="mono">count &lt; 90</span>, <span class="mono">budget &gt; 0</span>, a per-turn interrupt check — and the loop converges the instant any one fails.</div>
+</div>
+
+<h3>🔬 B2 · Don't trust a subagent's self-report; trust only a verifiable handle</h3>
+<p>When a subagent finishes, it hands you a one-line natural-language summary: "file uploaded," "test fixed." The most dangerous move is to <strong>act on that sentence at face value</strong> — <span class="mono">if summary.endswith(&quot;done&quot;): mark_complete()</span>. But a subagent is also an LLM and <strong>hallucinates</strong> too (C): it may genuinely believe the upload succeeded while the request actually failed long ago. Its summary is a <strong>self-report</strong>, not a <strong>verified fact</strong>. Treat the self-report as fact and the error rides on from here, until you publish a fake "success" to the user.</p>
+<p>Hermes' delegate tool writes this discipline as plain text into the subagent's prompt: subagent summaries are SELF-REPORTS, not verified facts; for any operation with external side-effects (HTTP POST/PUT, remote writes, file creation at shared paths, publishing), the subagent must <strong>return a verifiable handle</strong> (URL / ID / absolute path / HTTP status), and the parent must <strong>verify it itself</strong> — fetch that URL, stat that file, read the content back — <strong>before</strong> telling the user it succeeded. In one line: <strong>a handle can be verified independently, a self-report can't.</strong></p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ wrong · how you might write it</span></div><pre># Anti-pattern: just believe the subagent's one-line self-report
+result = run_subagent("upload the quarterly report to S3")
+if result.summary.endswith("done") or "success" in result.summary:
+    mark_complete()            # unverified: the file may never have been uploaded
+    tell_user("uploaded ✓")    # treats a SELF-REPORT as a verified fact
+# subagents hallucinate too: summary says success != actually success → fake success rides on to the user</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ right · tools/delegate_tool.py:2923</span></div><pre>        "- Subagent summaries are SELF-REPORTS, not verified facts. A subagent "
+        "that claims \"uploaded successfully\" or \"file written\" may be wrong. "
+        "For operations with external side-effects (HTTP POST/PUT, remote "
+        "writes, file creation at shared paths, publishing), require the "
+        "subagent to return a verifiable handle (URL, ID, absolute path, HTTP "
+        "status) and verify it yourself — fetch the URL, stat the file, read "
+        "back the content — before telling the user the operation succeeded.\n"</pre></div>
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="B2: on the left a subagent self-reports done, the parent takes it as fact and a fake success rides on, on the right the subagent returns a verifiable handle and the parent independently fetches and stats to verify before trusting it">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">B2 · trust a self-report all the way down vs demand a verifiable handle and verify</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ just trust the subagent's one line</text>
+  <rect x="20" y="62" width="300" height="278" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <line x1="40" y1="118" x2="40" y2="300" stroke="var(--red)" stroke-width="2" stroke-dasharray="4 4"/>
+  <text x="34" y="92" font-size="10.5" fill="var(--red)">red chain: unverified</text>
+  <rect x="60" y="100" width="220" height="42" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="170" y="126" text-anchor="middle" font-size="12" fill="var(--blue)">subagent · generator</text>
+  <text x="170" y="162" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">↓ self-reports "done ✓"</text>
+  <rect x="60" y="172" width="220" height="42" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="198" text-anchor="middle" font-size="12" fill="var(--red)">parent: takes it as fact</text>
+  <text x="170" y="234" text-anchor="middle" font-size="11" fill="var(--red)">↓ unverified</text>
+  <rect x="60" y="244" width="220" height="42" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-dasharray="5 4"/>
+  <text x="170" y="270" text-anchor="middle" font-size="12" fill="var(--red)">fake "success" published</text>
+  <text x="170" y="312" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">✗ hallucination rides on</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ demand a handle + parent verifies</text>
+  <rect x="360" y="62" width="300" height="278" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <line x1="380" y1="118" x2="380" y2="300" stroke="var(--accent)" stroke-width="2"/>
+  <text x="374" y="92" font-size="10.5" fill="var(--accent-ink)">handle: independently verifiable</text>
+  <rect x="400" y="100" width="220" height="42" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="510" y="126" text-anchor="middle" font-size="12" fill="var(--blue)">subagent · generator</text>
+  <text x="510" y="162" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">↓ returns handle URL / ID / path / HTTP</text>
+  <rect x="400" y="172" width="220" height="42" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="198" text-anchor="middle" font-size="12" fill="var(--accent-ink)">parent: verifies independently</text>
+  <text x="510" y="234" text-anchor="middle" font-size="10.5" fill="var(--muted)">fetch URL · stat file · read back</text>
+  <rect x="400" y="244" width="220" height="42" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="270" text-anchor="middle" font-size="12" fill="var(--accent-ink)">tell user only after it checks out</text>
+  <text x="510" y="312" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✓ handle is independently verifiable</text>
+</svg>
+<div class="fig-cap"><b>B2 · verifiable handle</b>: a subagent's summary is a <strong>self-report</strong>, not a verified fact; take it at face value and a fake "success" rides all the way down. The fix is to demand an independently verifiable <strong>handle</strong> (URL / ID / path / HTTP status) and have the parent fetch / stat / read back, trusting it only after it checks out.</div>
+</div>
+
+<p>The remaining two pits (B3 / B4) share one way out — <strong>delegation is isolation</strong>. Ch.13's <span class="mono">delegate_task</span> gives every subagent <strong>its own context and terminal session</strong>, and by default the parent only waits for a single <strong>summary</strong> back before continuing: this cures B3 at once (the subagent's intermediate noise never floods the parent's cache prefix) and B4 (a single over-long loop that would magnify errors endlessly is split into several isolated, independently-converging short loops). The two diagrams below map these two failure modes.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 340" role="img" aria-label="B3: on the left a subagent shares the parent context, intermediate noise floods in and pollutes the parent cache and drops attention, on the right the subagent has its own context and terminal sandbox and returns only a single summary">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">B3 · shared context drowned in noise vs an isolated sandbox returning only a summary</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ subagent shares the parent context</text>
+  <rect x="20" y="62" width="300" height="258" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <rect x="44" y="86" width="252" height="64" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="112" text-anchor="middle" font-size="12" font-weight="700" fill="var(--red)">parent context window</text>
+  <text x="170" y="134" text-anchor="middle" font-size="11" fill="var(--red)">packed with subtask noise</text>
+  <text x="84" y="186" text-anchor="middle" font-size="16" fill="var(--red)">↑</text>
+  <text x="170" y="186" text-anchor="middle" font-size="16" fill="var(--red)">↑</text>
+  <text x="258" y="186" text-anchor="middle" font-size="16" fill="var(--red)">↑</text>
+  <rect x="44" y="196" width="80" height="40" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="84" y="220" text-anchor="middle" font-size="10.5" fill="var(--red)">task A noise</text>
+  <rect x="130" y="196" width="80" height="40" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="170" y="220" text-anchor="middle" font-size="10.5" fill="var(--red)">task B noise</text>
+  <rect x="216" y="196" width="80" height="40" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="256" y="220" text-anchor="middle" font-size="10.5" fill="var(--red)">tool dumps</text>
+  <text x="170" y="266" text-anchor="middle" font-size="11" fill="var(--muted)">cache polluted · attention ↓</text>
+  <text x="170" y="298" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">✗ parent drowns, drifts hazier</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ own context + terminal, summary only</text>
+  <rect x="360" y="62" width="300" height="258" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="384" y="86" width="252" height="58" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="112" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">parent context</text>
+  <text x="510" y="132" text-anchor="middle" font-size="11" fill="var(--accent-ink)">stays clean · cache warm</text>
+  <text x="510" y="180" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">↑ returns one summary</text>
+  <rect x="420" y="196" width="180" height="58" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-dasharray="5 4"/>
+  <text x="510" y="220" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">subagent sandbox</text>
+  <text x="510" y="240" text-anchor="middle" font-size="10.5" fill="var(--blue)">own context + terminal</text>
+  <text x="510" y="278" text-anchor="middle" font-size="10.5" fill="var(--muted)">intermediate noise stays in the sandbox</text>
+  <text x="510" y="304" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✓ parent cache warm · attention focused</text>
+</svg>
+<div class="fig-cap"><b>B3 · isolation is protection</b>: a subagent sharing the parent context lets intermediate noise flood the parent cache, pollute the prefix, and drop attention; an own-context + terminal sandbox keeps the noise inside the subagent, and the parent receives a single summary with a warm cache.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 320" role="img" aria-label="B4: on the left one over-long loop magnifies its error step by step and drifts off the target line, on the right delegation splits it into several isolated, independently-converging short loops">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">B4 · one over-long loop magnifying error vs delegation into several short loops</text>
+  <text x="20" y="52" font-size="12" font-weight="700" fill="var(--red)">❌ one loop too long · error magnified step by step</text>
+  <rect x="20" y="62" width="300" height="238" rx="10" fill="var(--panel-2)" stroke="var(--red)"/>
+  <line x1="44" y1="108" x2="296" y2="108" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="48" y="102" font-size="10.5" fill="var(--accent-ink)">target line (should converge here)</text>
+  <polyline points="48,116 100,128 152,150 210,186 276,238" fill="none" stroke="var(--red)" stroke-width="2.5"/>
+  <circle cx="48" cy="116" r="4" fill="var(--red)"/>
+  <circle cx="100" cy="128" r="4" fill="var(--red)"/>
+  <circle cx="152" cy="150" r="4" fill="var(--red)"/>
+  <circle cx="210" cy="186" r="4" fill="var(--red)"/>
+  <circle cx="276" cy="238" r="5" fill="var(--red)"/>
+  <text x="150" y="170" font-size="10.5" fill="var(--red)">small error</text>
+  <text x="206" y="208" font-size="10.5" fill="var(--red)">magnified</text>
+  <text x="200" y="262" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">all early-error blowups</text>
+  <text x="170" y="290" text-anchor="middle" font-size="12" font-weight="700" fill="var(--red)">✗ drifts off, no cutoff</text>
+  <text x="360" y="52" font-size="12" font-weight="700" fill="var(--accent-ink)">✅ delegate: split into isolated short loops</text>
+  <rect x="360" y="62" width="300" height="238" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="470" y="84" width="120" height="36" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="530" y="107" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">delegate</text>
+  <line x1="530" y1="120" x2="420" y2="168" stroke="var(--accent)" stroke-width="1.5"/>
+  <line x1="530" y1="120" x2="530" y2="168" stroke="var(--accent)" stroke-width="1.5"/>
+  <line x1="530" y1="120" x2="622" y2="168" stroke="var(--accent)" stroke-width="1.5"/>
+  <rect x="378" y="170" width="84" height="50" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="420" y="190" text-anchor="middle" font-size="10.5" fill="var(--blue)">short loop A</text>
+  <text x="420" y="208" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">✓ converges</text>
+  <rect x="488" y="170" width="84" height="50" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="530" y="190" text-anchor="middle" font-size="10.5" fill="var(--blue)">short loop B</text>
+  <text x="530" y="208" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">✓ converges</text>
+  <rect x="598" y="170" width="48" height="50" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="622" y="190" text-anchor="middle" font-size="10.5" fill="var(--blue)">C</text>
+  <text x="622" y="208" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">✓</text>
+  <text x="510" y="250" text-anchor="middle" font-size="10.5" fill="var(--muted)">isolated · independently converging · no carryover</text>
+  <text x="510" y="288" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">✓ short loops → early cutoff, no blowup</text>
+</svg>
+<div class="fig-cap"><b>B4 · short loops</b>: in one over-long loop an early small error gets magnified by every later step and drifts further off; delegation splits the big task into isolated, independently-converging short loops, so error has no chance to accumulate across loops.</div>
 </div>
 </div>
   <div class="footnav"><a class="prev" href="25-design-principles.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">设计原则横向收束</span><span class="lang-en">Design principles synthesis</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
