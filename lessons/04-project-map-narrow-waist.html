@@ -347,6 +347,10 @@ Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cro
 你就理解了 Hermes 大部分架构决策：<strong>核心能不长就不长，能力尽量长在边缘</strong>。
 </p>
 
+<p>为什么要先抓住这个<strong>形状</strong>，而不是先记某个文件？因为 AGENTS.md 把它列为<strong>贯穿几乎每一个设计决策的两条性质</strong>之一——另一条是<strong>「每会话提示缓存神圣不可侵犯」</strong>。也就是说，「窄腰」不是事后总结出来的美学口号，而是一把<strong>评审任何改动的尺子</strong>：一个改动要进核心，先得问它配不配占用这条腰。把这把尺子握在手里，你往往还没读完源码，就能预判一个 PR 该不该被接受、一项能力该落在哪一层。这正是本章被放在前部「哲学」位置的原因：它是看懂后面所有具体机制的<strong>前置透镜</strong>。</p>
+
+<p>窄腰还回答了一个容易被忽略的疑问：Hermes 明明<strong>很大</strong>，凭什么说核心「窄」？AGENTS.md 给的答案是——产品的<strong>广度</strong>（平台、provider、模型、桌面/TUI 功能）是<strong>有意</strong>奔放扩张的，而「最小 footprint」这条约束管的只是<strong>能力如何接进核心</strong>，并非产品是否允许变大。换句话说，大与窄并不矛盾：<strong>大长在两端，窄守在中间</strong>。后面每一节，其实都是这一句话的展开——它既解释了为什么平台能堆到二十多个，也解释了为什么核心工具清单短得出奇。</p>
+
 <div class="card analogy">
   <div class="tag">🔌 生活类比</div>
   想想 <strong>USB</strong>：中间是一个<strong>极窄、极稳定</strong>的标准接口，两端却接着<strong>无数设备</strong>——
@@ -367,6 +371,10 @@ Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cro
 </table>
 <p>好处很实在：<strong>修一次核心逻辑，所有前端同时受益</strong>；新功能加进 Ink，桌面 App 里自动出现。</p>
 
+<p>但更深的问题是：为什么非要让五种前端共享<strong>同一个</strong> AIAgent，而不是各写各的？因为窄腰的回报恰恰来自「<strong>只实现一次</strong>」。无状态会话所需的状态外置机制（第 2 章 B）、缓存友好的消息拼装（第 6 章）、工具发现与派发——这些复杂逻辑只要写在核心一处，所有前端就一次性继承。若每个前端各自维护一份推理循环，缓存策略、角色对齐规则、预算控制就会变成<strong>五份会各自漂移的实现</strong>，任何一处疏漏都是一类新 bug，而且只在那个前端上复现，极难排查。</p>
+
+<p>这条「一个 core」的线会一直延伸到后面几章：第 16 章讲<strong>终端的多种后端</strong>（local/docker/ssh/modal…），第 17 章讲<strong>平台适配器</strong>，第 23 章讲<strong>插件与 MCP</strong>——它们全是挂在同一条腰上的「壳」或「边缘」。前端换皮、后端换实现，核心推理循环纹丝不动。正因为腰稳，<span class="mono">ui-tui</span> 里加一个功能，桌面 App 才会「自动出现」，而不必在两处各写一遍；这也是 AGENTS.md 反复强调「不要在仪表盘里重写主聊天体验」的根因——重写就等于在腰之外再造一条腰。</p>
+
 <h2>“腰”：一份共享的核心工具清单</h2>
 <p>窄腰的“腰”，具体就是 <span class="mono">_HERMES_CORE_TOOLS</span>——一份所有平台共享的核心工具清单。
 它的注释一句话点明了设计意图：</p>
@@ -378,6 +386,10 @@ Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cro
 </div>
 <p>为什么核心工具要这么克制？因为<strong>每个核心工具都会出现在每一次 API 调用的工具 schema 里</strong>——
 工具越多，模型选择质量越差(这正是第 3 章 F「工具越多越不准」)。所以新增<strong>核心</strong>工具的门槛极高。</p>
+
+<p>为什么核心工具被称作「<strong>最贵的例外</strong>」，而不是「多一个少一个无所谓」？AGENTS.md 把根挖得很清楚：<strong>我们加的每一个 model 工具，都会在每一次 API 调用里被发送</strong>。这意味着一个核心工具的成本不是「加一次」，而是「<strong>乘以你这辈子的每一轮对话</strong>」。它是窄腰的<strong>经济学根据</strong>——核心是所有能力都要穿过的窄通道，凡占用它的，都是<strong>全局、永久</strong>的成本。一个边缘插件改坏了只伤一个用户，一个多余的核心工具却向<strong>每个用户的每一轮</strong>收税。</p>
+
+<p>这笔成本还会同时撞上前面两章讲过的两个约束。一是<strong>注意力稀释</strong>（第 2 章）：工具 schema 越长，关键指令越容易「中间遗失」，模型的工具选择质量随之下降——这正是第 3 章 F「工具越多越不准」的来源。二是<strong>缓存前缀变长</strong>（第 6 章）：工具列表是系统前缀的一部分，臃肿的腰会让每一轮要缓存、要比对的前缀更大、更贵。所以这里的「克制」不是工程洁癖，而是在替用户省下被<strong>反复乘加</strong>的真金白银——这也呼应了 AGENTS.md 把「核心 agent + model 工具 schema」单列为「每一笔加法都按每次调用付费」的那一处。</p>
 
 <h2>新能力往哪放：Footprint Ladder</h2>
 <p>Hermes 用一个<strong>阶梯</strong>决定“新能力放哪一层”——<strong>选能正确解决问题的、footprint 最小的那一级</strong>：</p>
@@ -391,6 +403,12 @@ Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cro
 </div>
 <p>正确的核心工具长这样：<span class="mono">terminal</span>、<span class="mono">read_file</span>、
 <span class="mono">web_search</span>、<span class="mono">browser_navigate</span>——基础到几乎人人都用。</p>
+
+<p>那么，<strong>什么该进核心、什么该下沉边缘</strong>，靠的是什么手艺？标准其实很硬：只有<strong>基础到几乎人人每一轮都要、且终端+文件够不到</strong>的能力，才配当核心工具——AGENTS.md 给的正例正是上面这四个。反过来，凡是长尾、niche、或只在配好某个前置时才需要的能力，一律往阶梯下层推：能扩展现有代码就不写新工具，能用 CLI+技能就不进 schema，能门控就让它「没配好时根本不出现」。这把判断刀，决定了核心永远只留下那几样<strong>无可替代</strong>的东西。</p>
+
+<p>这也解释了 AGENTS.md 那句看似拗口的话——「<strong>在边缘奔放，在腰部保守</strong>」。两者并不冲突：新平台、新 provider、新技能<strong>routinely</strong> 落地，哪怕体量很大，因为它们长在两端、不动核心 schema；而新<strong>核心工具</strong>是「最后手段」，因为它动的是那条全局收费的腰。把这条线想清楚，你就不会再纠结「Hermes 到底想大还是想小」——它要的是<strong>两端大、中间小</strong>。一个 PR 加平台是受欢迎的扩张，同一个人加核心工具却要被反复盘问，差别不在代码量，而在它落在腰还是落在边缘。</p>
+
+<p>Footprint Ladder 还有一层智慧，是处理「<strong>同类能力反复来敲门</strong>」的情形。AGENTS.md 明说：当 3 个以上 PR 想接入<strong>同一类</strong>东西（多种 memory 后端、provider、通知器），不要一个个并进核心，而是设计一个 <strong>ABC + 编排器</strong>，把现有内置实现包成第一个 provider，再把竞争的 PR 变成针对该接口的插件。这正是「<strong>扩展而非重复</strong>」：用一道<strong>窄接口</strong>替代 N 个散落的特例，腰依旧只有一条，而所有同类后端都在边缘各自生长、互不打扰。这也是 AGENTS.md 里 memory provider「不再新增 in-tree 后端、一律做成独立插件仓库」那条政策背后的同一逻辑：接口收在中间，实现散到边缘。</p>
 
 <h2>边缘如何向中心“注册”</h2>
 <p>能力长在边缘，但要被 agent 用到，得向中心的 <span class="mono">registry</span> 注册。注册入口签名清晰：</p>
@@ -412,6 +430,10 @@ Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cro
            ^
     run_agent.py, cli.py, ...</pre>
 </div>
+
+<p>为什么依赖链要被钉成<strong>单向</strong>——<span class="mono">registry</span> 不 import 任何工具，工具反过来注册进 registry？因为窄腰要稳，前提是它<strong>不依赖任何边缘</strong>。一旦核心反向引用某个具体工具，就等于把一根边缘焊死在腰上：删不掉、换不掉，循环依赖也会随之滋生。单向链让「腰」永远是被依赖的那一端，边缘可以自由增删；而 <span class="mono">discover_builtin_tools()</span> 的自动发现，又让「加一个工具」连 import 清单都不必维护——把文件丢进 <span class="mono">tools/</span>、写一句 <span class="mono">register()</span> 即可，核心一行不动。</p>
+
+<p>把这几节连起来看，窄腰真正守住的是两样东西：<strong>缓存活着</strong>与<strong>演化稳着</strong>。核心稳，缓存前缀就稳，长对话的每一轮都能复用那段昂贵前缀（第 6 章）；核心窄，边缘怎么加插件、换后端都<strong>动不到</strong>核心，演化的风险被挡在腰之外，核心因此可以长年保持稳定。这也是为什么本章被列进全书的<strong>三条设计主线</strong>之一（第 25 章）：窄腰不是单点技巧，而是一条从哲学（本章）一路贯穿到 Footprint Ladder（第 8 章）、多后端终端（第 16 章）、平台适配器（第 17 章）与插件/MCP（第 23 章）的<strong>同一条线</strong>。</p>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · “一处编辑、全平台同步”怎么做到</div>
@@ -435,6 +457,8 @@ Hermes 很大——CLI、消息网关、20 多个平台、TUI、桌面 App、cro
   所以有了 <strong>Footprint Ladder</strong>：能在边缘解决的，绝不加进核心。
   <p style="margin:.5rem 0 0">对应的 LLM 约束：<span class="badge constraint">F·工具越多越不准</span>——窄腰直接压住工具集规模；
   也间接服务 <span class="badge constraint">B·无状态</span>（统一 core 让状态外置机制只实现一次）。</p>
+  <p>再往深一层：为什么偏要做<strong>窄腰</strong>这种沙漏形状，而不是干脆做一个无所不包的大核心？因为大核心意味着每一次 API 调用都背着所有能力的 schema——注意力被稀释（第 2 章）、缓存前缀被撑大（第 6 章）、成本被<strong>逐轮乘加</strong>。窄腰把复杂度<strong>挤向两端</strong>：底层让终端长出多种后端，上层让技能与插件无限生长，中间只留下人人每轮都要的那几样。复杂度并没有消失，只是被搬到了<strong>不必每轮付费</strong>的地方。</p>
+  <p>所以本章的取舍可以浓缩成一句：<strong>核心的每一寸面积都是全局、永久、逐轮计费的</strong>，因此能在边缘解决的就绝不进核心。这把尺子会在后面反复出现——评审一个新工具时、决定一项能力落在 Footprint Ladder 哪一级时、判断一个插件该不该碰核心文件时，问的都是同一个问题：<strong>它配占用这条腰吗？</strong>能回答好这一问，你就握住了 Hermes 架构的总钥匙。</p>
 </div>
 
 <div class="card key">
@@ -490,6 +514,10 @@ extensions</strong> (skills/plugins/MCP) below. Grasp this shape and you grasp m
 <strong>grow the core as little as possible; grow capability at the edges</strong>.
 </p>
 
+<p>Why grab the <strong>shape</strong> first instead of memorizing some file? Because AGENTS.md lists it as one of the <strong>two properties that shape almost every design decision</strong> — the other being <strong>"per-conversation prompt caching is sacred."</strong> The narrow waist isn't an after-the-fact aesthetic; it's a <strong>ruler for reviewing any change</strong>: for something to enter the core, first ask whether it earns a place on the waist. Hold that ruler and you can often predict — before you've finished reading the source — whether a PR should land and which rung a capability belongs on. That's why this chapter sits in the early "philosophy" slot: it's the <strong>lens</strong> for everything concrete that follows.</p>
+
+<p>The waist also answers an easily-missed question: Hermes is plainly <strong>big</strong>, so how is the core "narrow"? AGENTS.md's answer: the product's <strong>breadth</strong> (platforms, providers, models, desktop/TUI features) expands aggressively and <strong>on purpose</strong>, while the "smallest footprint" rule only governs <strong>how a capability is wired into the core</strong>, not whether the product is allowed to grow. Big and narrow don't conflict: <strong>big lives at the ends, narrow guards the middle</strong>. Every later section is just an unfolding of that one sentence — it explains both why platforms can stack past twenty and why the core-tool list stays startlingly short.</p>
+
 <div class="card analogy">
   <div class="tag">🔌 Analogy</div>
   Think of <strong>USB</strong>: the middle is one <strong>extremely narrow, extremely stable</strong> standard, while both
@@ -513,6 +541,10 @@ reasoning loop:</p>
 <p>The payoff is concrete: <strong>fix the core logic once, every front-end benefits</strong>; add a feature to Ink and it
 shows up in the desktop app automatically.</p>
 
+<p>But the deeper question is: why force five front-ends to share the <strong>same</strong> AIAgent rather than each rolling its own? Because the narrow waist's payoff comes precisely from <strong>"implement it once."</strong> The state-externalization machinery a stateless session needs (ch.2's B), cache-friendly message assembly (ch.6), tool discovery and dispatch — write that complex logic once in the core and every front-end inherits it for free. If each front-end maintained its own reasoning loop, the caching strategy, role-alternation rules, and budget control would become <strong>five implementations that drift apart</strong>, and any single slip becomes a new bug class that only reproduces on that one front-end and is brutal to track down.</p>
+
+<p>This "one core" line stretches across later chapters: ch.16 covers the terminal's <strong>multiple backends</strong> (local/docker/ssh/modal…), ch.17 the <strong>platform adapters</strong>, ch.23 <strong>plugins and MCP</strong> — all of them "shells" or "edges" hung on the same waist. Reskin the front-end, swap the backend implementation, and the core reasoning loop doesn't budge. Precisely because the waist is stable, a feature added in <span class="mono">ui-tui</span> "shows up automatically" in the desktop app instead of being written twice — which is also the root reason AGENTS.md keeps insisting "do not re-implement the primary chat experience in the dashboard": re-implementing means building a second waist beside the first.</p>
+
 <h2>The “waist”: one shared core-tool list</h2>
 <p>The “waist” is concretely <span class="mono">_HERMES_CORE_TOOLS</span> — one core-tool list shared by all platforms. Its
 comment states the intent in one line:</p>
@@ -525,6 +557,10 @@ comment states the intent in one line:</p>
 <p>Why so disciplined? Because <strong>every core tool ships in the tool schema of every API call</strong> — more tools,
 worse model selection (exactly ch.3's F “more tools = worse accuracy”). So the bar for a new <strong>core</strong> tool is
 very high.</p>
+
+<p>Why is a core tool called the <strong>"most expensive exception"</strong> rather than "one more or less, who cares"? AGENTS.md digs to the root: <strong>every model tool we add is sent on every API call</strong>. That means a core tool's cost isn't "added once" — it's <strong>multiplied across every turn you'll ever have</strong>. This is the narrow waist's <strong>economic basis</strong>: the core is the narrow channel every capability must pass through, so anything that occupies it is a <strong>global, permanent</strong> cost. A broken edge plugin hurts one user; one redundant core tool taxes <strong>every user on every turn</strong>.</p>
+
+<p>That cost also collides with the two constraints from earlier chapters at once. First, <strong>attention dilution</strong> (ch.2): the longer the tool schema, the easier it is for key instructions to get "lost in the middle," degrading the model's tool selection — which is exactly where ch.3's F "more tools = worse accuracy" comes from. Second, a <strong>longer cache prefix</strong> (ch.6): the tool list is part of the system prefix, so a bloated waist makes the prefix that must be cached and compared each turn bigger and pricier. So this "discipline" isn't engineering fastidiousness — it's saving the user real money that would otherwise be <strong>multiplied and added up</strong> — echoing AGENTS.md singling out "the core agent + the model tool schema" as "the one place where every addition is paid for on every API call."</p>
 
 <h2>Where new capability goes: the Footprint Ladder</h2>
 <p>Hermes uses a <strong>ladder</strong> to decide which rung a new capability lands on — <strong>pick the smallest-footprint
@@ -540,6 +576,12 @@ rung that correctly solves it</strong>:</p>
 <p>Correct core tools look like: <span class="mono">terminal</span>, <span class="mono">read_file</span>,
 <span class="mono">web_search</span>, <span class="mono">browser_navigate</span> — fundamental enough that nearly everyone
 needs them.</p>
+
+<p>So what's the craft behind <strong>what goes in the core vs. what sinks to the edge</strong>? The standard is actually hard-edged: only a capability that is <strong>fundamental enough that nearly everyone needs it every turn, and unreachable via terminal + file</strong>, earns core-tool status — and AGENTS.md's positive examples are precisely the four above. Conversely, anything long-tail, niche, or needed only once a prerequisite is configured gets pushed down the ladder: if you can extend existing code, don't write a new tool; if a CLI command + skill works, don't enter the schema; if it can be gated, let it "not appear at all until configured." That judgment knife is what keeps the core down to a few <strong>irreplaceable</strong> things.</p>
+
+<p>This also explains AGENTS.md's seemingly awkward line — <strong>"expansive at the edges and conservative at the waist."</strong> The two don't conflict: new platforms, providers, and skills land <strong>routinely</strong>, even large ones, because they grow at the ends and don't touch the core schema; whereas a new <strong>core tool</strong> is a "last resort" because it touches the globally-billed waist. Get this line straight and you'll stop agonizing over "does Hermes want to be big or small" — it wants to be <strong>big at the ends, small in the middle</strong>. A PR adding a platform is welcome expansion; the same person adding a core tool gets grilled — the difference isn't lines of code, it's whether it lands on the waist or on an edge.</p>
+
+<p>The ladder carries one more piece of wisdom: handling the case where <strong>the same category keeps knocking</strong>. AGENTS.md states it plainly: when 3+ PRs try to integrate the <strong>same category</strong> of thing (memory backends, providers, notifiers), don't merge them one at a time into the core — design an <strong>ABC + orchestrator</strong>, wrap the existing built-in as the first provider, and turn the competing PRs into plugins against that interface. This is "<strong>extend, don't duplicate</strong>": replace N scattered special cases with one <strong>narrow interface</strong>, the waist still being a single one, while every sibling backend grows independently at the edge. It's the same logic behind AGENTS.md's "no new in-tree memory providers — ship them as standalone plugin repos" policy: keep the interface in the middle, scatter the implementations to the edge.</p>
 
 <h2>How the edges “register” with the center</h2>
 <p>Capability lives at the edges, but to be usable it must register with the central <span class="mono">registry</span>.
@@ -563,6 +605,10 @@ The entry signature is clean:</p>
            ^
     run_agent.py, cli.py, ...</pre>
 </div>
+
+<p>Why is the dependency chain pinned <strong>one-way</strong> — <span class="mono">registry</span> imports no tools, while tools register into the registry? Because for the waist to stay stable, it must <strong>depend on no edge</strong>. The moment the core back-references a concrete tool, it welds an edge onto the waist: you can't delete it, can't swap it, and circular imports start to breed. The one-way chain keeps the "waist" forever on the depended-upon side, while edges are free to come and go; and <span class="mono">discover_builtin_tools()</span>'s auto-discovery means "adding a tool" doesn't even require maintaining an import list — drop a file into <span class="mono">tools/</span>, write one <span class="mono">register()</span>, and the core doesn't change a line.</p>
+
+<p>Connect these sections and the narrow waist is really guarding two things: <strong>the cache stays alive</strong> and <strong>evolution stays stable</strong>. Stable core means a stable cache prefix, so every turn of a long conversation can reuse that expensive prefix (ch.6); narrow core means however you add plugins or swap backends at the edge, the core <strong>isn't touched</strong>, and evolution's risk is kept outside the waist, so the core can stay stable for years. That's why this chapter is one of the book's <strong>three design throughlines</strong> (ch.25): the narrow waist isn't a point trick but a <strong>single line</strong> running from philosophy (this chapter) through the Footprint Ladder (ch.8), the multi-backend terminal (ch.16), platform adapters (ch.17), and plugins/MCP (ch.23).</p>
 
 <div class="card collab">
   <div class="tag">🧩 Collaboration · how “edit once, all platforms sync” works</div>
@@ -590,6 +636,8 @@ The entry signature is clean:</p>
   <p style="margin:.5rem 0 0">The matching LLM constraint: <span class="badge constraint">F·tool-overload</span> — the narrow
   waist directly caps tool-set size; it also indirectly serves <span class="badge constraint">B·stateless</span> (one core
   means the state-externalization machinery is implemented once).</p>
+  <p>One layer deeper: why an hourglass-shaped <strong>narrow waist</strong> rather than just one all-encompassing fat core? Because a fat core means every API call carries the schema of every capability — attention diluted (ch.2), cache prefix bloated (ch.6), cost <strong>multiplied turn by turn</strong>. The narrow waist <strong>pushes complexity to the two ends</strong>: below, the terminal grows multiple backends; above, skills and plugins grow without limit; the middle keeps only the few things everyone needs every turn. The complexity doesn't vanish — it's just relocated to where you <strong>don't pay for it every turn</strong>.</p>
+  <p>So the chapter's tradeoff condenses to one line: <strong>every inch of core surface is global, permanent, and billed per turn</strong>, therefore anything solvable at the edge never enters the core. This ruler recurs throughout — reviewing a new tool, deciding which Footprint Ladder rung a capability lands on, judging whether a plugin should touch core files — the question is always the same: <strong>does it earn a place on the waist?</strong> Answer that well and you hold the master key to Hermes' architecture.</p>
 </div>
 
 <div class="card key">
