@@ -638,7 +638,7 @@ Each rung adds more permanent surface than the one above. Choose the highest
   <line x1="396" y1="118" x2="396" y2="262" stroke="var(--line)"/>
   <line x1="396" y1="262" x2="640" y2="262" stroke="var(--line)"/>
   <polyline points="400,250 452,150 504,120 560,116 636,112" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4"/>
-  <text x="462" y="130" font-size="10" fill="var(--muted)">已注册工具数（仍在涨）</text>
+  <text x="462" y="130" font-size="10.5" fill="var(--muted)">已注册工具数（仍在涨）</text>
   <polyline points="400,250 452,242 504,236 560,232 636,230" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
   <text x="470" y="222" font-size="10.5" font-weight="700" fill="var(--accent-ink)">在场工具数（门控后）</text>
   <text x="510" y="294" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">✓ 在场少 → 选对率回升</text>
@@ -1367,7 +1367,7 @@ Each rung adds more permanent surface than the one above. Choose the highest
   <line x1="396" y1="118" x2="396" y2="262" stroke="var(--line)"/>
   <line x1="396" y1="262" x2="640" y2="262" stroke="var(--line)"/>
   <polyline points="400,250 452,150 504,120 560,116 636,112" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4"/>
-  <text x="462" y="130" font-size="10" fill="var(--muted)">registered tools (still rising)</text>
+  <text x="462" y="130" font-size="10.5" fill="var(--muted)">registered tools (still rising)</text>
   <polyline points="400,250 452,242 504,236 560,232 636,230" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
   <text x="470" y="222" font-size="10.5" font-weight="700" fill="var(--accent-ink)">in-scope tools (after gating)</text>
   <text x="510" y="294" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">✓ fewer in scope → right-picks recover</text>
