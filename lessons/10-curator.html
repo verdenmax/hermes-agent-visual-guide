@@ -385,6 +385,76 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 <p>为什么<strong>产权边界</strong>是整套自治的信任基石？因为 curator 握有<strong>归档</strong>这种「让技能从书架上消失」的权力，一旦它的判定范围越过 <span class="mono">created_by=agent</span> 这条线，后果是不可逆的信任崩塌：归档了你<strong>手工写</strong>的技能、或 hub 安装的第三方技能，等于自动化系统擅自处置了用户资产。所以门控函数 <span class="mono">is_agent_created</span> 是一张<strong>白名单</strong>而非黑名单——只有「后台 review fork 亲手建」的才进入治理范围，其余一律默认安全。更狠的是源码里钉死了一张 <span class="mono">PROTECTED_BUILTIN_SKILLS</span> 名单（目前只有 <span class="mono">plan</span>），它支撑着 <span class="mono">/plan</span> 斜杠命令——若被悄悄归档，命令会变成「Unknown command」却毫无报错信号，所以它在<strong>所有路径</strong>上无条件豁免。</p>
 <p>这条边界还有一层<strong>纵深</strong>：<span class="mono">curator.prune_builtins</span> <strong>默认就是开的(True)</strong>，所以 bundled 内置也会被纳入园丁的归档治理——但<strong>即便如此，内置最多也只可能被归档、绝不会被删除或改写</strong>；只有把它显式设成 <span class="mono">false</span>，才让全部内置整体免于治理。换句话说，越靠近「用户没法重建的资产」，curator 的手就越轻——agent 自建的可降级、可归档，bundled 内置只会被归档（且可一键 <span class="mono">false</span> 全豁免），受保护的 <span class="mono">plan</span> 则在任何路径下都完全不可碰。这种<strong>分级信任</strong>把「自动维护的收益」与「误伤用户资产的风险」按可恢复性精确对齐：能恢复的才允许动，不可重建的一律豁免。它和第 9 章的产权门控同源——第 9 章决定「谁被标记为 agent 创建」，本章决定「被标记者才可被园丁修剪」。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 372" role="img" aria-label="产权门控：is_agent_created 白名单闸决定哪类技能能被 curator 治理">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--accent-ink)">产权门控 · 谁能被园丁修剪</text>
+
+  <g stroke-width="2">
+    <line x1="240" y1="81"  x2="438" y2="81"  stroke="var(--accent)"/>
+    <line x1="240" y1="141" x2="438" y2="141" stroke="var(--blue)"/>
+    <line x1="240" y1="201" x2="438" y2="201" stroke="var(--blue)"/>
+    <line x1="240" y1="261" x2="438" y2="261" stroke="var(--amber)"/>
+    <line x1="240" y1="321" x2="438" y2="321" stroke="var(--red)"/>
+  </g>
+  <g>
+    <polygon points="438,76 447,81 438,86" fill="var(--accent)"/>
+    <polygon points="438,136 447,141 438,146" fill="var(--blue)"/>
+    <polygon points="438,196 447,201 438,206" fill="var(--blue)"/>
+    <polygon points="438,256 447,261 438,266" fill="var(--amber)"/>
+    <polygon points="438,316 447,321 438,326" fill="var(--red)"/>
+  </g>
+
+  <rect x="286" y="48" width="108" height="296" rx="10" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+  <text x="340" y="180" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">白名单闸</text>
+  <text x="340" y="200" text-anchor="middle" font-size="9.5" fill="var(--muted)">is_agent_created</text>
+  <text x="340" y="224" text-anchor="middle" font-size="9.5" fill="var(--muted)">＋ prune_builtins</text>
+  <text x="340" y="238" text-anchor="middle" font-size="9.5" fill="var(--muted)">默认 True</text>
+
+  <g font-size="11">
+    <rect x="28" y="58"  width="212" height="46" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="134" y="80"  text-anchor="middle" font-weight="700" fill="var(--accent-ink)">created_by:agent</text>
+    <text x="134" y="96"  text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">后台 review fork 自建</text>
+
+    <rect x="28" y="118" width="212" height="46" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="134" y="140" text-anchor="middle" fill="var(--ink)">手写 hand-made</text>
+    <text x="134" y="156" text-anchor="middle" font-size="9.5" fill="var(--muted)">无 created_by 标记</text>
+
+    <rect x="28" y="178" width="212" height="46" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="134" y="200" text-anchor="middle" fill="var(--ink)">hub 安装</text>
+    <text x="134" y="216" text-anchor="middle" font-size="9.5" fill="var(--muted)">.hub/ 管理</text>
+
+    <rect x="28" y="238" width="212" height="46" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+    <text x="134" y="260" text-anchor="middle" fill="var(--ink)">bundled 内置</text>
+    <text x="134" y="276" text-anchor="middle" font-size="9.5" fill="var(--muted)">prune_builtins=True（默认）</text>
+
+    <rect x="28" y="298" width="212" height="46" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+    <text x="134" y="320" text-anchor="middle" fill="var(--ink)">受保护内置 plan</text>
+    <text x="134" y="336" text-anchor="middle" font-size="9.5" fill="var(--muted)">PROTECTED_BUILTIN_SKILLS</text>
+  </g>
+
+  <g font-size="10.5">
+    <rect x="448" y="58"  width="204" height="46" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="550" y="80"  text-anchor="middle" font-weight="700" fill="var(--accent-ink)">✓ 纳入治理</text>
+    <text x="550" y="96"  text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">可 stale / 归档（可恢复）</text>
+
+    <rect x="448" y="118" width="204" height="46" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="550" y="146" text-anchor="middle" font-weight="700" fill="var(--blue)">✗ 永远安全 · 不碰</text>
+
+    <rect x="448" y="178" width="204" height="46" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="550" y="206" text-anchor="middle" font-weight="700" fill="var(--blue)">✗ 豁免 · 不碰</text>
+
+    <rect x="448" y="238" width="204" height="46" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+    <text x="550" y="260" text-anchor="middle" font-weight="700" fill="var(--ink)">⚠ 只归档 · 绝不删改</text>
+    <text x="550" y="276" text-anchor="middle" font-size="9.5" fill="var(--muted)">设 false → 全部内置豁免</text>
+
+    <rect x="448" y="298" width="204" height="46" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+    <text x="550" y="320" text-anchor="middle" font-weight="700" fill="var(--red)">✗ 任何路径都不可碰</text>
+    <text x="550" y="336" text-anchor="middle" font-size="9.5" fill="var(--muted)">撑起 /plan 斜杠命令</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>产权门控</b>：<b>is_agent_created</b> 是一张<b>白名单</b>——只有「后台 review fork 自建」（<span class="mono">created_by:agent</span>）的技能进入治理，可 stale、可归档；<b>手写</b>（无标记）与 <b>hub 安装</b>的永远不碰。<b>bundled 内置</b>因 <span class="mono">prune_builtins</span> <b>默认 True</b> 也纳入治理，但<b>最多只归档、绝不删改</b>（设 <span class="mono">false</span> 才让全部内置豁免）；<b>受保护的 plan</b> 在<b>任何路径</b>下都不可碰。</div>
+</div>
+
 <h2>确定性状态机：active → stale → archived</h2>
 <p>降级的核心是一个<strong>纯确定性</strong>的状态机——不调用任何 LLM，只看技能「最近一次真实活动」的时间戳：</p>
 
@@ -404,6 +474,47 @@ html[data-lang="zh"] .lang-en { display: none !important; }
         set_state(name, ACTIVE)                   <span class="cm"># 又被用了 -> 复活</span></pre>
 </div>
 <p>三条转换都基于 <span class="mono">anchor</span>（最近活动时间）：30 天没动 <span class="mono">active → stale</span>，90 天没动 <span class="mono">stale → archived</span>，一旦又被用到则 <span class="mono">stale → active</span> 复活。注意 anchor 的回退链 <span class="mono">last_activity → created_at → now</span>——保证<strong>刚建的新技能不会立刻把自己归档</strong>。整段<strong>没有一次 LLM 调用</strong>，纯靠遥测时间戳（第 9 章的 skill_usage 喂数据），既便宜又可预测。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 300" role="img" aria-label="技能生命周期状态机：active 到 stale 到 archived，pinned 旁路豁免，归档可恢复绝不删除">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--accent-ink)">技能生命周期状态机 · 绝不删除，归档可 restore</text>
+
+  <rect x="40" y="38" width="600" height="36" rx="9" fill="var(--purple-soft)" stroke="var(--purple)" stroke-dasharray="6 4"/>
+  <text x="340" y="61" text-anchor="middle" font-size="11.5" fill="var(--purple)">📌 pinned（钉住）· 豁免一切自动转换 — 归档 / LLM review / delete 三条路径都让路</text>
+
+  <text x="230" y="118" text-anchor="middle" font-size="11" fill="var(--muted)">30 天未动</text>
+  <text x="230" y="133" text-anchor="middle" font-size="9.5" fill="var(--faint)">stale_after_days</text>
+  <text x="450" y="118" text-anchor="middle" font-size="11" fill="var(--muted)">累计 90 天未动</text>
+  <text x="450" y="133" text-anchor="middle" font-size="9.5" fill="var(--faint)">archive_after_days</text>
+
+  <rect x="45"  y="150" width="150" height="58" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="120" y="178" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent-ink)">active</text>
+  <text x="120" y="196" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">活跃</text>
+
+  <rect x="265" y="150" width="150" height="58" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="340" y="178" text-anchor="middle" font-size="14" font-weight="700" fill="var(--ink)">stale</text>
+  <text x="340" y="196" text-anchor="middle" font-size="10.5" fill="var(--muted)">陈旧 · 仍在库</text>
+
+  <rect x="485" y="150" width="150" height="58" rx="10" fill="var(--panel-2)" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 3"/>
+  <text x="560" y="178" text-anchor="middle" font-size="14" font-weight="700" fill="var(--muted)">archived</text>
+  <text x="560" y="196" text-anchor="middle" font-size="10.5" fill="var(--muted)">归档 · 可恢复</text>
+
+  <line x1="197" y1="179" x2="256" y2="179" stroke="var(--muted)" stroke-width="2"/>
+  <polygon points="255,174 264,179 255,184" fill="var(--muted)"/>
+  <line x1="417" y1="179" x2="476" y2="179" stroke="var(--muted)" stroke-width="2"/>
+  <polygon points="475,174 484,179 475,184" fill="var(--muted)"/>
+
+  <path d="M300 208 C 280 252, 196 252, 178 210" fill="none" stroke="var(--blue)" stroke-width="2" stroke-dasharray="5 3"/>
+  <polygon points="173,214 178,205 184,211" fill="var(--blue)"/>
+  <text x="238" y="270" text-anchor="middle" font-size="11" fill="var(--blue)">又被用到 → 复活 reactivate</text>
+
+  <line x1="560" y1="208" x2="560" y2="223" stroke="var(--blue)" stroke-width="2" stroke-dasharray="5 3"/>
+  <polygon points="555,221 560,230 565,221" fill="var(--blue)"/>
+  <text x="560" y="248" text-anchor="middle" font-size="11" fill="var(--blue)">↩ restore：一键取回上架</text>
+  <text x="560" y="266" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✗ curator 绝不 delete</text>
+</svg>
+<div class="fig-cap"><b>生命周期状态机</b>：纯看活动时间戳确定性流转——<b>active</b>→（30 天未动）<b>stale</b>→（累计 90 天未动，再约 60 天）<b>archived</b>；一旦再被用到，<b>stale→active</b> 复活。<b>archived 仍在磁盘的 .archive/，可一键 restore——curator 永不删除</b>。<b>pinned</b> 技能走顶部旁路，豁免上述<b>一切</b>自动转换。</div>
+</div>
 <p>为什么降级要<strong>纯确定性、零 LLM</strong>？因为这套逻辑<strong>始终在跑</strong>（只要 curator 启用），如果每次巡查都调一次模型，既烧 token 又引入不可预测的判断噪声——一个技能「该不该降级」本质只是一道时间算术题，没必要让 LLM 来拍板。确定性还带来<strong>可审计性</strong>：给定同样的时间戳，结果永远一致，便于回放与测试。anchor 的回退链 <span class="mono">last_activity → created_at → now</span> 是个容易被忽略却关键的细节：若一个刚建的技能还没有任何活动记录，它会回退到<strong>创建时间</strong>甚至<strong>当下</strong>，从而绝不会在出生那一刻就把自己判成陈旧——这避免了「第 9 章刚抽取、第 10 章就归档」的荒谬竞态。</p>
 <p>内置技能的处理还藏着一个<strong>基线播种</strong>设计：由于 <span class="mono">prune_builtins</span> <strong>默认就开着</strong>，当 curator <strong>第一次</strong>见到某个内置技能时，会先给它写一条 baseline 记录，让闲置时钟<strong>从现在</strong>而非从 epoch 起算。不这样会怎样？一个一直存在、却从没被「计数」过的内置，其 last_activity 是空，若直接按 epoch 算就等于「已闲置无限久」，开关一打开就被整批归档——基线播种逼它必须再经历完整的 <span class="mono">archive_after_days</span> 不活动才会被归档。同理，整个 curator <strong>首次安装时不会立刻跑</strong>：没有 last_run_at 时它只<strong>播种</strong>状态并推迟一整个 interval，避免 <span class="mono">hermes update</span> 后第一次后台 tick 就擅自改动技能库。</p>
 
@@ -523,6 +634,76 @@ In ch.9, the background review keeps <strong>creating</strong> new skills. A pro
 <p>Why is the <strong>provenance boundary</strong> the trust foundation of the whole self-governance? Because the curator wields the power to <strong>archive</strong> — to make a skill "vanish from the shelf" — and the moment its judgment crosses the <span class="mono">created_by=agent</span> line the result is an irreversible collapse of trust: archiving a skill <strong>you hand-wrote</strong>, or a third-party hub-installed one, means an automated system disposed of the user's assets on its own. So the gate <span class="mono">is_agent_created</span> is a <strong>whitelist</strong>, not a blacklist — only skills "born from the background review fork" enter governance; everything else is safe by default. Harsher still, the source pins a <span class="mono">PROTECTED_BUILTIN_SKILLS</span> list (currently just <span class="mono">plan</span>) backing the <span class="mono">/plan</span> slash command — silently archiving it would turn the command into "Unknown command" with no error signal, so it's unconditionally exempt on <strong>every path</strong>.</p>
 <p>This boundary has a <strong>defense-in-depth</strong> layer: the <span class="mono">curator.prune_builtins</span> switch is <strong>on by default (True)</strong>, so bundled built-ins are also drawn into the gardener's archival governance — yet <strong>even so, built-ins can at most be archived, never deleted or rewritten</strong>; only setting it to <span class="mono">false</span> leaves all built-ins wholly out of governance. In other words, the closer to "assets the user can't rebuild," the lighter the curator's hand — agent-created can be demoted and archived, bundled built-ins can only be archived (and a single <span class="mono">false</span> exempts them all), the protected <span class="mono">plan</span> is untouchable on every path. This <strong>graduated trust</strong> aligns "maintenance benefit" against "risk of harming the user's assets" precisely by recoverability: only the recoverable may be moved, the unrebuildable is always exempt. It shares a root with ch.9's provenance gating — ch.9 decides "who is marked agent-created," this chapter decides "only the marked may the gardener prune."</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 372" role="img" aria-label="Provenance gating: the is_agent_created whitelist decides which skills the curator may govern">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--accent-ink)">Provenance gating · who the gardener may prune</text>
+
+  <g stroke-width="2">
+    <line x1="240" y1="81"  x2="438" y2="81"  stroke="var(--accent)"/>
+    <line x1="240" y1="141" x2="438" y2="141" stroke="var(--blue)"/>
+    <line x1="240" y1="201" x2="438" y2="201" stroke="var(--blue)"/>
+    <line x1="240" y1="261" x2="438" y2="261" stroke="var(--amber)"/>
+    <line x1="240" y1="321" x2="438" y2="321" stroke="var(--red)"/>
+  </g>
+  <g>
+    <polygon points="438,76 447,81 438,86" fill="var(--accent)"/>
+    <polygon points="438,136 447,141 438,146" fill="var(--blue)"/>
+    <polygon points="438,196 447,201 438,206" fill="var(--blue)"/>
+    <polygon points="438,256 447,261 438,266" fill="var(--amber)"/>
+    <polygon points="438,316 447,321 438,326" fill="var(--red)"/>
+  </g>
+
+  <rect x="286" y="48" width="108" height="296" rx="10" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
+  <text x="340" y="178" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">whitelist gate</text>
+  <text x="340" y="198" text-anchor="middle" font-size="9.5" fill="var(--muted)">is_agent_created</text>
+  <text x="340" y="222" text-anchor="middle" font-size="9.5" fill="var(--muted)">＋ prune_builtins</text>
+  <text x="340" y="236" text-anchor="middle" font-size="9.5" fill="var(--muted)">default True</text>
+
+  <g font-size="11">
+    <rect x="28" y="58"  width="212" height="46" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="134" y="80"  text-anchor="middle" font-weight="700" fill="var(--accent-ink)">created_by:agent</text>
+    <text x="134" y="96"  text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">background review fork</text>
+
+    <rect x="28" y="118" width="212" height="46" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="134" y="140" text-anchor="middle" fill="var(--ink)">hand-made</text>
+    <text x="134" y="156" text-anchor="middle" font-size="9.5" fill="var(--muted)">no created_by tag</text>
+
+    <rect x="28" y="178" width="212" height="46" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="134" y="200" text-anchor="middle" fill="var(--ink)">hub-installed</text>
+    <text x="134" y="216" text-anchor="middle" font-size="9.5" fill="var(--muted)">.hub/ managed</text>
+
+    <rect x="28" y="238" width="212" height="46" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+    <text x="134" y="260" text-anchor="middle" fill="var(--ink)">bundled built-in</text>
+    <text x="134" y="276" text-anchor="middle" font-size="9.5" fill="var(--muted)">prune_builtins=True (default)</text>
+
+    <rect x="28" y="298" width="212" height="46" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+    <text x="134" y="320" text-anchor="middle" fill="var(--ink)">protected built-in plan</text>
+    <text x="134" y="336" text-anchor="middle" font-size="9.5" fill="var(--muted)">PROTECTED_BUILTIN_SKILLS</text>
+  </g>
+
+  <g font-size="10.5">
+    <rect x="448" y="58"  width="204" height="46" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="550" y="80"  text-anchor="middle" font-weight="700" fill="var(--accent-ink)">✓ governed</text>
+    <text x="550" y="96"  text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">can stale / archive (recoverable)</text>
+
+    <rect x="448" y="118" width="204" height="46" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="550" y="146" text-anchor="middle" font-weight="700" fill="var(--blue)">✗ always safe · untouched</text>
+
+    <rect x="448" y="178" width="204" height="46" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="550" y="206" text-anchor="middle" font-weight="700" fill="var(--blue)">✗ exempt · untouched</text>
+
+    <rect x="448" y="238" width="204" height="46" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+    <text x="550" y="260" text-anchor="middle" font-weight="700" fill="var(--ink)">⚠ archive only · never delete/edit</text>
+    <text x="550" y="276" text-anchor="middle" font-size="9.5" fill="var(--muted)">false → all built-ins exempt</text>
+
+    <rect x="448" y="298" width="204" height="46" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+    <text x="550" y="320" text-anchor="middle" font-weight="700" fill="var(--red)">✗ untouchable on every path</text>
+    <text x="550" y="336" text-anchor="middle" font-size="9.5" fill="var(--muted)">backs the /plan command</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>Provenance gating</b>: <b>is_agent_created</b> is a <b>whitelist</b> — only skills "born from the background review fork" (<span class="mono">created_by:agent</span>) enter governance and may be staled/archived; <b>hand-made</b> (unmarked) and <b>hub-installed</b> ones are never touched. <b>Bundled built-ins</b> are also governed because <span class="mono">prune_builtins</span> is <b>True by default</b>, but they can <b>at most be archived, never deleted or modified</b> (set <span class="mono">false</span> to exempt all built-ins); the <b>protected plan</b> is untouchable on <b>every path</b>.</div>
+</div>
+
 <h2>A deterministic state machine: active → stale → archived</h2>
 <p>The core of demotion is a <strong>purely deterministic</strong> state machine — calling no LLM, looking only at a skill's "latest real activity" timestamp:</p>
 
@@ -542,6 +723,47 @@ In ch.9, the background review keeps <strong>creating</strong> new skills. A pro
         set_state(name, ACTIVE)                   <span class="cm"># used again -> reactivate</span></pre>
 </div>
 <p>All three transitions hinge on <span class="mono">anchor</span> (latest activity): 30 days idle is <span class="mono">active → stale</span>, 90 days idle is <span class="mono">stale → archived</span>, and any fresh use is <span class="mono">stale → active</span>. Note the anchor fallback chain <span class="mono">last_activity → created_at → now</span> — guaranteeing a <strong>freshly-built skill won't immediately archive itself</strong>. The whole pass makes <strong>not a single LLM call</strong>, running purely on telemetry timestamps (fed by ch.9's skill_usage), making it both cheap and predictable.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 300" role="img" aria-label="Skill lifecycle state machine: active to stale to archived, pinned bypasses, archive is recoverable and never deleted">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--accent-ink)">Skill lifecycle state machine · never delete, archive is restorable</text>
+
+  <rect x="40" y="38" width="600" height="36" rx="9" fill="var(--purple-soft)" stroke="var(--purple)" stroke-dasharray="6 4"/>
+  <text x="340" y="61" text-anchor="middle" font-size="11.5" fill="var(--purple)">📌 pinned · bypasses every auto-transition — archive / LLM review / delete all yield</text>
+
+  <text x="230" y="118" text-anchor="middle" font-size="11" fill="var(--muted)">30 days idle</text>
+  <text x="230" y="133" text-anchor="middle" font-size="9.5" fill="var(--faint)">stale_after_days</text>
+  <text x="450" y="118" text-anchor="middle" font-size="11" fill="var(--muted)">90 days idle total</text>
+  <text x="450" y="133" text-anchor="middle" font-size="9.5" fill="var(--faint)">archive_after_days</text>
+
+  <rect x="45"  y="150" width="150" height="58" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="120" y="178" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent-ink)">active</text>
+  <text x="120" y="196" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">in use</text>
+
+  <rect x="265" y="150" width="150" height="58" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="340" y="178" text-anchor="middle" font-size="14" font-weight="700" fill="var(--ink)">stale</text>
+  <text x="340" y="196" text-anchor="middle" font-size="10.5" fill="var(--muted)">idle · still in library</text>
+
+  <rect x="485" y="150" width="150" height="58" rx="10" fill="var(--panel-2)" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 3"/>
+  <text x="560" y="178" text-anchor="middle" font-size="14" font-weight="700" fill="var(--muted)">archived</text>
+  <text x="560" y="196" text-anchor="middle" font-size="10.5" fill="var(--muted)">recoverable</text>
+
+  <line x1="197" y1="179" x2="256" y2="179" stroke="var(--muted)" stroke-width="2"/>
+  <polygon points="255,174 264,179 255,184" fill="var(--muted)"/>
+  <line x1="417" y1="179" x2="476" y2="179" stroke="var(--muted)" stroke-width="2"/>
+  <polygon points="475,174 484,179 475,184" fill="var(--muted)"/>
+
+  <path d="M300 208 C 280 252, 196 252, 178 210" fill="none" stroke="var(--blue)" stroke-width="2" stroke-dasharray="5 3"/>
+  <polygon points="173,214 178,205 184,211" fill="var(--blue)"/>
+  <text x="238" y="270" text-anchor="middle" font-size="11" fill="var(--blue)">used again → reactivate</text>
+
+  <line x1="560" y1="208" x2="560" y2="223" stroke="var(--blue)" stroke-width="2" stroke-dasharray="5 3"/>
+  <polygon points="555,221 560,230 565,221" fill="var(--blue)"/>
+  <text x="560" y="248" text-anchor="middle" font-size="11" fill="var(--blue)">↩ restore: back to shelf</text>
+  <text x="560" y="266" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✗ curator never deletes</text>
+</svg>
+<div class="fig-cap"><b>Lifecycle state machine</b>: deterministic flow purely on activity timestamps — <b>active</b> →(30 days idle)<b>stale</b> →(90 days idle total, ~60 more)<b>archived</b>; any fresh use revives <b>stale→active</b>. <b>Archived skills still live on disk in .archive/ and restore with one click — the curator never deletes</b>. <b>pinned</b> skills take the top bypass lane, exempt from <b>every</b> transition above.</div>
+</div>
 <p>Why must demotion be <strong>purely deterministic, zero-LLM</strong>? Because this logic is <strong>always running</strong> (whenever the curator is enabled); calling a model on every patrol would burn tokens and inject unpredictable judgment noise — whether a skill "should be demoted" is fundamentally a time-arithmetic question, no need for an LLM to rule on it. Determinism also brings <strong>auditability</strong>: given the same timestamps the result is always identical, easy to replay and test. The anchor fallback chain <span class="mono">last_activity → created_at → now</span> is an easily-missed but crucial detail: a freshly-built skill with no activity record yet falls back to its <strong>creation time</strong> or even <strong>now</strong>, so it can never judge itself stale the instant it's born — averting the absurd race of "extracted in ch.9, archived in ch.10."</p>
 <p>Built-in handling hides a <strong>baseline-seeding</strong> design too: since <span class="mono">prune_builtins</span> is <strong>on by default</strong>, when the curator sees a built-in for the <strong>first time</strong>, it writes a baseline record so the idle clock starts <strong>now</strong> rather than at epoch. What if it didn't? A long-present built-in that was never "counted" has an empty last_activity; computing from epoch would mean "idle for infinitely long," and flipping the switch would archive the whole batch at once — baseline seeding forces it to endure a fresh <span class="mono">archive_after_days</span> of inactivity first. By the same logic the curator <strong>doesn't run immediately on first install</strong>: with no last_run_at it only <strong>seeds</strong> state and defers a full interval, so it won't mutate the library on the first background tick after <span class="mono">hermes update</span>.</p>
 

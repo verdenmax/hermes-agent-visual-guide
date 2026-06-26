@@ -394,6 +394,76 @@ LESSON_25 = {
 
 <p>怎么读这一章?三条<strong>设计线</strong>是<strong>纵</strong>的(每条线串起好几章,讲一个一以贯之的工程主张),A–G <strong>约束矩阵</strong>是<strong>横</strong>的(每条约束被哪些章治)。纵横交织,就是 Hermes 的<strong>设计骨架</strong>。先看三条线感受"它为什么长成这样",再用矩阵回查"每个缺陷怎么被治"——两遍下来,这台机器在你脑子里就<strong>立体</strong>了。下面先纵后横。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 392" role="img" aria-label="三条设计线纵贯全书：缓存神圣线、自我进化线、窄腰线，每条串起多章">
+  <text x="20" y="24" font-size="13.5" font-weight="700" fill="var(--ink)">三条设计线 · 纵贯全书（每条线串起多章，标一句主张）</text>
+
+  <rect x="12" y="64" width="152" height="62" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="88" y="89" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">① 缓存神圣线</text>
+  <text x="88" y="110" text-anchor="middle" font-size="10" fill="var(--muted)">逐字节稳定·只压缩例外</text>
+  <line x1="176" y1="95" x2="662" y2="95" stroke="var(--accent)" stroke-width="2.5"/>
+  <g text-anchor="middle">
+    <circle cx="225" cy="95" r="21" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="225" y="100" font-size="13" font-weight="700" fill="var(--accent-ink)">6</text>
+    <text x="225" y="128" font-size="10" fill="var(--muted)">提示稳定</text>
+    <circle cx="330" cy="95" r="21" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="330" y="100" font-size="13" font-weight="700" fill="var(--accent-ink)">15</text>
+    <text x="330" y="128" font-size="10" fill="var(--muted)">压缩例外</text>
+    <circle cx="435" cy="95" r="21" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="435" y="100" font-size="13" font-weight="700" fill="var(--accent-ink)">18</text>
+    <text x="435" y="128" font-size="10" fill="var(--muted)">控制旁路</text>
+    <circle cx="540" cy="95" r="21" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="540" y="100" font-size="13" font-weight="700" fill="var(--accent-ink)">21</text>
+    <text x="540" y="128" font-size="10" fill="var(--muted)">Cron 独立</text>
+    <circle cx="645" cy="95" r="21" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="645" y="100" font-size="13" font-weight="700" fill="var(--accent-ink)">23</text>
+    <text x="645" y="128" font-size="10" fill="var(--muted)">技能 append</text>
+  </g>
+
+  <rect x="12" y="184" width="152" height="62" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="88" y="209" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">② 自我进化线</text>
+  <text x="88" y="230" text-anchor="middle" font-size="10" fill="var(--muted)">产物外置·只追加不改</text>
+  <line x1="176" y1="215" x2="662" y2="215" stroke="var(--blue)" stroke-width="2.5"/>
+  <g text-anchor="middle">
+    <circle cx="225" cy="215" r="21" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="225" y="220" font-size="13" font-weight="700" fill="var(--blue)">9</text>
+    <text x="225" y="248" font-size="10" fill="var(--muted)">学习 nudge</text>
+    <circle cx="365" cy="215" r="21" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="365" y="220" font-size="13" font-weight="700" fill="var(--blue)">10</text>
+    <text x="365" y="248" font-size="10" fill="var(--muted)">Curator</text>
+    <circle cx="505" cy="215" r="21" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="505" y="220" font-size="13" font-weight="700" fill="var(--blue)">11</text>
+    <text x="505" y="248" font-size="10" fill="var(--muted)">记忆双层</text>
+    <circle cx="645" cy="215" r="21" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="645" y="220" font-size="13" font-weight="700" fill="var(--blue)">12</text>
+    <text x="645" y="248" font-size="10" fill="var(--muted)">跨会话搜索</text>
+  </g>
+
+  <rect x="12" y="304" width="152" height="62" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="88" y="329" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">③ 窄腰线</text>
+  <text x="88" y="350" text-anchor="middle" font-size="10" fill="var(--muted)">核心薄·能力在边缘</text>
+  <line x1="176" y1="335" x2="662" y2="335" stroke="var(--purple)" stroke-width="2.5"/>
+  <g text-anchor="middle">
+    <circle cx="225" cy="335" r="21" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="225" y="340" font-size="13" font-weight="700" fill="var(--purple)">4</text>
+    <text x="225" y="368" font-size="10" fill="var(--muted)">窄腰哲学</text>
+    <circle cx="330" cy="335" r="21" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="330" y="340" font-size="13" font-weight="700" fill="var(--purple)">8</text>
+    <text x="330" y="368" font-size="10" fill="var(--muted)">Ladder</text>
+    <circle cx="435" cy="335" r="21" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="435" y="340" font-size="13" font-weight="700" fill="var(--purple)">16</text>
+    <text x="435" y="368" font-size="10" fill="var(--muted)">终端后端</text>
+    <circle cx="540" cy="335" r="21" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="540" y="340" font-size="13" font-weight="700" fill="var(--purple)">17</text>
+    <text x="540" y="368" font-size="10" fill="var(--muted)">平台适配器</text>
+    <circle cx="645" cy="335" r="21" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="645" y="340" font-size="13" font-weight="700" fill="var(--purple)">23</text>
+    <text x="645" y="368" font-size="10" fill="var(--muted)">插件/MCP</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>三条设计线 · 纵贯全书</b>：① <b>缓存神圣线</b>(ch6→15→18→21→23)——整会话前缀逐字节稳定，只压缩例外；② <b>自我进化线</b>(ch9→10→11→12)——学到的东西外置成文件、只追加不改；③ <b>窄腰线</b>(ch4→8→16→17→23)——核心薄、能力全长在边缘。ch23 是后两线<b>共用</b>的节点。三线交汇：窄腰让核心稳、核心稳让缓存活、缓存活让成本低。</div>
+</div>
+
 <h2>线一:每个会话的 prompt 缓存神圣不可侵犯</h2>
 <p>这是全书<strong>出现最多</strong>的一条线。长对话每轮复用缓存前缀,任何改动过去上下文的操作都让缓存作废、成本翻倍。于是每个部件都为它让路:</p>
 
@@ -448,6 +518,90 @@ LESSON_25 = {
   (第 3 章引入)→ F 治:审查(第 14 章)、评测(第 22 章)、压缩(第 15 章);G 治:几乎每章——网关(17)、Cron(21)、Profiles(20)、安全(24)都是运维基础设施。
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="A–G 约束到治理它的章节矩阵，按引入章分两组">
+  <text x="20" y="24" font-size="13.5" font-weight="700" fill="var(--ink)">A–G 约束 → 治理它的章节</text>
+  <rect x="392" y="13" width="13" height="13" rx="3" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="411" y="24" font-size="10.5" fill="var(--muted)">第2章引入(A·B·E)</text>
+  <rect x="528" y="13" width="13" height="13" rx="3" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="547" y="24" font-size="10.5" fill="var(--muted)">第3章引入(C·D·F·G)</text>
+
+  <g font-size="11.5">
+    <rect x="12" y="44" width="212" height="36" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="22" y="67" fill="var(--ink)">A · 中间遗失</text>
+    <text x="216" y="66" text-anchor="end" font-size="9.5" fill="var(--blue)">引入 ch2</text>
+    <text x="234" y="66" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="49" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="66" fill="var(--ink)">ch4</text>
+      <rect x="302" y="49" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="66" fill="var(--ink)">ch8</text>
+      <rect x="352" y="49" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="373" y="66" fill="var(--ink)">ch23</text>
+      <rect x="402" y="49" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="423" y="66" fill="var(--ink)">ch15</text>
+      <rect x="452" y="49" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="473" y="66" fill="var(--ink)">ch13</text>
+    </g>
+
+    <rect x="12" y="88" width="212" height="36" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="22" y="111" fill="var(--ink)">B · 无状态</text>
+    <text x="216" y="110" text-anchor="end" font-size="9.5" fill="var(--blue)">引入 ch2</text>
+    <text x="234" y="110" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="93" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="110" fill="var(--ink)">ch6</text>
+      <rect x="302" y="93" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="110" fill="var(--ink)">ch11</text>
+      <rect x="352" y="93" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="373" y="110" fill="var(--ink)">ch20</text>
+      <rect x="402" y="93" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="423" y="110" fill="var(--ink)">ch16</text>
+    </g>
+
+    <rect x="12" y="132" width="212" height="36" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+    <text x="22" y="155" fill="var(--ink)">C · 幻觉</text>
+    <text x="216" y="154" text-anchor="end" font-size="9.5" fill="var(--amber)">引入 ch3</text>
+    <text x="234" y="154" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="137" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="154" fill="var(--ink)">ch14</text>
+      <rect x="302" y="137" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="154" fill="var(--ink)">ch8</text>
+    </g>
+
+    <rect x="12" y="176" width="212" height="36" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+    <text x="22" y="199" fill="var(--ink)">D · 指令=数据</text>
+    <text x="216" y="198" text-anchor="end" font-size="9.5" fill="var(--amber)">引入 ch3</text>
+    <text x="234" y="198" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="181" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="198" fill="var(--ink)">ch18</text>
+      <rect x="302" y="181" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="198" fill="var(--ink)">ch24</text>
+    </g>
+
+    <rect x="12" y="220" width="212" height="36" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="22" y="243" fill="var(--ink)">E · 结构化脆弱</text>
+    <text x="216" y="242" text-anchor="end" font-size="9.5" fill="var(--blue)">引入 ch2</text>
+    <text x="234" y="242" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="225" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="242" fill="var(--ink)">ch7</text>
+      <rect x="302" y="225" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="242" fill="var(--ink)">ch8</text>
+    </g>
+
+    <rect x="12" y="264" width="212" height="36" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+    <text x="22" y="287" fill="var(--ink)">F · 误差累积</text>
+    <text x="216" y="286" text-anchor="end" font-size="9.5" fill="var(--amber)">引入 ch3</text>
+    <text x="234" y="286" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="269" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="286" fill="var(--ink)">ch14</text>
+      <rect x="302" y="269" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="286" fill="var(--ink)">ch22</text>
+      <rect x="352" y="269" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="373" y="286" fill="var(--ink)">ch15</text>
+    </g>
+
+    <rect x="12" y="308" width="212" height="36" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+    <text x="22" y="331" fill="var(--ink)">G · 运维</text>
+    <text x="216" y="330" text-anchor="end" font-size="9.5" fill="var(--amber)">引入 ch3</text>
+    <text x="234" y="330" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="313" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="330" fill="var(--ink)">ch17</text>
+      <rect x="302" y="313" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="330" fill="var(--ink)">ch21</text>
+      <rect x="352" y="313" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="373" y="330" fill="var(--ink)">ch20</text>
+      <rect x="402" y="313" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="423" y="330" fill="var(--ink)">ch24</text>
+    </g>
+  </g>
+</svg>
+<div class="fig-cap"><b>A–G 约束 → 治理矩阵</b>：左列 7 个 LLM 固有缺陷，按<b>引入章</b>分两组——<b>A·B·E 在第 2 章</b>(单次调用)引入、C·D·F·G 在第 3 章(自主性)引入；右侧连到真正<b>治</b>它的章节。注意 <b>E·结构化脆弱属第 2 章，不是第 3 章</b>。一处工程常同时治多条：委派(ch13)治 A+B、审查(ch14)治 C+F、压缩(ch15)救 A 又拦 F。</div>
+</div>
+
 <p>读这张矩阵别漏了一个规律:<strong>同一处工程往往同时治好几条约束</strong>。委派(第 13 章)既把中间过程关进子上下文治 A·中间遗失,又用独立会话快照治 B·无状态,还顺带剥离高危工具做安全;审查(第 14 章)既治 C·幻觉又治 F·误差累积;压缩(第 15 章)既救 A 又拦 F。这说明 A–G 不是七个孤立的待办,而是<strong>同一个"概率内核 vs 真实世界"矛盾的七个切面</strong>——所以好的设计常常一箭多雕。反过来,这也是为什么 Hermes 的部件<strong>高度复用、彼此咬合</strong>:不是堆功能,而是用尽量少的机制覆盖尽量多的约束面。</p>
 
 <div class="card design">
@@ -488,6 +642,76 @@ LESSON_25 = {
 </div>
 
 <p>How to read this chapter? The three <strong>design lines</strong> run <strong>vertically</strong> (each threads several chapters into one consistent engineering claim); the A–G <strong>constraint matrix</strong> runs <strong>horizontally</strong> (which chapters treat each constraint). Warp and weft together are Hermes's <strong>design skeleton</strong>. Read the three lines first to feel "why it's shaped this way," then use the matrix to look up "how each flaw gets treated" — two passes and the machine stands <strong>in 3D</strong> in your head. Vertical first, then horizontal.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 392" role="img" aria-label="Three design lines threading the whole book: sacred-cache, self-evolution, narrow-waist">
+  <text x="20" y="24" font-size="13.5" font-weight="700" fill="var(--ink)">Three design lines · threading the whole book (one claim each)</text>
+
+  <rect x="12" y="64" width="176" height="62" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="100" y="89" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">① Sacred cache</text>
+  <text x="100" y="110" text-anchor="middle" font-size="9" fill="var(--muted)">byte-stable; compression only</text>
+  <line x1="200" y1="95" x2="662" y2="95" stroke="var(--accent)" stroke-width="2.5"/>
+  <g text-anchor="middle">
+    <circle cx="235" cy="95" r="21" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="235" y="100" font-size="13" font-weight="700" fill="var(--accent-ink)">6</text>
+    <text x="235" y="128" font-size="10" fill="var(--muted)">stable</text>
+    <circle cx="340" cy="95" r="21" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="340" y="100" font-size="13" font-weight="700" fill="var(--accent-ink)">15</text>
+    <text x="340" y="128" font-size="10" fill="var(--muted)">compress</text>
+    <circle cx="445" cy="95" r="21" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="445" y="100" font-size="13" font-weight="700" fill="var(--accent-ink)">18</text>
+    <text x="445" y="128" font-size="10" fill="var(--muted)">bypass</text>
+    <circle cx="550" cy="95" r="21" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="550" y="100" font-size="13" font-weight="700" fill="var(--accent-ink)">21</text>
+    <text x="550" y="128" font-size="10" fill="var(--muted)">Cron</text>
+    <circle cx="655" cy="95" r="21" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="655" y="100" font-size="13" font-weight="700" fill="var(--accent-ink)">23</text>
+    <text x="655" y="128" font-size="10" fill="var(--muted)">skills</text>
+  </g>
+
+  <rect x="12" y="184" width="176" height="62" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="100" y="209" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">② Self-evolution</text>
+  <text x="100" y="230" text-anchor="middle" font-size="9" fill="var(--muted)">externalize; append-only</text>
+  <line x1="200" y1="215" x2="662" y2="215" stroke="var(--blue)" stroke-width="2.5"/>
+  <g text-anchor="middle">
+    <circle cx="235" cy="215" r="21" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="235" y="220" font-size="13" font-weight="700" fill="var(--blue)">9</text>
+    <text x="235" y="248" font-size="10" fill="var(--muted)">nudge</text>
+    <circle cx="375" cy="215" r="21" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="375" y="220" font-size="13" font-weight="700" fill="var(--blue)">10</text>
+    <text x="375" y="248" font-size="10" fill="var(--muted)">Curator</text>
+    <circle cx="515" cy="215" r="21" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="515" y="220" font-size="13" font-weight="700" fill="var(--blue)">11</text>
+    <text x="515" y="248" font-size="10" fill="var(--muted)">memory</text>
+    <circle cx="655" cy="215" r="21" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="655" y="220" font-size="13" font-weight="700" fill="var(--blue)">12</text>
+    <text x="655" y="248" font-size="10" fill="var(--muted)">search</text>
+  </g>
+
+  <rect x="12" y="304" width="176" height="62" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="100" y="329" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--purple)">③ Narrow waist</text>
+  <text x="100" y="350" text-anchor="middle" font-size="9" fill="var(--muted)">thin core; edge capability</text>
+  <line x1="200" y1="335" x2="662" y2="335" stroke="var(--purple)" stroke-width="2.5"/>
+  <g text-anchor="middle">
+    <circle cx="235" cy="335" r="21" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="235" y="340" font-size="13" font-weight="700" fill="var(--purple)">4</text>
+    <text x="235" y="368" font-size="10" fill="var(--muted)">philosophy</text>
+    <circle cx="340" cy="335" r="21" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="340" y="340" font-size="13" font-weight="700" fill="var(--purple)">8</text>
+    <text x="340" y="368" font-size="10" fill="var(--muted)">Ladder</text>
+    <circle cx="445" cy="335" r="21" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="445" y="340" font-size="13" font-weight="700" fill="var(--purple)">16</text>
+    <text x="445" y="368" font-size="10" fill="var(--muted)">terminal</text>
+    <circle cx="550" cy="335" r="21" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="550" y="340" font-size="13" font-weight="700" fill="var(--purple)">17</text>
+    <text x="550" y="368" font-size="10" fill="var(--muted)">adapters</text>
+    <circle cx="655" cy="335" r="21" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="655" y="340" font-size="13" font-weight="700" fill="var(--purple)">23</text>
+    <text x="655" y="368" font-size="10" fill="var(--muted)">plugins</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>Three design lines · threading the whole book</b>: ① <b>sacred-cache</b> (ch6→15→18→21→23) — the prefix stays byte-stable all conversation, compression the only exception; ② <b>self-evolution</b> (ch9→10→11→12) — learnings externalized to files, append-only; ③ <b>narrow-waist</b> (ch4→8→16→17→23) — thin core, all capability at the edge. ch23 is a node <b>shared</b> by the latter two lines. The lines converge: narrow waist keeps the core stable, the stable core keeps the cache alive, the live cache keeps cost low.</div>
+</div>
 
 <h2>Line 1: per-conversation prompt caching is sacred</h2>
 <p>The <strong>most recurring</strong> line in the book. A long conversation reuses the cached prefix each turn; anything that mutates past context voids the cache and doubles the cost. So every part gives way to it:</p>
@@ -541,6 +765,90 @@ LESSON_25 = {
   (C/D introduced ch.3, E ch.2) → C: generate-verify split (ch.14), tools fetch real data (ch.8); D: gateway guards (ch.18), defense in depth (ch.24); E: tool schemas + in-place repair (ch.7/8).
   <div class="collab-sub">F · error accumulation / G · ops</div>
   (introduced ch.3) → F: review (ch.14), eval (ch.22), compression (ch.15); G: nearly every chapter — gateway (17), Cron (21), Profiles (20), security (24) are all operational infrastructure.
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="A–G constraints to the chapters that treat them, grouped by introducing chapter">
+  <text x="20" y="24" font-size="13.5" font-weight="700" fill="var(--ink)">A–G constraints → the chapters that treat them</text>
+  <rect x="372" y="13" width="13" height="13" rx="3" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="391" y="24" font-size="10.5" fill="var(--muted)">intro ch.2 (A·B·E)</text>
+  <rect x="500" y="13" width="13" height="13" rx="3" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="519" y="24" font-size="10.5" fill="var(--muted)">intro ch.3 (C·D·F·G)</text>
+
+  <g font-size="11">
+    <rect x="12" y="44" width="212" height="36" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="22" y="67" fill="var(--ink)">A · lost-in-middle</text>
+    <text x="216" y="66" text-anchor="end" font-size="9.5" fill="var(--blue)">ch2</text>
+    <text x="234" y="66" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="49" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="66" fill="var(--ink)">ch4</text>
+      <rect x="302" y="49" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="66" fill="var(--ink)">ch8</text>
+      <rect x="352" y="49" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="373" y="66" fill="var(--ink)">ch23</text>
+      <rect x="402" y="49" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="423" y="66" fill="var(--ink)">ch15</text>
+      <rect x="452" y="49" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="473" y="66" fill="var(--ink)">ch13</text>
+    </g>
+
+    <rect x="12" y="88" width="212" height="36" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="22" y="111" fill="var(--ink)">B · statelessness</text>
+    <text x="216" y="110" text-anchor="end" font-size="9.5" fill="var(--blue)">ch2</text>
+    <text x="234" y="110" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="93" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="110" fill="var(--ink)">ch6</text>
+      <rect x="302" y="93" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="110" fill="var(--ink)">ch11</text>
+      <rect x="352" y="93" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="373" y="110" fill="var(--ink)">ch20</text>
+      <rect x="402" y="93" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="423" y="110" fill="var(--ink)">ch16</text>
+    </g>
+
+    <rect x="12" y="132" width="212" height="36" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+    <text x="22" y="155" fill="var(--ink)">C · hallucination</text>
+    <text x="216" y="154" text-anchor="end" font-size="9.5" fill="var(--amber)">ch3</text>
+    <text x="234" y="154" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="137" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="154" fill="var(--ink)">ch14</text>
+      <rect x="302" y="137" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="154" fill="var(--ink)">ch8</text>
+    </g>
+
+    <rect x="12" y="176" width="212" height="36" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+    <text x="22" y="199" fill="var(--ink)">D · instr = data</text>
+    <text x="216" y="198" text-anchor="end" font-size="9.5" fill="var(--amber)">ch3</text>
+    <text x="234" y="198" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="181" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="198" fill="var(--ink)">ch18</text>
+      <rect x="302" y="181" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="198" fill="var(--ink)">ch24</text>
+    </g>
+
+    <rect x="12" y="220" width="212" height="36" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="22" y="243" fill="var(--ink)">E · brittle output</text>
+    <text x="216" y="242" text-anchor="end" font-size="9.5" fill="var(--blue)">ch2</text>
+    <text x="234" y="242" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="225" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="242" fill="var(--ink)">ch7</text>
+      <rect x="302" y="225" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="242" fill="var(--ink)">ch8</text>
+    </g>
+
+    <rect x="12" y="264" width="212" height="36" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+    <text x="22" y="287" fill="var(--ink)">F · error accum.</text>
+    <text x="216" y="286" text-anchor="end" font-size="9.5" fill="var(--amber)">ch3</text>
+    <text x="234" y="286" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="269" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="286" fill="var(--ink)">ch14</text>
+      <rect x="302" y="269" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="286" fill="var(--ink)">ch22</text>
+      <rect x="352" y="269" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="373" y="286" fill="var(--ink)">ch15</text>
+    </g>
+
+    <rect x="12" y="308" width="212" height="36" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+    <text x="22" y="331" fill="var(--ink)">G · ops</text>
+    <text x="216" y="330" text-anchor="end" font-size="9.5" fill="var(--amber)">ch3</text>
+    <text x="234" y="330" font-size="14" fill="var(--faint)">→</text>
+    <g font-size="10.5" text-anchor="middle">
+      <rect x="252" y="313" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="273" y="330" fill="var(--ink)">ch17</text>
+      <rect x="302" y="313" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="323" y="330" fill="var(--ink)">ch21</text>
+      <rect x="352" y="313" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="373" y="330" fill="var(--ink)">ch20</text>
+      <rect x="402" y="313" width="42" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/><text x="423" y="330" fill="var(--ink)">ch24</text>
+    </g>
+  </g>
+</svg>
+<div class="fig-cap"><b>A–G constraints → governance matrix</b>: the left column holds the 7 inherent LLM flaws, split by <b>introducing chapter</b> — <b>A·B·E are introduced in ch.2</b> (the single call), C·D·F·G in ch.3 (autonomy); the right side links to the chapters that actually <b>treat</b> each. Note <b>E·brittle structured output belongs to ch.2, not ch.3</b>. One piece of engineering often treats several: delegation (ch13) treats A+B, review (ch14) treats C+F, compression (ch15) rescues A and blocks F.</div>
 </div>
 
 <p>Don't miss a pattern in this matrix: <strong>one piece of engineering often treats several constraints at once</strong>. Delegation (ch.13) cages the intermediate process in a sub-context to treat A·lost-in-the-middle, uses an isolated session snapshot to treat B·statelessness, and incidentally strips high-risk tools for security; review (ch.14) treats both C·hallucination and F·error-accumulation; compression (ch.15) both rescues A and blocks F. This shows A–G aren't seven isolated to-dos but <strong>seven facets of the same "probabilistic core vs. real world" contradiction</strong> — so good design often kills several birds with one stone. Conversely, this is why Hermes's parts are <strong>highly reused and tightly meshed</strong>: not piling on features, but covering as many constraint facets as possible with as few mechanisms as possible.</p>

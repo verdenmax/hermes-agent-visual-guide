@@ -371,6 +371,59 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <p>把这条阶梯逐级摊开就懂了「为什么核心工具排最后」：① <strong>扩展现有</strong>——零新增面，能力只是已有东西的一个变体；② <strong>CLI 命令 + 技能</strong>——凡是能用 shell 表达的配置 / 状态 / 基建，就让 agent 去跑 <span class="mono">hermes 子命令</span>，模型工具足迹为零（<span class="mono">hermes webhook</span> / <span class="mono">cron</span> / <span class="mono">tools</span>）；③ <strong>service-gated 工具</strong>——需要结构化参数返回、且只在配了前置条件时才出现；④ <strong>插件</strong>——第三方 / 小众，装进 <span class="mono">~/.hermes/plugins/</span> 运行时发现；⑤ <strong>MCP server（进 catalog）</strong>——真得做成工具但又非核心基础，挂到内置 MCP client 上；⑥ <strong>新核心工具</strong>——只有当能力「基础、几乎人人要、终端 + 文件够不着」才走到这一步。每往下一阶，都比上一阶多背一份<strong>永久</strong>的面，所以纪律是：永远挑「最靠上、还能正确解决问题」的那一阶。</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 446" role="img" aria-label="Footprint Ladder 足迹阶梯：从低足迹到高足迹的六级，新核心工具排最后">
+  <text x="20" y="24" font-size="13.5" font-weight="700" fill="var(--accent)">Footprint Ladder · 新能力放哪一层：选 footprint 最小、还能解决问题的那一级</text>
+  <g>
+    <rect x="40" y="346" width="342" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <circle cx="64" cy="369" r="13" fill="var(--blue)"/>
+    <text x="64" y="373" text-anchor="middle" font-size="12" font-weight="700" fill="var(--bg)">1</text>
+    <text x="86" y="366" font-size="12.5" font-weight="700" fill="var(--ink)">扩展现有代码</text>
+    <text x="86" y="383" font-size="10.5" fill="var(--muted)">零新增表面 · 已有能力的一个变体</text>
+  </g>
+  <g>
+    <rect x="66" y="290" width="342" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <circle cx="90" cy="313" r="13" fill="var(--blue)"/>
+    <text x="90" y="317" text-anchor="middle" font-size="12" font-weight="700" fill="var(--bg)">2</text>
+    <text x="112" y="310" font-size="12.5" font-weight="700" fill="var(--ink)">CLI 命令 + 技能</text>
+    <text x="112" y="327" font-size="10.5" fill="var(--muted)">零 model-tool 足迹（hermes cron / webhook）</text>
+  </g>
+  <g>
+    <rect x="92" y="234" width="342" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <circle cx="116" cy="257" r="13" fill="var(--blue)"/>
+    <text x="116" y="261" text-anchor="middle" font-size="12" font-weight="700" fill="var(--bg)">3</text>
+    <text x="138" y="254" font-size="12.5" font-weight="700" fill="var(--ink)">服务门控工具 check_fn</text>
+    <text x="138" y="271" font-size="10.5" fill="var(--muted)">仅在配好前置条件时才出现</text>
+  </g>
+  <g>
+    <rect x="118" y="178" width="342" height="46" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+    <circle cx="142" cy="201" r="13" fill="var(--purple)"/>
+    <text x="142" y="205" text-anchor="middle" font-size="12" font-weight="700" fill="var(--bg)">4</text>
+    <text x="164" y="198" font-size="12.5" font-weight="700" fill="var(--ink)">插件</text>
+    <text x="164" y="215" font-size="10.5" fill="var(--muted)">~/.hermes/plugins · 运行时发现</text>
+  </g>
+  <g>
+    <rect x="144" y="122" width="342" height="46" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+    <circle cx="168" cy="145" r="13" fill="var(--purple)"/>
+    <text x="168" y="149" text-anchor="middle" font-size="12" font-weight="700" fill="var(--bg)">5</text>
+    <text x="190" y="142" font-size="12.5" font-weight="700" fill="var(--ink)">MCP server（进 catalog）</text>
+    <text x="190" y="159" font-size="10.5" fill="var(--muted)">挂内置 MCP client · 零核心 schema 足迹</text>
+  </g>
+  <g>
+    <rect x="170" y="66" width="342" height="46" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2.5"/>
+    <circle cx="194" cy="89" r="13" fill="var(--red)"/>
+    <text x="194" y="93" text-anchor="middle" font-size="12" font-weight="700" fill="var(--bg)">6</text>
+    <text x="216" y="86" font-size="12.5" font-weight="700" fill="var(--red)">新核心工具（最后手段）</text>
+    <text x="216" y="103" font-size="10.5" fill="var(--muted)">基础、几乎人人要、终端+文件够不到</text>
+  </g>
+  <line x1="600" y1="392" x2="600" y2="74" stroke="var(--red)" stroke-width="2"/>
+  <path d="M600 66 L594 80 L606 80 Z" fill="var(--red)"/>
+  <text x="624" y="232" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)" transform="rotate(90 624 232)">footprint ↑ · 每次 API 调用都发 schema，越往上越贵</text>
+  <text x="40" y="422" font-size="11" fill="var(--muted)">↓ 优先选最靠下、还能解决问题的一级（核心工具＝最后手段）</text>
+</svg>
+<div class="fig-cap"><b>Footprint Ladder 足迹阶梯</b>：六级从低足迹（①扩展现有代码）到高足迹（⑥新核心工具）。每个核心工具的 schema 都随<b>每一次 API 调用</b>发送，所以越往上越贵——纪律是「选能正确解决问题的、footprint <b>最小</b>的那一级」，新核心工具永远排最后。</div>
+</div>
+
 <h2>门控：check_fn 让工具「条件不满足就不出现」</h2>
 <p>组装发给模型的 schema 列表时，注册表会对每个工具跑一遍它声明的 <span class="mono">check_fn</span>。返回 <span class="kw">False</span> 的工具<strong>直接被跳过、不进 schema</strong>——条件不满足时它的足迹是<strong>零</strong>：</p>
 
@@ -395,6 +448,55 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 <p>这里藏着一个<strong>刻意的不对称</strong>：发现是自动的，接线是手动的。<span class="mono">tools/*.py</span> 里只要有顶层 <span class="mono">registry.register()</span>，就会被 <span class="mono">discover_builtin_tools</span> 自动 import 并登记 schema（<span class="mono">registry.py:57</span>）；可工具要真正<strong>暴露给模型</strong>，还得有人把它的名字<strong>手写</strong>进某个 toolset（<span class="mono">_HERMES_CORE_TOOLS</span> 或新建一个）。为什么不让它顺势自动上台？因为「进核心」是全书最贵的决定——每个核心工具的 schema 在<strong>每一次 API 调用</strong>都要随请求发一遍：工具越多越稀释模型注意力（撞第 2 章 <span class="badge constraint">A·中间遗失</span>），又把缓存前缀撑得更长（撞第 6 章）。把接线留成「<strong>人来拍板的一步</strong>」，正是给这道最贵的门加一把手动锁，逼你先问一句「这真该进核心吗」。</p>
 
 <p>就算能力下沉到了边缘，Hermes 仍给「边缘的 token 账单」加了一道闸：<strong>Tool Search 渐进式披露</strong>（<span class="mono">model_tools.py:531</span>）。当 MCP + 插件这些<strong>非核心</strong>工具的可延迟面超过阈值（默认约上下文窗口的 10%）时，它们会被折叠到 <span class="mono">tool_search</span> / <span class="mono">tool_describe</span> / <span class="mono">tool_call</span> 三个桥接工具背后，用到时再展开；而 <span class="mono">_HERMES_CORE_TOOLS</span> 里的核心工具<strong>永不延迟</strong>。这把 <span class="mono">check_fn</span> 的「按需付费」推到极致：没配前置条件零足迹，配了但太多就懒加载。所以这条阶梯不止是写代码时的口诀，更是第 23 章插件 / MCP、第 16 章多后端、第 24 章安全边界的<strong>同一把决策尺子</strong>。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 322" role="img" aria-label="工具渐进式披露：核心工具与三个桥工具常驻，非核心 MCP 与插件工具超阈值即折叠到桥工具背后">
+  <text x="20" y="22" font-size="13" font-weight="700" fill="var(--accent)">渐进式披露 · 每轮 API 调用发送的 schema 保持小而稳</text>
+  <rect x="20" y="40" width="384" height="80" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="36" y="64" font-size="12.5" font-weight="700" fill="var(--accent-ink)">核心工具 · _HERMES_CORE_TOOLS</text>
+  <text x="36" y="84" font-size="10.5" fill="var(--accent-ink)">永不折叠 · 每轮 API 调用常驻</text>
+  <text x="36" y="106" font-size="10.5" fill="var(--ink)">terminal · read_file · web_search · browser_navigate</text>
+  <text x="420" y="36" font-size="10.5" fill="var(--muted)">+ 3 个桥工具（也常驻）</text>
+  <g text-anchor="middle">
+    <rect x="420" y="44" width="80" height="76" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="460" y="86" font-size="10" fill="var(--blue)">tool_search</text>
+    <rect x="506" y="44" width="86" height="76" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="549" y="86" font-size="10" fill="var(--blue)">tool_describe</text>
+    <rect x="598" y="44" width="64" height="76" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="630" y="86" font-size="10" fill="var(--blue)">tool_call</text>
+  </g>
+  <text x="20" y="150" font-size="10.5" fill="var(--muted)">触发：非核心可延迟面 &gt; ~10% 上下文窗口 → 折叠（model_tools.py:531）</text>
+  <line x1="506" y1="120" x2="506" y2="176" stroke="var(--blue)" stroke-width="1.8"/>
+  <path d="M506 120 L500 132 L512 132 Z" fill="var(--blue)"/>
+  <path d="M506 176 L500 164 L512 164 Z" fill="var(--blue)"/>
+  <text x="520" y="152" font-size="10.5" fill="var(--blue)">折叠 ⇅ 按需检索/展开</text>
+  <rect x="20" y="176" width="642" height="106" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-dasharray="6 4"/>
+  <text x="36" y="198" font-size="11" font-weight="700" fill="var(--blue)">折叠的非核心工具池 · 不进每轮 schema（MCP servers + 插件）</text>
+  <g text-anchor="middle" font-size="10">
+    <rect x="36"  y="210" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="92"  y="227" fill="var(--ink)">mcp:github</text>
+    <rect x="164" y="210" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="220" y="227" fill="var(--ink)">mcp:notion</text>
+    <rect x="292" y="210" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="348" y="227" fill="var(--ink)">mcp:slack</text>
+    <rect x="420" y="210" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="476" y="227" fill="var(--ink)">mcp:linear</text>
+    <rect x="548" y="210" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="604" y="227" fill="var(--ink)">plugin:spotify</text>
+    <rect x="36"  y="244" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="92"  y="261" fill="var(--ink)">plugin:gmail</text>
+    <rect x="164" y="244" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="220" y="261" fill="var(--ink)">mcp:fetch</text>
+    <rect x="292" y="244" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="348" y="261" fill="var(--ink)">mcp:postgres</text>
+    <rect x="420" y="244" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="476" y="261" fill="var(--ink)">plugin:home</text>
+    <rect x="548" y="244" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="604" y="261" fill="var(--muted)">… + 数十个</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>Tool Search 渐进式披露</b>：随每次 API 调用发送的只有<b>核心工具 _HERMES_CORE_TOOLS（永不折叠）</b>＋ <span class="mono">tool_search / tool_describe / tool_call</span> 三个桥工具。当非核心的 MCP、插件工具<b>可延迟面</b>超过约<b>上下文窗口的 10%</b>，它们被折叠到桥工具背后、<b>不进每轮 schema</b>，模型用到时再按需检索展开。这把 <span class="mono">check_fn</span> 的「按需付费」推到极致。</div>
+</div>
 
 <p><span class="mono">check_fn</span> 门控之所以优雅，在于它把「按需付费」做成了<strong>默认安全</strong>。看 <span class="mono">_HERMES_CORE_TOOLS</span> 里那几组带门的工具就懂了：Home Assistant 的 <span class="mono">ha_*</span> 只在配了 <span class="mono">HASS_TOKEN</span> 时出现，<span class="mono">computer_use</span> 要装了 cua-driver 才上台，<span class="mono">kanban_*</span> 要么是被派成 kanban worker（<span class="mono">HERMES_KANBAN_TASK</span> 环境变量在）、要么是 profile 显式启用了 kanban toolset 才进 schema（注释见 <span class="mono">toolsets.py:31</span>）。这意味着：这些工具名虽然<strong>常驻</strong>在核心清单里，却<strong>不向没配前置条件的用户收一分 token 税</strong>——它们的成本只在「你真的用得上」时才发生。这就是「能力在边缘」的另一种写法：把昂贵的核心面，按每个用户的真实环境<strong>动态裁掉</strong>。换句话说，同一份核心清单，在没配智能家居的用户那里和配了的用户那里，发给模型的<strong>实际 schema 并不一样</strong>——门控让「窄」具体到了每个会话的环境指纹。</p>
 
@@ -531,6 +633,59 @@ Tools are how an agent "acts" — read files, run a terminal, search the web, dr
   <p>Lay the ladder out rung by rung and "why a core tool ranks last" becomes obvious: ① <strong>Extend existing code</strong> — zero new surface; the capability is just a variation of something already there. ② <strong>CLI command + skill</strong> — anything config/state/infra expressible as shell goes to the agent running <span class="mono">hermes &lt;subcommand&gt;</span>, with zero model-tool footprint (<span class="mono">hermes webhook</span> / <span class="mono">cron</span> / <span class="mono">tools</span>). ③ <strong>service-gated tool</strong> — needs structured params/returns AND only appears when a prerequisite is configured. ④ <strong>plugin</strong> — third-party/niche, dropped into <span class="mono">~/.hermes/plugins/</span> and discovered at runtime. ⑤ <strong>MCP server (in the catalog)</strong> — genuinely needs to be a tool but isn't core-fundamental, so hang it off the built-in MCP client. ⑥ <strong>new core tool</strong> — only when the capability is "fundamental, useful to nearly everyone, and unreachable via terminal + file." Each lower rung carries one more slice of <strong>permanent</strong> surface, so the discipline is: always pick the highest rung that still correctly solves the problem.</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 446" role="img" aria-label="The Footprint Ladder: six rungs from lowest to highest footprint, with a new core tool ranking last">
+  <text x="20" y="24" font-size="13.5" font-weight="700" fill="var(--accent)">Footprint Ladder · where new capability goes: the smallest-footprint rung that still solves it</text>
+  <g>
+    <rect x="40" y="346" width="350" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <circle cx="64" cy="369" r="13" fill="var(--blue)"/>
+    <text x="64" y="373" text-anchor="middle" font-size="12" font-weight="700" fill="var(--bg)">1</text>
+    <text x="86" y="366" font-size="12.5" font-weight="700" fill="var(--ink)">Extend existing code</text>
+    <text x="86" y="383" font-size="10.5" fill="var(--muted)">Zero new surface · a variation of what exists</text>
+  </g>
+  <g>
+    <rect x="66" y="290" width="350" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <circle cx="90" cy="313" r="13" fill="var(--blue)"/>
+    <text x="90" y="317" text-anchor="middle" font-size="12" font-weight="700" fill="var(--bg)">2</text>
+    <text x="112" y="310" font-size="12.5" font-weight="700" fill="var(--ink)">CLI command + skill</text>
+    <text x="112" y="327" font-size="10.5" fill="var(--muted)">Zero model-tool footprint (hermes cron / webhook)</text>
+  </g>
+  <g>
+    <rect x="92" y="234" width="350" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <circle cx="116" cy="257" r="13" fill="var(--blue)"/>
+    <text x="116" y="261" text-anchor="middle" font-size="12" font-weight="700" fill="var(--bg)">3</text>
+    <text x="138" y="254" font-size="12.5" font-weight="700" fill="var(--ink)">Service-gated tool check_fn</text>
+    <text x="138" y="271" font-size="10.5" fill="var(--muted)">Appears only when a prerequisite is configured</text>
+  </g>
+  <g>
+    <rect x="118" y="178" width="350" height="46" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+    <circle cx="142" cy="201" r="13" fill="var(--purple)"/>
+    <text x="142" y="205" text-anchor="middle" font-size="12" font-weight="700" fill="var(--bg)">4</text>
+    <text x="164" y="198" font-size="12.5" font-weight="700" fill="var(--ink)">Plugin</text>
+    <text x="164" y="215" font-size="10.5" fill="var(--muted)">~/.hermes/plugins · discovered at runtime</text>
+  </g>
+  <g>
+    <rect x="144" y="122" width="350" height="46" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+    <circle cx="168" cy="145" r="13" fill="var(--purple)"/>
+    <text x="168" y="149" text-anchor="middle" font-size="12" font-weight="700" fill="var(--bg)">5</text>
+    <text x="190" y="142" font-size="12.5" font-weight="700" fill="var(--ink)">MCP server (in the catalog)</text>
+    <text x="190" y="159" font-size="10.5" fill="var(--muted)">On the built-in MCP client · zero core schema</text>
+  </g>
+  <g>
+    <rect x="170" y="66" width="350" height="46" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2.5"/>
+    <circle cx="194" cy="89" r="13" fill="var(--red)"/>
+    <text x="194" y="93" text-anchor="middle" font-size="12" font-weight="700" fill="var(--bg)">6</text>
+    <text x="216" y="86" font-size="12.5" font-weight="700" fill="var(--red)">New core tool (last resort)</text>
+    <text x="216" y="103" font-size="10.5" fill="var(--muted)">Fundamental, near-universal, beyond terminal+file</text>
+  </g>
+  <line x1="608" y1="392" x2="608" y2="74" stroke="var(--red)" stroke-width="2"/>
+  <path d="M608 66 L602 80 L614 80 Z" fill="var(--red)"/>
+  <text x="632" y="232" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)" transform="rotate(90 632 232)">footprint ↑ · shipped on every API call — costlier the higher you go</text>
+  <text x="40" y="422" font-size="11" fill="var(--muted)">↓ Prefer the lowest rung that still solves it (a core tool is the last resort)</text>
+</svg>
+<div class="fig-cap"><b>The Footprint Ladder</b>: six rungs from lowest footprint (① extend existing code) to highest (⑥ a new core tool). Every core tool's schema ships on <b>every single API call</b>, so higher = costlier — the discipline is "pick the <b>smallest-footprint</b> rung that still correctly solves the problem," and a new core tool always ranks last.</div>
+</div>
+
 <h2>Gating: check_fn makes a tool "vanish when prerequisites are unmet"</h2>
 <p>When assembling the schema list sent to the model, the registry runs each tool's declared <span class="mono">check_fn</span>. A tool returning <span class="kw">False</span> is <strong>skipped outright — never entering the schema</strong>; when its condition is unmet, its footprint is <strong>zero</strong>:</p>
 
@@ -555,6 +710,55 @@ Tools are how an agent "acts" — read files, run a terminal, search the web, dr
 <p>There's a <strong>deliberate asymmetry</strong> here: discovery is automatic, wiring is manual. Any top-level <span class="mono">registry.register()</span> in <span class="mono">tools/*.py</span> gets auto-imported and schema-registered by <span class="mono">discover_builtin_tools</span> (<span class="mono">registry.py:57</span>); but for the tool to actually be <strong>exposed to the model</strong>, someone must <strong>hand-write</strong> its name into a toolset (<span class="mono">_HERMES_CORE_TOOLS</span> or a new one). Why not let it auto-board too? Because "entering the core" is the most expensive decision in the book — every core tool's schema ships with <strong>every single API call</strong>: more tools dilute the model's attention (ch.2 <span class="badge constraint">A·lost-in-the-middle</span>) and stretch the cache prefix longer (ch.6). Leaving the wiring as "<strong>a step a human signs off on</strong>" puts a manual lock on the costliest door, forcing the question "does this really belong in the core?"</p>
 
 <p>Even when capability sinks to the edges, Hermes still gates the "edge token bill": <strong>Tool Search progressive disclosure</strong> (<span class="mono">model_tools.py:531</span>). When the deferrable surface of <strong>non-core</strong> MCP + plugin tools exceeds a threshold (default ~10% of the context window), they're folded behind three bridge tools — <span class="mono">tool_search</span> / <span class="mono">tool_describe</span> / <span class="mono">tool_call</span> — and expanded on demand; the core tools in <span class="mono">_HERMES_CORE_TOOLS</span> are <strong>never deferred</strong>. This pushes <span class="mono">check_fn</span>'s "pay-as-you-go" to its limit: zero footprint without prerequisites, lazy-loaded when there are too many. So the ladder isn't just a coding mnemonic — it's the <strong>same decision yardstick</strong> for ch.23 (plugins/MCP), ch.16 (multi-backend), and ch.24 (security boundaries).</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 322" role="img" aria-label="Tool Search progressive disclosure: core tools and three bridge tools stay resident; non-core MCP and plugin tools fold behind the bridge tools past a threshold">
+  <text x="20" y="22" font-size="13" font-weight="700" fill="var(--accent)">Progressive disclosure · the per-call schema stays small and stable</text>
+  <rect x="20" y="40" width="384" height="80" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="36" y="64" font-size="12.5" font-weight="700" fill="var(--accent-ink)">Core tools · _HERMES_CORE_TOOLS</text>
+  <text x="36" y="84" font-size="10.5" fill="var(--accent-ink)">Never deferred · resident on every API call</text>
+  <text x="36" y="106" font-size="10.5" fill="var(--ink)">terminal · read_file · web_search · browser_navigate</text>
+  <text x="420" y="36" font-size="10.5" fill="var(--muted)">+ 3 bridge tools (also resident)</text>
+  <g text-anchor="middle">
+    <rect x="420" y="44" width="80" height="76" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="460" y="86" font-size="10" fill="var(--blue)">tool_search</text>
+    <rect x="506" y="44" width="86" height="76" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="549" y="86" font-size="10" fill="var(--blue)">tool_describe</text>
+    <rect x="598" y="44" width="64" height="76" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="630" y="86" font-size="10" fill="var(--blue)">tool_call</text>
+  </g>
+  <text x="20" y="150" font-size="10.5" fill="var(--muted)">Trigger: non-core deferrable surface &gt; ~10% of context window → folded (model_tools.py:531)</text>
+  <line x1="506" y1="120" x2="506" y2="176" stroke="var(--blue)" stroke-width="1.8"/>
+  <path d="M506 120 L500 132 L512 132 Z" fill="var(--blue)"/>
+  <path d="M506 176 L500 164 L512 164 Z" fill="var(--blue)"/>
+  <text x="520" y="152" font-size="10.5" fill="var(--blue)">fold ⇅ retrieve on demand</text>
+  <rect x="20" y="176" width="642" height="106" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-dasharray="6 4"/>
+  <text x="36" y="198" font-size="11" font-weight="700" fill="var(--blue)">Folded non-core tool pool · not in the per-call schema (MCP servers + plugins)</text>
+  <g text-anchor="middle" font-size="10">
+    <rect x="36"  y="210" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="92"  y="227" fill="var(--ink)">mcp:github</text>
+    <rect x="164" y="210" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="220" y="227" fill="var(--ink)">mcp:notion</text>
+    <rect x="292" y="210" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="348" y="227" fill="var(--ink)">mcp:slack</text>
+    <rect x="420" y="210" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="476" y="227" fill="var(--ink)">mcp:linear</text>
+    <rect x="548" y="210" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="604" y="227" fill="var(--ink)">plugin:spotify</text>
+    <rect x="36"  y="244" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="92"  y="261" fill="var(--ink)">plugin:gmail</text>
+    <rect x="164" y="244" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="220" y="261" fill="var(--ink)">mcp:fetch</text>
+    <rect x="292" y="244" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="348" y="261" fill="var(--ink)">mcp:postgres</text>
+    <rect x="420" y="244" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="476" y="261" fill="var(--ink)">plugin:home</text>
+    <rect x="548" y="244" width="112" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="604" y="261" fill="var(--muted)">… + dozens more</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>Tool Search progressive disclosure</b>: only the <b>core tools _HERMES_CORE_TOOLS (never deferred)</b> plus the three bridge tools <span class="mono">tool_search / tool_describe / tool_call</span> ship on every API call. When the <b>deferrable surface</b> of non-core MCP and plugin tools exceeds about <b>10% of the context window</b>, they are folded behind the bridge tools — <b>out of the per-call schema</b> — and retrieved/expanded on demand. This pushes <span class="mono">check_fn</span>'s "pay-as-you-go" to its limit.</div>
+</div>
 
 <p>What makes <span class="mono">check_fn</span> gating elegant is that it makes "pay-as-you-go" the <strong>default-safe</strong> posture. Look at the gated groups in <span class="mono">_HERMES_CORE_TOOLS</span>: Home Assistant's <span class="mono">ha_*</span> appear only with <span class="mono">HASS_TOKEN</span> set, <span class="mono">computer_use</span> only when cua-driver is installed, and <span class="mono">kanban_*</span> only when the agent is spawned as a kanban worker (<span class="mono">HERMES_KANBAN_TASK</span> env set) or the profile explicitly enables the kanban toolset (comments at <span class="mono">toolsets.py:31</span>). So although these tool names <strong>live permanently</strong> in the core list, they <strong>charge no token tax to users who haven't configured their prerequisites</strong> — their cost only happens when you can actually use them. That's another way to write "capability at the edges": prune the expensive core surface <strong>dynamically</strong> per each user's real environment. In other words, the same core list yields a <strong>different actual schema</strong> for a user without smart-home set up versus one who has it — gating makes "narrow" specific to each session's environment fingerprint.</p>
 

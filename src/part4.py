@@ -455,6 +455,48 @@ Spawn a THIRD agent context -- not you (the implementer), not the reviewer.</pre
 <p>为什么审查者<strong>只</strong>拿 diff 和静态扫描结果，<strong>不</strong>给实现者的思路与上下文？多给点信息不是更好判断吗？恰恰相反：实现者的<strong>自辩</strong>正是要隔离掉的污染源。一旦 reviewer 看到「我之所以这么写是因为……」，它就<strong>继承</strong>了实现者的框架和确认偏误，开始审「<strong>那个故事</strong>」而非「<strong>代码本身</strong>」。全新 context 带来的是<strong>对抗性的独立</strong>——审查者不知道生成者想证明什么，只能照着结果挑错。这条隔离靠的是第 13 章 <span class="mono">delegate_task</span> 的上下文隔离原语，正呼应第 24 章「绝不让概率模型给自己当裁判」。</p>
 <p>那个打在提交上的 <span class="mono">[verified]</span> 前缀，承载的到底是什么信任？它不是「这段代码绝对正确」的保证，而是一个<strong>过程性的事实标记</strong>——「<strong>一个与实现者无共享上下文的独立审查者批准了它</strong>」。区别很关键：前者是对结果的断言（概率模型给不了），后者是对<strong>流程</strong>的断言（结构上可保证）。Hermes 反复用这种手法把「不可信的判断」换成「可信的过程」：不去赌模型这次没编，而是确保<strong>编没编由另一个独立 context 来核</strong>。同样的把手在委派层是「可验证 handle」，在审查层就是这个 <span class="mono">[verified]</span> 标记——都把信任<strong>从生成者的自我宣称挪到外部可核验的锚点上</strong>。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 340" role="img" aria-label="生成-验证分离：生成者产出 diff 与自我汇报，自报被墙挡住，独立验证者只拿 diff 在全新 context 里对照原始要求核验">
+  <text x="340" y="24" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">生成-验证分离 · 没有 agent 该验证自己的工作</text>
+
+  <rect x="20" y="44" width="220" height="150" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="130" y="66" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">① 生成者 · 实现子代理</text>
+  <rect x="36" y="80" width="188" height="34" rx="7" fill="var(--panel)" stroke="var(--blue)"/>
+  <text x="130" y="101" text-anchor="middle" font-size="11.5" fill="var(--ink)">产出：diff / 实现</text>
+  <rect x="36" y="122" width="188" height="34" rx="7" fill="var(--panel)" stroke="var(--red)" stroke-dasharray="4 3"/>
+  <text x="130" y="143" text-anchor="middle" font-size="11.5" fill="var(--red)">『我做完了』自我汇报</text>
+  <text x="130" y="180" text-anchor="middle" font-size="10.5" fill="var(--muted)">对自己有确认偏误 · 易谄媚</text>
+
+  <rect x="280" y="40" width="58" height="200" rx="6" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="302" y="140" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)" transform="rotate(90 302 140)">SELF-REPORTS 不可信</text>
+  <text x="322" y="140" text-anchor="middle" font-size="11" fill="var(--red)" transform="rotate(90 322 140)">不共享 context</text>
+
+  <text x="309" y="88" text-anchor="middle" font-size="10" fill="var(--blue)">✓ 仅传 diff</text>
+  <line x1="224" y1="97" x2="372" y2="97" stroke="var(--blue)" stroke-width="2"/>
+  <path d="M372 97 L363 92 L363 102 Z" fill="var(--blue)"/>
+  <line x1="224" y1="139" x2="278" y2="139" stroke="var(--red)" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="289" y="145" text-anchor="middle" font-size="16" font-weight="700" fill="var(--red)">✕</text>
+
+  <rect x="378" y="44" width="282" height="196" rx="10" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="519" y="66" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">③ 验证者 · 独立 fresh context</text>
+  <text x="394" y="92" font-size="11.5" fill="var(--ink)">• 只拿 diff（不共享实现者上下文）</text>
+  <text x="394" y="116" font-size="11.5" fill="var(--ink)">• 对照原始要求做符合性判断</text>
+  <text x="394" y="140" font-size="11.5" fill="var(--ink)">• 要求可验证把手：URL/ID/路径/HTTP</text>
+  <text x="394" y="164" font-size="11.5" fill="var(--ink)">• fail-closed：拿不准 → 判 false</text>
+  <rect x="394" y="184" width="120" height="34" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="454" y="205" text-anchor="middle" font-size="11" fill="var(--accent-ink)">PASS → [verified]</text>
+  <rect x="524" y="184" width="120" height="34" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="584" y="205" text-anchor="middle" font-size="11" fill="var(--red)">REQUEST_CHANGES</text>
+
+  <text x="340" y="276" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">绝不让生成者自证 · 信任从「自我宣称」挪到「外部可核验锚点」</text>
+  <rect x="150" y="290" width="186" height="30" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="243" y="310" text-anchor="middle" font-size="11" fill="var(--amber)">治 C·幻觉（真诚误报）</text>
+  <rect x="346" y="290" width="186" height="30" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="439" y="310" text-anchor="middle" font-size="11" fill="var(--amber)">治 F·误差累积（自证盲点）</text>
+</svg>
+<div class="fig-cap"><b>生成-验证分离</b>：生成者（实现子代理）产出 diff，并附一句「我做完了」的<b>自我汇报</b>；中间一道墙挡住<b>不可信的自报</b>——验证者<b>只</b>拿 diff、不共享其上下文，在<b>独立的 fresh context</b> 里对照<b>原始要求</b>做符合性判断，并要求<b>可验证把手</b>（URL/ID/路径/HTTP）而非口头摘要。绝不让生成者自证，正面治 <b>C·幻觉</b>（真诚误报）与 <b>F·误差累积</b>（自证盲点）。</div>
+</div>
+
 <h2>两阶段审查：spec 合规 + 代码质量</h2>
 <p><span class="mono">subagent-driven-development</span> 技能把审查拆成两阶段，每阶段一个独立 reviewer：</p>
 
@@ -474,6 +516,37 @@ Verdict: APPROVED or REQUEST_CHANGES.
 <p>先查<strong>是否符合 spec</strong>（PASS / 列出差距），再查<strong>代码质量</strong>（APPROVED / REQUEST_CHANGES）。为什么值得多花这些验证调用？技能里写得很实在：<strong>「在错误跨任务累积之前抓住它们」</strong>——这正是<strong>生成-验证差</strong>的工程化：验证一个结果比从头生成它<strong>便宜</strong>，多花的审查调用，换来的是不必事后调试「滚雪球式」的复合错误。这是对 <span class="badge constraint">F·误差累积</span> 的直接对策。</p>
 <p>为什么要拆成<strong>两个</strong>阶段、还要强制「spec 过了才查质量」的<strong>顺序</strong>？因为这两关抓的是<strong>正交</strong>的两类失败：spec 合规查的是「<strong>做错了东西</strong>」（少做、多做、scope creep），代码质量查的是「<strong>东西做错了</strong>」（bug、风格、边界）。若先查质量，就可能在<strong>压根跑偏</strong>的代码上白白打磨。这个顺序编码了一条成本梯度——<strong>越早抓越省的，越靠前查</strong>。技能的红线里也明文写着「spec 合规 PASS 之前别开质量审查（顺序错了）」。先确认方向对、再投入精修，把宝贵的验证调用花在刀刃上。</p>
 <p>那为什么值得给每个任务都付「实现者 + 两个审查者 +（可能的）修复者」这么多次调用？根子在<strong>生成-验证差</strong>：核验一个结果比从头重造它便宜，而错误会<strong>跨任务复合</strong>——任务 3 建在错的任务 1 上，调试代价是相乘而非相加。技能自己的「cost trade-off」也直说：调用是多了，但「比事后调试滚雪球式的复合问题便宜」。这也解释了为什么要<strong>每任务全新子代理</strong>——不让上一个任务的错误状态污染下一个。它和第 15 章压缩（靠限制上下文增长压制 F）一前一后，合成一条<strong>质量防线</strong>，共同对抗 <span class="badge constraint">F·误差累积</span>。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 280" role="img" aria-label="两阶段审查强制顺序：先 spec 合规审查，PASS 后才进入代码质量审查，整套 fail-closed">
+  <text x="340" y="24" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">两阶段审查 · 强制顺序：spec 合规 → 质量</text>
+
+  <rect x="24" y="44" width="266" height="116" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="157" y="68" text-anchor="middle" font-size="13" font-weight="700" fill="var(--blue)">① spec 合规审查</text>
+  <text x="157" y="92" text-anchor="middle" font-size="11.5" fill="var(--ink)">问：做对了东西吗？</text>
+  <text x="157" y="112" text-anchor="middle" font-size="10.5" fill="var(--muted)">抓 under/over-build · scope creep</text>
+  <rect x="44" y="124" width="226" height="28" rx="7" fill="var(--panel)" stroke="var(--blue)"/>
+  <text x="157" y="143" text-anchor="middle" font-size="11" fill="var(--ink)">OUTPUT: PASS / 列出 spec 差距</text>
+
+  <line x1="290" y1="92" x2="388" y2="92" stroke="var(--accent)" stroke-width="2.5"/>
+  <path d="M388 92 L379 87 L379 97 Z" fill="var(--accent)"/>
+  <rect x="300" y="100" width="78" height="24" rx="12" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="339" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">仅当 PASS</text>
+
+  <rect x="390" y="44" width="266" height="116" rx="10" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="523" y="68" text-anchor="middle" font-size="13" font-weight="700" fill="var(--purple)">② 代码质量审查</text>
+  <text x="523" y="92" text-anchor="middle" font-size="11.5" fill="var(--ink)">问：东西做对了吗？</text>
+  <text x="523" y="112" text-anchor="middle" font-size="10.5" fill="var(--muted)">抓 bug · 风格 · 边界</text>
+  <rect x="410" y="124" width="226" height="28" rx="7" fill="var(--panel)" stroke="var(--purple)"/>
+  <text x="523" y="143" text-anchor="middle" font-size="11" fill="var(--ink)">Verdict: APPROVED / REQUEST_CHANGES</text>
+
+  <text x="340" y="184" text-anchor="middle" font-size="11" fill="var(--muted)">顺序锁死：方向错了，不在跑偏的代码上浪费质量审查</text>
+  <rect x="24" y="198" width="632" height="62" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="340" y="220" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">fail-closed · 默认拦下</text>
+  <text x="340" y="242" text-anchor="middle" font-size="11" fill="var(--ink)">无法解析 → passed=false　·　security_concerns 非空 → passed=false　·　两列表皆空才算过</text>
+</svg>
+<div class="fig-cap"><b>两阶段审查 · 强制顺序</b>：先 spec 合规审查（「做对了东西吗？」，PASS 或列出差距），<b>PASS 后才</b>进入质量审查（「东西做对了吗？」，APPROVED/REQUEST_CHANGES）。两关抓<b>正交</b>的失败类，顺序锁死避免在跑偏的代码上白磨；整套 <b>fail-closed</b>——无法解析或有安全顾虑一律判 false，只有两个列表都空才放行。</div>
+</div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><strong>规划</strong>：<span class="mono">plan</span> 技能——纯规划、禁止执行，产出 markdown 计划到 .hermes/plans/</span></div>
@@ -564,6 +637,48 @@ Spawn a THIRD agent context -- not you (the implementer), not the reviewer.</pre
 <p>Why does the reviewer get <strong>only</strong> the diff and static-scan results, and <strong>not</strong> the implementer's reasoning or context? Wouldn't more information help it judge? Quite the opposite: the implementer's <strong>rationalizations</strong> are exactly the contamination you want to exclude. Once a reviewer sees "I wrote it this way because…", it <strong>inherits</strong> the implementer's framing and confirmation bias and starts reviewing <strong>the story</strong> rather than <strong>the code itself</strong>. A fresh context gives <strong>adversarial independence</strong> — the reviewer doesn't know what the generator wanted to prove, so it can only find flaws by the result. This isolation rests on ch.13's <span class="mono">delegate_task</span> context-isolation primitive, echoing ch.24's "never let the probabilistic model be its own judge."</p>
 <p>What trust does that <span class="mono">[verified]</span> commit prefix actually carry? Not a guarantee that "this code is absolutely correct," but a <strong>process fact marker</strong> — "<strong>an independent reviewer with no shared context with the implementer approved it</strong>." The distinction matters: the former asserts a result (which a probabilistic model can't deliver), the latter asserts a <strong>process</strong> (which structure can guarantee). Hermes repeatedly swaps "untrustworthy judgment" for "trustworthy process": instead of betting the model didn't fabricate this time, it ensures <strong>whether it fabricated is checked by another independent context</strong>. The same handle is the "verifiable handle" at the delegation layer and this <span class="mono">[verified]</span> mark at the review layer — both move trust <strong>from the generator's self-claim to an externally checkable anchor</strong>.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 340" role="img" aria-label="Generator-verifier separation: the generator emits a diff and a self-report, the self-report is blocked by a wall, and an independent verifier takes only the diff and checks it against the original spec in a fresh context">
+  <text x="340" y="24" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">Generator–verifier separation · no agent should verify its own work</text>
+
+  <rect x="20" y="44" width="220" height="150" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="130" y="66" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">① Generator · implementer</text>
+  <rect x="36" y="80" width="188" height="34" rx="7" fill="var(--panel)" stroke="var(--blue)"/>
+  <text x="130" y="101" text-anchor="middle" font-size="11.5" fill="var(--ink)">Produces: diff / implementation</text>
+  <rect x="36" y="122" width="188" height="34" rx="7" fill="var(--panel)" stroke="var(--red)" stroke-dasharray="4 3"/>
+  <text x="130" y="143" text-anchor="middle" font-size="11.5" fill="var(--red)">“I'm done” self-report</text>
+  <text x="130" y="180" text-anchor="middle" font-size="10.5" fill="var(--muted)">confirmation bias · prone to sycophancy</text>
+
+  <rect x="280" y="40" width="58" height="200" rx="6" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="302" y="140" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)" transform="rotate(90 302 140)">SELF-REPORTS untrusted</text>
+  <text x="322" y="140" text-anchor="middle" font-size="11" fill="var(--red)" transform="rotate(90 322 140)">no shared context</text>
+
+  <text x="309" y="88" text-anchor="middle" font-size="10" fill="var(--blue)">✓ diff only</text>
+  <line x1="224" y1="97" x2="372" y2="97" stroke="var(--blue)" stroke-width="2"/>
+  <path d="M372 97 L363 92 L363 102 Z" fill="var(--blue)"/>
+  <line x1="224" y1="139" x2="278" y2="139" stroke="var(--red)" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="289" y="145" text-anchor="middle" font-size="16" font-weight="700" fill="var(--red)">✕</text>
+
+  <rect x="378" y="44" width="282" height="196" rx="10" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="519" y="66" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">③ Verifier · independent fresh context</text>
+  <text x="394" y="92" font-size="11.5" fill="var(--ink)">• gets only the diff (no shared context)</text>
+  <text x="394" y="116" font-size="11.5" fill="var(--ink)">• checks compliance vs original spec</text>
+  <text x="394" y="140" font-size="11.5" fill="var(--ink)">• demands handles: URL/ID/path/HTTP</text>
+  <text x="394" y="164" font-size="11.5" fill="var(--ink)">• fail-closed: unsure → false</text>
+  <rect x="394" y="184" width="120" height="34" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="454" y="205" text-anchor="middle" font-size="11" fill="var(--accent-ink)">PASS → [verified]</text>
+  <rect x="524" y="184" width="120" height="34" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="584" y="205" text-anchor="middle" font-size="11" fill="var(--red)">REQUEST_CHANGES</text>
+
+  <text x="340" y="276" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">never self-certify · trust moves from self-claim to external anchor</text>
+  <rect x="138" y="290" width="200" height="30" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="238" y="310" text-anchor="middle" font-size="11" fill="var(--amber)">treats C·hallucination</text>
+  <rect x="348" y="290" width="200" height="30" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="448" y="310" text-anchor="middle" font-size="11" fill="var(--amber)">treats F·error accumulation</text>
+</svg>
+<div class="fig-cap"><b>Generator–verifier separation</b>: the generator (implementer subagent) emits a diff plus an “I'm done” <b>self-report</b>; a wall blocks the <b>untrustworthy self-report</b> — the verifier gets <b>only</b> the diff, shares none of the generator's context, and in an <b>independent fresh context</b> judges compliance against the <b>original spec</b>, demanding <b>verifiable handles</b> (URL/ID/path/HTTP) rather than a prose summary. The generator never self-certifies, treating <b>C·hallucination</b> (sincere misreport) and <b>F·error accumulation</b> (self-cert blind spot) head-on.</div>
+</div>
+
 <h2>Two-stage review: spec compliance + code quality</h2>
 <p>The <span class="mono">subagent-driven-development</span> skill splits review into two stages, each an independent reviewer:</p>
 
@@ -583,6 +698,37 @@ Verdict: APPROVED or REQUEST_CHANGES.
 <p>First check <strong>spec compliance</strong> (PASS / list gaps), then <strong>code quality</strong> (APPROVED / REQUEST_CHANGES). Why spend these extra verification calls? The skill says it plainly: <strong>"catch issues before they compound across tasks."</strong> This is exactly the engineering of the <strong>generation-verification gap</strong>: verifying a result is <strong>cheaper</strong> than generating it from scratch, and the extra review calls buy you not having to debug "snowballing" compound errors later. A direct countermeasure to <span class="badge constraint">F·error accumulation</span>.</p>
 <p>Why split it into <strong>two</strong> stages and enforce the <strong>order</strong> "quality only after spec PASS"? Because the two gates catch <strong>orthogonal</strong> failure classes: spec-compliance catches "<strong>built the wrong thing</strong>" (under-build, over-build, scope creep), code-quality catches "<strong>built the thing wrong</strong>" (bugs, style, edge cases). Running quality first risks polishing code that is <strong>entirely off-target</strong>. The ordering encodes a cost gradient — <strong>what's cheapest if caught early goes first</strong>. The skill's own red flags say it outright: "don't start code-quality review before spec compliance is PASS (wrong order)." Confirm the direction is right, then invest in polish, spending precious verification calls where they count.</p>
 <p>So why is it worth paying "implementer + two reviewers + (maybe) a fixer" per task? The root is the <strong>generation-verification gap</strong>: verifying a result is cheaper than regenerating it, and errors <strong>compound across tasks</strong> — task 3 built on a wrong task 1 multiplies, not adds, the debugging cost. The skill's own "cost trade-off" note says it plainly: more invocations, but "cheaper than debugging compounded problems later." It also explains the <strong>fresh subagent per task</strong> — don't let the previous task's wrong state pollute the next. Together with ch.15's compression (which fights F by bounding context growth), it forms a <strong>quality defense line</strong> jointly treating <span class="badge constraint">F·error accumulation</span>.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 280" role="img" aria-label="Two-stage review with enforced order: spec compliance first, then code quality only after PASS, the whole thing fail-closed">
+  <text x="340" y="24" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">Two-stage review · enforced order: spec compliance → quality</text>
+
+  <rect x="24" y="44" width="266" height="116" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="157" y="68" text-anchor="middle" font-size="13" font-weight="700" fill="var(--blue)">① Spec-compliance review</text>
+  <text x="157" y="92" text-anchor="middle" font-size="11.5" fill="var(--ink)">Q: built the wrong thing?</text>
+  <text x="157" y="112" text-anchor="middle" font-size="10.5" fill="var(--muted)">under/over-build · scope creep</text>
+  <rect x="44" y="124" width="226" height="28" rx="7" fill="var(--panel)" stroke="var(--blue)"/>
+  <text x="157" y="143" text-anchor="middle" font-size="11" fill="var(--ink)">OUTPUT: PASS / list spec gaps</text>
+
+  <line x1="290" y1="92" x2="388" y2="92" stroke="var(--accent)" stroke-width="2.5"/>
+  <path d="M388 92 L379 87 L379 97 Z" fill="var(--accent)"/>
+  <rect x="300" y="100" width="78" height="24" rx="12" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="339" y="116" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">only on PASS</text>
+
+  <rect x="390" y="44" width="266" height="116" rx="10" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="523" y="68" text-anchor="middle" font-size="13" font-weight="700" fill="var(--purple)">② Code-quality review</text>
+  <text x="523" y="92" text-anchor="middle" font-size="11.5" fill="var(--ink)">Q: built the thing wrong?</text>
+  <text x="523" y="112" text-anchor="middle" font-size="10.5" fill="var(--muted)">bugs · style · edge cases</text>
+  <rect x="410" y="124" width="226" height="28" rx="7" fill="var(--panel)" stroke="var(--purple)"/>
+  <text x="523" y="143" text-anchor="middle" font-size="11" fill="var(--ink)">Verdict: APPROVED / REQUEST_CHANGES</text>
+
+  <text x="340" y="184" text-anchor="middle" font-size="11" fill="var(--muted)">Order locked: don't waste quality review on off-target code</text>
+  <rect x="24" y="198" width="632" height="62" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="340" y="220" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">fail-closed · default to blocking</text>
+  <text x="340" y="242" text-anchor="middle" font-size="11" fill="var(--ink)">can't parse → passed=false　·　security_concerns non-empty → passed=false　·　pass only when both empty</text>
+</svg>
+<div class="fig-cap"><b>Two-stage review · enforced order</b>: spec-compliance first (“built the wrong thing?”, PASS or list gaps); <b>only after PASS</b> comes code-quality (“built the thing wrong?”, APPROVED/REQUEST_CHANGES). The two gates catch <b>orthogonal</b> failure classes, and the locked order avoids polishing off-target code; the whole thing is <b>fail-closed</b> — can't-parse or security concerns judge false, passing only when both lists are empty.</div>
+</div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><strong>Plan</strong>: the <span class="mono">plan</span> skill — pure planning, no execution, writes a markdown plan to .hermes/plans/</span></div>

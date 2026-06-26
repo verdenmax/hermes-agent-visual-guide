@@ -394,6 +394,41 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 <p><strong>③ 长度 → 延迟与成本。</strong>上下文越长，每一步越慢、越贵。交互式 agent 必须有<strong>上下文预算</strong>，
 不能无脑堆历史。这条直接催生了 Hermes 的<strong>迭代预算</strong>（第 5 章）与<strong>上下文压缩</strong>（第 15 章）。</p>
 <p>为什么<strong>中间遗失</strong>是结构性缺陷，而不是某次训练没调好的 bug？因为它是 transformer 注意力机制与训练语料分布共同的<strong>固有产物</strong>：注意力本质是对所有位置做<strong>归一化的竞争</strong>，序列越长，单个中段 token 能分到的权重就越被<strong>稀释</strong>；再叠加位置编码、以及语料里“要点常居首尾”的统计规律，模型学到的就是一条<strong>两头重、中间轻的 U 型曲线</strong>。换更大的窗口治不了它——窗口只让你<strong>装得下</strong>，不等于让你<strong>看得清</strong>。所以 Hermes 从不把希望寄托在“模型某天会把中间也读全”，而是<strong>顺着这条曲线</strong>做工程：这正是<strong>窄腰</strong>哲学的起点（第 4、8 章：少塞工具、少塞历史）。</p>
+<div class="figure">
+<svg viewBox="0 0 680 320" role="img" aria-label="中间遗失：一条长上下文上叠加 U 型注意力/召回曲线，开头结尾高、中段塌陷">
+  <text x="20" y="24" font-size="13" font-weight="700" fill="var(--ink)">注意力 / 召回率</text>
+  <text x="20" y="42" font-size="11" fill="var(--muted)">高</text>
+  <text x="20" y="206" font-size="11" fill="var(--muted)">低</text>
+  <line x1="58" y1="36" x2="58" y2="212" stroke="var(--line)"/>
+  <line x1="58" y1="212" x2="660" y2="212" stroke="var(--line)"/>
+  <path d="M58 200 L58 212 L660 212 L660 200" fill="none" stroke="var(--faint)" stroke-dasharray="2 3"/>
+  <path d="M62 56 C 150 70, 210 188, 359 196 C 508 188, 568 70, 656 56" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="62" cy="56" r="4.5" fill="var(--accent)"/>
+  <circle cx="656" cy="56" r="4.5" fill="var(--accent)"/>
+  <circle cx="359" cy="196" r="4.5" fill="var(--red)"/>
+  <text x="62" y="78" text-anchor="start" font-size="11" font-weight="700" fill="var(--accent-ink)">开头·强</text>
+  <text x="656" y="78" text-anchor="end" font-size="11" font-weight="700" fill="var(--accent-ink)">结尾·强</text>
+  <text x="359" y="184" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">中段塌陷 · 信息被忽略</text>
+  <g font-size="11" text-anchor="middle">
+    <rect x="58"  y="236" width="86" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="101" y="261" fill="var(--accent-ink)">tok 头</text>
+    <rect x="148" y="236" width="86" height="40" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="191" y="261" fill="var(--muted)">tok</text>
+    <rect x="238" y="236" width="86" height="40" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+    <text x="281" y="261" fill="var(--red)">tok 中</text>
+    <rect x="328" y="236" width="86" height="40" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+    <text x="371" y="261" fill="var(--red)">tok 中</text>
+    <rect x="418" y="236" width="86" height="40" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+    <text x="461" y="261" fill="var(--red)">tok 中</text>
+    <rect x="508" y="236" width="86" height="40" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="551" y="261" fill="var(--muted)">tok</text>
+    <rect x="598" y="236" width="62" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="629" y="261" fill="var(--accent-ink)">tok 尾</text>
+  </g>
+  <text x="359" y="298" text-anchor="middle" font-size="11" fill="var(--muted)">一条长上下文（从左到右逐 token） →</text>
+</svg>
+<div class="fig-cap"><b>中间遗失（lost in the middle）</b>：把同一条关键指令放在长上下文的不同位置，模型的<b>注意力/召回率</b>呈一条 <b>U 型曲线</b>——开头、结尾最强，<b>中段塌陷</b>。埋在中间的内容最容易“看不见”。对策：关键指令<b>头尾各放一遍</b>，最相关片段放<b>边缘</b>，别堆中段。</div>
+</div>
 <p>顺着这条 U 型曲线，Hermes 在三处下手。其一，<strong>窄腰</strong>：AGENTS.md 把核心定为“每加一个模型工具，都会在<strong>每一次</strong> API 调用里被发送”，因此核心工具极度克制，能力被推到边缘（技能/插件）——<strong>上下文里噪声越少，中段被淹没的关键信息就越少</strong>。其二，<strong>压缩</strong>（第 15 章）：当历史变长，与其放任<strong>上下文腐烂</strong>，不如把旧轮次摘要成精简前缀，把注意力重新聚回要点。其三，<strong>委派</strong>（第 13 章）：把一段冗长的中间推理关进<strong>子代理的隔离上下文</strong>，父对话只收回一份摘要，中间过程根本不进入父窗口的中段。三招都不是修模型，而是<strong>改喂法</strong>。</p>
 <div class="card warn">
   <div class="tag">⚠️ 反直觉</div>
@@ -422,6 +457,36 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 把错误一路编下去。对策：<strong>先规划、后执行</strong>，把“修订”放到<strong>单独一遍</strong>，并给足<strong>推理空间</strong>（思考 token）再出答案。
 这呼应 Hermes 的<strong>委派 / 规划-执行分离</strong>（第 13、14 章）。</p>
 <p><strong>无状态</strong>同样不是缺陷，而是定义本身：一次调用在数学上就是一个<strong>纯函数</strong>，输出只由这次递进去的 messages 决定，函数返回后不残留任何变量。它不会“记住”上一句，是因为根本<strong>没有可写的持久内存</strong>。于是一个反直觉的结论成立：<strong>所谓“记忆”从来不在模型里，而在模型之外</strong>。Hermes 的会话库（<span class="mono">SessionDB</span>，SQLite + 全文检索）、技能、记忆系统，本质都是这颗失忆内核的<strong>外接硬盘</strong>——每次调用前把需要的状态重新读出、拼进 messages、再递进去。这也是 Hermes 敢谈“自我进化”的根本前提：能进化的从来是<strong>外部文件</strong>，不是模型权重。</p>
+<div class="figure">
+<svg viewBox="0 0 680 286" role="img" aria-label="无状态：LLM 是纯函数 f(完整上下文)=回应，两次调用之间零记忆，记忆必须外置成文件">
+  <rect x="266" y="92" width="148" height="74" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="124" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent-ink)">LLM</text>
+  <text x="340" y="146" text-anchor="middle" font-size="11.5" fill="var(--accent-ink)">= f(完整上下文)</text>
+  <g font-size="11" text-anchor="middle">
+    <rect x="20" y="84" width="150" height="90" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="95" y="104" font-size="11.5" font-weight="700" fill="var(--blue)">输入 · 完整上下文</text>
+    <text x="95" y="124" fill="var(--ink)">system（身份/记忆/profile）</text>
+    <text x="95" y="142" fill="var(--ink)">+ 全部历史 messages</text>
+    <text x="95" y="160" fill="var(--ink)">+ 本轮新消息</text>
+  </g>
+  <line x1="170" y1="129" x2="262" y2="129" stroke="var(--blue)" stroke-width="2"/>
+  <path d="M262 129 l-9 -5 v10 z" fill="var(--blue)"/>
+  <g font-size="11" text-anchor="middle">
+    <rect x="510" y="100" width="150" height="58" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="585" y="124" font-size="11.5" font-weight="700" fill="var(--ink)">输出 · 回应</text>
+    <text x="585" y="143" fill="var(--muted)">续写最可能的下一段</text>
+  </g>
+  <line x1="414" y1="129" x2="506" y2="129" stroke="var(--accent)" stroke-width="2"/>
+  <path d="M506 129 l-9 -5 v10 z" fill="var(--accent)"/>
+  <text x="340" y="206" text-anchor="middle" font-size="12" font-weight="700" fill="var(--red)">⟲ 函数返回后：零残留 · 两次调用之间零记忆</text>
+  <g font-size="11" text-anchor="middle">
+    <rect x="150" y="222" width="380" height="46" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-dasharray="5 4"/>
+    <text x="340" y="242" font-size="11.5" font-weight="700" fill="var(--accent-ink)">所以记忆必须「外置成文件」</text>
+    <text x="340" y="260" fill="var(--accent-ink)">SessionDB · 技能 · 记忆 → 下次调用前重新读出、拼回 system</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>模型是纯函数</b>：一次调用就是 <span class="mono">f(完整上下文) → 回应</span>，输出只由本轮递进去的 messages 决定；函数一返回，<b>零残留、两次调用之间零记忆</b>。所以“记忆”从来不在模型里，必须<b>外置成文件</b>（system prompt 里的身份/记忆/profile，加上 SessionDB / 技能），每轮调用前重新读出拼回——这正是 Hermes「自我进化」得以存在的根本理由。</div>
+</div>
 <p>把状态外置，又带出一对必须小心平衡的力。一边，每次都<strong>重发</strong>全部上下文很贵；另一边，Hermes 把<strong>逐对话提示缓存</strong>奉为不可侵犯——AGENTS.md 直言缓存“神圣”，长对话每轮复用同一段缓存前缀，任何<strong>中途改写历史、换工具集、重建 system prompt</strong> 的动作都会让缓存失效、成本翻倍。这逼出一条贯穿全书的纪律：身份与稳定状态写进<strong>开头的 system prompt</strong>（第 6 章）并保持<strong>整段对话内逐字节不变</strong>；而易变的技能指令则作为<strong>普通 user 消息注入</strong>，而非塞回系统提示（第 4 章）；profile（第 20 章）再把不同身份彻底隔离。唯一允许动历史的例外，只有<strong>上下文压缩</strong>。</p>
 
 <h2>E · token 表示层：它按词块看世界</h2>
@@ -560,6 +625,41 @@ quality</strong>: a <strong>tight, focused</strong> context usually beats “stu
 <strong>context budget</strong> and can't pile on history blindly. This directly motivates Hermes' <strong>iteration
 budget</strong> (ch.5) and <strong>context compression</strong> (ch.15).</p>
 <p>Why is <strong>lost-in-the-middle</strong> a structural flaw rather than a training bug someone forgot to fix? Because it is an <strong>inherent product</strong> of transformer attention plus the data it was trained on: attention is a <strong>normalized competition</strong> across all positions, so the longer the sequence, the more any single mid-context token's weight gets <strong>diluted</strong>; add positional encoding and the corpus-level habit of putting key points at the start and end, and the model learns a <strong>U-shaped curve — heavy at the ends, light in the middle</strong>. A bigger window can't cure it: a window lets you <strong>fit</strong> the text, not <strong>see</strong> it clearly. So Hermes never bets on “the model will one day read the middle too”; it designs <em>with</em> the curve — which is exactly where the <strong>narrow-waist</strong> philosophy begins (ch.4, 8: fewer tools, less history).</p>
+<div class="figure">
+<svg viewBox="0 0 680 320" role="img" aria-label="Lost in the middle: a U-shaped attention/recall curve over a long context, high at the ends, collapsing in the middle">
+  <text x="20" y="24" font-size="13" font-weight="700" fill="var(--ink)">attention / recall</text>
+  <text x="20" y="42" font-size="11" fill="var(--muted)">high</text>
+  <text x="20" y="206" font-size="11" fill="var(--muted)">low</text>
+  <line x1="58" y1="36" x2="58" y2="212" stroke="var(--line)"/>
+  <line x1="58" y1="212" x2="660" y2="212" stroke="var(--line)"/>
+  <path d="M58 200 L58 212 L660 212 L660 200" fill="none" stroke="var(--faint)" stroke-dasharray="2 3"/>
+  <path d="M62 56 C 150 70, 210 188, 359 196 C 508 188, 568 70, 656 56" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="62" cy="56" r="4.5" fill="var(--accent)"/>
+  <circle cx="656" cy="56" r="4.5" fill="var(--accent)"/>
+  <circle cx="359" cy="196" r="4.5" fill="var(--red)"/>
+  <text x="62" y="78" text-anchor="start" font-size="11" font-weight="700" fill="var(--accent-ink)">start·strong</text>
+  <text x="656" y="78" text-anchor="end" font-size="11" font-weight="700" fill="var(--accent-ink)">end·strong</text>
+  <text x="359" y="184" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">middle collapses · info ignored</text>
+  <g font-size="11" text-anchor="middle">
+    <rect x="58"  y="236" width="86" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="101" y="261" fill="var(--accent-ink)">tok head</text>
+    <rect x="148" y="236" width="86" height="40" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="191" y="261" fill="var(--muted)">tok</text>
+    <rect x="238" y="236" width="86" height="40" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+    <text x="281" y="261" fill="var(--red)">tok mid</text>
+    <rect x="328" y="236" width="86" height="40" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+    <text x="371" y="261" fill="var(--red)">tok mid</text>
+    <rect x="418" y="236" width="86" height="40" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+    <text x="461" y="261" fill="var(--red)">tok mid</text>
+    <rect x="508" y="236" width="86" height="40" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="551" y="261" fill="var(--muted)">tok</text>
+    <rect x="598" y="236" width="62" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="629" y="261" fill="var(--accent-ink)">tok tail</text>
+  </g>
+  <text x="359" y="298" text-anchor="middle" font-size="11" fill="var(--muted)">one long context (token by token, left → right) →</text>
+</svg>
+<div class="fig-cap"><b>Lost in the middle</b>: place the same key instruction at different positions in a long context and the model's <b>attention/recall</b> traces a <b>U-shaped curve</b> — strongest at the start and end, <b>collapsing in the middle</b>. Whatever is buried mid-context is the easiest to go “unseen.” Fix: put key instructions at <b>both head and tail</b>, keep the most relevant snippets at the <b>edges</b>, not piled in the middle.</div>
+</div>
 <p>Working with that curve, Hermes acts in three places. First, the <strong>narrow waist</strong>: AGENTS.md fixes the rule that “every model tool we add is sent on <strong>every</strong> API call,” so core tools stay austere and capability is pushed to the edges (skills/plugins) — <strong>less noise in context means less key info drowned in the middle</strong>. Second, <strong>compression</strong> (ch.15): as history grows, rather than letting <strong>context rot</strong> set in, old turns are summarized into a tight prefix that re-focuses attention on what matters. Third, <strong>delegation</strong> (ch.13): a long stretch of intermediate reasoning is shut inside a <strong>subagent's isolated context</strong>, and the parent only gets a summary back — the middle steps never enter the parent's window at all. None of these fixes the model; they all change <strong>how it's fed</strong>.</p>
 <div class="card warn">
   <div class="tag">⚠️ Counter-intuitive</div>
@@ -590,6 +690,36 @@ path</strong>, it tends to <strong>“commit and rationalize,”</strong> invent
 first, execute second</strong>, put “revision” in a <strong>separate pass</strong>, and give it <strong>room to
 reason</strong> (thinking tokens) before answering. This echoes Hermes' <strong>delegation / plan-execute split</strong> (ch.13, 14).</p>
 <p><strong>Statelessness</strong> is likewise not a defect but a definition: mathematically a call is a <strong>pure function</strong> whose output depends only on the messages handed in this time, with no variables left behind when it returns. It doesn't “remember” your last line because there is <strong>no writable persistent memory</strong> to begin with. Hence a counter-intuitive truth: <strong>“memory” never lives inside the model — it lives outside it</strong>. Hermes' session store (<span class="mono">SessionDB</span>, SQLite + full-text search), skills, and memory system are all the <strong>external hard drive</strong> for that amnesiac core — before each call the needed state is re-read, packed into messages, and handed back in. This is also why Hermes can speak of “self-evolution” at all: what evolves is always the <strong>external files</strong>, never the weights.</p>
+<div class="figure">
+<svg viewBox="0 0 680 286" role="img" aria-label="Stateless: the LLM is a pure function f(full context)=response, zero memory between calls, so memory must be externalized into files">
+  <rect x="266" y="92" width="148" height="74" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="124" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent-ink)">LLM</text>
+  <text x="340" y="146" text-anchor="middle" font-size="11" fill="var(--accent-ink)">= f(full context)</text>
+  <g font-size="11" text-anchor="middle">
+    <rect x="20" y="84" width="150" height="90" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="95" y="104" font-size="11.5" font-weight="700" fill="var(--blue)">input · full context</text>
+    <text x="95" y="124" fill="var(--ink)">system (identity/mem/profile)</text>
+    <text x="95" y="142" fill="var(--ink)">+ all history messages</text>
+    <text x="95" y="160" fill="var(--ink)">+ this turn's message</text>
+  </g>
+  <line x1="170" y1="129" x2="262" y2="129" stroke="var(--blue)" stroke-width="2"/>
+  <path d="M262 129 l-9 -5 v10 z" fill="var(--blue)"/>
+  <g font-size="11" text-anchor="middle">
+    <rect x="510" y="100" width="150" height="58" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="585" y="124" font-size="11.5" font-weight="700" fill="var(--ink)">output · response</text>
+    <text x="585" y="143" fill="var(--muted)">most likely next text</text>
+  </g>
+  <line x1="414" y1="129" x2="506" y2="129" stroke="var(--accent)" stroke-width="2"/>
+  <path d="M506 129 l-9 -5 v10 z" fill="var(--accent)"/>
+  <text x="340" y="206" text-anchor="middle" font-size="12" font-weight="700" fill="var(--red)">⟲ after return: zero residue · zero memory between calls</text>
+  <g font-size="11" text-anchor="middle">
+    <rect x="150" y="222" width="380" height="46" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-dasharray="5 4"/>
+    <text x="340" y="242" font-size="11.5" font-weight="700" fill="var(--accent-ink)">so memory must be “externalized into files”</text>
+    <text x="340" y="260" fill="var(--accent-ink)">SessionDB · skills · memory → re-read &amp; re-packed before the next call</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>The model is a pure function</b>: one call is just <span class="mono">f(full context) → response</span>, its output decided solely by the messages handed in this turn; the moment it returns there is <b>zero residue, zero memory between calls</b>. So “memory” never lives in the model — it must be <b>externalized into files</b> (identity/memory/profile in the system prompt, plus SessionDB / skills), re-read and re-packed before each call. This is the very reason Hermes' “self-evolution” can exist at all.</div>
+</div>
 <p>Externalizing state raises a pair of forces to balance carefully. On one side, <strong>re-sending</strong> the whole context every time is expensive; on the other, Hermes treats <strong>per-conversation prompt caching</strong> as inviolable — AGENTS.md calls caching “sacred,” a long conversation reusing the same cached prefix each turn, and any act that <strong>rewrites past context, swaps toolsets, or rebuilds the system prompt</strong> mid-conversation invalidates the cache and multiplies cost. That forces a discipline running through the whole book: identity and stable state go into the <strong>system prompt up front</strong> (ch.6) and stay <strong>byte-stable for the life of the conversation</strong>; volatile skill instructions are injected as <strong>ordinary user messages</strong> rather than folded back into the system prompt (ch.4); and profiles (ch.20) isolate distinct identities entirely. The one allowed exception to touching history is <strong>context compression</strong>.</p>
 
 <h2>E · The token layer: it sees the world in chunks</h2>

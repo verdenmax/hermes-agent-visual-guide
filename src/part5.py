@@ -494,6 +494,50 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
 </div>
 <p>分两类:<span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> 要<strong>取消在途任务</strong>(走专门的交接路径,序列化「取消 + 回应 + 排空队列」);<span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> 等不取消任务、只需<strong>直接内联派发</strong>。注释点破一个坑:<strong>千万别走 <span class="mono">_process_message_background</span></strong>——它管会话生命周期,清理逻辑会和正在跑的任务发生竞争。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="agent 忙时消息要过两道守卫，控制命令必须同时旁路两道">
+  <defs><marker id="g18a" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--muted)"/></marker></defs>
+  <text x="340" y="17" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">agent 忙时 · 两道顺序守卫 + 控制命令旁路</text>
+
+  <rect x="275" y="26" width="130" height="30" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="45" text-anchor="middle" font-size="12" fill="var(--blue)">新消息到达</text>
+  <line x1="340" y1="56" x2="340" y2="69" stroke="var(--muted)" marker-end="url(#g18a)"/>
+
+  <rect x="30" y="70" width="620" height="50" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="44" y="88" font-size="10.5" fill="var(--faint)">守卫① 适配器层 · gateway/platforms/base.py</text>
+  <text x="340" y="110" text-anchor="middle" font-size="12.5" fill="var(--ink)">session_key ∈ _active_sessions ？ → 会话忙？</text>
+
+  <text x="232" y="137" text-anchor="middle" font-size="10.5" fill="var(--muted)">普通对话 →</text>
+  <text x="452" y="137" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">可解析命令 → 旁路</text>
+  <path d="M340 120 L340 144 L130 144 L130 153" fill="none" stroke="var(--muted)" marker-end="url(#g18a)"/>
+  <path d="M340 120 L340 144 L445 144 L445 153" fill="none" stroke="var(--muted)" marker-end="url(#g18a)"/>
+
+  <rect x="45" y="156" width="170" height="62" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="130" y="182" text-anchor="middle" font-size="12" fill="var(--ink)">排队等待</text>
+  <text x="130" y="202" text-anchor="middle" font-size="10" fill="var(--muted)">→ _pending_messages</text>
+  <text x="130" y="238" text-anchor="middle" font-size="10" fill="var(--faint)">等当前回合结束再喂入模型</text>
+
+  <rect x="240" y="156" width="410" height="46" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="254" y="174" font-size="10.5" fill="var(--faint)">守卫② 网关 runner · gateway/run.py</text>
+  <text x="445" y="195" text-anchor="middle" font-size="12" fill="var(--ink)">按 canonical 名显式分派</text>
+  <path d="M445 202 L445 212 L341 212 L341 221" fill="none" stroke="var(--muted)" marker-end="url(#g18a)"/>
+  <path d="M445 202 L445 212 L550 212 L550 221" fill="none" stroke="var(--muted)" marker-end="url(#g18a)"/>
+
+  <rect x="242" y="224" width="198" height="60" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="341" y="249" text-anchor="middle" font-size="11.5" fill="var(--accent-ink)">/stop  /new  /reset</text>
+  <text x="341" y="269" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">取消在途任务 · 序列化交接</text>
+
+  <rect x="452" y="224" width="196" height="60" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="550" y="249" text-anchor="middle" font-size="11" fill="var(--blue)">/approve  /deny  /status</text>
+  <text x="550" y="269" text-anchor="middle" font-size="9.5" fill="var(--blue)">内联派发（不取消任务）</text>
+
+  <rect x="30" y="302" width="620" height="46" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="340" y="323" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">⚠ 审批类命令必须同时旁路两道守卫</text>
+  <text x="340" y="341" text-anchor="middle" font-size="10" fill="var(--muted)">若排队：被兜底丢弃 = 空响应(zero-char)，或 /approve 等不到 → 死锁</text>
+</svg>
+<div class="fig-cap"><b>两道消息守卫 + 控制命令旁路</b>：agent 忙时,消息先过<b>守卫①</b>(适配器层 <span class="mono">base.py</span>)——普通对话进 <span class="mono">_pending_messages</span> 排队;<b>可解析 slash 命令则旁路守卫①</b>,再进<b>守卫②</b>(网关 runner <span class="mono">run.py</span>)按 <span class="mono">canonical</span> 名分派:<span class="mono">/stop /new /reset</span> 取消在途任务、<span class="mono">/approve /deny /status</span> 内联派发。<b>审批类命令必须同时旁路两道</b>,否则被兜底丢弃(空响应)或死锁。</div>
+</div>
+
 <p>为什么旁路还要再分「取消任务」和「内联派发」两类?<span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> 会动<strong>会话生命周期</strong>(要终止在途回合),必须走 <span class="mono">_dispatch_active_session_command</span> 这条把「取消 + 回应 + 排空队列」<strong>序列化</strong>的专路;否则旧任务的 <span class="mono">finally</span> 清理会和新命令的清理抢同一把守卫。而 <span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> 不碰生命周期,只发信号或只读状态,直接内联即可。注释之所以严禁走 <span class="mono">_process_message_background</span>,正因它会另起一个管生命周期的 task,清理逻辑和正在跑的任务<strong>赛跑</strong>(PR #4926)——这种竞态在压测下才偶发,极难复现,所以宁可从结构上堵死。</p>
 
 <p>为什么 <span class="mono">/approve</span> 是死锁的重灾区?agent 此刻正阻塞在 <span class="mono">tools/approval.py</span> 里一个 <span class="mono">threading.Event.wait()</span> 上——而普通中断走的是 asyncio 路径,<strong>根本叫不醒</strong>一个卡在线程 Event 上的 agent。所以 runner 把 <span class="mono">/approve</span> <span class="mono">/deny</span> 直接路由到审批处理器去 <span class="mono">set</span> 那个 Event。若让它老实排队:agent 等审批放行、审批却在队列里等 agent 跑完,两边互锁、永久卡死。这正是第 24 章<strong>人在回路</strong>审批能在 agent 阻塞时仍然送达的底座——审批信号必须有一条不经 agent 主循环的旁路才能解锁它自己。</p>
@@ -517,6 +561,40 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
 <p>道理很硬:网关 runner 有个兜底,会<strong>丢弃任何漏进排队队列的命令文本</strong>。所以一条跑到一半发的 <span class="mono">/model</span>,若被排队,就会「<strong>既悄悄打断了 agent、又被丢弃</strong>」,用户收到一个<strong>空响应</strong>。结论:只要是能解析的 slash 命令,一律旁路、立即派发,绝不排队。这也正是<strong>缓存线</strong>要守住的危险:控制命令一旦混进对话历史、被当成用户文本,就可能让历史里冒出连续两条用户消息、破坏严格角色交替(第 7 章的不变量),进而动摇被缓存的前缀(第 6 章)。旁路让控制命令走<strong>控制通道</strong>、根本不进历史,正是从源头掐断这条危险。</p>
 
 <p>为什么命令识别要用<strong>显式代码解析</strong>而不交给模型判断?<span class="mono">get_command()</span> 只做纯语法切分:取首词、剥掉 <span class="mono">/</span>、去掉 <span class="mono">@botname</span>、首词里含 <span class="mono">/</span> 的当文件路径直接拒掉;再由 <span class="mono">resolve_command()</span> 查中央 <span class="mono">COMMAND_REGISTRY</span> 的别名表确认。整条链零模型参与——因为模型分不清「这是给系统的指令还是要处理的数据」(约束 <strong>D</strong>)。一旦把判断权交给模型,一段精心构造的对话文本就能伪装成 <span class="mono">/stop</span> 骗它执行。把识别钉死在网关层,注入便没了入口。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 322" role="img" aria-label="网关用显式代码解析识别控制命令，而非交给模型判断">
+  <defs><marker id="g18b" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--muted)"/></marker></defs>
+  <text x="340" y="17" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">控制命令 vs 数据 · 网关显式代码识别（治 D：指令=数据）</text>
+
+  <rect x="270" y="28" width="140" height="30" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="47" text-anchor="middle" font-size="12" fill="var(--ink)">消息文本 raw</text>
+  <line x1="340" y1="58" x2="340" y2="71" stroke="var(--muted)" marker-end="url(#g18b)"/>
+
+  <rect x="190" y="72" width="300" height="52" rx="10" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="340" y="94" text-anchor="middle" font-size="12" fill="var(--purple)">get_command() → resolve_command()</text>
+  <text x="340" y="112" text-anchor="middle" font-size="9.5" fill="var(--muted)">纯语法切分 + 查 COMMAND_REGISTRY · 零模型参与</text>
+
+  <path d="M340 124 L340 140 L165 140 L165 155" fill="none" stroke="var(--muted)" marker-end="url(#g18b)"/>
+  <path d="M340 124 L340 140 L515 140 L515 155" fill="none" stroke="var(--muted)" marker-end="url(#g18b)"/>
+
+  <rect x="40" y="158" width="250" height="70" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="165" y="181" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">resolve ≠ None → 控制通道</text>
+  <text x="165" y="201" text-anchor="middle" font-size="10" fill="var(--accent-ink)">旁路派发，永不进对话历史</text>
+  <text x="165" y="219" text-anchor="middle" font-size="9.5" fill="var(--muted)">/stop  /approve  /model …</text>
+
+  <rect x="390" y="158" width="250" height="70" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="515" y="181" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">否则 = 数据 → 对话通道</text>
+  <text x="515" y="201" text-anchor="middle" font-size="10" fill="var(--blue)">进 _pending_messages → 喂给模型</text>
+  <text x="515" y="219" text-anchor="middle" font-size="9.5" fill="var(--muted)">真正的对话内容</text>
+
+  <rect x="40" y="246" width="600" height="64" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="56" y="266" font-size="11" font-weight="700" fill="var(--red)">✗ 反模式：把识别交给模型判断</text>
+  <text x="56" y="285" font-size="10" fill="var(--muted)">构造文本可伪装 /stop 触发执行（注入）；命令混入历史 → 历史出现连续两条 user</text>
+  <text x="56" y="302" font-size="10" fill="var(--muted)">→ 破坏严格角色交替（第7章）→ 动摇被缓存前缀（第6章）。显式解析 = 从源头堵死。</text>
+</svg>
+<div class="fig-cap"><b>控制命令 vs 数据：显式解析</b>：网关用 <span class="mono">get_command()</span>/<span class="mono">resolve_command()</span> 纯代码识别命令(确定性、零模型)——能解析的走<b>控制通道</b>旁路派发、<b>永不进对话历史</b>;否则当<b>数据</b>进 <span class="mono">_pending_messages</span> 喂给模型。这正是治 <b>D·指令=数据</b>:不让模型判断,既挡注入(伪造指令进不来),又护住第 6 章缓存前缀与第 7 章角色交替。</div>
+</div>
 
 <p>为什么旁路判据用「<strong>能否解析</strong>」而不是一张写死的白名单?<span class="mono">should_bypass_active_session</span> 直接返回 <span class="mono">resolve_command(cmd) is not None</span>——只要是注册过的 slash 命令一律旁路。<span class="mono">ACTIVE_SESSION_BYPASS_COMMANDS</span> 只是「有专属 Level-2 处理器」的子集;其余命令落到 runner 的 catch-all,回一句「Agent is running,wait or <span class="mono">/stop</span>」而不是被默默丢弃。这层兜底是一串事故堆出来的:<span class="mono">/model</span> <span class="mono">/reasoning</span> <span class="mono">/resume</span> <span class="mono">/undo</span> 等当年都漏过、变成空响应(#5057 #6252 #10370)。所以判据必须是<strong>全集</strong>覆盖,白名单一定会漏掉下一个新加的命令。</p>
 
@@ -616,6 +694,50 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
 </div>
 <p>Two classes: <span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> must <strong>cancel the in-flight task</strong> (via a dedicated handoff that serializes "cancel + respond + drain queue"); <span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> and friends don't cancel the task and just need <strong>inline dispatch</strong>. The comment flags a trap: <strong>never go through <span class="mono">_process_message_background</span></strong> — it manages session lifecycle, and its cleanup races with the running task.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="while busy a message passes two guards; control commands must bypass both">
+  <defs><marker id="g18ae" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--muted)"/></marker></defs>
+  <text x="340" y="17" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">Agent busy · two sequential guards + control-command bypass</text>
+
+  <rect x="270" y="26" width="140" height="30" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="45" text-anchor="middle" font-size="12" fill="var(--blue)">new message arrives</text>
+  <line x1="340" y1="56" x2="340" y2="69" stroke="var(--muted)" marker-end="url(#g18ae)"/>
+
+  <rect x="30" y="70" width="620" height="50" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="44" y="88" font-size="10.5" fill="var(--faint)">Guard ① adapter layer · gateway/platforms/base.py</text>
+  <text x="340" y="110" text-anchor="middle" font-size="12.5" fill="var(--ink)">session_key ∈ _active_sessions ？ → session busy？</text>
+
+  <text x="228" y="137" text-anchor="middle" font-size="10.5" fill="var(--muted)">ordinary chat →</text>
+  <text x="455" y="137" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">resolvable command → bypass</text>
+  <path d="M340 120 L340 144 L130 144 L130 153" fill="none" stroke="var(--muted)" marker-end="url(#g18ae)"/>
+  <path d="M340 120 L340 144 L445 144 L445 153" fill="none" stroke="var(--muted)" marker-end="url(#g18ae)"/>
+
+  <rect x="45" y="156" width="170" height="62" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="130" y="182" text-anchor="middle" font-size="12" fill="var(--ink)">queue &amp; wait</text>
+  <text x="130" y="202" text-anchor="middle" font-size="10" fill="var(--muted)">→ _pending_messages</text>
+  <text x="130" y="238" text-anchor="middle" font-size="10" fill="var(--faint)">fed in after the current turn ends</text>
+
+  <rect x="240" y="156" width="410" height="46" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="254" y="174" font-size="10.5" fill="var(--faint)">Guard ② gateway runner · gateway/run.py</text>
+  <text x="445" y="195" text-anchor="middle" font-size="12" fill="var(--ink)">dispatch by canonical name</text>
+  <path d="M445 202 L445 212 L341 212 L341 221" fill="none" stroke="var(--muted)" marker-end="url(#g18ae)"/>
+  <path d="M445 202 L445 212 L550 212 L550 221" fill="none" stroke="var(--muted)" marker-end="url(#g18ae)"/>
+
+  <rect x="242" y="224" width="198" height="60" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="341" y="249" text-anchor="middle" font-size="11.5" fill="var(--accent-ink)">/stop  /new  /reset</text>
+  <text x="341" y="269" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">cancel in-flight task · serialized</text>
+
+  <rect x="452" y="224" width="196" height="60" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="550" y="249" text-anchor="middle" font-size="11" fill="var(--blue)">/approve  /deny  /status</text>
+  <text x="550" y="269" text-anchor="middle" font-size="9.5" fill="var(--blue)">inline dispatch (no cancel)</text>
+
+  <rect x="30" y="302" width="620" height="46" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="340" y="323" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">⚠ approval commands must bypass BOTH guards</text>
+  <text x="340" y="341" text-anchor="middle" font-size="10" fill="var(--muted)">if queued: discarded = empty (zero-char) response, or /approve deadlocks</text>
+</svg>
+<div class="fig-cap"><b>Two message guards + control-command bypass</b>: while the agent is busy, a message first hits <b>guard ①</b> (adapter layer <span class="mono">base.py</span>) — ordinary chat queues into <span class="mono">_pending_messages</span>; a <b>resolvable slash command bypasses guard ①</b> and reaches <b>guard ②</b> (gateway runner <span class="mono">run.py</span>), dispatched by <span class="mono">canonical</span> name: <span class="mono">/stop /new /reset</span> cancel the in-flight task, <span class="mono">/approve /deny /status</span> dispatch inline. <b>Approval commands must bypass BOTH guards</b>, else they are discarded (empty response) or deadlock.</div>
+</div>
+
 <p>Why split the bypass further into "cancel the task" vs "inline dispatch"? <span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> touch <strong>session lifecycle</strong> (they must terminate the in-flight turn), so they go through <span class="mono">_dispatch_active_session_command</span>, a dedicated path that <strong>serializes</strong> "cancel + respond + drain queue"; otherwise the old task's <span class="mono">finally</span> cleanup races the new command's cleanup over the same guard. <span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> don't touch lifecycle — they only signal or read state — so inline is enough. The comment forbids <span class="mono">_process_message_background</span> precisely because it spawns another lifecycle-managing task whose cleanup <strong>races</strong> the running one (PR #4926) — a race that only shows up under load and is brutal to reproduce, so it is structurally designed out.</p>
 
 <p>Why is <span class="mono">/approve</span> the worst deadlock risk? The agent is right now blocked on a <span class="mono">threading.Event.wait()</span> inside <span class="mono">tools/approval.py</span> — and an ordinary interrupt travels the asyncio path, which <strong>cannot wake</strong> an agent stuck on a thread Event. So the runner routes <span class="mono">/approve</span> <span class="mono">/deny</span> straight to the approval handler to <span class="mono">set</span> that Event. If it queued instead: the agent waits for approval while the approval waits in the queue for the agent to finish — both locked forever. This is the foundation that lets ch.24's <strong>human-in-the-loop</strong> approval reach the agent even while it is blocked: the approval signal needs a path that bypasses the agent's own loop to unlock it.</p>
@@ -639,6 +761,40 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
 <p>The logic is hard: the gateway runner has a safety net that <strong>discards any command text that slips into the pending queue</strong>. So a <span class="mono">/model</span> sent mid-run, if queued, would "<strong>silently interrupt the agent AND get discarded</strong>," and the user gets an <strong>empty response</strong>. Conclusion: any resolvable slash command bypasses and dispatches immediately, never queues. This is exactly the danger the <strong>cache line</strong> guards against: once a control command leaks into conversation history as user text, it could put two user messages back to back, breaking strict role alternation (the invariant from ch.7) and thereby disturbing the cached prefix (ch.6). Bypass routes control commands onto a <strong>control channel</strong>, keeping them out of history entirely — cutting the danger off at the source.</p>
 
 <p>Why identify commands with <strong>explicit code parsing</strong> rather than letting the model judge? <span class="mono">get_command()</span> does purely syntactic splitting: take the first word, strip the <span class="mono">/</span>, drop <span class="mono">@botname</span>, and reject anything whose first word contains a <span class="mono">/</span> as a file path; then <span class="mono">resolve_command()</span> confirms it against the central <span class="mono">COMMAND_REGISTRY</span> alias table. The whole chain involves zero model judgment — because the model can't tell "is this an instruction to the system or data to process" (constraint <strong>D</strong>). Hand that decision to the model and a carefully crafted piece of conversation text could impersonate <span class="mono">/stop</span> and get it executed. Nail recognition down at the gateway and injection loses its entry point.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 322" role="img" aria-label="the gateway recognizes control commands with explicit code parsing, not by asking the model">
+  <defs><marker id="g18be" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--muted)"/></marker></defs>
+  <text x="340" y="17" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">Control command vs data · explicit code recognition (treats D: instruction=data)</text>
+
+  <rect x="270" y="28" width="140" height="30" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="47" text-anchor="middle" font-size="12" fill="var(--ink)">raw message text</text>
+  <line x1="340" y1="58" x2="340" y2="71" stroke="var(--muted)" marker-end="url(#g18be)"/>
+
+  <rect x="190" y="72" width="300" height="52" rx="10" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="340" y="94" text-anchor="middle" font-size="12" fill="var(--purple)">get_command() → resolve_command()</text>
+  <text x="340" y="112" text-anchor="middle" font-size="9.5" fill="var(--muted)">syntactic split + COMMAND_REGISTRY lookup · zero model</text>
+
+  <path d="M340 124 L340 140 L165 140 L165 155" fill="none" stroke="var(--muted)" marker-end="url(#g18be)"/>
+  <path d="M340 124 L340 140 L515 140 L515 155" fill="none" stroke="var(--muted)" marker-end="url(#g18be)"/>
+
+  <rect x="40" y="158" width="250" height="70" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="165" y="181" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">resolve ≠ None → control channel</text>
+  <text x="165" y="201" text-anchor="middle" font-size="10" fill="var(--accent-ink)">bypass dispatch, never enters history</text>
+  <text x="165" y="219" text-anchor="middle" font-size="9.5" fill="var(--muted)">/stop  /approve  /model …</text>
+
+  <rect x="390" y="158" width="250" height="70" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="515" y="181" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">otherwise = data → conversation</text>
+  <text x="515" y="201" text-anchor="middle" font-size="10" fill="var(--blue)">→ _pending_messages → model</text>
+  <text x="515" y="219" text-anchor="middle" font-size="9.5" fill="var(--muted)">genuine conversation content</text>
+
+  <rect x="40" y="246" width="600" height="64" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="56" y="266" font-size="11" font-weight="700" fill="var(--red)">✗ anti-pattern: let the model judge recognition</text>
+  <text x="56" y="285" font-size="9.5" fill="var(--muted)">crafted text can impersonate /stop (injection); a leaked command → two user messages in a row</text>
+  <text x="56" y="302" font-size="9.5" fill="var(--muted)">→ breaks strict role alternation (ch.7) → disturbs the cached prefix (ch.6). Explicit parsing seals it.</text>
+</svg>
+<div class="fig-cap"><b>Control command vs data: explicit parsing</b>: the gateway recognizes commands with pure code — <span class="mono">get_command()</span>/<span class="mono">resolve_command()</span> (deterministic, zero model). Resolvable ones ride the <b>control channel</b>, bypass-dispatched and <b>never entering conversation history</b>; everything else is <b>data</b> queued into <span class="mono">_pending_messages</span> for the model. This treats <b>D · instruction=data</b>: not trusting the model to judge both blocks injection (a forged instruction can't get in) and protects the ch.6 cache prefix and ch.7 role alternation.</div>
+</div>
 
 <p>Why is the bypass predicate "<strong>is it resolvable</strong>" rather than a hardcoded allow-list? <span class="mono">should_bypass_active_session</span> simply returns <span class="mono">resolve_command(cmd) is not None</span> — any registered slash command bypasses. <span class="mono">ACTIVE_SESSION_BYPASS_COMMANDS</span> is only the subset with explicit Level-2 handlers; the rest land in the runner's catch-all, which replies "Agent is running, wait or <span class="mono">/stop</span>" instead of being silently discarded. That safety net was built from a string of incidents: <span class="mono">/model</span> <span class="mono">/reasoning</span> <span class="mono">/resume</span> <span class="mono">/undo</span> all once slipped through into empty responses (#5057 #6252 #10370). So the predicate must cover the <strong>full set</strong>; an allow-list will always miss the next new command.</p>
 

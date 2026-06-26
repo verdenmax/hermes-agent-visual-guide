@@ -380,6 +380,102 @@ LESSON_22 = {
 </div>
 <p>三个要点:① <strong>并行</strong>——多 worker 各跑各的 prompt,互不依赖(无状态,约束 B 又一次发力);② <strong>质量过滤</strong>——<span class="mono">has_any_reasoning</span> 为假就 <span class="mono">continue</span> 丢弃,训练集只收有推理的样本;③ <strong>JSONL 追加</strong>——每条样本一行,带 <span class="mono">tool_stats</span> 等元数据,是标准的 RL/SFT 训练格式。</p>
 <p>落盘的方式也透着「为崩溃而设计」的味道。每个 worker 跑完<strong>一条</strong>就立刻把 <span class="mono">trajectory_entry</span> 追加进自己那个 <span class="mono">batch_&lt;N&gt;.jsonl</span>(<span class="mono">batch_runner.py:416</span>),而不是攒到最后一次性写——这样即便进程中途挂掉,已完成的样本也<strong>已经躺在磁盘上</strong>,续跑时按内容直接跳过。等所有 batch 跑完,再把目录里全部 <span class="mono">batch_*.jsonl</span> 合并成<strong>单个</strong> <span class="mono">trajectories.jsonl</span>(<span class="mono">:1026</span>),顺手滤掉工具名非法的脏条目。注意轨迹是<strong>按 batch 分文件、最后聚合成一个</strong>的,<span class="mono">model</span> 只是每条样本里的一个 metadata 字段,并不会按模型拆成多份。<strong>增量写保命、末尾合并出干净训练文件</strong>,两个目标各取所需。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 410" role="img" aria-label="批量并行处理与轨迹按 batch 增量落盘、末尾合并成单一文件">
+  <defs>
+    <marker id="bz1arr" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+      <path d="M0 0 L6 3 L0 6 z" fill="var(--faint)"/>
+    </marker>
+  </defs>
+  <text x="20" y="20" font-size="11.5" font-weight="700" fill="var(--accent-ink)">dataset → 并行 worker（Pool, num_workers=4）→ 增量 batch_&lt;N&gt;.jsonl → 合并单一 trajectories.jsonl</text>
+
+  <rect x="14" y="54" width="92" height="180" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="60" y="72" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">dataset</text>
+  <g font-size="8.5" text-anchor="middle" fill="var(--muted)">
+    <rect x="24" y="80"  width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="94">prompt 1</text>
+    <rect x="24" y="104" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="118">prompt 2</text>
+    <rect x="24" y="128" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="142">prompt 3</text>
+    <rect x="24" y="152" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="166">prompt 4</text>
+    <rect x="24" y="176" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="190">prompt …</text>
+  </g>
+
+  <text x="187" y="48" text-anchor="middle" font-size="9.5" fill="var(--muted)">Pool · num_workers=4</text>
+  <path d="M132 52 L242 52" stroke="var(--line)" fill="none"/>
+
+  <g font-size="10" text-anchor="middle">
+    <line x1="106" y1="77"  x2="130" y2="77"  stroke="var(--faint)" marker-end="url(#bz1arr)"/>
+    <line x1="106" y1="121" x2="130" y2="121" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
+    <line x1="106" y1="165" x2="130" y2="165" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
+    <line x1="106" y1="209" x2="130" y2="209" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
+
+    <rect x="132" y="60"  width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="184" y="76"  fill="var(--ink)">worker 1</text><text x="184" y="89" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <rect x="132" y="104" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="184" y="120" fill="var(--ink)">worker 2</text><text x="184" y="133" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <rect x="132" y="148" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="184" y="164" fill="var(--ink)">worker 3</text><text x="184" y="177" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <rect x="132" y="192" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="184" y="208" fill="var(--ink)">worker 4</text><text x="184" y="221" font-size="8.5" fill="var(--muted)">AIAgent</text>
+  </g>
+
+  <g font-size="9.5" text-anchor="middle">
+    <line x1="236" y1="77"  x2="250" y2="77"  stroke="var(--faint)" marker-end="url(#bz1arr)"/>
+    <line x1="236" y1="121" x2="250" y2="121" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
+    <line x1="236" y1="165" x2="250" y2="165" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
+    <line x1="236" y1="209" x2="250" y2="209" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
+
+    <rect x="250" y="60"  width="40" height="34" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="270" y="81"  fill="var(--accent-ink)">质检</text>
+    <rect x="250" y="104" width="40" height="34" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="270" y="125" fill="var(--accent-ink)">质检</text>
+    <rect x="250" y="148" width="40" height="34" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="270" y="169" fill="var(--accent-ink)">质检</text>
+    <rect x="250" y="192" width="40" height="34" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="270" y="213" fill="var(--accent-ink)">质检</text>
+  </g>
+
+  <g text-anchor="middle">
+    <line x1="290" y1="77"  x2="310" y2="77"  stroke="var(--faint)" marker-end="url(#bz1arr)"/>
+    <line x1="290" y1="121" x2="310" y2="121" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
+    <line x1="290" y1="165" x2="310" y2="165" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
+    <line x1="290" y1="209" x2="310" y2="209" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
+
+    <rect x="310" y="60"  width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="374" y="76"  font-size="10" fill="var(--ink)">batch_0.jsonl</text><text x="374" y="88" font-size="8" fill="var(--muted)">增量追加</text>
+    <rect x="310" y="104" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="374" y="120" font-size="10" fill="var(--ink)">batch_1.jsonl</text><text x="374" y="132" font-size="8" fill="var(--muted)">增量追加</text>
+    <rect x="310" y="148" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="374" y="164" font-size="10" fill="var(--ink)">batch_2.jsonl</text><text x="374" y="176" font-size="8" fill="var(--muted)">增量追加</text>
+    <rect x="310" y="192" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="374" y="208" font-size="10" fill="var(--ink)">batch_3.jsonl</text><text x="374" y="220" font-size="8" fill="var(--muted)">增量追加</text>
+  </g>
+
+  <line x1="438" y1="77"  x2="452" y2="77"  stroke="var(--accent)" marker-end="url(#bz1arr)"/>
+  <line x1="438" y1="121" x2="452" y2="121" stroke="var(--accent)" marker-end="url(#bz1arr)"/>
+  <line x1="438" y1="165" x2="452" y2="165" stroke="var(--accent)" marker-end="url(#bz1arr)"/>
+  <line x1="438" y1="209" x2="452" y2="209" stroke="var(--accent)" marker-end="url(#bz1arr)"/>
+  <rect x="452" y="60" width="16" height="166" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="460" y="143" text-anchor="middle" font-size="10" font-weight="700" fill="var(--accent-ink)" transform="rotate(90 460 143)">合并</text>
+  <line x1="460" y1="226" x2="460" y2="250" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#bz1arr)"/>
+
+  <rect x="296" y="252" width="370" height="140" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="481" y="276" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">trajectories.jsonl · 单一合并文件</text>
+  <g text-anchor="middle" font-size="9.5">
+    <rect x="308" y="288" width="112" height="28" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="364" y="306" fill="var(--blue)">conversations</text>
+    <rect x="426" y="288" width="100" height="28" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="476" y="306" fill="var(--blue)">tool_stats</text>
+    <rect x="532" y="288" width="122" height="28" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="593" y="306" fill="var(--blue)">metadata</text>
+  </g>
+  <text x="481" y="346" text-anchor="middle" font-size="10" fill="var(--ink)">model 仅是 metadata 字段 → <tspan font-weight="700">不按模型拆分文件</tspan></text>
+  <text x="481" y="368" text-anchor="middle" font-size="9" fill="var(--muted)">合并时滤掉非法工具名的脏条目</text>
+
+  <rect x="14" y="252" width="270" height="140" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="28" y="274" font-size="10.5" font-weight="700" fill="var(--ink)">质检与续跑规则</text>
+  <g font-size="9">
+    <text x="28" y="300" fill="var(--accent-ink)">✓ 有推理 → 写入 batch_&lt;N&gt;.jsonl（增量）</text>
+    <text x="28" y="326" fill="var(--red)">✗ 零推理 → 丢弃，仍标记完成</text>
+    <text x="28" y="352" fill="var(--red)">✗ 失败 → 不另存 failed 文件，</text>
+    <text x="40" y="370" fill="var(--red)">留待 resume 重新跑</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>批量并行 + 轨迹增量落盘</b>：dataset 切批后由 <b>Pool(num_workers=4)</b> 起多个 worker 各跑一个 AIAgent；每跑完一条就<b>质检</b>后<b>增量追加</b>进自己的 batch_&lt;N&gt;.jsonl（崩溃不丢、resume 可续）。零推理样本被丢弃但<b>仍标记完成</b>（resume 不重试）；真正失败的<b>不另存 failed 文件</b>，留待 resume 重跑。所有 batch 跑完后合并成<b>单一</b> trajectories.jsonl（含 conversations / tool_stats / metadata）——<b>model 只是每条样本的 metadata 字段，不按模型拆文件</b>。<b>注</b>：这是<b>批量</b> <span class="mono">batch_runner</span> 路径；本章上文讲的 <span class="mono">_save_trajectory</span> 是<b>单次会话</b>的另一条路径，按成功/失败分写 <span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span>——两条路径并存、各管各的。</div>
+</div>
 <p>顺带说,<span class="mono">trajectory_entry</span> 里那些字段不是凑数的。除了 <span class="mono">conversations</span>,它还按工具记下 <span class="mono">tool_stats</span>(count/success/failure)、单列每个工具失败数的 <span class="mono">tool_error_counts</span>,以及 <span class="mono">api_calls</span>、<span class="mono">toolsets_used</span>、<span class="mono">partial</span>(因非法工具调用提前停)等。为什么要存这么细?因为训练和分析都要吃这些信号:哪个工具老失败、一条轨迹烧了几次 API、是不是中途被截断,既能用来筛样本质量,也能反过来诊断 agent 的薄弱环节。轨迹因此不只是「对话录像」,而是带<strong>结构化质量标签</strong>的研究样本——这也是它配得上「资产」二字的原因。换句话说,落盘时多记的这几个字段,后续在训练与诊断两头都会连本带利地还回来。</p>
 
 <h2>轨迹:一次对话变一条训练样本</h2>
@@ -416,6 +512,43 @@ LESSON_22 = {
     <span class="kw">assert</span> m.lower() <span class="kw">in</span> DEFAULT_CONTEXT_LENGTHS_LOWER</pre>
 </div>
 <p>规则一句话:<strong>测试若读起来像「当前数据的快照」,删掉;若读起来像「两份数据必须如何关联」的契约,留下。</strong>「gemini 目录里必须有 gemini-2.5-pro」是快照(下个模型发布就错);「gemini 目录至少有一个模型」「每个模型都有对应的上下文长度」是<strong>不变量</strong>——数据怎么更新都不破。这让测试<strong>抗模型/数据漂移</strong>,routine 更新不再天天红 CI。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 240" role="img" aria-label="评测对比：锁数据快照导致 CI 天天红，锁行为不变量则随系统演化">
+  <defs>
+    <marker id="bz2arr" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+      <path d="M0 0 L6 3 L0 6 z" fill="var(--faint)"/>
+    </marker>
+  </defs>
+
+  <text x="28" y="26" font-size="12.5" font-weight="700" fill="var(--red)">❌ 锁快照 · change-detector</text>
+  <rect x="18" y="38" width="306" height="80" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <g font-size="10" font-family="ui-monospace, monospace">
+    <text x="30" y="62" fill="var(--ink)">assert "gemini-2.5-pro" in models</text>
+    <text x="30" y="82" fill="var(--ink)">assert _config_version == 21</text>
+    <text x="30" y="104" font-size="9" fill="var(--muted)"># 把「当前数据」冻进断言</text>
+  </g>
+  <line x1="171" y1="118" x2="171" y2="150" stroke="var(--faint)" marker-end="url(#bz2arr)"/>
+  <text x="171" y="140" text-anchor="middle" font-size="9.5" fill="var(--muted)">模型每周发布 / config bump</text>
+  <rect x="18" y="154" width="306" height="64" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="171" y="182" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">CI 天天变红 ✗</text>
+  <text x="171" y="204" text-anchor="middle" font-size="9.5" fill="var(--muted)">逼人去「修测试」而非修 bug</text>
+
+  <text x="366" y="26" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✅ 锁不变量 · 行为契约</text>
+  <rect x="356" y="38" width="306" height="80" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <g font-size="10" font-family="ui-monospace, monospace">
+    <text x="368" y="62" fill="var(--ink)">assert len(models) &gt;= 1</text>
+    <text x="368" y="82" fill="var(--ink)">assert "gemini" in catalog</text>
+    <text x="368" y="104" font-size="9" fill="var(--muted)"># 每个 model 都有 context_length</text>
+  </g>
+  <line x1="509" y1="118" x2="509" y2="150" stroke="var(--faint)" marker-end="url(#bz2arr)"/>
+  <text x="509" y="140" text-anchor="middle" font-size="9.5" fill="var(--muted)">随模型/config 自由演化</text>
+  <rect x="356" y="154" width="306" height="64" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="509" y="182" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">CI 持续通过 ✓</text>
+  <text x="509" y="204" text-anchor="middle" font-size="9.5" fill="var(--muted)">数据怎么更新都不破</text>
+</svg>
+<div class="fig-cap"><b>锁不变量，不锁快照</b>：左边把「当前数据」冻进断言——具体模型名 gemini-2.5-pro、config 版本号 21；模型每周发布、config 升级，CI 就<b>天天变红</b>，逼工程师去「修测试」。右边只断言两份数据<b>必须成立的关系</b>（目录至少有一个模型、每个模型都有 context length），数据怎么更新都不破，测试<b>随系统一起演化</b>。</div>
+</div>
 <p>锁不变量换来的是什么?是<strong>能跟着系统一起演化</strong>的测试。「gemini 目录里至少有一个模型」「每个模型都有对应的上下文长度」这类断言,锁的是两份数据之间<strong>必须成立的关系</strong>,数据怎么更新都不破。这恰好和「窄腰」哲学互为表里:核心的契约越稳、越少,系统就越<strong>好测</strong>;反过来,正因为腰部的不变量被牢牢锁住,边缘才敢放心地快速扩张新平台、新模型、新 provider(参见讲工具集与约束的那几章)。所以评测在这里不是给代码拍快照,而是<strong>守护整个系统在持续迭代中的正确性</strong>——它和窄腰一道,让「核心稳、边缘野蛮生长」这件事在工程上可持续。</p>
 <p>再往深一层看,评测的本职其实是<strong>量化误差累积</strong>(约束 F)。agent 在多轮自主里,一个小判断失误会顺着后续步骤滚成雪球;不变量测试守住的,正是「这些必须成立的关系别在迭代里悄悄被破坏」。把它和轨迹的质量门槛并排看会更清楚:质量门槛挡住低质数据流进训练、免得把误差<strong>固化进下一代模型</strong>;不变量测试挡住回归在一次次提交中慢慢累积。一个在数据入口把关、一个在代码演化时把关,前后两道闸,都是在跟<strong>误差累积</strong>这条 LLM 固有约束较劲——这也是本章三件事(批量、轨迹、评测)其实围着同一个根在转的原因。</p>
 
@@ -492,6 +625,102 @@ LESSON_22 = {
 </div>
 <p>Three points: ① <strong>parallel</strong> — workers each run their own prompt, independent (stateless, constraint B at work again); ② <strong>quality filter</strong> — <span class="mono">continue</span> to drop when <span class="mono">has_any_reasoning</span> is false, the training set takes only samples with reasoning; ③ <strong>JSONL append</strong> — one sample per line with metadata like <span class="mono">tool_stats</span>, the standard RL/SFT training format.</p>
 <p>The way it persists reeks of "designed for crashes," too. Each worker appends its <span class="mono">trajectory_entry</span> to its own <span class="mono">batch_&lt;N&gt;.jsonl</span> the instant <strong>one</strong> prompt finishes (<span class="mono">batch_runner.py:416</span>), rather than buffering everything for a single final write — so even if the process dies mid-run, completed samples are <strong>already on disk</strong> and a resume skips them by content. Once all batches finish, every <span class="mono">batch_*.jsonl</span> in the directory is merged into a <strong>single</strong> <span class="mono">trajectories.jsonl</span> (<span class="mono">:1026</span>), filtering out dirty entries with invalid tool names along the way. Note trajectories are split <strong>by batch and aggregated into one file</strong> — <span class="mono">model</span> is just a metadata field per sample, not a per-model file split. <strong>Incremental writes save your bacon; the final merge yields one clean training file</strong> — each goal served on its own terms.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 410" role="img" aria-label="Parallel batch processing with per-batch incremental persistence merged into a single file">
+  <defs>
+    <marker id="be1arr" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+      <path d="M0 0 L6 3 L0 6 z" fill="var(--faint)"/>
+    </marker>
+  </defs>
+  <text x="20" y="20" font-size="11" font-weight="700" fill="var(--accent-ink)">dataset → parallel workers (Pool, num_workers=4) → incremental batch_&lt;N&gt;.jsonl → merge one trajectories.jsonl</text>
+
+  <rect x="14" y="54" width="92" height="180" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="60" y="72" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">dataset</text>
+  <g font-size="8.5" text-anchor="middle" fill="var(--muted)">
+    <rect x="24" y="80"  width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="94">prompt 1</text>
+    <rect x="24" y="104" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="118">prompt 2</text>
+    <rect x="24" y="128" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="142">prompt 3</text>
+    <rect x="24" y="152" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="166">prompt 4</text>
+    <rect x="24" y="176" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="190">prompt …</text>
+  </g>
+
+  <text x="187" y="48" text-anchor="middle" font-size="9.5" fill="var(--muted)">Pool · num_workers=4</text>
+  <path d="M132 52 L242 52" stroke="var(--line)" fill="none"/>
+
+  <g font-size="10" text-anchor="middle">
+    <line x1="106" y1="77"  x2="130" y2="77"  stroke="var(--faint)" marker-end="url(#be1arr)"/>
+    <line x1="106" y1="121" x2="130" y2="121" stroke="var(--faint)" marker-end="url(#be1arr)"/>
+    <line x1="106" y1="165" x2="130" y2="165" stroke="var(--faint)" marker-end="url(#be1arr)"/>
+    <line x1="106" y1="209" x2="130" y2="209" stroke="var(--faint)" marker-end="url(#be1arr)"/>
+
+    <rect x="132" y="60"  width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="184" y="76"  fill="var(--ink)">worker 1</text><text x="184" y="89" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <rect x="132" y="104" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="184" y="120" fill="var(--ink)">worker 2</text><text x="184" y="133" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <rect x="132" y="148" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="184" y="164" fill="var(--ink)">worker 3</text><text x="184" y="177" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <rect x="132" y="192" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="184" y="208" fill="var(--ink)">worker 4</text><text x="184" y="221" font-size="8.5" fill="var(--muted)">AIAgent</text>
+  </g>
+
+  <g font-size="9.5" text-anchor="middle">
+    <line x1="236" y1="77"  x2="250" y2="77"  stroke="var(--faint)" marker-end="url(#be1arr)"/>
+    <line x1="236" y1="121" x2="250" y2="121" stroke="var(--faint)" marker-end="url(#be1arr)"/>
+    <line x1="236" y1="165" x2="250" y2="165" stroke="var(--faint)" marker-end="url(#be1arr)"/>
+    <line x1="236" y1="209" x2="250" y2="209" stroke="var(--faint)" marker-end="url(#be1arr)"/>
+
+    <rect x="250" y="60"  width="40" height="34" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="270" y="81"  fill="var(--accent-ink)">QC</text>
+    <rect x="250" y="104" width="40" height="34" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="270" y="125" fill="var(--accent-ink)">QC</text>
+    <rect x="250" y="148" width="40" height="34" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="270" y="169" fill="var(--accent-ink)">QC</text>
+    <rect x="250" y="192" width="40" height="34" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="270" y="213" fill="var(--accent-ink)">QC</text>
+  </g>
+
+  <g text-anchor="middle">
+    <line x1="290" y1="77"  x2="310" y2="77"  stroke="var(--faint)" marker-end="url(#be1arr)"/>
+    <line x1="290" y1="121" x2="310" y2="121" stroke="var(--faint)" marker-end="url(#be1arr)"/>
+    <line x1="290" y1="165" x2="310" y2="165" stroke="var(--faint)" marker-end="url(#be1arr)"/>
+    <line x1="290" y1="209" x2="310" y2="209" stroke="var(--faint)" marker-end="url(#be1arr)"/>
+
+    <rect x="310" y="60"  width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="374" y="76"  font-size="10" fill="var(--ink)">batch_0.jsonl</text><text x="374" y="88" font-size="8" fill="var(--muted)">append</text>
+    <rect x="310" y="104" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="374" y="120" font-size="10" fill="var(--ink)">batch_1.jsonl</text><text x="374" y="132" font-size="8" fill="var(--muted)">append</text>
+    <rect x="310" y="148" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="374" y="164" font-size="10" fill="var(--ink)">batch_2.jsonl</text><text x="374" y="176" font-size="8" fill="var(--muted)">append</text>
+    <rect x="310" y="192" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+    <text x="374" y="208" font-size="10" fill="var(--ink)">batch_3.jsonl</text><text x="374" y="220" font-size="8" fill="var(--muted)">append</text>
+  </g>
+
+  <line x1="438" y1="77"  x2="452" y2="77"  stroke="var(--accent)" marker-end="url(#be1arr)"/>
+  <line x1="438" y1="121" x2="452" y2="121" stroke="var(--accent)" marker-end="url(#be1arr)"/>
+  <line x1="438" y1="165" x2="452" y2="165" stroke="var(--accent)" marker-end="url(#be1arr)"/>
+  <line x1="438" y1="209" x2="452" y2="209" stroke="var(--accent)" marker-end="url(#be1arr)"/>
+  <rect x="452" y="60" width="16" height="166" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="460" y="143" text-anchor="middle" font-size="10" font-weight="700" fill="var(--accent-ink)" transform="rotate(90 460 143)">merge</text>
+  <line x1="460" y1="226" x2="460" y2="250" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#be1arr)"/>
+
+  <rect x="296" y="252" width="370" height="140" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="481" y="276" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">trajectories.jsonl · single merged file</text>
+  <g text-anchor="middle" font-size="9.5">
+    <rect x="308" y="288" width="112" height="28" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="364" y="306" fill="var(--blue)">conversations</text>
+    <rect x="426" y="288" width="100" height="28" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="476" y="306" fill="var(--blue)">tool_stats</text>
+    <rect x="532" y="288" width="122" height="28" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="593" y="306" fill="var(--blue)">metadata</text>
+  </g>
+  <text x="481" y="346" text-anchor="middle" font-size="9.5" fill="var(--ink)">model is just a metadata field → <tspan font-weight="700">no per-model file split</tspan></text>
+  <text x="481" y="368" text-anchor="middle" font-size="9" fill="var(--muted)">dirty entries with invalid tool names dropped on merge</text>
+
+  <rect x="14" y="252" width="270" height="140" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="28" y="274" font-size="10.5" font-weight="700" fill="var(--ink)">QC &amp; resume rules</text>
+  <g font-size="8.5">
+    <text x="28" y="300" fill="var(--accent-ink)">✓ has reasoning → append to batch_&lt;N&gt;.jsonl</text>
+    <text x="28" y="326" fill="var(--red)">✗ zero reasoning → dropped, still marked done</text>
+    <text x="28" y="352" fill="var(--red)">✗ failed → no separate failed file,</text>
+    <text x="40" y="370" fill="var(--red)">retried on resume</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>Parallel batch + incremental trajectory persistence</b>: after splitting the dataset, <b>Pool(num_workers=4)</b> spins up workers each running one AIAgent; the instant a prompt finishes it is <b>QC'd</b> and <b>appended</b> to that worker's own batch_&lt;N&gt;.jsonl (crash-safe, resumable). Zero-reasoning samples are dropped but <b>still marked done</b> (no resume retry); genuinely failed prompts get <b>no separate failed file</b> — they're re-run on resume. Once all batches finish they merge into a <b>single</b> trajectories.jsonl (conversations / tool_stats / metadata) — <b>model is only a per-sample metadata field, never a per-model file split</b>. <b>Note</b>: this is the <b>batch</b> <span class="mono">batch_runner</span> path; the <span class="mono">_save_trajectory</span> discussed above is a separate <b>single-session</b> path that splits by success/failure into <span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span> — the two paths coexist, each on its own terms.</div>
+</div>
 <p>Incidentally, the fields in <span class="mono">trajectory_entry</span> aren't filler. Besides <span class="mono">conversations</span> it records per-tool <span class="mono">tool_stats</span> (count/success/failure), a <span class="mono">tool_error_counts</span> listing each tool's failures, plus <span class="mono">api_calls</span>, <span class="mono">toolsets_used</span>, <span class="mono">partial</span> (stopped early due to invalid tool calls), and more. Why store such detail? Because both training and analysis feed on these signals: which tool keeps failing, how many API calls a trajectory burned, whether it was truncated mid-run — usable to filter sample quality and, conversely, to diagnose the agent's weak spots. A trajectory is thus not just a "conversation recording" but a research sample with <strong>structured quality labels</strong> — which is exactly why it earns the word "asset."</p>
 
 <h2>Trajectory: one conversation becomes one training sample</h2>
@@ -528,6 +757,43 @@ LESSON_22 = {
     <span class="kw">assert</span> m.lower() <span class="kw">in</span> DEFAULT_CONTEXT_LENGTHS_LOWER</pre>
 </div>
 <p>The rule in one line: <strong>if a test reads like a snapshot of current data, delete it; if it reads like a contract about how two pieces of data must relate, keep it.</strong> "the gemini catalog must contain gemini-2.5-pro" is a snapshot (wrong on the next release); "the gemini catalog has at least one model," "every model has a context length" are <strong>invariants</strong> — unbroken however the data updates. This makes tests <strong>drift-proof</strong> against model/data churn, so routine updates no longer redden CI daily.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 240" role="img" aria-label="Eval contrast: locking data snapshots reddens CI daily, while locking behavioral invariants evolves with the system">
+  <defs>
+    <marker id="be2arr" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+      <path d="M0 0 L6 3 L0 6 z" fill="var(--faint)"/>
+    </marker>
+  </defs>
+
+  <text x="28" y="26" font-size="12.5" font-weight="700" fill="var(--red)">❌ snapshot · change-detector</text>
+  <rect x="18" y="38" width="306" height="80" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <g font-size="10" font-family="ui-monospace, monospace">
+    <text x="30" y="62" fill="var(--ink)">assert "gemini-2.5-pro" in models</text>
+    <text x="30" y="82" fill="var(--ink)">assert _config_version == 21</text>
+    <text x="30" y="104" font-size="9" fill="var(--muted)"># freezes "current data" into asserts</text>
+  </g>
+  <line x1="171" y1="118" x2="171" y2="150" stroke="var(--faint)" marker-end="url(#be2arr)"/>
+  <text x="171" y="140" text-anchor="middle" font-size="9.5" fill="var(--muted)">model ships weekly / config bumps</text>
+  <rect x="18" y="154" width="306" height="64" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="171" y="182" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">CI red every day ✗</text>
+  <text x="171" y="204" text-anchor="middle" font-size="9.5" fill="var(--muted)">forces "fix the test", not fix bugs</text>
+
+  <text x="366" y="26" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✅ invariant · behavior contract</text>
+  <rect x="356" y="38" width="306" height="80" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <g font-size="10" font-family="ui-monospace, monospace">
+    <text x="368" y="62" fill="var(--ink)">assert len(models) &gt;= 1</text>
+    <text x="368" y="82" fill="var(--ink)">assert "gemini" in catalog</text>
+    <text x="368" y="104" font-size="9" fill="var(--muted)"># every model has context_length</text>
+  </g>
+  <line x1="509" y1="118" x2="509" y2="150" stroke="var(--faint)" marker-end="url(#be2arr)"/>
+  <text x="509" y="140" text-anchor="middle" font-size="9.5" fill="var(--muted)">evolves with models / config</text>
+  <rect x="356" y="154" width="306" height="64" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="509" y="182" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">CI keeps passing ✓</text>
+  <text x="509" y="204" text-anchor="middle" font-size="9.5" fill="var(--muted)">unbroken however data updates</text>
+</svg>
+<div class="fig-cap"><b>Lock invariants, not snapshots</b>: the left side freezes "current data" into assertions — a literal model name gemini-2.5-pro, a config version number 21; a model ships weekly, config bumps, and CI <b>goes red daily</b>, forcing engineers to "fix the test." The right side asserts only the <b>relation that must hold</b> between two pieces of data (the catalog has at least one model, every model has a context length), unbroken however the data updates — so the tests <b>evolve along with the system</b>.</div>
+</div>
 <p>What does locking invariants buy? Tests that can <strong>evolve along with the system</strong>. Assertions like "the gemini catalog has at least one model" or "every model has a context length" lock the <strong>relation that must hold</strong> between two pieces of data, unbroken however the data updates. This mirrors the "narrow waist" philosophy: the more stable and minimal the core's contracts, the more <strong>testable</strong> the system; conversely, precisely because the waist's invariants are locked down, the edges dare to expand fast — new platforms, models, providers (see the chapters on toolsets and constraints). So eval here isn't snapshotting the code but <strong>guarding the whole system's correctness across continuous iteration</strong> — together with the narrow waist, it's what makes "stable core, wild edges" sustainable as engineering.</p>
 <p>One layer deeper: eval's real job is to <strong>quantify error accumulation</strong> (constraint F). In an agent's multi-turn autonomy, one small misjudgment snowballs down the subsequent steps; what invariant tests guard is precisely "don't let these must-hold relations quietly break across iterations." Put it beside the trajectory's quality gate and it's clearer: the quality gate stops low-quality data from flowing into training, lest the error get <strong>baked into the next model</strong>; invariant tests stop regressions from slowly piling up commit by commit. One gatekeeps at the data inlet, the other at code evolution — two gates, front and back, both fighting the inherent LLM constraint of <strong>error accumulation</strong> — which is why this chapter's three things (batch, trajectory, eval) really orbit the same root.</p>
 
