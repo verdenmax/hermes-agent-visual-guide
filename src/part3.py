@@ -90,8 +90,65 @@ or updated?"</span>.  Writes go straight to the memory + skill stores.
         mark_agent_created(name)</pre>
 </div>
 <p>其二，<strong>延迟失效</strong>：技能清单是 system prompt 的一部分（第 6 章 stable 层）。所以凡是会改动技能集的命令，都<strong>默认延迟生效</strong>——改动<strong>下个会话</strong>才进前缀，本会话缓存不破；只有显式加 <span class="mono">--now</span>（如 <span class="mono">/skills install --now</span>）才立即失效。这正是 AGENTS.md 钉死的「cache-aware slash command」范式。还有一个细节：技能被 <span class="mono">/skill-name</span> 调用时，是作为 <strong>user 消息</strong>注入、<strong>而非</strong>塞进 system prompt——同样是为了不动那条神圣的前缀。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 276" role="img" aria-label="技能注入走 user 消息，不进 system prompt">
+  <rect x="24" y="106" width="150" height="64" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="99" y="133" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">/skill-name</text>
+  <text x="99" y="153" text-anchor="middle" font-size="11" fill="var(--muted)">调用一个技能</text>
+  <path d="M176 124 Q 280 92 366 78" fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="6 4"/>
+  <polygon points="372,78 361,72 361,84" fill="var(--red)"/>
+  <text x="252" y="62" text-anchor="middle" font-size="18" font-weight="700" fill="var(--red)">✕</text>
+  <text x="262" y="120" text-anchor="middle" font-size="10.5" fill="var(--red)">✗ 不塞进前缀，否则击穿缓存</text>
+  <path d="M176 154 Q 280 188 366 210" fill="none" stroke="var(--blue)" stroke-width="2.5"/>
+  <polygon points="372,210 361,204 361,216" fill="var(--blue)"/>
+  <text x="250" y="242" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--blue)">✓ 注入为 user 消息（末尾追加）</text>
+  <rect x="372" y="32" width="288" height="86" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="516" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">system prompt · 缓存前缀（stable）</text>
+  <text x="516" y="78" text-anchor="middle" font-size="11" fill="var(--accent-ink)">身份 · 工具 · 技能清单 · 环境</text>
+  <text x="516" y="102" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">🔒 会话内逐字节不动</text>
+  <rect x="372" y="170" width="288" height="84" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2.5"/>
+  <text x="516" y="194" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">对话末尾 · append user 消息</text>
+  <text x="516" y="216" text-anchor="middle" font-size="11" fill="var(--blue)">user: /skill-name 内容</text>
+  <text x="516" y="237" text-anchor="middle" font-size="11" fill="var(--blue)">✅ append-only · 缓存安全</text>
+</svg>
+<div class="fig-cap"><b>技能注入走 user 消息，不进 system prompt</b>：一次 <span class="mono">/skill-name</span> 调用，Hermes <b>不会</b>改写 system prompt——那是会话期的<b>缓存前缀</b>，改一个字节就从改动点起整段失效（第 6 章）。它改为在<b>对话末尾追加一条 user 消息</b>把技能内容带进来：append-only、缓存安全。这正是「写在别处、不碰前缀」的同一条纪律。</div>
+</div>
 <p>这两道护栏各自防的是什么？<strong>产权门控</strong>防的是「<strong>误删你的劳动</strong>」：curator（第 10 章）会自动归档变陈旧的技能，若它也碰你<strong>亲手</strong>写的技能，你刻意经营的成果就被园丁铲了；所以只有 <span class="mono">is_background_review()</span> 创建的才打上 agent-created 标，前台 <span class="mono">skill_manage(create)</span> 是用户指令、curator 永不染指。<strong>延迟失效</strong>防的是缓存击穿：技能清单属于 system prompt 的<strong>稳定层</strong>，会话中途重载就要重建前缀；故默认改动<strong>下个会话</strong>才生效，<span class="mono">--now</span> 是显式逃生口。同理，<span class="mono">/skill-name</span> 调用走<strong>追加一条 user 消息</strong>——append-only、缓存安全，而改 system prompt 会让下游全部失效。</p>
 <p>把镜头拉远，本章只是<strong>自我进化闭环的入口</strong>，真正的力量来自后面三章的咬合：第 9 章<strong>抽取</strong>（把可复用解法写成 SKILL.md）→ 第 10 章 curator <strong>管生命周期</strong>（用得少就标 stale、再久就归档，<strong>永不删除</strong>、pinned 豁免）→ 第 11 章 memory <strong>沉淀身份</strong>（声明性地记住你是谁、偏好什么）→ 第 12 章 <strong>跨会话搜索</strong>（FTS5 找回旧技能与旧会话）。四章合起来才是完整回路：<strong>学会 → 园丁式养护 → 记住 → 召回</strong>。而它们能层层叠加却不互相踩缓存，靠的全是同一条铁律——<strong>写在别处、生效在下次</strong>，神圣前缀全程一字不动。少了任何一环，闭环都会塌：只抽取不养护，技能库会被陈旧条目淹没；只养护不召回，旧技能再好也无人取用；正是四章各司其职，才让 Hermes 真正<strong>越用越懂你</strong>。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 426" role="img" aria-label="自我进化闭环：四章咬合成顺时针回路">
+  <circle cx="340" cy="215" r="58" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="210" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">越用越懂你</text>
+  <text x="340" y="231" text-anchor="middle" font-size="11.5" fill="var(--accent-ink)">跨会话学习</text>
+  <g fill="none" stroke="var(--muted)" stroke-width="2.2">
+    <path d="M455 70 Q 545 95 553 176"/>
+    <path d="M555 251 Q 548 348 463 374"/>
+    <path d="M220 378 Q 133 350 128 252"/>
+    <path d="M125 179 Q 133 95 215 62"/>
+  </g>
+  <g fill="var(--muted)">
+    <polygon points="553,184 547,173 559,173"/>
+    <polygon points="456,378 467,372 467,384"/>
+    <polygon points="125,246 119,257 131,257"/>
+    <polygon points="224,57 213,51 213,63"/>
+  </g>
+  <rect x="225" y="24" width="230" height="64" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="340" y="50" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">① 学习 nudge → 抽取技能</text>
+  <text x="340" y="70" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">可复用解法写成 SKILL.md · 第9章（本章）</text>
+  <rect x="455" y="183" width="200" height="64" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="555" y="209" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">② Curator 后台养护</text>
+  <text x="555" y="229" text-anchor="middle" font-size="10.5" fill="var(--blue)">少用→stale→归档·永不删 · 第10章</text>
+  <rect x="225" y="346" width="230" height="64" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="372" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">③ 记忆沉淀「你是谁」</text>
+  <text x="340" y="392" text-anchor="middle" font-size="10.5" fill="var(--blue)">声明性记住身份 / 偏好 · 第11章</text>
+  <rect x="25" y="183" width="200" height="64" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="125" y="209" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">④ 跨会话搜索召回</text>
+  <text x="125" y="229" text-anchor="middle" font-size="10.5" fill="var(--blue)">FTS5 找回旧技能 / 会话 · 第12章</text>
+</svg>
+<div class="fig-cap"><b>自我进化闭环</b>：四章咬合成一个顺时针回路——① 学习 nudge 把可复用解法抽成技能（第 9 章 · 本章入口）→ ② Curator 后台养护，把陈旧技能标 stale 再归档（<b>永不删</b>，第 10 章）→ ③ 记忆声明性沉淀「你是谁、偏好什么」（第 11 章）→ ④ 跨会话 FTS5 搜索召回旧技能与旧会话（第 12 章）→ 回到 ①。四环各司其职，Hermes 才<b>越用越懂你</b>，而全程不动那条神圣的缓存前缀。</div>
+</div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「学习而不破缓存」</div>
@@ -210,7 +267,64 @@ or updated?"</span>.  Writes go straight to the memory + skill stores.
 </div>
 <p>Second, <strong>deferred invalidation</strong>: the skills list is part of the system prompt (ch.6's stable tier). So any command that changes the skill set is <strong>deferred by default</strong> — the change enters the prefix <strong>next session</strong>, sparing this session's cache; only an explicit <span class="mono">--now</span> (e.g. <span class="mono">/skills install --now</span>) invalidates immediately. This is the "cache-aware slash command" pattern pinned in AGENTS.md. One more detail: when a skill is invoked via <span class="mono">/skill-name</span>, it is injected as a <strong>user message</strong>, <strong>not</strong> dropped into the system prompt — again, to leave that sacred prefix alone.</p>
 <p>What does each guardrail actually protect? <strong>Provenance gating</strong> guards against <strong>deleting your work</strong>: the curator (ch.10) auto-archives skills that go stale, and if it touched skills <strong>you</strong> authored by hand, your deliberate work would get weeded out — so only <span class="mono">is_background_review()</span> creations get the agent-created mark; a foreground <span class="mono">skill_manage(create)</span> is user-directed and the curator never touches it. <strong>Deferred invalidation</strong> guards against cache-busting: the skills list lives in the system prompt's <strong>stable tier</strong>, and reloading it mid-session rebuilds the prefix; so changes default to <strong>next session</strong>, with <span class="mono">--now</span> as the explicit escape hatch. By the same logic, a <span class="mono">/skill-name</span> invocation <strong>appends one user message</strong> — append-only, cache-safe — whereas editing the system prompt would invalidate everything downstream.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 276" role="img" aria-label="Skills are injected as a user message, not into the system prompt">
+  <rect x="24" y="106" width="150" height="64" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="99" y="133" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">/skill-name</text>
+  <text x="99" y="153" text-anchor="middle" font-size="11" fill="var(--muted)">invoke a skill</text>
+  <path d="M176 124 Q 280 92 366 78" fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="6 4"/>
+  <polygon points="372,78 361,72 361,84" fill="var(--red)"/>
+  <text x="252" y="62" text-anchor="middle" font-size="18" font-weight="700" fill="var(--red)">✕</text>
+  <text x="262" y="120" text-anchor="middle" font-size="10.5" fill="var(--red)">✗ not into the prefix → busts the cache</text>
+  <path d="M176 154 Q 280 188 366 210" fill="none" stroke="var(--blue)" stroke-width="2.5"/>
+  <polygon points="372,210 361,204 361,216" fill="var(--blue)"/>
+  <text x="250" y="242" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--blue)">✓ injected as a user message (appended)</text>
+  <rect x="372" y="32" width="288" height="86" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="516" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">system prompt · cache prefix (stable)</text>
+  <text x="516" y="78" text-anchor="middle" font-size="11" fill="var(--accent-ink)">identity · tools · skills list · env</text>
+  <text x="516" y="102" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">🔒 byte-stable within the session</text>
+  <rect x="372" y="170" width="288" height="84" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2.5"/>
+  <text x="516" y="194" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">conversation tail · append user msg</text>
+  <text x="516" y="216" text-anchor="middle" font-size="11" fill="var(--blue)">user: /skill-name content</text>
+  <text x="516" y="237" text-anchor="middle" font-size="11" fill="var(--blue)">✅ append-only · cache-safe</text>
+</svg>
+<div class="fig-cap"><b>Skills are injected as a user message, not into the system prompt</b>: a <span class="mono">/skill-name</span> call <b>never</b> rewrites the system prompt — that's the session's <b>cache prefix</b>, and changing one byte invalidates everything from that point on (ch.6). Instead Hermes <b>appends one user message</b> at the tail to carry the skill in: append-only and cache-safe. Same discipline as everywhere — written elsewhere, the prefix untouched.</div>
+</div>
 <p>Pull the camera back: this chapter is only the <strong>entry point</strong> of the self-evolution loop; the real power comes from how the next three mesh: ch.9 <strong>extracts</strong> (distill a reusable approach into SKILL.md) → ch.10's curator <strong>manages the lifecycle</strong> (mark stale when unused, archive when older, <strong>never delete</strong>, pinned exempt) → ch.11's memory <strong>settles identity</strong> (declaratively remembering who you are and what you prefer) → ch.12's <strong>cross-session search</strong> (FTS5 recalling old skills and sessions). Together they form the full circuit: <strong>learn → garden → remember → recall</strong>. They stack without ever stepping on the cache because all four obey the same iron rule — <strong>written elsewhere, effective next time</strong>, the sacred prefix untouched throughout. Drop any link and the loop collapses: extract without gardening and the skill store drowns in stale entries; garden without recall and even the best old skill is never reached. Precisely because the four divide the labor, Hermes genuinely <strong>gets to know you the more you use it</strong>.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 426" role="img" aria-label="The self-evolution loop: four chapters mesh into a clockwise circuit">
+  <circle cx="340" cy="215" r="58" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="210" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">knows you more</text>
+  <text x="340" y="231" text-anchor="middle" font-size="11" fill="var(--accent-ink)">the more you use it</text>
+  <g fill="none" stroke="var(--muted)" stroke-width="2.2">
+    <path d="M455 70 Q 545 95 553 176"/>
+    <path d="M555 251 Q 548 348 463 374"/>
+    <path d="M220 378 Q 133 350 128 252"/>
+    <path d="M125 179 Q 133 95 215 62"/>
+  </g>
+  <g fill="var(--muted)">
+    <polygon points="553,184 547,173 559,173"/>
+    <polygon points="456,378 467,372 467,384"/>
+    <polygon points="125,246 119,257 131,257"/>
+    <polygon points="224,57 213,51 213,63"/>
+  </g>
+  <rect x="225" y="24" width="230" height="64" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="340" y="50" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">① Learn → extract a skill</text>
+  <text x="340" y="70" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">reusable approach into SKILL.md · ch.9 (here)</text>
+  <rect x="455" y="183" width="200" height="64" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="555" y="209" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">② Curator gardens</text>
+  <text x="555" y="229" text-anchor="middle" font-size="10" fill="var(--blue)">unused→stale→archive·never delete · ch.10</text>
+  <rect x="225" y="346" width="230" height="64" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="372" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">③ Memory settles identity</text>
+  <text x="340" y="392" text-anchor="middle" font-size="10.5" fill="var(--blue)">declaratively remember who / prefs · ch.11</text>
+  <rect x="25" y="183" width="200" height="64" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="125" y="209" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">④ Cross-session recall</text>
+  <text x="125" y="229" text-anchor="middle" font-size="10" fill="var(--blue)">FTS5 finds old skills / sessions · ch.12</text>
+</svg>
+<div class="fig-cap"><b>The self-evolution loop</b>: four chapters mesh into one clockwise circuit — ① a learning nudge distills a reusable approach into a skill (ch.9, the entry point) → ② the curator gardens, marking unused skills stale then archiving (<b>never deleting</b>, ch.10) → ③ memory declaratively settles "who you are and what you prefer" (ch.11) → ④ cross-session FTS5 search recalls old skills and sessions (ch.12) → back to ①. With each link doing its job, Hermes genuinely <b>gets to know you the more you use it</b> — all without touching the sacred cache prefix.</div>
+</div>
 
 <div class="card collab">
   <div class="tag">🧩 Collaboration · how the parts mesh for "learn without breaking the cache"</div>

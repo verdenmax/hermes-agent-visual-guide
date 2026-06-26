@@ -53,6 +53,36 @@ agent = AIAgent(
 
 <p>为什么非得起<strong>独立会话</strong>、而不是图省事把结果追加到主对话?根子在第 6 章的缓存模型:一个长寿命会话每轮都复用被缓存的前缀,任何<strong>中途改写历史</strong>都会击穿缓存,让后续每一轮都按全价重算 token。而 cron 是<strong>异步</strong>触发的——它醒来的时刻与你说话的时刻毫不相干,若把它的输出硬塞进主对话,既可能在两条同角色消息之间插入第三条(破坏第 7 章的严格角色交替),又会改变下次用户轮所缓存的前缀字节。独立 <span class="mono">session_id</span> 让后台任务拥有自己的状态盘,主对话被缓存的前缀<strong>一字不动</strong>——这是「缓存神圣」在自动化层最直接的落地。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 270" role="img" aria-label="cron 起独立会话,结果不镜像进主对话,两条会话互不干扰缓存与角色交替">
+  <text x="34" y="22" font-size="13.5" font-weight="700" fill="var(--accent-ink)">主对话会话(长寿命 · 缓存前缀稳定)</text>
+  <rect x="34" y="34" width="438" height="54" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="253" y="58" text-anchor="middle" font-size="12" fill="var(--accent-ink)">🔒 神圣前缀(system + 历史)逐字节不动</text>
+  <text x="253" y="77" text-anchor="middle" font-size="10.5" fill="var(--muted)">每轮复用缓存 · 严格角色交替 user↔assistant</text>
+  <rect x="476" y="34" width="170" height="54" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="561" y="58" text-anchor="middle" font-size="12" fill="var(--blue)">本轮新增</text>
+  <text x="561" y="77" text-anchor="middle" font-size="10.5" fill="var(--muted)">只往末尾 append</text>
+
+  <line x1="34" y1="120" x2="646" y2="120" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="38" y="114" font-size="10.5" fill="var(--muted)">隔离边界 · 不共享状态盘</text>
+  <line x1="300" y1="158" x2="300" y2="92" stroke="var(--red)" stroke-width="2"/>
+  <text x="300" y="128" text-anchor="middle" font-size="15" font-weight="700" fill="var(--red)">✕</text>
+  <text x="318" y="124" font-size="11" font-weight="700" fill="var(--red)">不镜像进主对话</text>
+
+  <text x="34" y="178" font-size="13.5" font-weight="700" fill="var(--amber)">独立 cron 会话(platform="cron" · skip_memory · 独立 session_id)</text>
+  <rect x="34" y="190" width="118" height="54" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="93" y="213" text-anchor="middle" font-size="11" fill="var(--ink)">header 帧</text>
+  <text x="93" y="230" text-anchor="middle" font-size="10" fill="var(--muted)">任务说明</text>
+  <rect x="156" y="190" width="368" height="54" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="213" text-anchor="middle" font-size="11.5" fill="var(--ink)">AIAgent 跑这次 job · 独立状态盘</text>
+  <text x="340" y="230" text-anchor="middle" font-size="10" fill="var(--muted)">skip_memory=True · 不写用户画像</text>
+  <rect x="528" y="190" width="118" height="54" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="587" y="213" text-anchor="middle" font-size="11" fill="var(--ink)">footer 帧</text>
+  <text x="587" y="230" text-anchor="middle" font-size="10" fill="var(--muted)">结果投递</text>
+</svg>
+<div class="fig-cap"><b>cron 不搅扰主对话</b>:上＝长寿命主对话,神圣缓存前缀逐字节不动、严格角色交替;下＝cron 起的<b>独立会话</b>(<span class="mono">platform="cron"</span> · <span class="mono">skip_memory</span> · 独立 <span class="mono">session_id</span>),结果带 header/footer 框单独投递,<b>不镜像进主对话</b>。两条会话井水不犯河水——缓存前缀与角色交替都不被后台任务搅乱。</div>
+</div>
+
 <p><span class="mono">skip_memory=True</span> 治的是另一种污染。记忆(第 11 章)的职责,是从对话里提炼「关于这个用户」的画像;但 cron 跑的是<strong>系统派给的杂活</strong>,并非用户当下的真实意图。若让记忆把「每天 9 点生成会议汇总」这类系统提示也学进画像,用户表征就会被自动任务的噪声带偏——注释原话正是 <span class="mono">Cron system prompts would corrupt user representations</span>。所以 cron 默认 <span class="mono">skip_memory</span>,既省下记忆同步的开销,也守住画像的纯净。这是一个「默认安全」的选择:要让某个 job 反过来写记忆,得显式开启,而不是不小心就污染了用户档案。</p>
 
 <h2>安全阀:catchup 与不活动超时</h2>
@@ -70,6 +100,34 @@ agent = AIAgent(
 <p><strong>catchup 窗口 = 半个周期</strong>(clamp 在 120 秒到 2 小时):错过得不久就补跑一次,错过太久就<strong>快进</strong>、不堆积补跑(免得开机时把积压的几十次一股脑全跑了)。另一头,cron 会话用<strong>不活动超时</strong>兜底:默认空转 <strong>600 秒(10 分钟)</strong>无动静(无工具调用、无流式 token)就 <span class="mono">agent.interrupt("Cron job timed out (inactivity)")</span> 中断(<span class="mono">HERMES_CRON_TIMEOUT</span> 可调;<strong>活跃干活时可跑数小时</strong>)。这样失控空转的 agent <strong>独占不了</strong>调度器,而正常长任务不会被误杀。再加 <span class="mono">.tick.lock</span> 文件锁,多个进程也不会重复 tick。</p>
 
 <p>为什么超时要做成<strong>不活动</strong>判定、而不是一刀切的硬上限?因为合法后台任务的时长差异极大:一次抓取可能 10 秒,一次跨库迁移可能要跑几小时。若用固定硬上限,要么把它设得很大(失控空转也得耗满才被发现),要么设得很小(误杀正常长任务),两头都不讨好。<strong>不活动超时</strong>绕开了这个两难:它盯的是「还在不在干活」——只要还有工具调用、API 调用或流式 token,计时器就被 <span class="mono">_touch_activity()</span> 重置;只有连续 <strong>600 秒(默认)</strong>毫无动静,才判定为卡死并 <span class="mono">agent.interrupt()</span>。于是活跃的长任务能安心跑数小时,而真正空转的 agent 独占不了调度器。这正是本指南早先纠正过的关键点:它是一套基于「有没有在干活」的不活动判定,而不是某些文档里误传的「固定几分钟就一刀切硬砍」。两者天差地别:前者对正常长任务零误伤,后者会把跑了几分钟的合法迁移直接腰斩。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 258" role="img" aria-label="不活动超时:有输出就一直跑,持续无输出超过600秒才被中断,而非固定硬中断">
+  <text x="34" y="24" font-size="13" font-weight="700" fill="var(--blue)">① 活跃 job · 持续有输出 → 一直跑</text>
+  <rect x="34" y="38" width="520" height="42" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <g fill="var(--blue)">
+    <circle cx="90" cy="59" r="4"/><circle cx="156" cy="59" r="4"/><circle cx="222" cy="59" r="4"/>
+    <circle cx="288" cy="59" r="4"/><circle cx="354" cy="59" r="4"/><circle cx="420" cy="59" r="4"/>
+    <circle cx="486" cy="59" r="4"/>
+  </g>
+  <path d="M554 59 L600 59" stroke="var(--blue)" stroke-width="2"/>
+  <polygon points="600,53 613,59 600,65" fill="var(--blue)"/>
+  <text x="618" y="63" font-size="11" font-weight="700" fill="var(--blue)">数小时</text>
+  <text x="294" y="100" text-anchor="middle" font-size="10.5" fill="var(--muted)">每个工具调用 / 流式 token 触发 _touch_activity() → 计时器清零</text>
+
+  <text x="34" y="146" font-size="13" font-weight="700" fill="var(--red)">② 空转 job · 持续无输出 &gt; 600s → 才被 kill</text>
+  <rect x="34" y="160" width="86" height="42" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="77" y="185" text-anchor="middle" font-size="10.5" fill="var(--blue)">有输出</text>
+  <rect x="124" y="160" width="396" height="42" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="322" y="179" text-anchor="middle" font-size="11" fill="var(--ink)">无输出计时… 600s</text>
+  <text x="322" y="194" text-anchor="middle" font-size="9.5" fill="var(--muted)">HERMES_CRON_TIMEOUT 可调 · 0=unlimited</text>
+  <rect x="524" y="160" width="122" height="42" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="585" y="179" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✕ kill</text>
+  <text x="585" y="194" text-anchor="middle" font-size="9" fill="var(--red)">agent.interrupt()</text>
+  <text x="34" y="238" font-size="11" font-weight="700" fill="var(--muted)">⚠ 这是「不活动超时」(盯有没有在干活),不是固定几分钟的「硬中断」。</text>
+</svg>
+<div class="fig-cap"><b>不活动超时闸</b>:① 只要持续有工具调用 / 流式 token,<span class="mono">_touch_activity()</span> 就把计时器清零,活跃 job 可跑<b>数小时</b>;② 只有<b>持续无输出超过 600s</b>(<span class="mono">HERMES_CRON_TIMEOUT</span> 可调,<span class="mono">0=unlimited</span>)才被 <span class="mono">agent.interrupt()</span> 中断。它是一套基于「还在不在干活」的<b>不活动判定</b>,而不是固定几分钟就一刀切的<b>硬中断</b>——对正常长任务零误伤。</div>
+</div>
 
 <p>另一头的 catchup 是同样的「防雪崩」思路。设想笔记本合盖一整晚,开机时若把积压的几十次「每 5 分钟」补跑一股脑全发,既刷屏又烧钱。<span class="mono">_compute_grace_seconds</span> 把容忍窗口设为<strong>半个周期</strong>(clamp 在 120s–2h):错过得不久就补跑一次,错过太久就把 <span class="mono">next_run_at</span> <strong>快进</strong>到下一个整点、丢弃积压。而 <span class="mono">.tick.lock</span> 文件锁(底层是 <span class="mono">fcntl.flock</span>)保证哪怕网关与独立调度器同时在跑,同一时刻也只有一个 tick 真正推进任务。三个阀各管一类失控——不活动超时管「跑飞」、catchup 管「错过」、文件锁管「重复」——合起来把「定时」从玩具做成可托付的基础设施。值得一提的是,这套阀门的设计取向与第 13 章委派的「中断级联」同源:都不追求绝对掐死,而是给失控留一个<strong>可预期、可恢复</strong>的兜底,让正常路径丝毫不受影响、异常路径也能优雅止损。</p>
 
@@ -166,6 +224,36 @@ agent = AIAgent(
 
 <p>Why insist on an <strong>isolated session</strong> rather than just appending the result to the main conversation? It comes back to ch.6's cache model: a long-lived conversation reuses a cached prefix every turn, and any <strong>mid-conversation rewrite of history</strong> shatters that cache, forcing every later turn to recompute tokens at full price. Cron fires <strong>asynchronously</strong> — the moment it wakes has nothing to do with when you speak — so jamming its output into the main conversation could both insert a third message between two same-role ones (breaking ch.7's strict alternation) and change the prefix bytes the next user turn caches against. An isolated <span class="mono">session_id</span> gives the background job its own state store, leaving the main conversation's cached prefix <strong>untouched</strong> — "caching is sacred" realized at the automation layer.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 270" role="img" aria-label="cron spins up an isolated session whose result is not mirrored into the main conversation, leaving cache and role alternation undisturbed">
+  <text x="34" y="22" font-size="13.5" font-weight="700" fill="var(--accent-ink)">Main conversation (long-lived · stable cached prefix)</text>
+  <rect x="34" y="34" width="438" height="54" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="253" y="58" text-anchor="middle" font-size="12" fill="var(--accent-ink)">🔒 Sacred prefix (system + history), byte-stable</text>
+  <text x="253" y="77" text-anchor="middle" font-size="10.5" fill="var(--muted)">reused each turn · strict role alternation user↔assistant</text>
+  <rect x="476" y="34" width="170" height="54" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="561" y="58" text-anchor="middle" font-size="12" fill="var(--blue)">this turn</text>
+  <text x="561" y="77" text-anchor="middle" font-size="10.5" fill="var(--muted)">append at tail only</text>
+
+  <line x1="34" y1="120" x2="646" y2="120" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="38" y="114" font-size="10.5" fill="var(--muted)">isolation boundary · no shared state store</text>
+  <line x1="300" y1="158" x2="300" y2="92" stroke="var(--red)" stroke-width="2"/>
+  <text x="300" y="128" text-anchor="middle" font-size="15" font-weight="700" fill="var(--red)">✕</text>
+  <text x="318" y="124" font-size="11" font-weight="700" fill="var(--red)">not mirrored into main</text>
+
+  <text x="34" y="178" font-size="13.5" font-weight="700" fill="var(--amber)">Isolated cron session (platform="cron" · skip_memory · own session_id)</text>
+  <rect x="34" y="190" width="118" height="54" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="93" y="213" text-anchor="middle" font-size="11" fill="var(--ink)">header frame</text>
+  <text x="93" y="230" text-anchor="middle" font-size="10" fill="var(--muted)">task brief</text>
+  <rect x="156" y="190" width="368" height="54" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="213" text-anchor="middle" font-size="11.5" fill="var(--ink)">AIAgent runs this job · own state store</text>
+  <text x="340" y="230" text-anchor="middle" font-size="10" fill="var(--muted)">skip_memory=True · no user-representation write</text>
+  <rect x="528" y="190" width="118" height="54" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="587" y="213" text-anchor="middle" font-size="11" fill="var(--ink)">footer frame</text>
+  <text x="587" y="230" text-anchor="middle" font-size="10" fill="var(--muted)">deliver result</text>
+</svg>
+<div class="fig-cap"><b>Cron never disturbs the main conversation</b>: top = the long-lived main session, its sacred cached prefix byte-stable with strict role alternation; bottom = cron's <b>isolated session</b> (<span class="mono">platform="cron"</span> · <span class="mono">skip_memory</span> · own <span class="mono">session_id</span>), result delivered framed with header/footer and <b>not mirrored into the main conversation</b>. The two sessions never cross streams — neither the cached prefix nor role alternation is disturbed by background jobs.</div>
+</div>
+
 <p><span class="mono">skip_memory=True</span> treats a different pollution. Memory's job (ch.11) is to distill a <strong>representation of the user</strong> from the conversation; but cron runs <strong>chores the system assigned</strong>, not the user's live intent. If memory learned "generate a meeting digest at 9am daily" as if it were the user, the representation would skew toward automation noise — the comment says it outright: <span class="mono">Cron system prompts would corrupt user representations</span>. So cron runs no memory by default, saving the sync cost and keeping the representation clean. It's a "safe by default" choice: making a job write memory takes an explicit opt-in, rather than accidentally polluting the user's profile.</p>
 
 <h2>Safety valves: catchup and the inactivity timeout</h2>
@@ -183,6 +271,34 @@ agent = AIAgent(
 <p><strong>The catchup window = half the period</strong> (clamped 120s to 2h): miss it by a little and it runs once to catch up; miss it by a lot and it <strong>fast-forwards</strong> instead of piling up catch-up runs (so booting up won't fire dozens of backlogged runs at once). On the other end, a cron session is backstopped by an <strong>inactivity timeout</strong>: by default, after <strong>600 seconds (10 min)</strong> of no activity (no tool call, no stream token) it fires <span class="mono">agent.interrupt("Cron job timed out (inactivity)")</span> (tunable via <span class="mono">HERMES_CRON_TIMEOUT</span>; <strong>an actively-working job can run for hours</strong>). So a runaway idle agent <strong>can't monopolize</strong> the scheduler, while a legitimate long job isn't killed. Plus a <span class="mono">.tick.lock</span> file lock means multiple processes won't double-tick.</p>
 
 <p>Why make the timeout an <strong>inactivity</strong> check rather than a flat hard cap? Because legitimate background jobs vary wildly in length: a fetch may take 10 seconds, a cross-database migration may run for hours. A fixed hard cap is a lose-lose: set it high and a runaway idle agent must burn the whole window before it's caught; set it low and you kill legitimate long jobs. The <strong>inactivity timeout</strong> sidesteps the dilemma by watching "is it still doing work" — every tool call, API call, or stream token resets the timer via <span class="mono">_touch_activity()</span>; only after <strong>600 seconds (default)</strong> of total silence is it judged stuck and <span class="mono">agent.interrupt()</span>'d. So active long jobs run for hours while a truly idle agent can't monopolize the scheduler. This is exactly the point this guide corrected earlier: it is an inactivity check keyed on real activity, not the fixed-minutes hard cut some docs mistakenly imply — and the two are worlds apart, since the former never harms a legitimate long job while the latter would behead a migration that ran a few minutes.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 258" role="img" aria-label="inactivity timeout: keeps running while output continues, killed only after over 600s of silence, not a fixed hard cap">
+  <text x="34" y="24" font-size="13" font-weight="700" fill="var(--blue)">① Active job · output keeps coming → keeps running</text>
+  <rect x="34" y="38" width="520" height="42" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <g fill="var(--blue)">
+    <circle cx="90" cy="59" r="4"/><circle cx="156" cy="59" r="4"/><circle cx="222" cy="59" r="4"/>
+    <circle cx="288" cy="59" r="4"/><circle cx="354" cy="59" r="4"/><circle cx="420" cy="59" r="4"/>
+    <circle cx="486" cy="59" r="4"/>
+  </g>
+  <path d="M554 59 L600 59" stroke="var(--blue)" stroke-width="2"/>
+  <polygon points="600,53 613,59 600,65" fill="var(--blue)"/>
+  <text x="618" y="63" font-size="11" font-weight="700" fill="var(--blue)">hours</text>
+  <text x="294" y="100" text-anchor="middle" font-size="10.5" fill="var(--muted)">each tool call / stream token fires _touch_activity() → timer reset to 0</text>
+
+  <text x="34" y="146" font-size="13" font-weight="700" fill="var(--red)">② Idle job · silent &gt; 600s → only then killed</text>
+  <rect x="34" y="160" width="86" height="42" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="77" y="185" text-anchor="middle" font-size="10.5" fill="var(--blue)">output</text>
+  <rect x="124" y="160" width="396" height="42" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="322" y="179" text-anchor="middle" font-size="11" fill="var(--ink)">silence timer… 600s</text>
+  <text x="322" y="194" text-anchor="middle" font-size="9.5" fill="var(--muted)">HERMES_CRON_TIMEOUT tunable · 0=unlimited</text>
+  <rect x="524" y="160" width="122" height="42" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="585" y="179" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✕ kill</text>
+  <text x="585" y="194" text-anchor="middle" font-size="9" fill="var(--red)">agent.interrupt()</text>
+  <text x="34" y="238" font-size="11" font-weight="700" fill="var(--muted)">⚠ This is an INACTIVITY timeout (watches "still working?"), not a fixed-minutes hard cut.</text>
+</svg>
+<div class="fig-cap"><b>The inactivity-timeout valve</b>: ① as long as tool calls / stream tokens keep coming, <span class="mono">_touch_activity()</span> resets the timer, so an active job can run for <b>hours</b>; ② only after <b>over 600s of total silence</b> (<span class="mono">HERMES_CRON_TIMEOUT</span> tunable, <span class="mono">0=unlimited</span>) is it <span class="mono">agent.interrupt()</span>'d. It is an <b>inactivity check</b> keyed on "is it still doing work," not a fixed-minutes <b>hard cut</b> — zero harm to a legitimate long job.</div>
+</div>
 
 <p>The catchup valve at the other end follows the same "anti-avalanche" logic. Imagine the laptop is closed all night; on boot, firing dozens of backlogged "every 5 min" runs at once would both flood you and burn money. <span class="mono">_compute_grace_seconds</span> sets the tolerance window to <strong>half the period</strong> (clamped 120s–2h): miss by a little and it catches up once; miss by a lot and it <strong>fast-forwards</strong> <span class="mono">next_run_at</span> to the next slot, dropping the backlog. The <span class="mono">.tick.lock</span> file lock (<span class="mono">fcntl.flock</span> underneath) ensures that even with the gateway and a standalone scheduler both running, only one tick advances jobs at a time. Three valves, three failure modes — inactivity for "runaway," catchup for "missed," the lock for "duplicate" — together turning "scheduling" from a toy into infrastructure you can trust. Notably, this valve philosophy shares roots with ch.13's delegation "interrupt cascade": neither chases an absolute kill, but gives runaways a <strong>predictable, recoverable</strong> backstop, leaving the normal path entirely unaffected while letting the abnormal one fail gracefully.</p>
 

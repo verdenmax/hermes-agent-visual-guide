@@ -377,9 +377,71 @@ Hermes 是 <a href="https://github.com/NousResearch/hermes-agent">Nous Research<
 把成功的做法变成<strong>可复用的程序性知识</strong>。这件事之所以重要，是因为大模型本身有个硬伤——
 <strong>两次调用之间它什么都不记得</strong>。Hermes 的全部“进化”机制，本质都是在<strong>对抗这个失忆</strong>。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 268" role="img" aria-label="LLM 七个固有约束 A 到 G，分为单次调用与自主性两组">
+  <text x="20" y="24" font-size="13" font-weight="700" fill="var(--blue)">① 单次调用层面 single-call（A · B · E）</text>
+  <g>
+    <rect x="20"  y="34" width="202" height="82" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="52"  y="88" text-anchor="middle" font-size="26" font-weight="700" fill="var(--blue)">A</text>
+    <text x="78"  y="82" font-size="14" fill="var(--ink)">中间遗失</text>
+    <rect x="238" y="34" width="202" height="82" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="270" y="88" text-anchor="middle" font-size="26" font-weight="700" fill="var(--blue)">B</text>
+    <text x="296" y="82" font-size="14" fill="var(--ink)">无状态</text>
+    <rect x="456" y="34" width="202" height="82" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="488" y="88" text-anchor="middle" font-size="26" font-weight="700" fill="var(--blue)">E</text>
+    <text x="514" y="82" font-size="13.5" fill="var(--ink)">结构化输出脆弱</text>
+  </g>
+  <text x="20" y="152" font-size="13" font-weight="700" fill="var(--accent-ink)">② 自主性层面 autonomy（C · D · F · G）</text>
+  <g>
+    <rect x="20"  y="162" width="151" height="82" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="46"  y="216" text-anchor="middle" font-size="24" font-weight="700" fill="var(--accent-ink)">C</text>
+    <text x="68"  y="210" font-size="13.5" fill="var(--ink)">幻觉</text>
+    <rect x="183" y="162" width="151" height="82" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="209" y="216" text-anchor="middle" font-size="24" font-weight="700" fill="var(--accent-ink)">D</text>
+    <text x="231" y="210" font-size="13" fill="var(--ink)">指令=数据</text>
+    <rect x="346" y="162" width="151" height="82" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="372" y="216" text-anchor="middle" font-size="24" font-weight="700" fill="var(--accent-ink)">F</text>
+    <text x="394" y="210" font-size="13.5" fill="var(--ink)">误差累积</text>
+    <rect x="509" y="162" width="151" height="82" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="535" y="216" text-anchor="middle" font-size="24" font-weight="700" fill="var(--accent-ink)">G</text>
+    <text x="557" y="210" font-size="13.5" fill="var(--ink)">运维</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>LLM 七缺陷 A–G 一览</b>：<b>A·中间遗失 / B·无状态 / E·结构化输出脆弱</b> 是「单次调用」就暴露的约束；<b>C·幻觉 / D·指令=数据 / F·误差累积 / G·运维</b> 则要把模型串成「自主体」后才显现。本章先聚焦 B·无状态——其余六条在第 2–3 章展开，整套 A–G 是后续每章基础设施的「为什么」。</div>
+</div>
+
 <p>为什么是“把状态外置”而不是“换个记性更好的模型”？因为<strong>无状态是大模型的结构性事实</strong>，不是某一代模型的缺陷——再强的模型，两次 API 调用之间也只能看见你这一次塞进去的上下文（第 2 章 B·无状态）。如果把“记住你”寄托在模型权重上，就等于把<strong>个人化</strong>押在一次次昂贵的微调上，既慢又把你锁死在单一厂商。Hermes 反其道而行：让模型保持<strong>无状态、可随时替换</strong>，把所有“记忆”沉淀到模型<strong>之外</strong>的技能、记忆文件、会话库里（第 4 章把状态外置）。于是“变聪明”这件事，就从<strong>训练问题</strong>变成了<strong>工程问题</strong>——这正是 Hermes 全部进化机制的设计原点。</p>
 
 <p>还有一个容易被忽略的取舍：<strong>同一套 agent 核心</strong>同时驱动 CLI、消息网关（20+ 平台）、TUI 和 Electron 桌面 App，而不是每个端各写一套逻辑。为什么这么做？因为如果每端独立实现，“学习闭环”就会<strong>四分五裂</strong>：在 Telegram 上学到的技能，到了桌面端却用不上。一个核心多端，意味着<strong>记忆、技能、会话库全平台共享</strong>，行为也<strong>处处一致</strong>（第 17 章网关适配、第 19 章 TUI/桌面）。代价是核心必须保持<strong>足够通用</strong>、不能为某一个端开特例——这又反过来强化了“窄腰”纪律：核心只留各端都需要的最小公共面（第 8 章）。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 384" role="img" aria-label="同一个 AIAgent 核心向外驱动 CLI、消息网关、TUI、Electron 桌面与 ACP 五个前端">
+  <line x1="340" y1="200" x2="125" y2="62"  stroke="var(--line)" stroke-width="1.8"/>
+  <line x1="340" y1="200" x2="340" y2="62"  stroke="var(--line)" stroke-width="1.8"/>
+  <line x1="340" y1="200" x2="555" y2="62"  stroke="var(--line)" stroke-width="1.8"/>
+  <line x1="340" y1="200" x2="235" y2="348" stroke="var(--line)" stroke-width="1.8"/>
+  <line x1="340" y1="200" x2="445" y2="348" stroke="var(--line)" stroke-width="1.8"/>
+  <g text-anchor="middle">
+    <rect x="50"  y="38" width="150" height="48" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="125" y="67" font-size="13" fill="var(--ink)">CLI</text>
+    <rect x="265" y="38" width="150" height="48" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="340" y="67" font-size="12" fill="var(--ink)">消息网关 · 20+ 平台</text>
+    <rect x="480" y="38" width="150" height="48" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="555" y="67" font-size="13" fill="var(--ink)">TUI</text>
+  </g>
+  <rect x="255" y="164" width="170" height="72" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="196" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent-ink)">agent core</text>
+  <text x="340" y="217" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">AIAgent · run_agent.py</text>
+  <text x="340" y="280" text-anchor="middle" font-size="11" fill="var(--muted)">同一核心驱动所有前端</text>
+  <g text-anchor="middle">
+    <rect x="145" y="324" width="180" height="48" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="235" y="353" font-size="12.5" fill="var(--ink)">Electron 桌面 App</text>
+    <rect x="355" y="324" width="180" height="48" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="445" y="353" font-size="12.5" fill="var(--ink)">ACP · 编辑器集成</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>一个核心，多端复用</b>：同一个 <b>AIAgent</b> 核心（run_agent.py）同时驱动 CLI、消息网关（20+ 平台）、TUI、Electron 桌面与 ACP（VS Code/Zed/JetBrains）。记忆、技能、会话库全平台共享、行为处处一致——这也正是核心必须保持「窄腰」、不为某一个端开特例的原因。</div>
+</div>
 
 <div class="card macro">
   <div class="tag">🌍 宏观理解</div>
@@ -544,9 +606,75 @@ you; it turns proven approaches into <strong>reusable procedural knowledge</stro
 because LLMs have a hard limitation — <strong>they remember nothing between two calls</strong>. Every Hermes
 “evolution” mechanism is, at heart, <strong>a fight against that amnesia</strong>.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 268" role="img" aria-label="The seven inherent LLM constraints A to G, split into single-call and autonomy groups">
+  <text x="20" y="24" font-size="13" font-weight="700" fill="var(--blue)">① Single-call layer (A · B · E)</text>
+  <g>
+    <rect x="20"  y="34" width="202" height="82" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="50"  y="88" text-anchor="middle" font-size="26" font-weight="700" fill="var(--blue)">A</text>
+    <text x="76"  y="72" font-size="12.5" fill="var(--ink)">lost in the</text>
+    <text x="76"  y="90" font-size="12.5" fill="var(--ink)">middle</text>
+    <rect x="238" y="34" width="202" height="82" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="268" y="88" text-anchor="middle" font-size="26" font-weight="700" fill="var(--blue)">B</text>
+    <text x="294" y="82" font-size="12.5" fill="var(--ink)">statelessness</text>
+    <rect x="456" y="34" width="202" height="82" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="486" y="88" text-anchor="middle" font-size="26" font-weight="700" fill="var(--blue)">E</text>
+    <text x="512" y="72" font-size="12" fill="var(--ink)">brittle</text>
+    <text x="512" y="90" font-size="12" fill="var(--ink)">structured output</text>
+  </g>
+  <text x="20" y="152" font-size="13" font-weight="700" fill="var(--accent-ink)">② Autonomy layer (C · D · F · G)</text>
+  <g>
+    <rect x="20"  y="162" width="151" height="82" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="44"  y="216" text-anchor="middle" font-size="24" font-weight="700" fill="var(--accent-ink)">C</text>
+    <text x="66"  y="208" font-size="11.5" fill="var(--ink)">hallucination</text>
+    <rect x="183" y="162" width="151" height="82" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="207" y="216" text-anchor="middle" font-size="24" font-weight="700" fill="var(--accent-ink)">D</text>
+    <text x="229" y="200" font-size="11.5" fill="var(--ink)">instructions</text>
+    <text x="229" y="218" font-size="11.5" fill="var(--ink)">= data</text>
+    <rect x="346" y="162" width="151" height="82" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="370" y="216" text-anchor="middle" font-size="24" font-weight="700" fill="var(--accent-ink)">F</text>
+    <text x="392" y="200" font-size="11.5" fill="var(--ink)">error</text>
+    <text x="392" y="218" font-size="11.5" fill="var(--ink)">accumulation</text>
+    <rect x="509" y="162" width="151" height="82" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="533" y="216" text-anchor="middle" font-size="24" font-weight="700" fill="var(--accent-ink)">G</text>
+    <text x="555" y="208" font-size="12.5" fill="var(--ink)">ops</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>The seven LLM constraints A–G at a glance</b>: <b>A·lost-in-the-middle / B·statelessness / E·brittle structured output</b> already bite on a <b>single call</b>; <b>C·hallucination / D·instructions=data / F·error accumulation / G·ops</b> only surface once you string the model into an <b>autonomous agent</b>. This chapter focuses on B·statelessness — the other six unfold in ch.2–3, and the full A–G is the “why” behind every later chapter's infrastructure.</div>
+</div>
+
 <p>Why externalize state instead of “just use a model with a better memory”? Because <strong>statelessness is a structural fact of LLMs</strong>, not a flaw of one generation — even the strongest model sees only the context you hand it on this single call (ch.2, B·Statelessness). Pinning “remembering you” to model weights would bet <strong>personalization</strong> on repeated, expensive fine-tunes — slow, and locked to one vendor. Hermes does the opposite: keep the model <strong>stateless and swappable</strong>, and persist all “memory” <strong>outside</strong> it — into skills, memory files, the session store (ch.4, externalizing state). That turns “getting smarter” from a <strong>training problem</strong> into an <strong>engineering problem</strong> — the design origin of every evolution mechanism here.</p>
 
 <p>One easily-missed tradeoff: a <strong>single agent core</strong> drives the CLI, the messaging gateway (20+ platforms), the TUI and the Electron desktop app — rather than reimplementing the logic per front-end. Why? Because separate implementations would <strong>fragment the learning loop</strong>: a skill learned on Telegram would be useless on the desktop. One core, many ends means <strong>memory, skills and the session store are shared across every platform</strong>, with <strong>consistent behavior everywhere</strong> (ch.17 gateway adapters, ch.19 TUI/desktop). The price: the core must stay <strong>general enough</strong> to special-case no single front-end — which in turn reinforces the “narrow waist”: the core keeps only the minimal common surface every end needs (ch.8).</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 384" role="img" aria-label="A single AIAgent core drives five frontends: CLI, messaging gateway, TUI, Electron desktop and ACP">
+  <line x1="340" y1="200" x2="125" y2="62"  stroke="var(--line)" stroke-width="1.8"/>
+  <line x1="340" y1="200" x2="340" y2="62"  stroke="var(--line)" stroke-width="1.8"/>
+  <line x1="340" y1="200" x2="555" y2="62"  stroke="var(--line)" stroke-width="1.8"/>
+  <line x1="340" y1="200" x2="235" y2="348" stroke="var(--line)" stroke-width="1.8"/>
+  <line x1="340" y1="200" x2="445" y2="348" stroke="var(--line)" stroke-width="1.8"/>
+  <g text-anchor="middle">
+    <rect x="50"  y="38" width="150" height="48" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="125" y="67" font-size="13" fill="var(--ink)">CLI</text>
+    <rect x="265" y="38" width="150" height="48" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="340" y="67" font-size="11.5" fill="var(--ink)">messaging gateway</text>
+    <rect x="480" y="38" width="150" height="48" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="555" y="67" font-size="13" fill="var(--ink)">TUI</text>
+  </g>
+  <rect x="255" y="164" width="170" height="72" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="196" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent-ink)">agent core</text>
+  <text x="340" y="217" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">AIAgent · run_agent.py</text>
+  <text x="340" y="280" text-anchor="middle" font-size="11" fill="var(--muted)">one core drives every frontend</text>
+  <g text-anchor="middle">
+    <rect x="145" y="324" width="180" height="48" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="235" y="353" font-size="12.5" fill="var(--ink)">Electron desktop app</text>
+    <rect x="355" y="324" width="180" height="48" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="445" y="353" font-size="12.5" fill="var(--ink)">ACP · editor plugins</text>
+  </g>
+</svg>
+<div class="fig-cap"><b>One core, many ends</b>: a single <b>AIAgent</b> core (run_agent.py) drives the CLI, the messaging gateway (20+ platforms), the TUI, the Electron desktop app and ACP (VS Code/Zed/JetBrains). Memory, skills and the session store are shared across every platform, with consistent behavior — which is exactly why the core must stay a <b>narrow waist</b> and special-case no single front-end.</div>
+</div>
 
 <div class="card macro">
   <div class="tag">🌍 Big picture</div>

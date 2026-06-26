@@ -41,6 +41,47 @@ LESSON_13 = {
 <p>看这份「隔离 vs 继承」清单：<strong>隔离</strong>的是会污染或淹没的东西——对话历史、上下文文件、记忆、用户交互、迭代预算（每个子代理一份<strong>全新</strong>预算）；<strong>继承</strong>的是跑起来必需的运行时——provider / model / api_key / session_db。工具描述把这条取舍说得最直白：<span class="inline">Each subagent gets its own conversation, terminal session, and toolset. Only the final summary is returned -- intermediate tool results never enter your context window</span>。</p>
 <p>这条「隔离 vs 继承」的分界线，背后是一个统一判据：<strong>会污染上下文或缓存的，一律隔离；只供运行不入对话的，才继承</strong>。它不是逐项拍脑袋，而是把第 6 章「缓存神圣」与约束 A「中间遗失」当成<strong>硬约束</strong>反推出来的结果。也正因如此，子代理跑的是一份 <span class="mono">ephemeral_system_prompt</span> 而非父那套三层稳定 system prompt——临时、用完即弃，不参与父的缓存前缀，于是父对话从头到尾<strong>字节级稳定</strong>，每一轮都命中缓存。理解了这个判据，你就能预测任何新字段该落在隔离侧还是继承侧。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 348" role="img" aria-label="委派的上下文隔离：父代理派发任务，子代理在独立 context 与终端里跑，只把一句摘要回灌父代理">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">委派：上下文隔离 — 父只收一句摘要</text>
+
+  <rect x="24" y="44" width="210" height="190" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="129" y="68" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">父代理 parent</text>
+  <text x="40" y="96" font-size="11.5" fill="var(--ink)">• 自己的 context</text>
+  <text x="40" y="120" font-size="11.5" fill="var(--ink)">• 自己的 terminal</text>
+  <rect x="40" y="136" width="178" height="80" rx="8" fill="var(--panel)" stroke="var(--accent)" stroke-dasharray="4 3"/>
+  <text x="129" y="162" text-anchor="middle" font-size="11.5" fill="var(--accent-ink)">🔒 神圣缓存前缀</text>
+  <text x="129" y="181" text-anchor="middle" font-size="9.5" fill="var(--muted)">每轮命中 · 字节级稳定</text>
+  <text x="129" y="200" text-anchor="middle" font-size="9.5" fill="var(--muted)">（第 6 章）</text>
+
+  <rect x="446" y="44" width="210" height="190" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="551" y="68" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">子代理 subagent · leaf</text>
+  <text x="460" y="92" font-size="11" fill="var(--ink)">• 独立 context</text>
+  <text x="460" y="112" font-size="11" fill="var(--ink)">• 独立 terminal</text>
+  <text x="460" y="132" font-size="10" fill="var(--ink)">• ephemeral prompt(goal+context)</text>
+  <text x="460" y="150" font-size="10" fill="var(--ink)">• skip_context_files / memory</text>
+  <rect x="460" y="160" width="182" height="62" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="551" y="179" text-anchor="middle" font-size="10" font-weight="700" fill="var(--red)">✖ 剥离 5 个高危工具</text>
+  <text x="551" y="196" text-anchor="middle" font-size="8.5" fill="var(--red)">delegate · clarify · memory</text>
+  <text x="551" y="210" text-anchor="middle" font-size="8.5" fill="var(--red)">send_message · execute_code</text>
+
+  <text x="340" y="84" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">delegate_task(goal)</text>
+  <line x1="238" y1="92" x2="442" y2="92" stroke="var(--ink)" stroke-width="2"/>
+  <path d="M442 92 L432 87 L432 97 Z" fill="var(--ink)"/>
+
+  <text x="340" y="142" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">只回一句摘要</text>
+  <line x1="442" y1="150" x2="238" y2="150" stroke="var(--accent-ink)" stroke-width="2"/>
+  <path d="M238 150 L248 145 L248 155 Z" fill="var(--accent-ink)"/>
+  <text x="340" y="170" text-anchor="middle" font-size="9.5" fill="var(--muted)">only final summary</text>
+
+  <rect x="24" y="252" width="632" height="80" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="40" y="276" font-size="11.5" font-weight="700" fill="var(--muted)">中间过程：读几十文件 · 跑命令 · 试错几十轮</text>
+  <text x="40" y="300" font-size="11" fill="var(--blue)">✓ 全留在子代理 context（platform=&quot;subagent&quot;，用完即弃）</text>
+  <text x="40" y="321" font-size="11" fill="var(--accent-ink)">✗ 永不进父 context · 不污染父缓存 → 治 A·中间遗失 + 护第 6 章缓存</text>
+</svg>
+<div class="fig-cap"><b>委派的上下文隔离</b>：父代理调 <span class="mono">delegate_task(goal)</span> 把子任务交给一个<b>独立子代理</b>——它有<b>独立 context + 独立终端</b>，跑在只装 goal+context 的 <span class="mono">ephemeral_system_prompt</span> 上，并 <span class="mono">skip_context_files/memory</span>；作为 leaf 还被<b>剥离 delegate/clarify/memory/send_message/execute_code</b> 五个高危工具。子代理读几十文件、试错的<b>中间过程全留在自己的 context</b>，只把<b>一句最终摘要</b>回灌父代理。于是父窗口不被淹没（治 A·中间遗失），父的神圣缓存前缀也字节级稳定（护第 6 章缓存）。</div>
+</div>
+
 <h2>两种角色：leaf 不能再委派，orchestrator 能</h2>
 <p>子代理有两种 <span class="mono">role</span>。默认的 <span class="mono">leaf</span> 是<strong>专注的工人</strong>，被禁掉一批工具；<span class="mono">orchestrator</span> 则保留委派能力，能再派自己的工人：</p>
 <p>为什么 leaf 默认要被剥掉这<strong>五</strong>个高危工具？这是<strong>最小权限</strong>（连第 24 章安全）落到委派上的体现，每一条禁令都对着一类具体越权风险：<span class="mono">delegate_task</span> 禁掉防无限套娃；<span class="mono">clarify</span> 禁掉是因为子代理的 <span class="mono">clarify_callback=None</span>——它根本够不到用户，留着只会卡死；<span class="mono">memory</span> 禁掉防一个隔离的子上下文去写<strong>共享</strong> MEMORY.md 污染全局；<span class="mono">send_message</span> 禁掉防工人擅自制造跨平台副作用；<span class="mono">execute_code</span> 禁掉是要它<strong>逐步推理</strong>而非一把梭写脚本。</p>
@@ -62,6 +103,50 @@ orchestrator_ok = _get_orchestrator_enabled() <span class="kw">and</span> child_
 effective_role = role <span class="kw">if</span> (role == <span class="st">"orchestrator"</span> <span class="kw">and</span> orchestrator_ok) <span class="kw">else</span> <span class="st">"leaf"</span></pre>
 </div>
 <p><span class="mono">_strip_blocked_tools</span> 把 <span class="mono">delegation / clarify / memory / code_execution</span> 四个 toolset <strong>整组移除</strong>——leaf 因此一并失去 delegate_task（<strong>不能再委派</strong>、避免无限套娃）、clarify、memory、execute_code；而 <span class="mono">DELEGATE_BLOCKED_TOOLS</span> 是「子代理永不可见」的<strong>权威工具清单</strong>（5 个，含 send_message），把『全员被禁』的 toolset 挡在子代理菜单之外。<span class="mono">orchestrator</span> 则被重新加回 delegation toolset、能再派工人——但<strong>默认配置下嵌套是关闭的</strong>（<span class="mono">max_spawn</span> 默认扁平，需在 config 显式抬高才解锁多级），且受<strong>嵌套深度上限</strong>（<span class="mono">child_depth &lt; max_spawn</span>）和并发上限（<span class="mono">max_concurrent_children</span>，默认 3）兜住，防止子代理军团失控。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 330" role="img" aria-label="并行批量委派与嵌套深度上限：父代理一次派发多个子代理，受并发上限 3 约束，嵌套深度默认 1，孙代理被拒">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">并行 batch + 嵌套深度上限</text>
+
+  <rect x="270" y="36" width="140" height="44" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="63" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">父代理 · depth 0</text>
+
+  <text x="40" y="96" font-size="10.5" fill="var(--ink)">delegate_task(tasks=[…])</text>
+  <line x1="340" y1="80" x2="340" y2="100" stroke="var(--ink)" stroke-width="2"/>
+  <line x1="104" y1="100" x2="576" y2="100" stroke="var(--ink)" stroke-width="2"/>
+  <line x1="104" y1="100" x2="104" y2="126" stroke="var(--ink)" stroke-width="2"/>
+  <path d="M104 128 L99 119 L109 119 Z" fill="var(--ink)"/>
+  <line x1="340" y1="100" x2="340" y2="126" stroke="var(--ink)" stroke-width="2"/>
+  <path d="M340 128 L335 119 L345 119 Z" fill="var(--ink)"/>
+  <line x1="576" y1="100" x2="576" y2="126" stroke="var(--ink)" stroke-width="2"/>
+  <path d="M576 128 L571 119 L581 119 Z" fill="var(--ink)"/>
+
+  <rect x="24"  y="130" width="160" height="46" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="104" y="151" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">子代理 #1</text>
+  <text x="104" y="167" text-anchor="middle" font-size="9" fill="var(--muted)">leaf · depth 1</text>
+  <rect x="260" y="130" width="160" height="46" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="151" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">子代理 #2</text>
+  <text x="340" y="167" text-anchor="middle" font-size="9" fill="var(--muted)">leaf · depth 1</text>
+  <rect x="496" y="130" width="160" height="46" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="576" y="151" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">子代理 #3</text>
+  <text x="576" y="167" text-anchor="middle" font-size="9" fill="var(--muted)">leaf · depth 1</text>
+
+  <text x="340" y="196" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">并发上限 max_concurrent_children = 3</text>
+  <text x="340" y="213" text-anchor="middle" font-size="9.5" fill="var(--muted)">超过 3 个则排队，等空位才起跑</text>
+
+  <rect x="24" y="240" width="372" height="74" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="40" y="262" font-size="11" font-weight="700" fill="var(--muted)">嵌套深度上限</text>
+  <text x="40" y="283" font-size="11" fill="var(--ink)">max_spawn_depth = 1（默认扁平 flat）</text>
+  <text x="40" y="303" font-size="11" fill="var(--ink)">父 → 子 ✓　　子 → 孙 ✗（需 config 显式抬高）</text>
+
+  <line x1="576" y1="176" x2="556" y2="246" stroke="var(--red)" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="600" y="214" font-size="15" font-weight="700" fill="var(--red)">✖</text>
+  <rect x="468" y="248" width="170" height="62" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-dasharray="4 3"/>
+  <text x="553" y="272" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">孙代理 grandchild</text>
+  <text x="553" y="290" text-anchor="middle" font-size="9.5" fill="var(--red)">depth 2 · 被拒绝</text>
+</svg>
+<div class="fig-cap"><b>并行 batch 与深度上限</b>：父代理用 <span class="mono">tasks=[…]</span> 一次派发多个子代理并发执行，但同步并发受 <span class="mono">max_concurrent_children</span>（默认 <b>3</b>）约束，超出的排队等空位。嵌套则<b>默认扁平</b>：<span class="mono">max_spawn_depth = 1</span>，父→子放行、子→孙<b>被拒</b>——要多级必须在 config 显式抬高（后台委派另受 <span class="mono">max_async_children=3</span> 限，满载直接拒绝、不排队）。代价相乘，所以默认收得很紧。</div>
+</div>
 
 <h2>background 委派如何不破缓存</h2>
 <p>顶层 model 发起的委派<strong>总是 background</strong>：立即返回一个 <span class="mono">delegation_id</span>，子代理在后台守护线程里跑。子代理跑完后，结果如何<strong>不破坏父缓存</strong>地回到对话？答案在完成队列的设计里：</p>
@@ -154,6 +239,47 @@ When a task produces <strong>tons of intermediate work</strong> (reading dozens 
 <p>Look at the "isolate vs inherit" list: <strong>isolated</strong> are the things that would pollute or flood — conversation history, context files, memory, user interaction, the iteration budget (each subagent gets a <strong>fresh</strong> one); <strong>inherited</strong> is the runtime needed to run — provider / model / api_key / session_db. The tool description states the trade-off most plainly: <span class="inline">Each subagent gets its own conversation, terminal session, and toolset. Only the final summary is returned -- intermediate tool results never enter your context window</span>.</p>
 <p>This "isolate vs inherit" dividing line rests on a single criterion: <strong>anything that would pollute context or cache is isolated; only what's needed to run, without entering the conversation, is inherited</strong>. It's not item-by-item guesswork — it's reverse-derived from treating ch.6's "cache is sacred" and constraint A "lost-in-the-middle" as <strong>hard constraints</strong>. That's also why the subagent runs on an <span class="mono">ephemeral_system_prompt</span> rather than the parent's stable three-tier system prompt — temporary, throwaway, never part of the parent's cache prefix, so the parent conversation stays <strong>byte-stable</strong> end to end and hits the cache every turn. Grasp this criterion and you can predict which side any new field belongs on.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 348" role="img" aria-label="Delegation context isolation: the parent dispatches a subtask, the subagent runs in its own context and terminal, returning only a one-line summary to the parent">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">Delegation: context isolation — parent gets only a summary</text>
+
+  <rect x="24" y="44" width="210" height="190" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="129" y="68" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">parent</text>
+  <text x="40" y="96" font-size="11.5" fill="var(--ink)">• its own context</text>
+  <text x="40" y="120" font-size="11.5" fill="var(--ink)">• its own terminal</text>
+  <rect x="40" y="136" width="178" height="80" rx="8" fill="var(--panel)" stroke="var(--accent)" stroke-dasharray="4 3"/>
+  <text x="129" y="162" text-anchor="middle" font-size="11.5" fill="var(--accent-ink)">🔒 sacred cache prefix</text>
+  <text x="129" y="181" text-anchor="middle" font-size="9.5" fill="var(--muted)">hits every turn · byte-stable</text>
+  <text x="129" y="200" text-anchor="middle" font-size="9.5" fill="var(--muted)">(ch.6)</text>
+
+  <rect x="446" y="44" width="210" height="190" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="551" y="68" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">subagent · leaf</text>
+  <text x="460" y="92" font-size="11" fill="var(--ink)">• independent context</text>
+  <text x="460" y="112" font-size="11" fill="var(--ink)">• independent terminal</text>
+  <text x="460" y="132" font-size="10" fill="var(--ink)">• ephemeral prompt(goal+context)</text>
+  <text x="460" y="150" font-size="10" fill="var(--ink)">• skip_context_files / memory</text>
+  <rect x="460" y="160" width="182" height="62" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="551" y="179" text-anchor="middle" font-size="10" font-weight="700" fill="var(--red)">✖ 5 high-risk tools stripped</text>
+  <text x="551" y="196" text-anchor="middle" font-size="8.5" fill="var(--red)">delegate · clarify · memory</text>
+  <text x="551" y="210" text-anchor="middle" font-size="8.5" fill="var(--red)">send_message · execute_code</text>
+
+  <text x="340" y="84" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">delegate_task(goal)</text>
+  <line x1="238" y1="92" x2="442" y2="92" stroke="var(--ink)" stroke-width="2"/>
+  <path d="M442 92 L432 87 L432 97 Z" fill="var(--ink)"/>
+
+  <text x="340" y="142" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">only final summary</text>
+  <line x1="442" y1="150" x2="238" y2="150" stroke="var(--accent-ink)" stroke-width="2"/>
+  <path d="M238 150 L248 145 L248 155 Z" fill="var(--accent-ink)"/>
+  <text x="340" y="170" text-anchor="middle" font-size="9.5" fill="var(--muted)">one high-signal blob</text>
+
+  <rect x="24" y="252" width="632" height="80" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="40" y="276" font-size="11.5" font-weight="700" fill="var(--muted)">Intermediate work: read dozens of files · run commands · trial &amp; error</text>
+  <text x="40" y="300" font-size="11" fill="var(--blue)">✓ stays in the subagent context (platform=&quot;subagent&quot;, discarded when done)</text>
+  <text x="40" y="321" font-size="11" fill="var(--accent-ink)">✗ never enters parent context · never pollutes parent cache → treats A + guards ch.6</text>
+</svg>
+<div class="fig-cap"><b>Delegation context isolation</b>: the parent calls <span class="mono">delegate_task(goal)</span> to hand a subtask to an <b>independent subagent</b> — its own <b>independent context + terminal</b>, running on an <span class="mono">ephemeral_system_prompt</span> holding just goal+context, with <span class="mono">skip_context_files/memory</span>; as a leaf it's also <b>stripped of delegate/clarify/memory/send_message/execute_code</b>. The dozens of files it reads and its trial-and-error <b>all stay in its own context</b>; only <b>one final summary</b> returns to the parent. So the parent window isn't flooded (treats A·lost-in-the-middle) and its sacred cache prefix stays byte-stable (guards ch.6).</div>
+</div>
+
 <h2>Two roles: leaf can't re-delegate, orchestrator can</h2>
 <p>A subagent has two <span class="mono">role</span>s. The default <span class="mono">leaf</span> is a <strong>focused worker</strong> with a set of tools disabled; <span class="mono">orchestrator</span> retains delegation and can spawn its own workers:</p>
 <p>Why is leaf stripped of these <strong>five</strong> high-risk tools by default? It's <strong>least privilege</strong> (tying into ch.24 security) applied to delegation, and each ban targets a concrete over-reach risk: <span class="mono">delegate_task</span> is blocked to prevent infinite nesting; <span class="mono">clarify</span> is blocked because the child's <span class="mono">clarify_callback=None</span> — it literally can't reach the user, so keeping it would only deadlock; <span class="mono">memory</span> is blocked so an isolated child context can't write the <strong>shared</strong> MEMORY.md and pollute the global; <span class="mono">send_message</span> is blocked so a worker can't unilaterally cause cross-platform side effects; <span class="mono">execute_code</span> is blocked to force <strong>step-by-step reasoning</strong> instead of one-shot scripting.</p>
@@ -175,6 +301,50 @@ orchestrator_ok = _get_orchestrator_enabled() <span class="kw">and</span> child_
 effective_role = role <span class="kw">if</span> (role == <span class="st">"orchestrator"</span> <span class="kw">and</span> orchestrator_ok) <span class="kw">else</span> <span class="st">"leaf"</span></pre>
 </div>
 <p><span class="mono">_strip_blocked_tools</span> removes four toolsets wholesale — <span class="mono">delegation / clarify / memory / code_execution</span> — so leaf loses delegate_task (<strong>can't re-delegate</strong>, preventing infinite nesting), clarify, memory, and execute_code; while <span class="mono">DELEGATE_BLOCKED_TOOLS</span> is the authoritative list of tools a child must <strong>never see</strong> (5 of them, including send_message), keeping the 'all-blocked' toolset out of the subagent's menu. <span class="mono">orchestrator</span> gets the delegation toolset re-added and can spawn workers — but <strong>nesting is off by default</strong> (<span class="mono">max_spawn</span> is flat by default; raise it in config to unlock multiple levels), and is bounded by a <strong>nesting depth cap</strong> (<span class="mono">child_depth &lt; max_spawn</span>) and a concurrency cap (<span class="mono">max_concurrent_children</span>, default 3), so a subagent army can't spin out of control.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 330" role="img" aria-label="Parallel batch delegation and nesting depth cap: the parent dispatches several subagents at once, bounded by a concurrency cap of 3, with nesting depth defaulting to 1 so a grandchild is rejected">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">Parallel batch + nesting depth cap</text>
+
+  <rect x="270" y="36" width="140" height="44" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="63" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">parent · depth 0</text>
+
+  <text x="40" y="96" font-size="10.5" fill="var(--ink)">delegate_task(tasks=[…])</text>
+  <line x1="340" y1="80" x2="340" y2="100" stroke="var(--ink)" stroke-width="2"/>
+  <line x1="104" y1="100" x2="576" y2="100" stroke="var(--ink)" stroke-width="2"/>
+  <line x1="104" y1="100" x2="104" y2="126" stroke="var(--ink)" stroke-width="2"/>
+  <path d="M104 128 L99 119 L109 119 Z" fill="var(--ink)"/>
+  <line x1="340" y1="100" x2="340" y2="126" stroke="var(--ink)" stroke-width="2"/>
+  <path d="M340 128 L335 119 L345 119 Z" fill="var(--ink)"/>
+  <line x1="576" y1="100" x2="576" y2="126" stroke="var(--ink)" stroke-width="2"/>
+  <path d="M576 128 L571 119 L581 119 Z" fill="var(--ink)"/>
+
+  <rect x="24"  y="130" width="160" height="46" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="104" y="151" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">subagent #1</text>
+  <text x="104" y="167" text-anchor="middle" font-size="9" fill="var(--muted)">leaf · depth 1</text>
+  <rect x="260" y="130" width="160" height="46" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="151" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">subagent #2</text>
+  <text x="340" y="167" text-anchor="middle" font-size="9" fill="var(--muted)">leaf · depth 1</text>
+  <rect x="496" y="130" width="160" height="46" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="576" y="151" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">subagent #3</text>
+  <text x="576" y="167" text-anchor="middle" font-size="9" fill="var(--muted)">leaf · depth 1</text>
+
+  <text x="340" y="196" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">concurrency cap max_concurrent_children = 3</text>
+  <text x="340" y="213" text-anchor="middle" font-size="9.5" fill="var(--muted)">beyond 3, tasks queue and wait for a free slot</text>
+
+  <rect x="24" y="240" width="372" height="74" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="40" y="262" font-size="11" font-weight="700" fill="var(--muted)">nesting depth cap</text>
+  <text x="40" y="283" font-size="11" fill="var(--ink)">max_spawn_depth = 1 (flat by default)</text>
+  <text x="40" y="303" font-size="11" fill="var(--ink)">parent → child ✓　　child → grandchild ✗ (raise in config)</text>
+
+  <line x1="576" y1="176" x2="556" y2="246" stroke="var(--red)" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="600" y="214" font-size="15" font-weight="700" fill="var(--red)">✖</text>
+  <rect x="468" y="248" width="170" height="62" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-dasharray="4 3"/>
+  <text x="553" y="272" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">grandchild</text>
+  <text x="553" y="290" text-anchor="middle" font-size="9.5" fill="var(--red)">depth 2 · rejected</text>
+</svg>
+<div class="fig-cap"><b>Parallel batch &amp; the depth cap</b>: the parent uses <span class="mono">tasks=[…]</span> to dispatch several subagents that run concurrently, but synchronous concurrency is bounded by <span class="mono">max_concurrent_children</span> (default <b>3</b>) — extras queue for a free slot. Nesting is <b>flat by default</b>: <span class="mono">max_spawn_depth = 1</span>, parent→child allowed but child→grandchild <b>rejected</b> — multiple levels require explicitly raising it in config (background delegation is separately capped by <span class="mono">max_async_children=3</span>, rejected outright at capacity, not queued). Cost is multiplicative, so the defaults are tight.</div>
+</div>
 
 <h2>How background delegation avoids breaking the cache</h2>
 <p>A top-level, model-issued delegation <strong>always runs in the background</strong>: it returns a <span class="mono">delegation_id</span> immediately, and the subagent runs on a background daemon thread. When the child finishes, how does the result re-enter the conversation <strong>without breaking the parent's cache</strong>? The answer is in the completion-queue design:</p>

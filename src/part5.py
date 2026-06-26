@@ -32,6 +32,59 @@ LESSON_17 = {
 
 <p>为什么非要先归一化成一种结构?因为<strong>下游消费者太多</strong>:会话路由、两道守卫(第 18 章)、agent 核心循环(第 7 章消息流)、定时任务投递(cron)、审批与中断——若它们各自都要认 Telegram、Discord、微信……二十多种原生格式,复杂度就是「消费者数 × 平台数」的乘积,加一个平台得改一圈下游。在<strong>入口处翻译一次</strong>,把这层乘法塌缩成加法:平台只管产出 <span class="mono">MessageEvent</span>,下游只管消费它,两端各自演化、互不牵连。<span class="mono">raw_message</span> 仍留着平台原始对象做「留底」,真要平台专属细节时回查得到,但<strong>主路径只碰那几个归一化字段</strong>——这正是第 4 章「窄腰」在数据结构层面的投影:把宽阔的多样性收束成一道窄接口。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 352" role="img" aria-label="多平台归一化漏斗:各平台经各自适配器翻成统一 MessageEvent,再进单一 agent 核心">
+  <text x="340" y="20" text-anchor="middle" font-size="13" font-weight="700" fill="var(--blue)">▲ 协议各异 · 每个平台一种原生格式</text>
+  <g font-size="11.5" text-anchor="middle">
+    <rect x="15"  y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="65"  y="56" fill="var(--ink)">telegram</text>
+    <rect x="125" y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="175" y="56" fill="var(--ink)">discord</text>
+    <rect x="235" y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="285" y="56" fill="var(--ink)">slack</text>
+    <rect x="345" y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="395" y="56" fill="var(--ink)">whatsapp</text>
+    <rect x="455" y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="505" y="56" fill="var(--ink)">signal</text>
+    <rect x="565" y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="615" y="56" fill="var(--ink)">email …</text>
+  </g>
+  <g stroke="var(--line)">
+    <line x1="65"  y1="68" x2="65"  y2="92"/>
+    <line x1="175" y1="68" x2="175" y2="92"/>
+    <line x1="285" y1="68" x2="285" y2="92"/>
+    <line x1="395" y1="68" x2="395" y2="92"/>
+    <line x1="505" y1="68" x2="505" y2="92"/>
+    <line x1="615" y1="68" x2="615" y2="92"/>
+  </g>
+  <g font-size="10.5" text-anchor="middle">
+    <rect x="15"  y="92" width="100" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="65"  y="110" fill="var(--muted)">adapter</text>
+    <rect x="125" y="92" width="100" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="175" y="110" fill="var(--muted)">adapter</text>
+    <rect x="235" y="92" width="100" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="285" y="110" fill="var(--muted)">adapter</text>
+    <rect x="345" y="92" width="100" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="395" y="110" fill="var(--muted)">adapter</text>
+    <rect x="455" y="92" width="100" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="505" y="110" fill="var(--muted)">adapter</text>
+    <rect x="565" y="92" width="100" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="615" y="110" fill="var(--muted)">adapter</text>
+  </g>
+  <path d="M15 126 L665 126 L450 206 L230 206 Z" fill="var(--panel-2)" stroke="var(--line)" stroke-linejoin="round"/>
+  <text x="340" y="172" text-anchor="middle" font-size="11.5" fill="var(--muted)">归一化漏斗 · 压成同一种</text>
+  <rect x="230" y="206" width="220" height="50" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="228" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">统一 MessageEvent</text>
+  <text x="340" y="246" text-anchor="middle" font-size="10" fill="var(--accent-ink)">所有适配器都产出它</text>
+  <line x1="340" y1="256" x2="340" y2="282" stroke="var(--accent)" stroke-width="2"/>
+  <path d="M334 274 L340 282 L346 274 Z" fill="var(--accent)"/>
+  <rect x="230" y="284" width="220" height="46" rx="9" fill="var(--panel-2)" stroke="var(--ink)" stroke-width="2"/>
+  <text x="340" y="306" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">agent 核心</text>
+  <text x="340" y="323" text-anchor="middle" font-size="10" fill="var(--muted)">只认这一种抽象</text>
+</svg>
+<div class="fig-cap"><b>多平台归一化漏斗</b>:二十多个平台各说各的协议(Telegram Update / Discord 事件 / IRC 文本行……),但每个平台派一个 <b>adapter</b> 把它翻成<b>同一个 MessageEvent</b>——漏斗在这里收口。核心 agent 只认这唯一一种抽象,从不认识任何平台的原生格式;加一个平台只是多接一条入水管,漏斗口与下游<b>纹丝不动</b>。这正是第 4 章「窄腰」在多端接入上的投影。(诚实地说,核心仍残留极少数平台特例,如 Telegram 私聊话题、Feishu 线程,但不在主路径上。)</div>
+</div>
+
 <p>诚实地说,<span class="mono">MessageEvent</span> 并非「纯净到不含一点平台味」:它身上挂着若干<strong>只有部分平台才填</strong>的可选字段——<span class="mono">platform_update_id</span>(Telegram 的 <span class="mono">update_id</span>,供 <span class="mono">/restart</span> 推进偏移、避免同一条更新被处理两次)、<span class="mono">reply_to_message_id</span> / <span class="mono">reply_to_author_id</span>(回复上下文)、<span class="mono">auto_skill</span>(Telegram 私聊话题、Discord 频道绑定时自动加载的技能)。设计上并不强求「完美纯净」,而是让这些字段<strong>默认 None、绝大多数平台直接忽略</strong>。务实地容纳少数平台的特性,好过为抽象洁癖把能力削平——抽象是为复用服务的,不是为教条服务的。这一点也提醒读者:窄腰不等于绝对零特例,而是把特例压到最小、且不让它们污染主路径。</p>
 
 <h2>适配器契约:BasePlatformAdapter</h2>
@@ -62,6 +115,39 @@ LESSON_17 = {
 <p>为什么把契约固化成 <span class="mono">ABC</span> + <span class="mono">@abstractmethod</span>,而不是写个普通基类靠口头约定?因为 abstractmethod 让<strong>「没实现 connect/send 就根本实例化不了」</strong>——契约从「文档里的君子协定」升级成「导入期的硬约束」,谁也没法只写半个适配器就硬上线。更要害的是<strong>职责切分</strong>:基类独占所有<strong>共性机器</strong>——会话路由、消息排队、<span class="mono">_active_sessions</span> 中断锁、审批、typing 心跳;子类只补<strong>传输层</strong>那点平台专属逻辑(怎么连、怎么收、怎么发)。若没有这层 ABC,每个平台都得重造一遍会话与守卫机制,bug 会在二十多份实现里各自分叉,一个修复要复制二十遍,根本无从统一收口。</p>
 
 <p>加一个平台有两条路(见 <span class="mono">ADDING_A_PLATFORM.md</span>):<strong>插件路</strong>(推荐)——在 <span class="mono">plugins/platforms/&lt;name&gt;/</span> 写 <span class="mono">adapter.py</span> 继承 <span class="mono">BasePlatformAdapter</span>,用 <span class="mono">ctx.register_platform()</span> 注册,<strong>零改核心</strong>,插件框架自动接管配置解析、用户授权、cron 投递、状态展示与网关装配;<strong>内置路</strong>仅留给核心贡献者。连 <span class="mono">Platform</span> 枚举都用 <span class="mono">_missing_()</span> 钩子为插件平台动态造成员,<span class="mono">Platform("irc")</span> 不改枚举即可成立(且身份稳定)。另外,凡用唯一凭据(如 bot token)连接的适配器,启动时都会 <span class="mono">acquire_scoped_lock</span> 抢一把<strong>令牌锁</strong>,防止两个 profile(第 20 章)拿同一个 token 同时上线、互相顶号——这是「单进程多实例」与「跨平台」必须同时成立时的安全护栏。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 300" role="img" aria-label="加平台两条路:插件路零改核心,内置路改动核心仓库,但都继承同一 BasePlatformAdapter 契约">
+  <text x="340" y="20" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">加一个平台的两条路</text>
+  <rect x="25"  y="36" width="300" height="30" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="175" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✅ 插件路(推荐)</text>
+  <rect x="355" y="36" width="300" height="30" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="505" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">🛠 内置路(核心贡献者)</text>
+  <g font-size="11" text-anchor="middle">
+    <rect x="40"  y="82" width="270" height="32" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="175" y="102" fill="var(--ink)">plugins/platforms/&lt;name&gt;/adapter.py</text>
+    <rect x="40"  y="122" width="270" height="32" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="175" y="142" fill="var(--ink)">ctx.register_platform()</text>
+    <rect x="40"  y="162" width="270" height="30" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="175" y="181" font-weight="700" fill="var(--accent-ink)">零改核心 · 框架自动装配</text>
+
+    <rect x="370" y="82" width="270" height="32" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="505" y="102" fill="var(--ink)">gateway/platforms/&lt;name&gt;.py</text>
+    <rect x="370" y="122" width="270" height="32" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="505" y="142" fill="var(--ink)">改动核心仓库 + 装配代码</text>
+    <rect x="370" y="162" width="270" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+    <text x="505" y="181" font-weight="700" fill="var(--purple)">仅核心贡献者走这条</text>
+  </g>
+  <line x1="175" y1="192" x2="300" y2="226" stroke="var(--line)"/>
+  <path d="M291 219 L301 227 L289 230 Z" fill="var(--line)"/>
+  <line x1="505" y1="192" x2="380" y2="226" stroke="var(--line)"/>
+  <path d="M391 230 L379 227 L389 219 Z" fill="var(--line)"/>
+  <rect x="140" y="228" width="400" height="48" rx="9" fill="var(--panel-2)" stroke="var(--ink)" stroke-width="2"/>
+  <text x="340" y="250" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">都继承同一 BasePlatformAdapter 契约</text>
+  <text x="340" y="268" text-anchor="middle" font-size="10.5" fill="var(--muted)">→ 核心网关主路径只认这一个抽象</text>
+</svg>
+<div class="fig-cap"><b>加平台两条路</b>:推荐的<b>插件路</b>在 <span class="mono">plugins/platforms/&lt;name&gt;/</span> 写一个子类、用 <span class="mono">ctx.register_platform()</span> 注册,<b>零改核心</b>,框架自动接管配置、授权、cron 投递与网关装配;<b>内置路</b>留给核心贡献者,要动核心仓库。两条路殊途同归——都继承同一个 <span class="mono">BasePlatformAdapter</span> 契约,核心网关主路径始终只认这一个抽象。绝大多数主流平台(telegram/discord/slack……)其实都走插件路。</div>
+</div>
 
 <h2>一个真实的翻译官:IRCAdapter</h2>
 <p>看 IRC 适配器怎么把一行 IRC 文本翻成统一事件——这是所有 28+ 适配器共同的模式:</p>
@@ -164,6 +250,59 @@ LESSON_17 = {
 
 <p>Why insist on normalizing into one structure first? Because <strong>there are too many downstream consumers</strong>: session routing, the two guards (ch.18), the agent core loop (ch.7 message flow), cron delivery, approval and interruption. If each of them had to understand Telegram, Discord, WeChat… twenty-plus native formats, complexity becomes the product "number-of-consumers × number-of-platforms," and adding one platform means editing every consumer. <strong>Translate once at the ingress</strong> and that multiplication collapses to addition: platforms only produce <span class="mono">MessageEvent</span>, consumers only consume it, and the two ends evolve independently. <span class="mono">raw_message</span> still keeps the original platform object as a fallback for when a platform-specific detail is genuinely needed, but <strong>the main path touches only the normalized fields</strong> — this is ch.4's narrow waist projected onto a data structure: funnel broad diversity into one narrow interface.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 352" role="img" aria-label="Multi-platform normalization funnel: each platform's adapter translates into one unified MessageEvent, then into a single agent core">
+  <text x="340" y="20" text-anchor="middle" font-size="13" font-weight="700" fill="var(--blue)">▲ Different protocols · one native format per platform</text>
+  <g font-size="11.5" text-anchor="middle">
+    <rect x="15"  y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="65"  y="56" fill="var(--ink)">telegram</text>
+    <rect x="125" y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="175" y="56" fill="var(--ink)">discord</text>
+    <rect x="235" y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="285" y="56" fill="var(--ink)">slack</text>
+    <rect x="345" y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="395" y="56" fill="var(--ink)">whatsapp</text>
+    <rect x="455" y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="505" y="56" fill="var(--ink)">signal</text>
+    <rect x="565" y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="615" y="56" fill="var(--ink)">email …</text>
+  </g>
+  <g stroke="var(--line)">
+    <line x1="65"  y1="68" x2="65"  y2="92"/>
+    <line x1="175" y1="68" x2="175" y2="92"/>
+    <line x1="285" y1="68" x2="285" y2="92"/>
+    <line x1="395" y1="68" x2="395" y2="92"/>
+    <line x1="505" y1="68" x2="505" y2="92"/>
+    <line x1="615" y1="68" x2="615" y2="92"/>
+  </g>
+  <g font-size="10.5" text-anchor="middle">
+    <rect x="15"  y="92" width="100" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="65"  y="110" fill="var(--muted)">adapter</text>
+    <rect x="125" y="92" width="100" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="175" y="110" fill="var(--muted)">adapter</text>
+    <rect x="235" y="92" width="100" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="285" y="110" fill="var(--muted)">adapter</text>
+    <rect x="345" y="92" width="100" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="395" y="110" fill="var(--muted)">adapter</text>
+    <rect x="455" y="92" width="100" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="505" y="110" fill="var(--muted)">adapter</text>
+    <rect x="565" y="92" width="100" height="28" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="615" y="110" fill="var(--muted)">adapter</text>
+  </g>
+  <path d="M15 126 L665 126 L450 206 L230 206 Z" fill="var(--panel-2)" stroke="var(--line)" stroke-linejoin="round"/>
+  <text x="340" y="172" text-anchor="middle" font-size="11.5" fill="var(--muted)">normalization funnel · squash into one shape</text>
+  <rect x="230" y="206" width="220" height="50" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="340" y="228" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">unified MessageEvent</text>
+  <text x="340" y="246" text-anchor="middle" font-size="10" fill="var(--accent-ink)">all adapters produce it</text>
+  <line x1="340" y1="256" x2="340" y2="282" stroke="var(--accent)" stroke-width="2"/>
+  <path d="M334 274 L340 282 L346 274 Z" fill="var(--accent)"/>
+  <rect x="230" y="284" width="220" height="46" rx="9" fill="var(--panel-2)" stroke="var(--ink)" stroke-width="2"/>
+  <text x="340" y="306" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">agent core</text>
+  <text x="340" y="323" text-anchor="middle" font-size="10" fill="var(--muted)">knows only this one abstraction</text>
+</svg>
+<div class="fig-cap"><b>Multi-platform normalization funnel</b>: twenty-plus platforms each speak their own protocol (Telegram Update / Discord event / IRC text line…), but each gets an <b>adapter</b> that translates it into <b>the same MessageEvent</b> — where the funnel narrows. The core agent knows only this single abstraction and never sees any platform's native format; adding a platform just adds one more inlet pipe while the funnel's neck and everything downstream stay <b>untouched</b>. This is ch.4's narrow waist projected onto multi-platform ingress. (Honestly, the core still keeps a few platform special-cases — e.g. Telegram DM topics, Feishu threads — but they're off the main path.)</div>
+</div>
+
 <p>To be honest, <span class="mono">MessageEvent</span> is not "pure, with zero platform flavor": it carries several <strong>optional fields only some platforms populate</strong> — <span class="mono">platform_update_id</span> (Telegram's <span class="mono">update_id</span>, used by <span class="mono">/restart</span> to advance the offset and avoid processing the same update twice), <span class="mono">reply_to_message_id</span> / <span class="mono">reply_to_author_id</span> (reply context), and <span class="mono">auto_skill</span> (skills auto-loaded for Telegram DM topics or Discord channel bindings). The design doesn't demand "perfect purity"; it lets these fields <strong>default to None and be ignored by most platforms</strong>. Pragmatically accommodating a few platforms' features beats flattening capability for the sake of abstraction purism — abstraction serves reuse, not dogma. A reminder, too: a narrow waist isn't zero special-cases, it's special-cases minimized and kept out of the main path.</p>
 
 <h2>The adapter contract: BasePlatformAdapter</h2>
@@ -194,6 +333,39 @@ LESSON_17 = {
 <p>Why freeze the contract as an <span class="mono">ABC</span> + <span class="mono">@abstractmethod</span> rather than a plain base class relying on convention? Because abstractmethod makes it so <strong>"an adapter that doesn't implement connect/send can't even be instantiated"</strong> — the contract is promoted from a gentleman's agreement in the docs to a hard, import-time constraint; nobody can ship half an adapter. More crucially, it's <strong>separation of duty</strong>: the base class owns all the <strong>common machinery</strong> — session routing, message queuing, the <span class="mono">_active_sessions</span> interrupt lock, approval, the typing heartbeat; the subclass fills only the <strong>transport layer's</strong> platform-specific bit (how to connect, receive, send). Without this ABC, every platform would rebuild the session-and-guard machinery, and bugs would diverge across twenty-plus implementations, with one fix needing to be copied twenty times — no way to close it centrally.</p>
 
 <p>There are two paths to add a platform (see <span class="mono">ADDING_A_PLATFORM.md</span>): the <strong>plugin path</strong> (recommended) — write <span class="mono">adapter.py</span> under <span class="mono">plugins/platforms/&lt;name&gt;/</span> inheriting <span class="mono">BasePlatformAdapter</span>, register via <span class="mono">ctx.register_platform()</span>, with <strong>zero core changes</strong>, and the plugin framework auto-handles config parsing, user authorization, cron delivery, status display, and gateway wiring; the <strong>built-in path</strong> is reserved for core contributors. Even the <span class="mono">Platform</span> enum uses a <span class="mono">_missing_()</span> hook to mint members for plugin platforms dynamically, so <span class="mono">Platform("irc")</span> works without editing the enum (and is identity-stable). Also, any adapter that connects with a unique credential (e.g. a bot token) grabs a <strong>token lock</strong> via <span class="mono">acquire_scoped_lock</span> at startup, stopping two profiles (ch.20) from bringing the same token online at once and clobbering each other — the guardrail required when "multi-instance" and "multi-platform" must both hold.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 300" role="img" aria-label="Two paths to add a platform: the plugin path needs no core change, the built-in path edits the core repo, but both inherit the same BasePlatformAdapter contract">
+  <text x="340" y="20" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">Two paths to add a platform</text>
+  <rect x="25"  y="36" width="300" height="30" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="175" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✅ Plugin path (recommended)</text>
+  <rect x="355" y="36" width="300" height="30" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="505" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">🛠 Built-in path (core contributors)</text>
+  <g font-size="11" text-anchor="middle">
+    <rect x="40"  y="82" width="270" height="32" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="175" y="102" fill="var(--ink)">plugins/platforms/&lt;name&gt;/adapter.py</text>
+    <rect x="40"  y="122" width="270" height="32" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="175" y="142" fill="var(--ink)">ctx.register_platform()</text>
+    <rect x="40"  y="162" width="270" height="30" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="175" y="181" font-weight="700" fill="var(--accent-ink)">zero core change · auto-wired</text>
+
+    <rect x="370" y="82" width="270" height="32" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="505" y="102" fill="var(--ink)">gateway/platforms/&lt;name&gt;.py</text>
+    <rect x="370" y="122" width="270" height="32" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+    <text x="505" y="142" fill="var(--ink)">edit core repo + wiring code</text>
+    <rect x="370" y="162" width="270" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+    <text x="505" y="181" font-weight="700" fill="var(--purple)">core contributors only</text>
+  </g>
+  <line x1="175" y1="192" x2="300" y2="226" stroke="var(--line)"/>
+  <path d="M291 219 L301 227 L289 230 Z" fill="var(--line)"/>
+  <line x1="505" y1="192" x2="380" y2="226" stroke="var(--line)"/>
+  <path d="M391 230 L379 227 L389 219 Z" fill="var(--line)"/>
+  <rect x="140" y="228" width="400" height="48" rx="9" fill="var(--panel-2)" stroke="var(--ink)" stroke-width="2"/>
+  <text x="340" y="250" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">both inherit the same BasePlatformAdapter contract</text>
+  <text x="340" y="268" text-anchor="middle" font-size="10.5" fill="var(--muted)">→ the core gateway's main path knows only this abstraction</text>
+</svg>
+<div class="fig-cap"><b>Two paths to add a platform</b>: the recommended <b>plugin path</b> writes a subclass under <span class="mono">plugins/platforms/&lt;name&gt;/</span> and registers via <span class="mono">ctx.register_platform()</span> with <b>zero core changes</b>, the framework auto-handling config, authorization, cron delivery, and gateway wiring; the <b>built-in path</b> is for core contributors and edits the core repo. Both converge — they inherit the same <span class="mono">BasePlatformAdapter</span> contract, and the core gateway's main path always knows only this one abstraction. Most mainstream platforms (telegram/discord/slack…) actually take the plugin path.</div>
+</div>
 
 <h2>A real translator: IRCAdapter</h2>
 <p>See how the IRC adapter turns a line of IRC text into a unified event — the shared pattern of all 28+ adapters:</p>
