@@ -127,6 +127,68 @@ LESSON_06 = {
 <div class="fig-cap"><b>缓存的两副面孔</b>：前缀逐字节不变时，长长的固定前缀按<b>缓存读取价</b>（约原价 1/10）计费，整段对话成本压到约四分之一；可一旦在会话中途动了前缀<b>一个字节</b>，从那点起的缓存<b>整体丢失、按全价重算</b>——这就是「每个会话的 prompt 缓存神圣不可侵犯」的代价根源。</div>
 </div>
 
+<p>不过，这 4 个断点也不能<strong>无脑</strong>打。<span class="mono">_apply_cache_marker</span> 会把 marker 加到目标消息的<strong>最后一个内容块</strong>上——万一那一块恰好是 <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span>，marker 就会<strong>破坏签名验证</strong>。所以转成 Anthropic 格式时，<span class="mono">anthropic_adapter</span> 会把这些块上的 <span class="mono">cache_control</span> 再<strong>剥掉</strong>（注释直说 <span class="inline">cache markers interfere with signature validation</span>），并让带 marker 的 system prompt 保持为 <strong>content blocks</strong> 而非纯字符串：</p>
+
+<div class="figure">
+<svg viewBox="0 0 720 388" role="img" aria-label="Anthropic 缓存的 4 个 cache_control 断点放置与 thinking 签名安全">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">system_and_3 · 4 个 cache_control 断点 + thinking 签名安全</text>
+  <text x="20" y="52" font-size="11.5" font-weight="700" fill="var(--muted)">① 在 deepcopy 副本上打 4 断点：system 前缀 + 末 3 条非 system 消息（同 TTL）</text>
+
+  <rect x="24" y="72" width="150" height="58" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="99" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="99" y="121" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">system 前缀</text>
+  <circle cx="99" cy="72" r="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="99" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--accent-ink)">1</text>
+
+  <rect x="182" y="72" width="208" height="58" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="286" y="99" text-anchor="middle" font-size="11" fill="var(--muted)">… 中间历史消息（无断点）…</text>
+  <text x="286" y="118" text-anchor="middle" font-size="10" fill="var(--faint)">整段命中前缀缓存 · 不重算</text>
+
+  <rect x="398" y="72" width="92" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="444" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="444" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-3</text>
+  <circle cx="444" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="444" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">2</text>
+
+  <rect x="498" y="72" width="92" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="544" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="544" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-2</text>
+  <circle cx="544" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="544" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">3</text>
+
+  <rect x="598" y="72" width="92" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="644" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="644" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-1</text>
+  <circle cx="644" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="644" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">4</text>
+
+  <rect x="24" y="148" width="340" height="40" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="40" y="173" font-size="11" fill="var(--accent-ink)">deepcopy 副本：marker 只打副本，原 api_messages 不动</text>
+  <rect x="374" y="148" width="316" height="40" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="390" y="173" font-size="11" fill="var(--blue)">4 断点同一 TTL：ephemeral，5m（默认）或 1h</text>
+
+  <rect x="24" y="202" width="666" height="176" rx="12" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="42" y="230" font-size="24">⚠️</text>
+  <text x="74" y="228" font-size="12.5" font-weight="700" fill="var(--red)">关键坑：thinking / redacted_thinking 块上的 cache_control 必须剥掉</text>
+
+  <rect x="42" y="246" width="276" height="92" rx="9" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="58" y="268" font-size="10.5" font-weight="700" fill="var(--ink)">assistant 消息，末块 = thinking</text>
+  <text x="58" y="292" font-size="10.5" fill="var(--muted)">若 marker 落到 thinking 块上</text>
+  <text x="58" y="316" font-size="10.5" font-weight="700" fill="var(--red)">✗ 破坏 Anthropic 签名验证</text>
+
+  <text x="358" y="292" text-anchor="middle" font-size="22">✂️</text>
+  <text x="358" y="316" text-anchor="middle" font-size="10" fill="var(--muted)">注入后 pop</text>
+
+  <rect x="398" y="246" width="274" height="92" rx="9" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="414" y="268" font-size="10.5" font-weight="700" fill="var(--ink)">anthropic_adapter 转换时</text>
+  <text x="414" y="292" font-size="10.5" fill="var(--accent-ink)">b.pop("cache_control", None)</text>
+  <text x="414" y="316" font-size="10.5" font-weight="700" fill="var(--accent-ink)">✅ 仅留 signature，验证通过</text>
+
+  <text x="42" y="362" font-size="10.5" fill="var(--muted)">附：带 marker 的 system prompt 保持为 content blocks（list）而非纯字符串，cache_control 才不丢。</text>
+</svg>
+<div class="fig-cap"><b>4 断点 + 签名安全</b>：<span class="mono">system_and_3</span> 在 system 前缀和末 3 条非 system 上打 4 个 <span class="mono">cache_control</span> 断点（同 TTL、打在 deepcopy 副本上）；但 marker 必须从 <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span> 块上<b>剥掉</b>，否则破坏签名验证。</div>
+</div>
+
 <h2>守住前缀的最后一道闸：注入前扫描</h2>
 <p>三层里的 <span class="mono">context</span> 会把 <strong>AGENTS.md / .cursorrules</strong> 等文件原样塞进 system prompt。问题是：这些文件可能来自 clone 来的仓库，里面可能藏着 <strong>prompt 注入</strong>。一旦进了 system prompt，它就成了<strong>会话期固定前缀的一部分</strong>，用户<strong>没有任何机会</strong>拦截。所以 Hermes 在注入<strong>之前</strong>先扫一遍：</p>
 
@@ -330,6 +392,68 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
   <text x="668" y="206" text-anchor="end" font-size="11.5" font-weight="700" fill="var(--red)">turn cost ↑↑</text>
 </svg>
 <div class="fig-cap"><b>The two faces of caching</b>: when the prefix is byte-identical, the long fixed prefix bills at the <b>cache-read price</b> (~1/10 of full), collapsing the whole conversation to roughly a quarter of the cost; but change <b>a single byte</b> mid-session and the cache from that point is <b>lost and recomputed at full price</b> — the root reason why "per-conversation prompt caching is sacred."</div>
+</div>
+
+<p>But these 4 breakpoints can't be applied <strong>blindly</strong>. <span class="mono">_apply_cache_marker</span> attaches the marker to the target message's <strong>last content block</strong> — and if that block happens to be a <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span> block, the marker <strong>breaks signature validation</strong>. So when converting to Anthropic format, <span class="mono">anthropic_adapter</span> <strong>strips</strong> <span class="mono">cache_control</span> back off those blocks (the comment is blunt: <span class="inline">cache markers interfere with signature validation</span>) and keeps a marker-bearing system prompt as <strong>content blocks</strong> rather than a plain string:</p>
+
+<div class="figure">
+<svg viewBox="0 0 720 388" role="img" aria-label="Placement of Anthropic's 4 cache_control breakpoints and thinking-signature safety">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">system_and_3 · 4 cache_control breakpoints + thinking-signature safety</text>
+  <text x="20" y="52" font-size="11.5" font-weight="700" fill="var(--muted)">① 4 breakpoints on the deepcopy: system prefix + last 3 non-system messages (same TTL)</text>
+
+  <rect x="24" y="72" width="150" height="58" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="99" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="99" y="121" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">system prefix</text>
+  <circle cx="99" cy="72" r="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="99" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--accent-ink)">1</text>
+
+  <rect x="182" y="72" width="208" height="58" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="286" y="99" text-anchor="middle" font-size="11" fill="var(--muted)">… middle history (no breakpoint) …</text>
+  <text x="286" y="118" text-anchor="middle" font-size="10" fill="var(--faint)">whole block hits the prefix cache · not recomputed</text>
+
+  <rect x="398" y="72" width="92" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="444" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="444" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-3</text>
+  <circle cx="444" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="444" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">2</text>
+
+  <rect x="498" y="72" width="92" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="544" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="544" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-2</text>
+  <circle cx="544" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="544" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">3</text>
+
+  <rect x="598" y="72" width="92" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="644" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="644" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-1</text>
+  <circle cx="644" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="644" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">4</text>
+
+  <rect x="24" y="148" width="340" height="40" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="40" y="173" font-size="11" fill="var(--accent-ink)">deepcopy: marker only on the copy; original api_messages untouched</text>
+  <rect x="374" y="148" width="316" height="40" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="390" y="173" font-size="11" fill="var(--blue)">all 4 share one TTL: ephemeral, 5m (default) or 1h</text>
+
+  <rect x="24" y="202" width="666" height="176" rx="12" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="42" y="230" font-size="24">⚠️</text>
+  <text x="74" y="228" font-size="12.5" font-weight="700" fill="var(--red)">Key trap: strip cache_control off thinking / redacted_thinking blocks</text>
+
+  <rect x="42" y="246" width="276" height="92" rx="9" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="58" y="268" font-size="10.5" font-weight="700" fill="var(--ink)">assistant message, last block = thinking</text>
+  <text x="58" y="292" font-size="10.5" fill="var(--muted)">if the marker lands on the thinking block</text>
+  <text x="58" y="316" font-size="10.5" font-weight="700" fill="var(--red)">✗ breaks Anthropic signature validation</text>
+
+  <text x="358" y="292" text-anchor="middle" font-size="22">✂️</text>
+  <text x="358" y="316" text-anchor="middle" font-size="10" fill="var(--muted)">pop after inject</text>
+
+  <rect x="398" y="246" width="274" height="92" rx="9" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="414" y="268" font-size="10.5" font-weight="700" fill="var(--ink)">anthropic_adapter, on conversion</text>
+  <text x="414" y="292" font-size="10.5" fill="var(--accent-ink)">b.pop("cache_control", None)</text>
+  <text x="414" y="316" font-size="10.5" font-weight="700" fill="var(--accent-ink)">✅ only signature remains — validates</text>
+
+  <text x="42" y="362" font-size="10.5" fill="var(--muted)">Also: a marker-bearing system prompt stays as content blocks (a list), not a plain string, so cache_control survives.</text>
+</svg>
+<div class="fig-cap"><b>4 breakpoints + signature safety</b>: <span class="mono">system_and_3</span> places 4 <span class="mono">cache_control</span> breakpoints on the system prefix and the last 3 non-system messages (same TTL, on a deepcopy); but the marker must be <b>stripped</b> from <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span> blocks, or it breaks signature validation.</div>
 </div>
 
 <h2>The last gate guarding the prefix: scan before injection</h2>
