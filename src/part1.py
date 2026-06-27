@@ -1808,30 +1808,30 @@ LESSON_05 = {
   <rect x="18" y="84" width="314" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="26" y="99" font-size="9" font-weight="700" fill="var(--ink)">[0] system</text>
   <text x="26" y="110" font-size="9" fill="var(--muted)">固定前缀（字节稳定才能缓存命中）</text>
-  <text x="332" y="99" text-anchor="end" font-size="8.5" fill="var(--blue)">初始</text>
+  <text x="332" y="99" text-anchor="end" font-size="9" fill="var(--blue)">初始</text>
 
   <rect x="18" y="120" width="314" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="26" y="135" font-size="9" font-weight="700" fill="var(--ink)">[1] user</text>
   <text x="26" y="146" font-size="9" fill="var(--purple)">content=&quot;北京今天天气怎么样？&quot;</text>
-  <text x="332" y="135" text-anchor="end" font-size="8.5" fill="var(--blue)">初始</text>
+  <text x="332" y="135" text-anchor="end" font-size="9" fill="var(--blue)">初始</text>
 
   <rect x="18" y="156" width="314" height="60" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="26" y="170" font-size="9" font-weight="700" fill="var(--accent-ink)">[2] assistant · tool_calls=[{</text>
   <text x="26" y="182" font-size="9" fill="var(--accent-ink)">  id:&quot;call_abc123&quot;, function:{</text>
   <text x="26" y="194" font-size="9" fill="var(--accent-ink)">  name:&quot;get_weather&quot;,</text>
   <text x="26" y="206" font-size="9" fill="var(--accent-ink)">  arguments:'{&quot;city&quot;:&quot;北京&quot;}'}}]</text>
-  <text x="332" y="170" text-anchor="end" font-size="8.5" fill="var(--accent)">圈1③</text>
+  <text x="332" y="170" text-anchor="end" font-size="9" fill="var(--accent)">圈1③</text>
 
   <rect x="18" y="220" width="314" height="46" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="26" y="234" font-size="9" font-weight="700" fill="var(--accent-ink)">[3] tool · name=&quot;get_weather&quot;</text>
   <text x="26" y="246" font-size="9" fill="var(--accent-ink)">  content=&quot;北京 晴 26°C&quot;,</text>
   <text x="26" y="258" font-size="9" fill="var(--accent-ink)">  tool_call_id=&quot;call_abc123&quot;</text>
-  <text x="332" y="234" text-anchor="end" font-size="8.5" fill="var(--accent)">圈1④</text>
+  <text x="332" y="234" text-anchor="end" font-size="9" fill="var(--accent)">圈1④</text>
 
   <rect x="18" y="270" width="314" height="42" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
   <text x="26" y="284" font-size="9" font-weight="700" fill="var(--purple)">[4] assistant · 无 tool_calls → 收尾</text>
   <text x="26" y="296" font-size="9" fill="var(--purple)">  content=&quot;北京今天晴，26°C&quot;</text>
-  <text x="332" y="284" text-anchor="end" font-size="8.5" fill="var(--purple)">圈2⑤</text>
+  <text x="332" y="284" text-anchor="end" font-size="9" fill="var(--purple)">圈2⑤</text>
 
   <text x="22" y="332" font-size="9" fill="var(--muted)">每圈把新消息 append 回同一个列表：①初始 2 条</text>
   <text x="22" y="346" font-size="9" fill="var(--muted)">→ ③+assistant → ④+tool → ⑤+final，旧消息从不重写</text>
@@ -1843,24 +1843,24 @@ LESSON_05 = {
   <rect x="354" y="84" width="308" height="40" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="362" y="99" font-size="9" font-weight="700" fill="var(--ink)">① 初始 · 进入 while 之前</text>
   <text x="362" y="113" font-size="9" fill="var(--muted)">api_call_count=0 · budget max=90 used=0 remaining=90</text>
-  <text x="654" y="99" text-anchor="end" font-size="8.5" fill="var(--muted)">:589</text>
+  <text x="654" y="99" text-anchor="end" font-size="9" fill="var(--muted)">:589</text>
 
   <rect x="354" y="128" width="308" height="62" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="362" y="142" font-size="9" font-weight="700" fill="var(--ink)">② 圈1 闸门通过 → consume()</text>
   <text x="362" y="154" font-size="9" fill="var(--ink)">0 &lt; 90 且 90 &gt; 0 ✅ · _interrupt_requested=False</text>
   <text x="362" y="166" font-size="9" fill="var(--ink)">api_call_count → 1</text>
   <text x="362" y="178" font-size="9" fill="var(--ink)">consume() → used=1, remaining=89</text>
-  <text x="654" y="142" text-anchor="end" font-size="8.5" fill="var(--muted)">:601 · :610</text>
+  <text x="654" y="142" text-anchor="end" font-size="9" fill="var(--muted)">:601 · :610</text>
 
   <rect x="354" y="194" width="308" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="362" y="209" font-size="9" font-weight="700" fill="var(--accent-ink)">③ 圈1 模型 → 有 tool_calls</text>
   <text x="362" y="223" font-size="9" fill="var(--accent-ink)">append assistant → messages[2]（见左 r2）</text>
-  <text x="654" y="209" text-anchor="end" font-size="8.5" fill="var(--muted)">:4051</text>
+  <text x="654" y="209" text-anchor="end" font-size="9" fill="var(--muted)">:4051</text>
 
   <rect x="354" y="238" width="308" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="362" y="253" font-size="9" font-weight="700" fill="var(--accent-ink)">④ 圈1 执行 _execute_tool_calls</text>
   <text x="362" y="267" font-size="9" fill="var(--accent-ink)">make_tool_result_message → tool 消息 · len=4</text>
-  <text x="654" y="253" text-anchor="end" font-size="8.5" fill="var(--muted)">:4079 · 337</text>
+  <text x="654" y="253" text-anchor="end" font-size="9" fill="var(--muted)">:4079 · 337</text>
 
   <rect x="354" y="282" width="308" height="74" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
   <text x="362" y="296" font-size="9" font-weight="700" fill="var(--purple)">⑤ 圈2 → 无 tool_calls → 收尾</text>
@@ -1868,7 +1868,7 @@ LESSON_05 = {
   <text x="362" y="320" font-size="9" fill="var(--purple)">final_response=&quot;北京今天晴，26°C&quot; → append</text>
   <text x="362" y="332" font-size="9" fill="var(--purple)">🎉 Conversation completed after 2</text>
   <text x="362" y="344" font-size="9" fill="var(--purple)">   OpenAI-compatible API call(s) → break</text>
-  <text x="654" y="296" text-anchor="end" font-size="8.5" fill="var(--muted)">:4509 · :4513</text>
+  <text x="654" y="296" text-anchor="end" font-size="9" fill="var(--muted)">:4509 · :4513</text>
 
   <text x="358" y="374" font-size="9" fill="var(--muted)">两圈共 2 次 consume：used 0→1→2，remaining 90→89→88</text>
   <text x="358" y="390" font-size="9" fill="var(--muted)">parent 预算上限 90（subagent 各自 50）· agent_init.py:165</text>
@@ -2143,30 +2143,30 @@ From the moment you hit enter to the moment Hermes hands back a final answer, wh
   <rect x="18" y="84" width="314" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="26" y="99" font-size="9" font-weight="700" fill="var(--ink)">[0] system</text>
   <text x="26" y="110" font-size="9" fill="var(--muted)">stable prefix (byte-stable for cache hits)</text>
-  <text x="332" y="99" text-anchor="end" font-size="8.5" fill="var(--blue)">initial</text>
+  <text x="332" y="99" text-anchor="end" font-size="9" fill="var(--blue)">initial</text>
 
   <rect x="18" y="120" width="314" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="26" y="135" font-size="9" font-weight="700" fill="var(--ink)">[1] user</text>
   <text x="26" y="146" font-size="9" fill="var(--purple)">content=&quot;What is the weather in Beijing today?&quot;</text>
-  <text x="332" y="135" text-anchor="end" font-size="8.5" fill="var(--blue)">initial</text>
+  <text x="332" y="135" text-anchor="end" font-size="9" fill="var(--blue)">initial</text>
 
   <rect x="18" y="156" width="314" height="60" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="26" y="170" font-size="9" font-weight="700" fill="var(--accent-ink)">[2] assistant · tool_calls=[{</text>
   <text x="26" y="182" font-size="9" fill="var(--accent-ink)">  id:&quot;call_abc123&quot;, function:{</text>
   <text x="26" y="194" font-size="9" fill="var(--accent-ink)">  name:&quot;get_weather&quot;,</text>
   <text x="26" y="206" font-size="9" fill="var(--accent-ink)">  arguments:'{&quot;city&quot;:&quot;Beijing&quot;}'}}]</text>
-  <text x="332" y="170" text-anchor="end" font-size="8.5" fill="var(--accent)">turn1③</text>
+  <text x="332" y="170" text-anchor="end" font-size="9" fill="var(--accent)">turn1③</text>
 
   <rect x="18" y="220" width="314" height="46" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="26" y="234" font-size="9" font-weight="700" fill="var(--accent-ink)">[3] tool · name=&quot;get_weather&quot;</text>
   <text x="26" y="246" font-size="9" fill="var(--accent-ink)">  content=&quot;Beijing clear 26°C&quot;,</text>
   <text x="26" y="258" font-size="9" fill="var(--accent-ink)">  tool_call_id=&quot;call_abc123&quot;</text>
-  <text x="332" y="234" text-anchor="end" font-size="8.5" fill="var(--accent)">turn1④</text>
+  <text x="332" y="234" text-anchor="end" font-size="9" fill="var(--accent)">turn1④</text>
 
   <rect x="18" y="270" width="314" height="42" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
   <text x="26" y="284" font-size="9" font-weight="700" fill="var(--purple)">[4] assistant · no tool_calls → finish</text>
   <text x="26" y="296" font-size="9" fill="var(--purple)">  content=&quot;Beijing is clear today, 26°C&quot;</text>
-  <text x="332" y="284" text-anchor="end" font-size="8.5" fill="var(--purple)">turn2⑤</text>
+  <text x="332" y="284" text-anchor="end" font-size="9" fill="var(--purple)">turn2⑤</text>
 
   <text x="22" y="332" font-size="9" fill="var(--muted)">each turn appends new messages onto the same list:</text>
   <text x="22" y="346" font-size="9" fill="var(--muted)">①init 2 → ③+assistant → ④+tool → ⑤+final, never rewritten</text>
@@ -2178,24 +2178,24 @@ From the moment you hit enter to the moment Hermes hands back a final answer, wh
   <rect x="354" y="84" width="308" height="40" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="362" y="99" font-size="9" font-weight="700" fill="var(--ink)">① initial · before the while loop</text>
   <text x="362" y="113" font-size="9" fill="var(--muted)">api_call_count=0 · budget max=90 used=0 remaining=90</text>
-  <text x="654" y="99" text-anchor="end" font-size="8.5" fill="var(--muted)">:589</text>
+  <text x="654" y="99" text-anchor="end" font-size="9" fill="var(--muted)">:589</text>
 
   <rect x="354" y="128" width="308" height="62" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="362" y="142" font-size="9" font-weight="700" fill="var(--ink)">② turn 1 gate passes → consume()</text>
   <text x="362" y="154" font-size="9" fill="var(--ink)">0 &lt; 90 and 90 &gt; 0 ✅ · _interrupt_requested=False</text>
   <text x="362" y="166" font-size="9" fill="var(--ink)">api_call_count → 1</text>
   <text x="362" y="178" font-size="9" fill="var(--ink)">consume() → used=1, remaining=89</text>
-  <text x="654" y="142" text-anchor="end" font-size="8.5" fill="var(--muted)">:601 · :610</text>
+  <text x="654" y="142" text-anchor="end" font-size="9" fill="var(--muted)">:601 · :610</text>
 
   <rect x="354" y="194" width="308" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="362" y="209" font-size="9" font-weight="700" fill="var(--accent-ink)">③ turn 1 model → has tool_calls</text>
   <text x="362" y="223" font-size="9" fill="var(--accent-ink)">append assistant → messages[2] (see left r2)</text>
-  <text x="654" y="209" text-anchor="end" font-size="8.5" fill="var(--muted)">:4051</text>
+  <text x="654" y="209" text-anchor="end" font-size="9" fill="var(--muted)">:4051</text>
 
   <rect x="354" y="238" width="308" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="362" y="253" font-size="9" font-weight="700" fill="var(--accent-ink)">④ turn 1 runs _execute_tool_calls</text>
   <text x="362" y="267" font-size="9" fill="var(--accent-ink)">make_tool_result_message → tool message · len=4</text>
-  <text x="654" y="253" text-anchor="end" font-size="8.5" fill="var(--muted)">:4079 · 337</text>
+  <text x="654" y="253" text-anchor="end" font-size="9" fill="var(--muted)">:4079 · 337</text>
 
   <rect x="354" y="282" width="308" height="74" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
   <text x="362" y="296" font-size="9" font-weight="700" fill="var(--purple)">⑤ turn 2 → no tool_calls → finish</text>
@@ -2203,7 +2203,7 @@ From the moment you hit enter to the moment Hermes hands back a final answer, wh
   <text x="362" y="320" font-size="9" fill="var(--purple)">final_response=&quot;Beijing is clear today, 26°C&quot; → append</text>
   <text x="362" y="332" font-size="9" fill="var(--purple)">🎉 Conversation completed after 2</text>
   <text x="362" y="344" font-size="9" fill="var(--purple)">   OpenAI-compatible API call(s) → break</text>
-  <text x="654" y="296" text-anchor="end" font-size="8.5" fill="var(--muted)">:4509 · :4513</text>
+  <text x="654" y="296" text-anchor="end" font-size="9" fill="var(--muted)">:4509 · :4513</text>
 
   <text x="358" y="374" font-size="9" fill="var(--muted)">2 consume() calls total: used 0→1→2, remaining 90→89→88</text>
   <text x="358" y="390" font-size="9" fill="var(--muted)">parent cap 90 (each subagent 50) · agent_init.py:165</text>

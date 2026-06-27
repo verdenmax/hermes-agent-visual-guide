@@ -1191,14 +1191,14 @@ agent._cached_system_prompt = new_system_prompt      <span class="cm"># 写回�
   <text x="30" y="68" font-size="10" font-weight="700" fill="var(--ink)">② 边界（:787-788）</text>
   <rect x="30" y="76" width="156" height="32" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="38" y="90" font-size="9" font-weight="700" fill="var(--accent-ink)">protect_first_n=3</text>
-  <text x="38" y="103" font-size="8.5" fill="var(--accent-ink)">保头 · 随增长衰减→0（:2024）</text>
+  <text x="38" y="103" font-size="9" fill="var(--accent-ink)">保头 · 随增长衰减→0（:2024）</text>
   <rect x="30" y="116" width="156" height="48" rx="6" fill="var(--purple-soft)" stroke="var(--purple)"/>
   <text x="38" y="132" font-size="9" font-weight="700" fill="var(--purple)">中间 5 条 ← 待压</text>
-  <text x="38" y="147" font-size="8.5" fill="var(--purple)">用辅助模型折成结构化要点</text>
-  <text x="38" y="159" font-size="8.5" fill="var(--purple)">（高信号留、低信号弃）</text>
+  <text x="38" y="147" font-size="9" fill="var(--purple)">用辅助模型折成结构化要点</text>
+  <text x="38" y="159" font-size="9" fill="var(--purple)">（高信号留、低信号弃）</text>
   <rect x="30" y="172" width="156" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="38" y="186" font-size="9" font-weight="700" fill="var(--blue)">protect_last_n=20</text>
-  <text x="38" y="199" font-size="8.5" fill="var(--blue)">保尾 · 最近上下文原样留</text>
+  <text x="38" y="199" font-size="9" fill="var(--blue)">保尾 · 最近上下文原样留</text>
   <text x="30" y="224" font-size="9" fill="var(--muted)">保头保尾、只压中段</text>
   <text x="30" y="240" font-size="9" fill="var(--muted)">→ 既省 token 又不丢</text>
   <text x="30" y="256" font-size="9" fill="var(--muted)">　 最相关的近况</text>
@@ -1231,7 +1231,7 @@ agent._cached_system_prompt = new_system_prompt      <span class="cm"># 写回�
   <text x="592" y="188" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">~600</text>
   <text x="592" y="204" text-anchor="middle" font-size="9" fill="var(--accent-ink)">tok（压后）</text>
   <text x="592" y="234" text-anchor="middle" font-size="10" font-weight="700" fill="var(--purple)">≈ -93%</text>
-  <text x="592" y="252" text-anchor="middle" font-size="8.5" fill="var(--muted)">目标 ~0.20 比率</text>
+  <text x="592" y="252" text-anchor="middle" font-size="9" fill="var(--muted)">目标 ~0.20 比率</text>
 
   <rect x="20" y="276" width="640" height="116" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="32" y="294" font-size="10" font-weight="700" fill="var(--blue)">⑥ 缓存的唯一例外 · conversation_compression.py:515-517</text>
@@ -1450,14 +1450,14 @@ agent._cached_system_prompt = new_system_prompt      <span class="cm"># write ba
   <text x="30" y="68" font-size="10" font-weight="700" fill="var(--ink)">2. Boundary (:787-788)</text>
   <rect x="30" y="76" width="156" height="32" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="38" y="90" font-size="9" font-weight="700" fill="var(--accent-ink)">protect_first_n=3</text>
-  <text x="38" y="103" font-size="8.5" fill="var(--accent-ink)">head, decays to 0 as it grows (:2024)</text>
+  <text x="38" y="103" font-size="9" fill="var(--accent-ink)">head, decays to 0 as it grows (:2024)</text>
   <rect x="30" y="116" width="156" height="48" rx="6" fill="var(--purple-soft)" stroke="var(--purple)"/>
   <text x="38" y="132" font-size="9" font-weight="700" fill="var(--purple)">middle 5 msgs - to compress</text>
-  <text x="38" y="147" font-size="8.5" fill="var(--purple)">aux model folds into points</text>
-  <text x="38" y="159" font-size="8.5" fill="var(--purple)">(keep high-signal, drop low)</text>
+  <text x="38" y="147" font-size="9" fill="var(--purple)">aux model folds into points</text>
+  <text x="38" y="159" font-size="9" fill="var(--purple)">(keep high-signal, drop low)</text>
   <rect x="30" y="172" width="156" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="38" y="186" font-size="9" font-weight="700" fill="var(--blue)">protect_last_n=20</text>
-  <text x="38" y="199" font-size="8.5" fill="var(--blue)">tail, recent context kept as-is</text>
+  <text x="38" y="199" font-size="9" fill="var(--blue)">tail, recent context kept as-is</text>
   <text x="30" y="224" font-size="9" fill="var(--muted)">keep head and tail,</text>
   <text x="30" y="240" font-size="9" fill="var(--muted)">compress only the middle</text>
   <text x="30" y="256" font-size="9" fill="var(--muted)">- saves tokens, keeps recents</text>
@@ -1490,7 +1490,7 @@ agent._cached_system_prompt = new_system_prompt      <span class="cm"># write ba
   <text x="592" y="188" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">~600</text>
   <text x="592" y="204" text-anchor="middle" font-size="9" fill="var(--accent-ink)">tok (after)</text>
   <text x="592" y="234" text-anchor="middle" font-size="10" font-weight="700" fill="var(--purple)">~ -93%</text>
-  <text x="592" y="252" text-anchor="middle" font-size="8.5" fill="var(--muted)">target ~0.20 ratio</text>
+  <text x="592" y="252" text-anchor="middle" font-size="9" fill="var(--muted)">target ~0.20 ratio</text>
 
   <rect x="20" y="276" width="640" height="116" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="32" y="294" font-size="10" font-weight="700" fill="var(--blue)">6. The cache's only exception - conversation_compression.py:515-517</text>
@@ -1751,9 +1751,9 @@ terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st
   <text x="30" y="210" font-size="9" font-family="monospace" fill="var(--purple)">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</text>
   <text x="42" y="226" font-size="9" font-family="monospace" fill="var(--purple)">&quot;$(pwd -P)&quot;</text>
   <text x="30" y="244" font-size="9" font-family="monospace" fill="var(--ink)">exit $__hermes_ec</text>
-  <text x="30" y="266" font-size="8.5" fill="var(--muted)">cd 入会话 cwd → 跑命令 → 回写 env 快照</text>
-  <text x="30" y="280" font-size="8.5" fill="var(--muted)">→ 双通道吐 CWD（临时文件 + stdout 标记）</text>
-  <text x="30" y="298" font-size="8.5" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__（:280）</text>
+  <text x="30" y="266" font-size="9" fill="var(--muted)">cd 入会话 cwd → 跑命令 → 回写 env 快照</text>
+  <text x="30" y="280" font-size="9" fill="var(--muted)">→ 双通道吐 CWD（临时文件 + stdout 标记）</text>
+  <text x="30" y="298" font-size="9" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__（:280）</text>
 
   <rect x="336" y="50" width="324" height="74" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="348" y="68" font-size="10" font-weight="700" fill="var(--accent-ink)">② local · environments/local.py:634-695</text>
@@ -2026,9 +2026,9 @@ terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st
   <text x="30" y="210" font-size="9" font-family="monospace" fill="var(--purple)">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</text>
   <text x="42" y="226" font-size="9" font-family="monospace" fill="var(--purple)">&quot;$(pwd -P)&quot;</text>
   <text x="30" y="244" font-size="9" font-family="monospace" fill="var(--ink)">exit $__hermes_ec</text>
-  <text x="30" y="266" font-size="8.5" fill="var(--muted)">cd into session cwd -&gt; run -&gt; write env snapshot</text>
-  <text x="30" y="280" font-size="8.5" fill="var(--muted)">-&gt; emit CWD on two channels (temp file + stdout)</text>
-  <text x="30" y="298" font-size="8.5" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__ (:280)</text>
+  <text x="30" y="266" font-size="9" fill="var(--muted)">cd into session cwd -&gt; run -&gt; write env snapshot</text>
+  <text x="30" y="280" font-size="9" fill="var(--muted)">-&gt; emit CWD on two channels (temp file + stdout)</text>
+  <text x="30" y="298" font-size="9" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__ (:280)</text>
 
   <rect x="336" y="50" width="324" height="74" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="348" y="68" font-size="10" font-weight="700" fill="var(--accent-ink)">2. local - environments/local.py:634-695</text>

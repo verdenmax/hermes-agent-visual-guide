@@ -878,7 +878,7 @@ Hermes 同时支持 Anthropic、OpenAI Codex、Gemini、AWS Bedrock、以及二�
   <path d="M302 178 L310 182 L302 186 Z" fill="var(--muted)"/>
   <rect x="316" y="172" width="252" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="326" y="186" font-size="9" fill="var(--blue)">抽到顶层 system 参数</text>
-  <text x="650" y="186" text-anchor="end" font-size="8.5" fill="var(--faint)">:2465-2474</text>
+  <text x="650" y="186" text-anchor="end" font-size="9" fill="var(--faint)">:2465-2474</text>
 
   <rect x="30" y="197" width="252" height="20" rx="4" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="40" y="211" font-size="9" font-family="monospace" fill="var(--red)">function.parameters</text>
@@ -886,7 +886,7 @@ Hermes 同时支持 Anthropic、OpenAI Codex、Gemini、AWS Bedrock、以及二�
   <path d="M302 203 L310 207 L302 211 Z" fill="var(--muted)"/>
   <rect x="316" y="197" width="252" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="326" y="211" font-size="9" font-family="monospace" fill="var(--blue)">input_schema</text>
-  <text x="650" y="211" text-anchor="end" font-size="8.5" fill="var(--faint)">:1595-1600</text>
+  <text x="650" y="211" text-anchor="end" font-size="9" fill="var(--faint)">:1595-1600</text>
 
   <rect x="30" y="222" width="252" height="20" rx="4" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="40" y="236" font-size="9" font-family="monospace" fill="var(--red)">function.name</text>
@@ -894,7 +894,7 @@ Hermes 同时支持 Anthropic、OpenAI Codex、Gemini、AWS Bedrock、以及二�
   <path d="M302 228 L310 232 L302 236 Z" fill="var(--muted)"/>
   <rect x="316" y="222" width="252" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="326" y="236" font-size="9" font-family="monospace" fill="var(--blue)">name</text>
-  <text x="650" y="236" text-anchor="end" font-size="8.5" fill="var(--faint)">:1595-1600</text>
+  <text x="650" y="236" text-anchor="end" font-size="9" fill="var(--faint)">:1595-1600</text>
 
   <rect x="30" y="247" width="252" height="20" rx="4" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="40" y="261" font-size="9" fill="var(--red)">（缺）max_tokens</text>
@@ -902,7 +902,7 @@ Hermes 同时支持 Anthropic、OpenAI Codex、Gemini、AWS Bedrock、以及二�
   <path d="M302 253 L310 257 L302 261 Z" fill="var(--muted)"/>
   <rect x="316" y="247" width="252" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="326" y="261" font-size="9" fill="var(--blue)">补 max_tokens（Anthropic 必填）</text>
-  <text x="650" y="261" text-anchor="end" font-size="8.5" fill="var(--faint)">:2465-2474</text>
+  <text x="650" y="261" text-anchor="end" font-size="9" fill="var(--faint)">:2465-2474</text>
 
   <rect x="18" y="282" width="644" height="78" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="30" y="301" font-size="10.5" font-weight="700" fill="var(--accent-ink)">④ 真实出站请求体（Anthropic Messages API）</text>
@@ -1153,7 +1153,7 @@ Hermes speaks to Anthropic, OpenAI Codex, Gemini, AWS Bedrock, and twenty-odd Op
   <path d="M302 178 L310 182 L302 186 Z" fill="var(--muted)"/>
   <rect x="316" y="172" width="252" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="326" y="186" font-size="9" fill="var(--blue)">lifted to top-level system param</text>
-  <text x="650" y="186" text-anchor="end" font-size="8.5" fill="var(--faint)">:2465-2474</text>
+  <text x="650" y="186" text-anchor="end" font-size="9" fill="var(--faint)">:2465-2474</text>
 
   <rect x="30" y="197" width="252" height="20" rx="4" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="40" y="211" font-size="9" font-family="monospace" fill="var(--red)">function.parameters</text>
@@ -1161,7 +1161,7 @@ Hermes speaks to Anthropic, OpenAI Codex, Gemini, AWS Bedrock, and twenty-odd Op
   <path d="M302 203 L310 207 L302 211 Z" fill="var(--muted)"/>
   <rect x="316" y="197" width="252" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="326" y="211" font-size="9" font-family="monospace" fill="var(--blue)">input_schema</text>
-  <text x="650" y="211" text-anchor="end" font-size="8.5" fill="var(--faint)">:1595-1600</text>
+  <text x="650" y="211" text-anchor="end" font-size="9" fill="var(--faint)">:1595-1600</text>
 
   <rect x="30" y="222" width="252" height="20" rx="4" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="40" y="236" font-size="9" font-family="monospace" fill="var(--red)">function.name</text>
@@ -1169,7 +1169,7 @@ Hermes speaks to Anthropic, OpenAI Codex, Gemini, AWS Bedrock, and twenty-odd Op
   <path d="M302 228 L310 232 L302 236 Z" fill="var(--muted)"/>
   <rect x="316" y="222" width="252" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="326" y="236" font-size="9" font-family="monospace" fill="var(--blue)">name</text>
-  <text x="650" y="236" text-anchor="end" font-size="8.5" fill="var(--faint)">:1595-1600</text>
+  <text x="650" y="236" text-anchor="end" font-size="9" fill="var(--faint)">:1595-1600</text>
 
   <rect x="30" y="247" width="252" height="20" rx="4" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="40" y="261" font-size="9" fill="var(--red)">(missing) max_tokens</text>
@@ -1177,7 +1177,7 @@ Hermes speaks to Anthropic, OpenAI Codex, Gemini, AWS Bedrock, and twenty-odd Op
   <path d="M302 253 L310 257 L302 261 Z" fill="var(--muted)"/>
   <rect x="316" y="247" width="252" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="326" y="261" font-size="9" fill="var(--blue)">add max_tokens (required by Anthropic)</text>
-  <text x="650" y="261" text-anchor="end" font-size="8.5" fill="var(--faint)">:2465-2474</text>
+  <text x="650" y="261" text-anchor="end" font-size="9" fill="var(--faint)">:2465-2474</text>
 
   <rect x="18" y="282" width="644" height="78" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="30" y="301" font-size="10.5" font-weight="700" fill="var(--accent-ink)">(4) real outbound request body (Anthropic Messages API)</text>

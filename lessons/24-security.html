@@ -484,7 +484,7 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 524" role="img" aria-label="一条混淆命令 r反斜杠m -rf /home/alice/* 被第一道防线归一化还原成 rm -rf ~/* 后命中 HARDLINE 正则被硬阻断的真实数据流：① 攻击输入插入转义反斜杠和空引号躲正则；② _normalize_command_for_detection 六步归一化（strip_ansi 去 ANSI、去 null 字节、NFKC 加小写、re.sub 剥反斜杠 r反斜杠m 变 rm、剥空引号、_rewrite_resolved_user_home 把 /home/alice/ 变 ~/）还原成 rm -rf ~/*；③ 命中 HARDLINE 正则 recursive delete of home directory；④ _hardline_block_result 硬阻断 BLOCKED hardline，连 --yolo /yolo approvals.mode=off 都不放行；⑤ 对照：若改问模型危不危险，模型可能答这是安全清理脚本就放行，正则确定性命中而措辞混淆无效。">
+<svg viewBox="0 0 680 524" role="img" aria-label="一条混淆命令 r反斜杠m -rf /home/alice/* 被第一道防线归一化还原成 rm -rf ~/* 后命中 HARDLINE 正则被硬阻断的真实数据流：① 攻击输入插入转义反斜杠和空引号躲正则；② _normalize_command_for_detection 六步归一化（strip_ansi 去 ANSI、去 null 字节、NFKC 规范化、re.sub 剥反斜杠 r反斜杠m 变 rm、剥空引号、_rewrite_resolved_user_home 把 /home/alice/ 变 ~/）还原成 rm -rf ~/*；③ 命中 HARDLINE 正则 recursive delete of home directory；④ _hardline_block_result 硬阻断 BLOCKED hardline，连 --yolo /yolo approvals.mode=off 都不放行；⑤ 对照：若改问模型危不危险，模型可能答这是安全清理脚本就放行，正则确定性命中而措辞混淆无效。">
   <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">混淆命令 → 确定性归一化 → HARDLINE 焊死拦截</text>
   <text x="20" y="42" font-size="10" fill="var(--muted)">一条插了转义反斜杠与空引号的删家目录命令，如何被第一道防线还原并拦下</text>
   <text x="652" y="32" text-anchor="middle" font-size="22">🛡</text>
@@ -498,9 +498,9 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <text x="626" y="136" text-anchor="end" font-size="9" fill="var(--muted)">approval.py:559</text>
   <text x="58" y="158" font-size="9" fill="var(--muted)">1  strip_ansi(command) · 去全部 ANSI 转义序列</text>
   <text x="58" y="176" font-size="9" fill="var(--muted)">2  command.replace('\x00','') · 去 null 字节</text>
-  <text x="58" y="194" font-size="9" fill="var(--muted)">3  unicodedata.normalize('NFKC') + .lower()</text>
+  <text x="58" y="194" font-size="9" fill="var(--muted)">3  unicodedata.normalize('NFKC')</text>
   <text x="58" y="212" font-size="9" fill="var(--purple)">4  re.sub(r'\\([^\n])', r'\1')</text>
-  <text x="232" y="212" font-size="9" fill="var(--muted)">剥反斜杠 r\m→rm · approval.py:574</text>
+  <text x="232" y="212" font-size="9" fill="var(--muted)">剥反斜杠 r\m→rm · approval.py:575</text>
   <text x="58" y="230" font-size="9" fill="var(--muted)">5  剥空字符串字面量 r''m→rm · approval.py:577</text>
   <text x="58" y="248" font-size="9" fill="var(--muted)">6  _rewrite_resolved_user_home · /home/alice/ → ~/</text>
   <rect x="58" y="260" width="300" height="24" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
@@ -747,7 +747,7 @@ dependencies = [
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 524" role="img" aria-label="Real data flow of one obfuscated command r-backslash-m -rf /home/alice/* being restored to rm -rf ~/* and then blocked by the HARDLINE regex: (1) the attack input hides escaped backslashes and empty quotes to dodge the regex; (2) _normalize_command_for_detection runs six normalization steps (strip_ansi removes ANSI escapes, strip null bytes, NFKC plus lower, re.sub strips backslashes turning r-backslash-m into rm, strip empty quotes, _rewrite_resolved_user_home folds /home/alice/ into ~/) restoring rm -rf ~/*; (3) it matches the HARDLINE regex recursive delete of home directory; (4) _hardline_block_result hard-blocks with BLOCKED hardline, refused even with --yolo /yolo approvals.mode=off; (5) contrast: if we instead asked the model whether it is dangerous, it might answer this is a safe cleanup script and allow it, whereas the regex matches deterministically and wording tricks are useless.">
+<svg viewBox="0 0 680 524" role="img" aria-label="Real data flow of one obfuscated command r-backslash-m -rf /home/alice/* being restored to rm -rf ~/* and then blocked by the HARDLINE regex: (1) the attack input hides escaped backslashes and empty quotes to dodge the regex; (2) _normalize_command_for_detection runs six normalization steps (strip_ansi removes ANSI escapes, strip null bytes, NFKC normalize, re.sub strips backslashes turning r-backslash-m into rm, strip empty quotes, _rewrite_resolved_user_home folds /home/alice/ into ~/) restoring rm -rf ~/*; (3) it matches the HARDLINE regex recursive delete of home directory; (4) _hardline_block_result hard-blocks with BLOCKED hardline, refused even with --yolo /yolo approvals.mode=off; (5) contrast: if we instead asked the model whether it is dangerous, it might answer this is a safe cleanup script and allow it, whereas the regex matches deterministically and wording tricks are useless.">
   <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">Obfuscated command → deterministic normalization → HARDLINE block</text>
   <text x="20" y="42" font-size="10" fill="var(--muted)">how a delete-home command hidden behind escapes and empty quotes is restored and blocked by the first gate</text>
   <text x="652" y="32" text-anchor="middle" font-size="22">🛡</text>
@@ -761,9 +761,9 @@ dependencies = [
   <text x="626" y="136" text-anchor="end" font-size="9" fill="var(--muted)">approval.py:559</text>
   <text x="58" y="158" font-size="9" fill="var(--muted)">1  strip_ansi(command) · strip all ANSI escape sequences</text>
   <text x="58" y="176" font-size="9" fill="var(--muted)">2  command.replace('\x00','') · strip null bytes</text>
-  <text x="58" y="194" font-size="9" fill="var(--muted)">3  unicodedata.normalize('NFKC') + .lower()</text>
+  <text x="58" y="194" font-size="9" fill="var(--muted)">3  unicodedata.normalize('NFKC')</text>
   <text x="58" y="212" font-size="9" fill="var(--purple)">4  re.sub(r'\\([^\n])', r'\1')</text>
-  <text x="232" y="212" font-size="9" fill="var(--muted)">strip backslashes r\m→rm · approval.py:574</text>
+  <text x="232" y="212" font-size="9" fill="var(--muted)">strip backslashes r\m→rm · approval.py:575</text>
   <text x="58" y="230" font-size="9" fill="var(--muted)">5  strip empty-string literals r''m→rm · approval.py:577</text>
   <text x="58" y="248" font-size="9" fill="var(--muted)">6  _rewrite_resolved_user_home · /home/alice/ → ~/</text>
   <rect x="58" y="260" width="300" height="24" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>

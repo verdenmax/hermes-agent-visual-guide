@@ -1538,6 +1538,95 @@ From the moment you hit enter to the moment Hermes hands back a final answer, wh
 <div class="fig-cap"><b>This synchronous loop is the engine</b>: nearly every later mechanism <b>hangs off it</b> — tool dispatch (8) is the "if tool_calls, execute" step in the body; subagent delegation (13) is a tool that, from inside the loop, fires up a small engine with its <b>own independent loop</b>; context compression (15) is a preflight before the model call; trajectory recording (22) persists exactly the messages each turn appends to messages. Read this one loop and you hold the <b>skeleton</b> for every chapter that follows.</div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 466" role="img" aria-label="Conversation lifecycle film-strip worked example: one real message what is the weather in Beijing today runs two loop turns. Left messages list grows cell by cell from 2 to 5 entries: system, user, the assistant tool_calls call_abc123 get_weather city Beijing appended in turn 1, the tool result Beijing clear 26 degrees appended in turn 1, and the assistant final_response Beijing is clear today 26 degrees appended in turn 2. Right counters evolve: initial api_call_count 0, budget max 90 used 0 remaining 90; turn 1 gate 0 less than 90 and 90 greater than 0 passes, _interrupt_requested False, api_call_count becomes 1, after consume used 1 remaining 89; turn 1 model has tool_calls and appends assistant; turn 1 executes _execute_tool_calls via make_tool_result_message producing the tool message len 4; turn 2 api_call_count becomes 2, after consume used 2 remaining 88, no tool_calls so it finishes by appending final, prints Conversation completed after 2 OpenAI-compatible API call(s) then break. Bottom three exits: this example only takes the no tool_calls finish path; hitting max_iterations 90 and consume returning False budget exhausted are not triggered. Anchors conversation_loop.py 589 601 610 4051 4079 4509 4513.">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Conversation lifecycle film-strip · one message runs two turns</text>
+  <text x="20" y="44" font-size="10.5" fill="var(--muted)">Left: messages[] grows cell by cell · Right: api_call_count and IterationBudget evolve</text>
+  <text x="652" y="32" text-anchor="middle" font-size="22">🎞️</text>
+
+  <rect x="10" y="56" width="330" height="344" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="22" y="74" font-size="10" font-weight="700" fill="var(--ink)">messages[] · len 2 → 5 (append-only)</text>
+
+  <rect x="18" y="84" width="314" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="26" y="99" font-size="9" font-weight="700" fill="var(--ink)">[0] system</text>
+  <text x="26" y="110" font-size="9" fill="var(--muted)">stable prefix (byte-stable for cache hits)</text>
+  <text x="332" y="99" text-anchor="end" font-size="9" fill="var(--blue)">initial</text>
+
+  <rect x="18" y="120" width="314" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="26" y="135" font-size="9" font-weight="700" fill="var(--ink)">[1] user</text>
+  <text x="26" y="146" font-size="9" fill="var(--purple)">content=&quot;What is the weather in Beijing today?&quot;</text>
+  <text x="332" y="135" text-anchor="end" font-size="9" fill="var(--blue)">initial</text>
+
+  <rect x="18" y="156" width="314" height="60" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="170" font-size="9" font-weight="700" fill="var(--accent-ink)">[2] assistant · tool_calls=[{</text>
+  <text x="26" y="182" font-size="9" fill="var(--accent-ink)">  id:&quot;call_abc123&quot;, function:{</text>
+  <text x="26" y="194" font-size="9" fill="var(--accent-ink)">  name:&quot;get_weather&quot;,</text>
+  <text x="26" y="206" font-size="9" fill="var(--accent-ink)">  arguments:'{&quot;city&quot;:&quot;Beijing&quot;}'}}]</text>
+  <text x="332" y="170" text-anchor="end" font-size="9" fill="var(--accent)">turn1③</text>
+
+  <rect x="18" y="220" width="314" height="46" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="234" font-size="9" font-weight="700" fill="var(--accent-ink)">[3] tool · name=&quot;get_weather&quot;</text>
+  <text x="26" y="246" font-size="9" fill="var(--accent-ink)">  content=&quot;Beijing clear 26°C&quot;,</text>
+  <text x="26" y="258" font-size="9" fill="var(--accent-ink)">  tool_call_id=&quot;call_abc123&quot;</text>
+  <text x="332" y="234" text-anchor="end" font-size="9" fill="var(--accent)">turn1④</text>
+
+  <rect x="18" y="270" width="314" height="42" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="26" y="284" font-size="9" font-weight="700" fill="var(--purple)">[4] assistant · no tool_calls → finish</text>
+  <text x="26" y="296" font-size="9" fill="var(--purple)">  content=&quot;Beijing is clear today, 26°C&quot;</text>
+  <text x="332" y="284" text-anchor="end" font-size="9" fill="var(--purple)">turn2⑤</text>
+
+  <text x="22" y="332" font-size="9" fill="var(--muted)">each turn appends new messages onto the same list:</text>
+  <text x="22" y="346" font-size="9" fill="var(--muted)">①init 2 → ③+assistant → ④+tool → ⑤+final, never rewritten</text>
+  <text x="22" y="372" font-size="9" fill="var(--muted)">anchors conversation_loop.py:4051 / 4079 / 4509</text>
+
+  <rect x="346" y="56" width="324" height="344" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="358" y="74" font-size="10" font-weight="700" fill="var(--ink)">Counters evolve · api_call_count · IterationBudget</text>
+
+  <rect x="354" y="84" width="308" height="40" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="362" y="99" font-size="9" font-weight="700" fill="var(--ink)">① initial · before the while loop</text>
+  <text x="362" y="113" font-size="9" fill="var(--muted)">api_call_count=0 · budget max=90 used=0 remaining=90</text>
+  <text x="654" y="99" text-anchor="end" font-size="9" fill="var(--muted)">:589</text>
+
+  <rect x="354" y="128" width="308" height="62" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="362" y="142" font-size="9" font-weight="700" fill="var(--ink)">② turn 1 gate passes → consume()</text>
+  <text x="362" y="154" font-size="9" fill="var(--ink)">0 &lt; 90 and 90 &gt; 0 ✅ · _interrupt_requested=False</text>
+  <text x="362" y="166" font-size="9" fill="var(--ink)">api_call_count → 1</text>
+  <text x="362" y="178" font-size="9" fill="var(--ink)">consume() → used=1, remaining=89</text>
+  <text x="654" y="142" text-anchor="end" font-size="9" fill="var(--muted)">:601 · :610</text>
+
+  <rect x="354" y="194" width="308" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="362" y="209" font-size="9" font-weight="700" fill="var(--accent-ink)">③ turn 1 model → has tool_calls</text>
+  <text x="362" y="223" font-size="9" fill="var(--accent-ink)">append assistant → messages[2] (see left r2)</text>
+  <text x="654" y="209" text-anchor="end" font-size="9" fill="var(--muted)">:4051</text>
+
+  <rect x="354" y="238" width="308" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="362" y="253" font-size="9" font-weight="700" fill="var(--accent-ink)">④ turn 1 runs _execute_tool_calls</text>
+  <text x="362" y="267" font-size="9" fill="var(--accent-ink)">make_tool_result_message → tool message · len=4</text>
+  <text x="654" y="253" text-anchor="end" font-size="9" fill="var(--muted)">:4079 · 337</text>
+
+  <rect x="354" y="282" width="308" height="74" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="362" y="296" font-size="9" font-weight="700" fill="var(--purple)">⑤ turn 2 → no tool_calls → finish</text>
+  <text x="362" y="308" font-size="9" fill="var(--purple)">api_call_count → 2 · consume() → used=2, remaining=88</text>
+  <text x="362" y="320" font-size="9" fill="var(--purple)">final_response=&quot;Beijing is clear today, 26°C&quot; → append</text>
+  <text x="362" y="332" font-size="9" fill="var(--purple)">🎉 Conversation completed after 2</text>
+  <text x="362" y="344" font-size="9" fill="var(--purple)">   OpenAI-compatible API call(s) → break</text>
+  <text x="654" y="296" text-anchor="end" font-size="9" fill="var(--muted)">:4509 · :4513</text>
+
+  <text x="358" y="374" font-size="9" fill="var(--muted)">2 consume() calls total: used 0→1→2, remaining 90→89→88</text>
+  <text x="358" y="390" font-size="9" fill="var(--muted)">parent cap 90 (each subagent 50) · agent_init.py:165</text>
+
+  <rect x="10" y="406" width="660" height="52" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="423" font-size="9.5" font-weight="700" fill="var(--ink)">⑥ three loop exits · this example hits only #1</text>
+  <circle cx="24" cy="440" r="4" fill="var(--accent)"/>
+  <text x="34" y="444" font-size="9" fill="var(--accent-ink)">✅ no tool_calls finish (this example) :4509-4514</text>
+  <circle cx="312" cy="440" r="4" fill="var(--muted)"/>
+  <text x="322" y="444" font-size="9" fill="var(--muted)">○ reach max_iterations 90 — not hit</text>
+  <circle cx="520" cy="440" r="4" fill="var(--muted)"/>
+  <text x="530" y="444" font-size="9" fill="var(--muted)">○ consume() returns False — not hit</text>
+</svg>
+<div class="fig-cap"><b>One message, two turns (snapshot film-strip)</b>: take the real input <span class="mono">&quot;What is the weather in Beijing today?&quot;</span> and walk it through — on the left <span class="mono">messages[]</span> grows <b>from 2 entries to 5 by appending</b> (system/user → assistant <span class="mono">tool_calls</span> → tool result → final), while the counters evolve in lockstep: <span class="mono">api_call_count 0→1→2</span>, <span class="mono">IterationBudget used 0→1→2 / remaining 90→89→88</span>. On turn 2 the model returns <b>no tool_calls</b>, so it <span class="mono">appends final → 🎉 → break</span> (<span class="mono">conversation_loop.py:4509-4514</span>); the other two exits (hitting <span class="mono">max_iterations</span> 90 / <span class="mono">consume()</span> returning False) are never triggered here.</div>
+</div>
+
 <h2>Iteration budget: stopping runaway loops</h2>
 <p>At step 5, every model call first <span class="mono">consume()</span>s one unit of budget. That latch is guarded by <span class="mono">IterationBudget</span> (<span class="mono">agent/iteration_budget.py</span>), <strong>thread-safe</strong>, with a parent cap of <strong>90</strong> by default and each subagent capped independently at <strong>50</strong>. Its two core methods are short enough to memorize:</p>
 
@@ -1846,6 +1935,66 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
   <text x="42" y="362" font-size="10.5" fill="var(--muted)">Also: a marker-bearing system prompt stays as content blocks (a list), not a plain string, so cache_control survives.</text>
 </svg>
 <div class="fig-cap"><b>4 breakpoints + signature safety</b>: <span class="mono">system_and_3</span> places 4 <span class="mono">cache_control</span> breakpoints on the system prefix and the last 3 non-system messages (same TTL, on a deepcopy); but the marker must be <b>stripped</b> from <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span> blocks, or it breaks signature validation.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 410" role="img" aria-label="One real system prompt: three-tier assembly, cache marker, and the second-turn token bill">
+  <text x="18" y="23" font-size="13" font-weight="700" fill="var(--accent-ink)">Example: one real system prompt - 3 tiers join, marker, 2nd-turn token bill</text>
+
+  <rect x="18" y="36" width="332" height="92" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="30" y="55" font-size="10.5" font-weight="700" fill="var(--accent-ink)">(1) stable tier - DEFAULT_AGENT_IDENTITY</text>
+  <text x="30" y="76" font-size="9" font-family="monospace" fill="var(--ink)">You are Hermes Agent, an intelligent AI</text>
+  <text x="30" y="89" font-size="9" font-family="monospace" fill="var(--ink)">assistant created by Nous Research. ...</text>
+  <text x="30" y="113" font-size="9" fill="var(--muted)">prompt_builder.py:123</text>
+  <text x="338" y="113" text-anchor="end" font-size="11" font-weight="700" fill="var(--purple)">~ 6800 tok</text>
+
+  <rect x="18" y="136" width="332" height="62" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="30" y="155" font-size="10.5" font-weight="700" fill="var(--blue)">(2) context tier - context_parts</text>
+  <text x="30" y="175" font-size="9" font-family="monospace" fill="var(--ink)">AGENTS.md project rules (scanned first)</text>
+  <text x="30" y="192" font-size="9" fill="var(--muted)">system_prompt.py - context</text>
+  <text x="338" y="192" text-anchor="end" font-size="11" font-weight="700" fill="var(--purple)">~ 1200 tok</text>
+
+  <rect x="18" y="206" width="332" height="98" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="30" y="225" font-size="10.5" font-weight="700" fill="var(--purple)">(3) volatile tier - timestamp (last)</text>
+  <text x="30" y="245" font-size="9" font-family="monospace" fill="var(--ink)">Conversation started: Saturday, June 27, 2026</text>
+  <text x="30" y="259" font-size="9" font-family="monospace" fill="var(--ink)">Model: claude-opus-4.7</text>
+  <text x="30" y="273" font-size="9" font-family="monospace" fill="var(--ink)">Provider: anthropic</text>
+  <text x="30" y="296" font-size="9" fill="var(--muted)">system_prompt.py:454-461</text>
+  <text x="338" y="296" text-anchor="end" font-size="11" font-weight="700" fill="var(--purple)">~ 900 tok</text>
+
+  <path d="M352 56 L360 56 L360 286 L352 286" fill="none" stroke="var(--accent)" stroke-width="1.3"/>
+  <path d="M360 171 L370 171" stroke="var(--accent)" stroke-width="1.5"/>
+  <path d="M366 167 L374 171 L366 175 Z" fill="var(--accent)"/>
+
+  <rect x="376" y="36" width="286" height="116" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="388" y="56" font-size="10.5" font-weight="700" fill="var(--ink)">(4) built once - _cached_system_prompt</text>
+  <text x="388" y="78" font-size="9" font-family="monospace" fill="var(--ink)">joined = &quot;\n\n&quot;.join(p for p in</text>
+  <text x="388" y="91" font-size="9" font-family="monospace" fill="var(--ink)">  (stable, context, volatile) if p)</text>
+  <text x="388" y="113" font-size="9" fill="var(--muted)">built once per session (rebuilt only on compression)</text>
+  <text x="388" y="133" font-size="9" fill="var(--muted)">system_prompt.py:486</text>
+
+  <rect x="376" y="160" width="286" height="144" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="388" y="180" font-size="10.5" font-weight="700" fill="var(--accent-ink)">(5) apply cache_control marker</text>
+  <text x="388" y="202" font-size="9" font-family="monospace" fill="var(--ink)">marker = {&quot;type&quot;:&quot;ephemeral&quot;}</text>
+  <rect x="388" y="212" width="262" height="20" rx="4" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="396" y="226" font-size="9" font-weight="700" fill="var(--accent-ink)">5m default: no ttl key (easy to miss)</text>
+  <text x="388" y="252" font-size="9" font-family="monospace" fill="var(--ink)">if ttl==&quot;1h&quot;: marker[&quot;ttl&quot;]=&quot;1h&quot;</text>
+  <text x="388" y="276" font-size="9" fill="var(--muted)">prompt_caching.py:43-46</text>
+  <text x="388" y="294" font-size="9" fill="var(--muted)">cache_ttl=&quot;5m&quot; (default)</text>
+
+  <path d="M519 304 L519 316" stroke="var(--accent)" stroke-width="1.5"/>
+  <path d="M515 310 L519 318 L523 310 Z" fill="var(--accent)"/>
+  <rect x="18" y="320" width="644" height="60" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="30" y="339" font-size="10.5" font-weight="700" fill="var(--ink)">(6) 2nd-turn token bill: 6800 + 1200 + 900 = 8900 prefix tok</text>
+  <rect x="30" y="348" width="430" height="20" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="245" y="362" text-anchor="middle" font-size="9" fill="var(--accent-ink)">prefix ~ 8900 tok - cache-read price (1/10)</text>
+  <rect x="466" y="348" width="78" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="505" y="362" text-anchor="middle" font-size="9" fill="var(--blue)">tail ~150 - full</text>
+  <text x="656" y="362" text-anchor="end" font-size="11" font-weight="700" fill="var(--red)">input cost ↓ ~75%</text>
+
+  <text x="18" y="400" font-size="9.5" fill="var(--muted)">Read this: the volatile timestamp sits last; the 5m default marker is just {&quot;type&quot;:&quot;ephemeral&quot;} - no ttl key.</text>
+</svg>
+<div class="fig-cap"><b>One real system prompt, end to end</b>: stable (<span class="mono">DEFAULT_AGENT_IDENTITY</span> ~6800 tok) + context (AGENTS.md ~1200 tok) + volatile (real <span class="mono">timestamp</span> block ~900 tok) are joined by <span class="mono">&quot;\n\n&quot;.join</span> into <span class="mono">_cached_system_prompt</span>, built once per session; the <b>5m default marker is only <span class="mono">{&quot;type&quot;:&quot;ephemeral&quot;}</span></b>, and only 1h adds <span class="mono">&quot;ttl&quot;:&quot;1h&quot;</span>; on turn 2 the 8900-tok prefix bills at cache-read price, cutting input cost <b>~75%</b>.</div>
 </div>
 
 <h2>The last gate guarding the prefix: scan before injection</h2>
@@ -2162,6 +2311,76 @@ Hermes speaks to Anthropic, OpenAI Codex, Gemini, AWS Bedrock, and twenty-odd Op
 </div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 462" role="img" aria-label="One Read my AGENTS.md message translated from unified messages into the real Anthropic request body, field by field">
+  <text x="18" y="24" font-size="13" font-weight="700" fill="var(--accent-ink)">Example: Read my AGENTS.md - unified messages translated to a real Anthropic body</text>
+
+  <rect x="18" y="36" width="644" height="74" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="30" y="55" font-size="10.5" font-weight="700" fill="var(--blue)">(1) unified entry (core sees only OpenAI messages + OpenAI tools)</text>
+  <text x="30" y="75" font-size="9" font-family="monospace" fill="var(--ink)">messages:[{role:&quot;system&quot;,...}, {role:&quot;user&quot;, content:&quot;Read my AGENTS.md&quot;}]</text>
+  <text x="30" y="90" font-size="9" font-family="monospace" fill="var(--ink)">tools:[{&quot;type&quot;:&quot;function&quot;,&quot;function&quot;:{&quot;name&quot;:&quot;read_file&quot;,&quot;parameters&quot;:{...}}}]</text>
+  <text x="650" y="104" text-anchor="end" font-size="9" fill="var(--muted)">chat_completion_helpers.py</text>
+
+  <text x="340" y="127" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">(2) api_mode==&quot;anthropic_messages&quot; → build_api_kwargs dispatch · :559</text>
+  <path d="M340 130 L340 134" stroke="var(--accent)" stroke-width="1.5"/>
+  <path d="M336 132 L340 140 L344 132 Z" fill="var(--accent)"/>
+
+  <rect x="18" y="144" width="644" height="130" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="30" y="163" font-size="10.5" font-weight="700" fill="var(--ink)">(3) adapter translation: OpenAI field → Anthropic field (red → blue)</text>
+
+  <rect x="30" y="172" width="252" height="20" rx="4" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="40" y="186" font-size="9" fill="var(--red)">role:&quot;system&quot; message (inside messages)</text>
+  <path d="M288 182 L306 182" stroke="var(--muted)" stroke-width="1.3"/>
+  <path d="M302 178 L310 182 L302 186 Z" fill="var(--muted)"/>
+  <rect x="316" y="172" width="252" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="326" y="186" font-size="9" fill="var(--blue)">lifted to top-level system param</text>
+  <text x="650" y="186" text-anchor="end" font-size="9" fill="var(--faint)">:2465-2474</text>
+
+  <rect x="30" y="197" width="252" height="20" rx="4" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="40" y="211" font-size="9" font-family="monospace" fill="var(--red)">function.parameters</text>
+  <path d="M288 207 L306 207" stroke="var(--muted)" stroke-width="1.3"/>
+  <path d="M302 203 L310 207 L302 211 Z" fill="var(--muted)"/>
+  <rect x="316" y="197" width="252" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="326" y="211" font-size="9" font-family="monospace" fill="var(--blue)">input_schema</text>
+  <text x="650" y="211" text-anchor="end" font-size="9" fill="var(--faint)">:1595-1600</text>
+
+  <rect x="30" y="222" width="252" height="20" rx="4" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="40" y="236" font-size="9" font-family="monospace" fill="var(--red)">function.name</text>
+  <path d="M288 232 L306 232" stroke="var(--muted)" stroke-width="1.3"/>
+  <path d="M302 228 L310 232 L302 236 Z" fill="var(--muted)"/>
+  <rect x="316" y="222" width="252" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="326" y="236" font-size="9" font-family="monospace" fill="var(--blue)">name</text>
+  <text x="650" y="236" text-anchor="end" font-size="9" fill="var(--faint)">:1595-1600</text>
+
+  <rect x="30" y="247" width="252" height="20" rx="4" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="40" y="261" font-size="9" fill="var(--red)">(missing) max_tokens</text>
+  <path d="M288 257 L306 257" stroke="var(--muted)" stroke-width="1.3"/>
+  <path d="M302 253 L310 257 L302 261 Z" fill="var(--muted)"/>
+  <rect x="316" y="247" width="252" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="326" y="261" font-size="9" fill="var(--blue)">add max_tokens (required by Anthropic)</text>
+  <text x="650" y="261" text-anchor="end" font-size="9" fill="var(--faint)">:2465-2474</text>
+
+  <rect x="18" y="282" width="644" height="78" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="30" y="301" font-size="10.5" font-weight="700" fill="var(--accent-ink)">(4) real outbound request body (Anthropic Messages API)</text>
+  <text x="30" y="321" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;model&quot;:&quot;claude-opus-4.7&quot;, &quot;messages&quot;:[...], &quot;max_tokens&quot;:...,</text>
+  <text x="30" y="336" font-size="9" font-family="monospace" fill="var(--ink)"> &quot;system&quot;:[...], &quot;tools&quot;:[{&quot;name&quot;:&quot;read_file&quot;,&quot;input_schema&quot;:{...}}]}</text>
+  <text x="650" y="354" text-anchor="end" font-size="9" fill="var(--muted)">anthropic_adapter.py:2465-2474</text>
+
+  <rect x="18" y="370" width="314" height="82" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="30" y="389" font-size="10.5" font-weight="700" fill="var(--ink)">(5) normalize_response on the way in</text>
+  <text x="30" y="409" font-size="9" fill="var(--muted)">Anthropic response → unified OpenAI-style message</text>
+  <text x="30" y="425" font-size="9" fill="var(--muted)">content / tool_calls / usage realigned</text>
+  <text x="30" y="445" font-size="9" fill="var(--muted)">the core loop never sees the dialect</text>
+
+  <rect x="344" y="370" width="318" height="82" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="356" y="389" font-size="10.5" font-weight="700" fill="var(--purple)">(6) three reasoning fields (cross-turn)</text>
+  <text x="356" y="408" font-size="9" font-family="monospace" fill="var(--ink)">reasoning: kept internally · :888</text>
+  <text x="356" y="423" font-size="9" font-family="monospace" fill="var(--ink)">reasoning_content: pad &quot; &quot; if missing · :911</text>
+  <text x="356" y="438" font-size="9" font-family="monospace" fill="var(--ink)">reasoning_details: forwarded as-is · :938-940</text>
+</svg>
+<div class="fig-cap"><b>The real field-by-field diff for one outbound message</b>: unified OpenAI <span class="mono">messages</span> + tools, after the <span class="mono">api_mode==&quot;anthropic_messages&quot;</span> dispatch, are translated by the adapter - <span class="mono">role:&quot;system&quot;</span> lifted to top-level <span class="mono">system</span>, <span class="mono">function.parameters→input_schema</span>, <span class="mono">function.name→name</span>, plus the required <span class="mono">max_tokens</span> - into a real Anthropic body; <span class="mono">normalize_response</span> realigns the way back, and the three <span class="mono">reasoning</span> fields (including pad <span class="mono">&quot; &quot;</span> to avoid 400) keep continuity across turns.</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 Key points</div>
   <ul>
@@ -2352,6 +2571,54 @@ Tools are how an agent "acts" — read files, run a terminal, search the web, dr
   </g>
 </svg>
 <div class="fig-cap"><b>Tool Search progressive disclosure</b>: only the <b>core tools _HERMES_CORE_TOOLS (never deferred)</b> plus the three bridge tools <span class="mono">tool_search / tool_describe / tool_call</span> ship on every API call. When the <b>deferrable surface</b> of non-core MCP and plugin tools exceeds about <b>10% of the context window</b>, they are folded behind the bridge tools — <b>out of the per-call schema</b> — and retrieved/expanded on demand. This pushes <span class="mono">check_fn</span>'s "pay-as-you-go" to its limit.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 460" role="img" aria-label="One real read_file call from registration to schema, dirty JSON, coerce fix-up, dispatch and the tool message">
+  <text x="18" y="24" font-size="13" font-weight="700" fill="var(--accent-ink)">Example: one real read_file call - register → schema → coerce → dispatch</text>
+
+  <rect x="18" y="36" width="644" height="64" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="30" y="55" font-size="10.5" font-weight="700" fill="var(--accent-ink)">(1) register (tools/file_tools.py:1757)</text>
+  <text x="30" y="74" font-size="9" font-family="monospace" fill="var(--ink)">registry.register(name=&quot;read_file&quot;, toolset=&quot;file&quot;, schema=READ_FILE_SCHEMA,</text>
+  <text x="30" y="88" font-size="9" font-family="monospace" fill="var(--ink)">  handler=_handle_read_file, check_fn=_check_file_reqs, emoji=&quot;📖&quot;, max_result_size_chars=100_000)</text>
+
+  <rect x="18" y="108" width="644" height="84" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="30" y="127" font-size="10.5" font-weight="700" fill="var(--ink)">(2) READ_FILE_SCHEMA (tools/file_tools.py:1602-1614)</text>
+  <text x="30" y="146" font-size="9" font-family="monospace" fill="var(--ink)">path:{type:&quot;string&quot;}</text>
+  <text x="30" y="160" font-size="9" font-family="monospace" fill="var(--ink)">offset:{type:&quot;integer&quot;, default:1, minimum:1}</text>
+  <text x="30" y="174" font-size="9" font-family="monospace" fill="var(--ink)">limit:{type:&quot;integer&quot;, default:500, maximum:2000}</text>
+  <text x="650" y="146" text-anchor="end" font-size="9" font-family="monospace" fill="var(--purple)">required:[&quot;path&quot;]</text>
+
+  <rect x="18" y="200" width="312" height="86" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="30" y="219" font-size="10.5" font-weight="700" fill="var(--blue)">(3) model returns tool_call (dirty JSON)</text>
+  <text x="30" y="240" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;path&quot;:&quot;AGENTS.md&quot;,</text>
+  <text x="30" y="254" font-size="9" font-family="monospace" fill="var(--ink)"> &quot;offset&quot;:&quot;1&quot;, &quot;limit&quot;:&quot;500&quot;}</text>
+  <text x="30" y="276" font-size="9" fill="var(--red)">offset / limit are strings → off-schema</text>
+
+  <path d="M330 243 L348 243" stroke="var(--accent)" stroke-width="1.5"/>
+  <path d="M344 239 L352 243 L344 247 Z" fill="var(--accent)"/>
+
+  <rect x="350" y="200" width="312" height="86" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="362" y="219" font-size="10.5" font-weight="700" fill="var(--accent-ink)">(4) coerce_tool_args fixes per schema</text>
+  <text x="362" y="240" font-size="9" font-family="monospace" fill="var(--ink)">&quot;1&quot; → 1      (integer)</text>
+  <text x="362" y="254" font-size="9" font-family="monospace" fill="var(--ink)">&quot;500&quot; → 500  (integer)</text>
+  <text x="362" y="276" font-size="9" fill="var(--muted)">safe string cast; keeps original on failure · model_tools.py:644</text>
+
+  <rect x="18" y="300" width="644" height="82" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="30" y="319" font-size="10.5" font-weight="700" fill="var(--ink)">(5) registry.dispatch: run handler, wrap exceptions as error (tools/registry.py:390-416)</text>
+  <rect x="30" y="330" width="300" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="40" y="348" font-size="9.5" font-weight="700" fill="var(--accent-ink)">success</text>
+  <text x="40" y="364" font-size="9" font-family="monospace" fill="var(--ink)">return handler(args, **kwargs) → JSON string</text>
+  <rect x="350" y="330" width="312" height="40" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="360" y="348" font-size="9.5" font-weight="700" fill="var(--red)">exception</text>
+  <text x="360" y="364" font-size="9" font-family="monospace" fill="var(--red)">{&quot;error&quot;: _sanitize_tool_error(...)}</text>
+
+  <rect x="18" y="392" width="644" height="56" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="30" y="411" font-size="10.5" font-weight="700" fill="var(--purple)">(6) append the result as a tool message + budget check</text>
+  <text x="30" y="430" font-size="9" font-family="monospace" fill="var(--ink)">if _tc_names == {&quot;execute_code&quot;}: iteration_budget.refund()</text>
+  <text x="30" y="444" font-size="9" fill="var(--muted)">only read_file here → strict equality fails → no refund (conversation_loop.py:4120-4122)</text>
+</svg>
+<div class="fig-cap"><b>One tool, one call, JSON in to out</b>: <span class="mono">read_file</span> is registered via <span class="mono">registry.register</span>; <span class="mono">READ_FILE_SCHEMA</span> declares <span class="mono">offset</span> default 1 / <span class="mono">limit</span> default 500 max 2000 / <span class="mono">required:[&quot;path&quot;]</span>; the model's dirty JSON has <span class="mono">&quot;offset&quot;:&quot;1&quot;</span> and <span class="mono">&quot;limit&quot;:&quot;500&quot;</span> as strings, and <span class="mono">coerce_tool_args</span> saves the call by casting <span class="mono">&quot;1&quot;→1</span> and <span class="mono">&quot;500&quot;→500</span>; <span class="mono">dispatch</span> returns JSON on success or wraps an exception as <span class="mono">{&quot;error&quot;:...}</span>; finally the tool message is appended - and since the budget refunds only when <span class="mono">_tc_names</span> equals exactly <span class="mono">{&quot;execute_code&quot;}</span>, <span class="mono">read_file</span> is <b>not</b> refunded.</div>
 </div>
 
 <p>What makes <span class="mono">check_fn</span> gating elegant is that it makes "pay-as-you-go" the <strong>default-safe</strong> posture. Look at the gated groups in <span class="mono">_HERMES_CORE_TOOLS</span>: Home Assistant's <span class="mono">ha_*</span> appear only with <span class="mono">HASS_TOKEN</span> set, <span class="mono">computer_use</span> only when cua-driver is installed, and <span class="mono">kanban_*</span> only when the agent is spawned as a kanban worker (<span class="mono">HERMES_KANBAN_TASK</span> env set) or the profile explicitly enables the kanban toolset (comments at <span class="mono">toolsets.py:64</span>). So although these tool names <strong>live permanently</strong> in the core list, they <strong>charge no token tax to users who haven't configured their prerequisites</strong> — their cost only happens when you can actually use them. That's another way to write "capability at the edges": prune the expensive core surface <strong>dynamically</strong> per each user's real environment. In other words, the same core list yields a <strong>different actual schema</strong> for a user without smart-home set up versus one who has it — gating makes "narrow" specific to each session's environment fingerprint.</p>
@@ -2624,6 +2891,75 @@ or updated?"</span>.  Writes go straight to the memory + skill stores.
 <div class="fig-cap"><b>The self-evolution loop</b>: four chapters mesh into one clockwise circuit — ① a learning nudge distills a reusable approach into a skill (ch.9, the entry point) → ② the curator gardens, marking unused skills stale then archiving (<b>never deleting</b>, ch.10) → ③ memory declaratively settles "who you are and what you prefer" (ch.11) → ④ cross-session FTS5 search recalls old skills and sessions (ch.12) → back to ①. With each link doing its job, Hermes genuinely <b>gets to know you the more you use it</b> — all without touching the sacred cache prefix.</div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 472" role="img" aria-label="One complaint runs the full learning loop: frustration is recognized as a FIRST-CLASS skill signal; the nudge counter _iters_since_skill reaches _skill_nudge_interval which is 10 and sets _should_review_skills=True without injecting any text into the main conversation; after the response is delivered a background review daemon is forked with a list(messages) snapshot; it picks the earliest fitting rung of the Preference order PATCH a loaded skill, UPDATE an existing umbrella, ADD a support file, CREATE a class-level umbrella with fix-X or PR-number names forbidden; the write is marked mark_agent_created via is_background_review and handed to the curator; the do-not-capture zone forbids command not found and browser tools do not work">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">One complaint runs the learning loop · nudge #10 → fork review → pick rung → mark</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">Input this is too verbose, just give me the answer; real data at each step</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🧠</text>
+  <rect x="10" y="62" width="206" height="104" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="20" y="82" font-size="10" font-weight="700" fill="var(--blue)">1 · Input signal · frustration</text>
+  <rect x="19" y="90" width="188" height="40" rx="5" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="27" y="106" font-size="9" fill="var(--code-ink)">this is too verbose,</text>
+  <text x="27" y="122" font-size="9" fill="var(--code-ink)">just give me the answer</text>
+  <text x="20" y="148" font-size="9" font-weight="700" fill="var(--purple)">FIRST-CLASS skill signal</text>
+  <text x="20" y="162" font-size="9" fill="var(--muted)">background_review.py:180-186</text>
+  <line x1="216" y1="114" x2="236" y2="114" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M242,114 L234,110 L234,118 Z" fill="var(--line)"/>
+  <rect x="238" y="62" width="206" height="104" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="248" y="82" font-size="10" font-weight="700" fill="var(--ink)">2 · nudge counter hits threshold</text>
+  <text x="248" y="102" font-size="9" fill="var(--ink)">_iters_since_skill = 10</text>
+  <text x="248" y="118" font-size="9" fill="var(--ink)">&gt;= _skill_nudge_interval (10)</text>
+  <text x="248" y="136" font-size="9" font-weight="700" fill="var(--accent-ink)">_should_review_skills = True</text>
+  <text x="248" y="156" font-size="9" font-weight="700" fill="var(--amber)">✗ no text into the main chat</text>
+  <line x1="444" y1="114" x2="464" y2="114" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M470,114 L462,110 L462,118 Z" fill="var(--line)"/>
+  <rect x="466" y="62" width="204" height="104" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="476" y="82" font-size="10" font-weight="700" fill="var(--accent-ink)">3 · fork after response · daemon</text>
+  <text x="476" y="100" font-size="9" fill="var(--accent-ink)">_spawn_background_review(</text>
+  <text x="476" y="114" font-size="9" fill="var(--accent-ink)">  messages_snapshot=</text>
+  <text x="476" y="127" font-size="9" fill="var(--accent-ink)">    list(messages),</text>
+  <text x="476" y="140" font-size="9" fill="var(--accent-ink)">  review_skills=True)</text>
+  <text x="476" y="158" font-size="9" fill="var(--muted)">turn_finalizer.py:433-456</text>
+  <text x="20" y="190" font-size="11" font-weight="700" fill="var(--ink)">4 · Preference order · pick the earliest fitting rung (one must fire)</text>
+  <rect x="10" y="200" width="158" height="84" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="220" font-size="9.5" font-weight="700" fill="var(--blue)">1 · PATCH</text>
+  <text x="18" y="238" font-size="9" fill="var(--blue)">a currently-loaded skill</text>
+  <text x="18" y="254" font-size="9" fill="var(--blue)">the /skill-name you read</text>
+  <text x="18" y="276" font-size="9" fill="var(--muted)">:195-231</text>
+  <path d="M177,242 L169,238 L169,246 Z" fill="var(--line)"/>
+  <rect x="178" y="200" width="158" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="186" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">2 · UPDATE</text>
+  <text x="186" y="238" font-size="9" fill="var(--ink)">an existing umbrella</text>
+  <text x="186" y="254" font-size="9" fill="var(--ink)">add subsection / pitfall</text>
+  <path d="M345,242 L337,238 L337,246 Z" fill="var(--line)"/>
+  <rect x="346" y="200" width="158" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="354" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">3 · ADD support file</text>
+  <text x="354" y="238" font-size="9" fill="var(--ink)">references/ or scripts/</text>
+  <text x="354" y="254" font-size="9" fill="var(--ink)">under the umbrella</text>
+  <path d="M513,242 L505,238 L505,246 Z" fill="var(--line)"/>
+  <rect x="514" y="200" width="156" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="522" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">4 · CREATE umbrella</text>
+  <text x="522" y="238" font-size="9" fill="var(--ink)">name must be class-level</text>
+  <text x="522" y="256" font-size="9" font-weight="700" fill="var(--red)">no fix-X / PR# / err-string</text>
+  <rect x="10" y="300" width="404" height="58" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="20" y="320" font-size="10" font-weight="700" fill="var(--purple)">5 · provenance · mark on write</text>
+  <text x="20" y="338" font-size="9" fill="var(--purple)">is_background_review() → mark_agent_created(name)</text>
+  <text x="20" y="352" font-size="9" fill="var(--muted)">skill_manager_tool.py:1080-1084</text>
+  <line x1="414" y1="329" x2="424" y2="329" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M430,329 L422,325 L422,333 Z" fill="var(--line)"/>
+  <rect x="426" y="300" width="244" height="58" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="436" y="320" font-size="10" font-weight="700" fill="var(--accent-ink)">→ handed to curator (ch.10)</text>
+  <text x="436" y="338" font-size="9" fill="var(--accent-ink)">created_by:agent → stale / archive</text>
+  <text x="436" y="352" font-size="9" fill="var(--accent-ink)">hand-made skills never touched</text>
+  <rect x="10" y="372" width="660" height="92" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="24" y="392" font-size="10" font-weight="700" fill="var(--red)">6 · Do-not-capture zone · the review prompt forbids it (background_review.py:249-258)</text>
+  <text x="24" y="414" font-size="9" fill="var(--red)">✗ command not found · missing binary · unconfigured creds —— user-fixable, not durable rules</text>
+  <text x="24" y="434" font-size="9" fill="var(--red)">✗ browser tools do not work —— negative tool claims harden into months of self-imposed refusals</text>
+  <text x="24" y="454" font-size="9" fill="var(--muted)">Read this figure: treat frustration as first-class, pick the earliest rung, never learn env pitfalls or tool-broken claims</text>
+</svg>
+<div class="fig-cap"><b>A real complaint runs the full learning loop</b>: the user says <span class="mono">this is too verbose, just give me the answer</span> — background_review's prompt lists such frustration as a <b>FIRST-CLASS skill signal</b>. The nudge counter <span class="mono">_iters_since_skill</span> reaches <span class="mono">_skill_nudge_interval=10</span> and sets <span class="mono">_should_review_skills=True</span>, <b>but injects not one byte</b> into the main chat; only after the response ships does it fork the background review (with a <span class="mono">list(messages)</span> snapshot). It picks the earliest fitting <b>Preference order</b> rung — PATCH a loaded skill first, CREATE a class-level umbrella last (and never <span class="mono">fix-X</span>/PR-number names); the write is tagged <span class="mono">mark_agent_created</span> via <span class="mono">is_background_review()</span> for the curator. The <b>do-not-capture zone</b> is hard: <span class="mono">command not found</span> and <span class="mono">browser tools do not work</span> are dropped — learning the wrong lesson hardens into months of self-imposed refusals.</div>
+</div>
+
 <div class="card collab">
   <div class="tag">🧩 Collaboration · how the parts mesh for "learn without breaking the cache"</div>
   <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
@@ -2876,6 +3212,66 @@ review_agent._skill_nudge_interval = 0     <span class="cm"># the curator must n
 <p>Why <strong>must</strong> maintenance fork a separate session instead of running inline in the main conversation? It's the hard constraint of ch.6's "cache is sacred": the main conversation reuses a cached prefix every turn, and any mid-stream change to the system prompt, toolset, or memory <strong>shatters the cache</strong>, making the user re-pay full price for the whole history. The curator's consolidation pass may take 50–100 tool calls and read/write many skill files — if these happened inside the main session's context, the cache cost is catastrophic. <span class="mono">platform="curator"</span> gives it a <strong>fully separate cache namespace</strong>; <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> keep it from dragging in the main conversation's context and memory, so the "gardener" works in <strong>a separate office</strong> and the main cache prefix isn't touched by <strong>a single byte</strong>.</p>
 <p>The trigger is deliberately <strong>not a cron daemon</strong> but an <strong>inactivity gate</strong>: only when the agent is idle and more than <span class="mono">interval_hours</span> (7 days by default) have passed since the last run does <span class="mono">maybe_run_curator</span> piggyback on some background tick; the call site adds a second gate via <span class="mono">min_idle_hours</span> (2 hours by default) — while you're firing off requests it never cuts the line. Why so conservative? Because maintenance is <strong>low-priority housekeeping</strong> that must yield to real interaction; it must never judge a skill stale while you're using it, nor grab auxiliary-model quota during busy hours. "Maintain only when idle, always yield when busy" is exactly the courtesy a background ops system owes. And the first-install "seed and defer a full interval" is the same restraint — better to start governing a little late than to act rashly right after the user upgrades, before any usage data has accrued.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 450" role="img" aria-label="Day-by-day cutoff arithmetic for the skill pdf-form-filler: the real .usage.json has created_by agent, use_count 4, last_used_at 2026-03-20, state active, pinned false; the anchor falls back from last_activity to created_at to now; plugging now=2026-06-27 yields stale_cutoff=2026-05-28 and archive_cutoff=2026-03-29; T0 anchor 06-10 is later than stale so it stays active with zero LLM, T1 anchor 04-15 is at or before stale and still active so set_state STALE, T2 one call refreshes use_count 4 to 5 and last_activity to now so it returns to active, T3 anchor 03-20 is at or before archive so archive_skill moves it to .archive which is restorable and never deleted; exemptions are pinned which simply continues and PROTECTED_BUILTIN_SKILLS containing plan which is untouchable on every path">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">pdf-form-filler rung by rung · now=2026-06-27 into the 30/90-day cutoffs</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">active → stale → revive → archived, purely by comparing anchor to cutoff</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🌿</text>
+  <rect x="10" y="62" width="250" height="114" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="82" font-size="10" font-weight="700" fill="var(--ink)">pdf-form-filler · .usage.json</text>
+  <rect x="18" y="90" width="234" height="66" rx="5" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="26" y="106" font-size="9" fill="var(--code-ink)">{ &quot;created_by&quot;: &quot;agent&quot;,</text>
+  <text x="26" y="120" font-size="9" fill="var(--code-ink)">  &quot;use_count&quot;: 4,</text>
+  <text x="26" y="134" font-size="9" fill="var(--code-ink)">  &quot;last_used_at&quot;: &quot;2026-03-20&quot;,</text>
+  <text x="26" y="148" font-size="9" fill="var(--code-ink)">  &quot;state&quot;: &quot;active&quot;, &quot;pinned&quot;: false }</text>
+  <text x="20" y="171" font-size="9" fill="var(--muted)">skill_usage.py:462-471</text>
+  <rect x="272" y="62" width="398" height="114" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="282" y="82" font-size="10" font-weight="700" fill="var(--blue)">Sweep gate + cutoffs with now=2026-06-27</text>
+  <text x="282" y="100" font-size="9" fill="var(--blue)">anchor fallback: last_activity → created_at → now</text>
+  <text x="282" y="116" font-size="9" fill="var(--blue)">stale_cutoff = now - 30d = 2026-05-28</text>
+  <text x="282" y="132" font-size="9" fill="var(--blue)">archive_cutoff = now - 90d = 2026-03-29</text>
+  <text x="282" y="150" font-size="9" fill="var(--muted)">gate: idle + since last &gt; interval_hours(168h) + min_idle_hours(2h)</text>
+  <text x="282" y="167" font-size="9" fill="var(--muted)">curator.py:292-328 · config.py:2092-2118</text>
+  <rect x="10" y="192" width="162" height="140" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="18" y="212" font-size="9.5" font-weight="700" fill="var(--accent-ink)">T0 · stays active</text>
+  <text x="18" y="230" font-size="9" fill="var(--accent-ink)">anchor 2026-06-10</text>
+  <text x="18" y="246" font-size="9" fill="var(--accent-ink)">&gt; stale_cutoff 05-28</text>
+  <text x="18" y="262" font-size="9" fill="var(--accent-ink)">no branch fires</text>
+  <text x="18" y="290" font-size="9.5" font-weight="700" fill="var(--accent-ink)">→ stays ACTIVE</text>
+  <text x="18" y="308" font-size="9" fill="var(--muted)">zero LLM · deterministic</text>
+  <path d="M177,262 L169,258 L169,266 Z" fill="var(--line)"/>
+  <rect x="178" y="192" width="162" height="140" rx="8" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="186" y="212" font-size="9.5" font-weight="700" fill="var(--amber)">T1 · marks stale</text>
+  <text x="186" y="230" font-size="9" fill="var(--amber)">anchor 2026-04-15</text>
+  <text x="186" y="246" font-size="9" fill="var(--amber)">≤ stale, &gt; archive</text>
+  <text x="186" y="262" font-size="9" fill="var(--amber)">current = ACTIVE</text>
+  <text x="186" y="290" font-size="9.5" font-weight="700" fill="var(--amber)">→ set_state(STALE)</text>
+  <text x="186" y="308" font-size="9" fill="var(--muted)">marked_stale += 1</text>
+  <path d="M345,262 L337,258 L337,266 Z" fill="var(--line)"/>
+  <rect x="346" y="192" width="162" height="140" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="354" y="212" font-size="9.5" font-weight="700" fill="var(--accent-ink)">T2 · revives</text>
+  <text x="354" y="230" font-size="9" fill="var(--accent-ink)">/pdf-form-filler call</text>
+  <text x="354" y="246" font-size="9" fill="var(--accent-ink)">use_count 4 → 5</text>
+  <text x="354" y="262" font-size="9" fill="var(--accent-ink)">anchor=now &gt; stale &amp; STALE</text>
+  <text x="354" y="290" font-size="9.5" font-weight="700" fill="var(--accent-ink)">→ back to ACTIVE</text>
+  <text x="354" y="308" font-size="9" fill="var(--muted)">reactivated += 1</text>
+  <path d="M513,262 L505,258 L505,266 Z" fill="var(--line)"/>
+  <rect x="514" y="192" width="156" height="140" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="522" y="212" font-size="9.5" font-weight="700" fill="var(--red)">T3 · archives</text>
+  <text x="522" y="230" font-size="9" fill="var(--red)">anchor 2026-03-20</text>
+  <text x="522" y="246" font-size="9" fill="var(--red)">≤ archive_cutoff 03-29</text>
+  <text x="522" y="262" font-size="9" fill="var(--red)">current ≠ ARCHIVED</text>
+  <text x="522" y="290" font-size="9.5" font-weight="700" fill="var(--red)">→ archive_skill</text>
+  <text x="522" y="308" font-size="9" fill="var(--muted)">.archive/ · restorable</text>
+  <rect x="10" y="348" width="660" height="92" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="368" font-size="10" font-weight="700" fill="var(--ink)">Exemptions and protection · cleared before any auto-transition</text>
+  <text x="24" y="388" font-size="9" fill="var(--purple)">✓ pinned:true → continue, exempt from every stale / archive transition</text>
+  <text x="24" y="408" font-size="9" fill="var(--purple)">✓ PROTECTED_BUILTIN_SKILLS = {&quot;plan&quot;} —— untouchable on every path (skill_usage.py:66-68)</text>
+  <text x="24" y="430" font-size="9" fill="var(--muted)">Read this figure: plug 30/90-day cutoffs into a real now, derive each fate; archive is the heaviest action, never delete</text>
+</svg>
+<div class="fig-cap"><b>Plug the 30/90-day cutoffs into a real date and derive a skill's fate rung by rung</b>: <span class="mono">pdf-form-filler</span>'s real <span class="mono">.usage.json</span> (<span class="mono">use_count:4</span>, <span class="mono">last_used_at:&quot;2026-03-20&quot;</span>) takes the <b>anchor fallback</b> <span class="mono">last_activity → created_at → now</span>. With <span class="mono">now=2026-06-27</span> this yields <span class="mono">stale_cutoff=2026-05-28</span> and <span class="mono">archive_cutoff=2026-03-29</span>, then runs curator's three branches: <b>T0</b> anchor later than stale → stays active (zero LLM); <b>T1</b> past 30 days and still active → <span class="mono">set_state(STALE)</span>; <b>T2</b> one call refreshes <span class="mono">use_count 4→5</span>, anchor becomes now → revives to active; <b>T3</b> anchor past 90 days → <span class="mono">archive_skill</span> into <span class="mono">.archive/</span> (restorable, <b>never deleted</b>). <b>Exemptions</b>: <span class="mono">pinned</span> just continues; <span class="mono">PROTECTED_BUILTIN_SKILLS={&quot;plan&quot;}</span> is untouchable on every path.</div>
+</div>
+
 <div class="card collab">
   <div class="tag">🧩 Collaboration · how the parts mesh for "self-maintaining yet never destructive"</div>
   <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
@@ -3114,6 +3510,63 @@ should_review_memory = <span class="kw">False</span>
   <div class="step"><span class="num">5</span><span class="sc">both injection paths <strong>bypass "changing the system prompt mid-session"</strong> → the cache never breaks</span></div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 462" role="img" aria-label="One memory MEMORY.md with deploy target moving from fly deploy to Railway runs the full read-write separation: at session start load_from_disk reads MEMORY.md cap 2200 and USER.md cap 1375 into _system_prompt_snapshot; format_for_system_prompt freezes it into the volatile tier unchanged all session, the docstring says NOT the live state, so the prefix cache hits; a turn-5 write changes MEMORY.md on disk but the snapshot does not change; at turn-8 recall api_msg=msg.copy() and only when idx equals current_turn_user_idx is the fenced content appended to content, the original messages are never mutated; the injected real fence is the memory-context tag wrapping a System note that flags recalled memory context not new user input; the bottom invariant table shows how read-write separation keeps the cache sacred">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">One memory runs freeze → write → recall · with the real &lt;memory-context&gt; fence</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">MEMORY.md: deploy target fly deploy → Railway, watch read-write separation hold the cache</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">💾</text>
+  <rect x="10" y="62" width="162" height="106" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">1 · session start load_from_disk</text>
+  <text x="18" y="100" font-size="9" fill="var(--blue)">MEMORY.md (cap 2200)</text>
+  <text x="18" y="115" font-size="9" fill="var(--blue)">USER.md (cap 1375)</text>
+  <text x="18" y="132" font-size="9" fill="var(--blue)">→ _system_prompt_snapshot</text>
+  <text x="18" y="156" font-size="9" fill="var(--muted)">memory_tool.py:152-166</text>
+  <path d="M177,115 L169,111 L169,119 Z" fill="var(--line)"/>
+  <rect x="178" y="62" width="162" height="106" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="186" y="82" font-size="9.5" font-weight="700" fill="var(--accent-ink)">2 · freeze into volatile tier</text>
+  <text x="186" y="100" font-size="9" fill="var(--accent-ink)">format_for_system_prompt</text>
+  <text x="186" y="115" font-size="9" fill="var(--accent-ink)">snapshot stable all session 🔒</text>
+  <text x="186" y="130" font-size="9" fill="var(--accent-ink)">docstring: NOT the live state</text>
+  <text x="186" y="145" font-size="9" font-weight="700" fill="var(--accent-ink)">→ prefix cache hits</text>
+  <text x="186" y="162" font-size="9" fill="var(--muted)">memory_tool.py:567-578</text>
+  <path d="M345,115 L337,111 L337,119 Z" fill="var(--line)"/>
+  <rect x="346" y="62" width="162" height="106" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="354" y="82" font-size="9.5" font-weight="700" fill="var(--ink)">3 · turn-5 write MEMORY.md</text>
+  <text x="354" y="100" font-size="9" fill="var(--ink)">fly deploy → Railway</text>
+  <text x="354" y="116" font-size="9" font-weight="700" fill="var(--accent-ink)">disk changes ✓</text>
+  <text x="354" y="132" font-size="9" font-weight="700" fill="var(--blue)">snapshot unchanged 🔒</text>
+  <text x="354" y="148" font-size="9" fill="var(--muted)">prefix not broken</text>
+  <path d="M513,115 L505,111 L505,119 Z" fill="var(--line)"/>
+  <rect x="514" y="62" width="156" height="106" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="522" y="82" font-size="9.5" font-weight="700" fill="var(--purple)">4 · turn-8 recall</text>
+  <text x="522" y="100" font-size="9" fill="var(--purple)">api_msg = msg.copy()</text>
+  <text x="522" y="115" font-size="9" fill="var(--purple)">if idx==current_turn_user_idx</text>
+  <text x="522" y="130" font-size="9" fill="var(--purple)">content + fenced inject</text>
+  <text x="522" y="146" font-size="9" font-weight="700" fill="var(--purple)">messages never mutated</text>
+  <text x="522" y="162" font-size="9" fill="var(--muted)">conversation_loop:740-758</text>
+  <text x="20" y="183" font-size="10" font-weight="700" fill="var(--ink)">5 · the real fence injected into this turn's user copy (memory_manager.py:297-311)</text>
+  <rect x="10" y="190" width="660" height="118" rx="8" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="28" y="210" font-size="9" fill="var(--code-ink)">&lt;memory-context&gt;</text>
+  <text x="28" y="226" font-size="9" fill="var(--code-ink)">[System note: The following is recalled memory</text>
+  <text x="28" y="240" font-size="9" fill="var(--code-ink)">context, NOT new user input. Treat as</text>
+  <text x="28" y="254" font-size="9" fill="var(--code-ink)">authoritative reference data ...]</text>
+  <text x="28" y="276" font-size="9" font-weight="700" fill="var(--accent)">{clean} → Deploy: fly.io → Railway; use `railway up`, not `fly deploy`</text>
+  <text x="28" y="296" font-size="9" fill="var(--code-ink)">&lt;/memory-context&gt;</text>
+  <rect x="10" y="320" width="660" height="132" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="340" font-size="10" font-weight="700" fill="var(--ink)">6 · Invariant table · read-write separation keeps the cache sacred</text>
+  <circle cx="28" cy="357" r="4" fill="var(--accent)"/>
+  <text x="40" y="361" font-size="9" fill="var(--ink)">MEMORY.md disk —— changes on the turn-5 write, but disk-only</text>
+  <circle cx="28" cy="379" r="4" fill="var(--blue)"/>
+  <text x="40" y="383" font-size="9" fill="var(--ink)">_system_prompt_snapshot —— frozen all session → prefix cache hits</text>
+  <circle cx="28" cy="401" r="4" fill="var(--purple)"/>
+  <text x="40" y="405" font-size="9" fill="var(--ink)">original messages[idx] —— never mutated, never leaks into persistence</text>
+  <circle cx="28" cy="423" r="4" fill="var(--purple)"/>
+  <text x="40" y="427" font-size="9" fill="var(--ink)">api_msg = msg.copy() —— fence pasted at API-call time only, discarded after</text>
+  <text x="24" y="446" font-size="9" fill="var(--muted)">Read this figure: memory is both external and cache-safe — writes hit disk, reads paste a copy, snapshot and original messages stay put.</text>
+</svg>
+<div class="fig-cap"><b>One real memory runs the "read-write separation"</b>: at session start <span class="mono">load_from_disk</span> reads <span class="mono">MEMORY.md</span> (cap 2200)/<span class="mono">USER.md</span> (cap 1375), and <span class="mono">format_for_system_prompt</span> <b>freezes</b> it into <span class="mono">_system_prompt_snapshot</span> in the volatile tier — the docstring nails that it returns <span class="mono">NOT the live state</span>, so the <b>prefix cache hits</b> all session. Turn 5 writes "<span class="mono">fly deploy → Railway</span>" into <span class="mono">MEMORY.md</span>: disk changes, the <b>snapshot does not</b>. Turn 8 recalls via <span class="mono">api_msg = msg.copy()</span>, appending the fenced content to <span class="mono">content</span> only when <span class="mono">idx==current_turn_user_idx</span>, and the <b>original messages are never mutated</b>. What gets injected is that verbatim fence: <span class="mono">&lt;memory-context&gt;</span> + <span class="mono">[System note: ... NOT new user input ...]</span> + <span class="mono">{clean}</span> + <span class="mono">&lt;/memory-context&gt;</span>.</div>
+</div>
+
 <div class="card collab">
   <div class="tag">🧩 Collaboration · how the parts mesh for "remember without breaking the cache"</div>
   <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
@@ -3313,6 +3766,65 @@ merges all of that into a single calling shape with no mode parameter,
   <div class="step"><span class="num">3</span><span class="sc"><strong>Anchored window</strong>: take ±N context messages + session bookends (on-demand, not loading the whole thing)</span></div>
   <div class="step"><span class="num">4</span><span class="sc"><strong>Append verbatim</strong>: results appended as a tool message at the conversation tail — zero LLM summary, originals handed to the agent to read</span></div>
   <div class="step"><span class="num">5</span><span class="sc">no change to system prompt / prior turns → the cache prefix stays byte-identical, recall <strong>doesn't break the cache</strong></span></div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 462" role="img" aria-label="session_search with query deployment plan runs end to end: writes are indexed immediately by the messages_fts_insert trigger that uses new.id as rowid into FTS5; the retrieval SQL uses snippet messages_fts 0 three greater-than signs three less-than signs ellipsis 40 plus messages_fts MATCH question mark then ORDER BY rank over BM25; CJK falls back to trigram, and when a term has fewer than 3 characters trigram returns 0 so it falls back to LIKE substring; get_anchored_view with bookend equal to 3 returns three slices bookend_start the first three messages, window plus or minus 5 centered on the anchor, and bookend_end the last three; the matched text is appended as a tool message with zero LLM and no cache break; three calling modes have no mode parameter and are inferred from args DISCOVERY SCROLL BROWSE, the tool is service-gated and WAL writes retry up to 15 times within 0.150 seconds">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">session_search(query='deployment plan') end to end · index → SQL → bookend=3 → tool msg</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">index on write, retrieval SQL, CJK fallback, anchored window, zero-LLM append; real shape at each step</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🔍</text>
+  <rect x="10" y="62" width="210" height="108" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="82" font-size="9.5" font-weight="700" fill="var(--ink)">1 · index on write · trigger</text>
+  <text x="20" y="100" font-size="9" fill="var(--ink)">messages_fts_insert</text>
+  <text x="20" y="114" font-size="9" fill="var(--ink)">AFTER INSERT ON messages</text>
+  <text x="20" y="128" font-size="9" fill="var(--ink)">INSERT INTO messages_fts(rowid, ...)</text>
+  <text x="20" y="142" font-size="9" font-weight="700" fill="var(--accent-ink)">VALUES (new.id, ...)</text>
+  <text x="20" y="162" font-size="9" fill="var(--muted)">hermes_state.py:616-621</text>
+  <line x1="220" y1="116" x2="240" y2="116" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M246,116 L238,112 L238,120 Z" fill="var(--line)"/>
+  <rect x="230" y="62" width="210" height="108" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="240" y="82" font-size="9.5" font-weight="700" fill="var(--accent-ink)">2 · retrieval SQL · DISCOVERY</text>
+  <text x="240" y="100" font-size="9" fill="var(--accent-ink)">snippet(messages_fts, 0,</text>
+  <text x="240" y="114" font-size="9" fill="var(--accent-ink)">  '&gt;&gt;&gt;', '&lt;&lt;&lt;', '...', 40)</text>
+  <text x="240" y="128" font-size="9" fill="var(--accent-ink)">WHERE messages_fts MATCH ?</text>
+  <text x="240" y="142" font-size="9" font-weight="700" fill="var(--accent-ink)">ORDER BY rank   (BM25)</text>
+  <text x="240" y="162" font-size="9" fill="var(--muted)">hermes_state.py:3532/3535/3566</text>
+  <line x1="440" y1="116" x2="460" y2="116" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M466,116 L458,112 L458,120 Z" fill="var(--line)"/>
+  <rect x="450" y="62" width="220" height="108" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="460" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">3 · CJK fallback · trigram</text>
+  <text x="460" y="100" font-size="9" fill="var(--blue)">messages_fts_trigram</text>
+  <text x="460" y="114" font-size="9" fill="var(--blue)">tokenize='trigram'</text>
+  <text x="460" y="128" font-size="9" fill="var(--blue)">term &lt;3 chars → trigram returns 0</text>
+  <text x="460" y="142" font-size="9" font-weight="700" fill="var(--blue)">→ fall back to LIKE</text>
+  <text x="460" y="162" font-size="9" fill="var(--muted)">hermes_state.py:641-643</text>
+  <rect x="10" y="186" width="660" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="206" font-size="9.5" font-weight="700" fill="var(--ink)">snippet output · match wrapped in &gt;&gt;&gt; &lt;&lt;&lt;, window 40 tokens</text>
+  <text x="24" y="230" font-size="9" fill="var(--accent-ink)">... finalize the Q3 &gt;&gt;&gt;deployment plan&lt;&lt;&lt; before the rollout ...</text>
+  <text x="20" y="262" font-size="10" font-weight="700" fill="var(--ink)">4 · get_anchored_view(bookend=3) returns three slices (hermes_state.py:2875-2895)</text>
+  <rect x="10" y="272" width="200" height="80" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="292" font-size="9.5" font-weight="700" fill="var(--blue)">bookend_start [3]</text>
+  <text x="18" y="310" font-size="9" fill="var(--blue)">first 3 of the session</text>
+  <text x="18" y="326" font-size="9" fill="var(--blue)">user / assistant</text>
+  <rect x="222" y="272" width="236" height="80" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="230" y="292" font-size="9.5" font-weight="700" fill="var(--accent-ink)">window ±5 · anchor centered</text>
+  <text x="230" y="310" font-size="9" fill="var(--accent-ink)">messages_before / messages_after</text>
+  <text x="230" y="326" font-size="9" fill="var(--accent-ink)">anchor row always kept</text>
+  <rect x="470" y="272" width="200" height="80" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="478" y="292" font-size="9.5" font-weight="700" fill="var(--blue)">bookend_end [3]</text>
+  <text x="478" y="310" font-size="9" fill="var(--blue)">last 3 of the session</text>
+  <text x="478" y="326" font-size="9" fill="var(--blue)">user / assistant</text>
+  <rect x="10" y="364" width="324" height="72" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="20" y="384" font-size="9.5" font-weight="700" fill="var(--accent-ink)">5 · matched text appended as a tool message</text>
+  <text x="20" y="404" font-size="9" fill="var(--accent-ink)">fragments rejoin the sequence with tool role</text>
+  <text x="20" y="422" font-size="9" font-weight="700" fill="var(--accent-ink)">zero LLM · no cache break</text>
+  <rect x="342" y="364" width="328" height="72" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="352" y="384" font-size="9.5" font-weight="700" fill="var(--ink)">6 · three modes (no mode param, inferred from args)</text>
+  <text x="352" y="404" font-size="9" fill="var(--ink)">DISCOVERY(query) · SCROLL(session_id+id) · BROWSE()</text>
+  <text x="352" y="422" font-size="9" fill="var(--ink)">service-gated check_fn · WAL retry 15x / 0.150s</text>
+  <text x="20" y="452" font-size="9" fill="var(--muted)">Read this figure: writes are indexed by the trigger, one query takes real SQL for snippet and bookends, the hit is appended as a tool message — all zero-LLM and cache-safe.</text>
+</svg>
+<div class="fig-cap"><b>One query runs the real shape of cross-session search</b>: writes are indexed immediately by the <span class="mono">messages_fts_insert</span> trigger with <span class="mono">rowid=new.id</span> into FTS5. Retrieval uses real SQL: <span class="mono">snippet(messages_fts, 0, '&gt;&gt;&gt;', '&lt;&lt;&lt;', '...', 40)</span> + <span class="mono">messages_fts MATCH ?</span> + <span class="mono">ORDER BY rank</span> (BM25), wrapping the match in <span class="mono">&gt;&gt;&gt;…&lt;&lt;&lt;</span> over a 40-token window; CJK falls back to <span class="mono">trigram</span> (a term under 3 chars makes trigram return 0 → fall back to LIKE). <span class="mono">get_anchored_view(bookend=3)</span> returns three slices: <span class="mono">bookend_start</span> (first 3) + <span class="mono">window ±5</span> (anchor centered) + <span class="mono">bookend_end</span> (last 3). The hit is <b>appended as a tool message</b> — zero LLM, no cache break; the three modes <span class="mono">DISCOVERY/SCROLL/BROWSE</span> carry no mode parameter, inferred from args, and are service-gated.</div>
 </div>
 
 <div class="card collab">
@@ -3620,6 +4132,62 @@ the agent is idle and forge a fresh user/internal turn from each event:
   </ul>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 490" role="img" aria-label="One real delegate_task call walked through: 1 call args goal/context/toolsets/role=leaf; 2 build the subagent isolating ephemeral_system_prompt, platform=subagent, skip_context_files, skip_memory, iteration_budget=None while inheriting base_url/api_key/model/session_db; 3 strip the five DELEGATE_BLOCKED_TOOLS and downgrade role to leaf; 4 the subagent reads about 20 files and all intermediate work stays in its own context, never reaching the parent; 5 the parent receives only one final summary, returning a delegation_id first when background.">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">One real delegate_task call - args to isolated build to one summary</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">Example: dispatch a leaf subagent to audit scoped locks across gateway adapters</text>
+  <text x="628" y="32" font-size="22">🧩</text>
+
+  <rect x="20" y="50" width="640" height="60" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="32" y="68" font-size="10" font-weight="700" fill="var(--blue)">1. Call - tools/delegate_tool.py</text>
+  <text x="32" y="86" font-size="9" font-family="monospace" fill="var(--ink)">delegate_task(goal=&quot;audit gateway/platforms/ adapters whose connect() lacks acquire_scoped_lock&quot;,</text>
+  <text x="32" y="102" font-size="9" font-family="monospace" fill="var(--ink)">  context=&quot;pattern: irc/adapter.py&quot;, toolsets=[&quot;terminal&quot;,&quot;file&quot;,&quot;search&quot;], role=&quot;leaf&quot;)</text>
+
+  <line x1="340" y1="110" x2="340" y2="126" stroke="var(--line)" stroke-width="2"/>
+  <path d="M340 132 L334 122 L346 122 Z" fill="var(--line)"/>
+
+  <text x="340" y="146" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">2. Build the subagent - isolate vs inherit (:1234-1249)</text>
+
+  <rect x="20" y="154" width="324" height="118" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="34" y="172" font-size="10" font-weight="700" fill="var(--accent-ink)">Isolated - not in conversation / cache prefix</text>
+  <text x="34" y="190" font-size="9" font-family="monospace" fill="var(--ink)">ephemeral_system_prompt=child_prompt</text>
+  <text x="34" y="206" font-size="9" font-family="monospace" fill="var(--ink)">platform=&quot;subagent&quot;</text>
+  <text x="34" y="222" font-size="9" font-family="monospace" fill="var(--ink)">skip_context_files=True</text>
+  <text x="34" y="238" font-size="9" font-family="monospace" fill="var(--ink)">skip_memory=True</text>
+  <text x="34" y="256" font-size="9" font-family="monospace" fill="var(--purple)">iteration_budget=None  # fresh budget per subagent</text>
+
+  <rect x="356" y="154" width="304" height="118" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="370" y="172" font-size="10" font-weight="700" fill="var(--blue)">Inherited - runtime only, not conversation</text>
+  <text x="370" y="190" font-size="9" font-family="monospace" fill="var(--ink)">base_url / api_key</text>
+  <text x="370" y="206" font-size="9" font-family="monospace" fill="var(--ink)">model / fallback_model</text>
+  <text x="370" y="222" font-size="9" font-family="monospace" fill="var(--ink)">session_db (shared session store)</text>
+  <text x="370" y="246" font-size="9" fill="var(--muted)">Runtime creds copied, but conversation /</text>
+  <text x="370" y="260" font-size="9" fill="var(--muted)">context files / memory NOT inherited - cache safe</text>
+
+  <rect x="20" y="282" width="640" height="74" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="32" y="300" font-size="10" font-weight="700" fill="var(--red)">3. Strip dangerous tools + role downgrade - :768 / :45-53 / :1023-1024</text>
+  <text x="32" y="318" font-size="9" font-family="monospace" fill="var(--ink)">child_toolsets = _strip_blocked_tools(child_toolsets)</text>
+  <text x="32" y="334" font-size="9" font-family="monospace" fill="var(--red)">x DELEGATE_BLOCKED_TOOLS(5): delegate_task · clarify · memory · send_message · execute_code</text>
+  <text x="32" y="350" font-size="9" font-family="monospace" fill="var(--purple)">effective_role = role if (role==&quot;orchestrator&quot; and orchestrator_ok) else &quot;leaf&quot;</text>
+
+  <rect x="20" y="366" width="324" height="92" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="34" y="384" font-size="10" font-weight="700" fill="var(--muted)">4. Subagent's own context (never reaches parent)</text>
+  <text x="34" y="404" font-size="9" fill="var(--ink)">reads ~20 adapter.py · search/grep · dozens of retries</text>
+  <text x="34" y="422" font-size="9" fill="var(--ink)">all intermediate tool results stay in child context</text>
+  <text x="34" y="440" font-size="9" fill="var(--muted)">platform=&quot;subagent&quot; · discarded when done</text>
+
+  <rect x="356" y="366" width="304" height="92" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="370" y="384" font-size="10" font-weight="700" fill="var(--accent-ink)">5. Parent gets only one final summary</text>
+  <text x="370" y="404" font-size="9" fill="var(--ink)">&quot;audited 21 adapters: matrix/sms lack lock;</text>
+  <text x="370" y="420" font-size="9" fill="var(--ink)"> 19 others compliant&quot;</text>
+  <text x="370" y="440" font-size="9" fill="var(--purple)">background=true returns delegation_id first (:2592)</text>
+
+  <rect x="20" y="466" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="480" text-anchor="middle" font-size="9" fill="var(--muted)">Read this: one delegate_task = inherit runtime + isolate conversation/files/memory + strip 5 tools to leaf; parent gets one summary, cache untouched</text>
+</svg>
+<div class="fig-cap"><b>One real delegate_task</b>: the parent calls <span class="mono">delegate_task(goal,context,toolsets,role=&quot;leaf&quot;)</span> -&gt; the subagent is built <b>isolated</b> (<span class="mono">ephemeral_system_prompt</span> / <span class="mono">platform=&quot;subagent&quot;</span> / <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> / <span class="mono">iteration_budget=None</span>) while <b>inheriting</b> base_url/api_key/model/session_db; it strips the five <span class="mono">DELEGATE_BLOCKED_TOOLS</span> and downgrades role to leaf; reading ~20 files, <b>all intermediate work stays in the child context</b>, and the parent gets only the summary "audited 21 adapters: matrix/sms lack lock; 19 others compliant" (background returns a <span class="mono">delegation_id</span> first).</div>
+</div>
+
 <div class="selftest">
 <h2>🧪 Self-test - think about the design</h2>
 <div class="quiz">
@@ -3838,6 +4406,59 @@ Verdict: APPROVED or REQUEST_CHANGES.
     <li><strong>Two-stage review</strong>: spec compliance (PASS/gaps) + code quality (APPROVED/REQUEST_CHANGES), "catch before they compound" — the generation-verification gap engineered.</li>
     <li><strong>Sycophancy countered structurally</strong>: the core prompt has no anti-sycophancy instruction; it relies on the "independent verifier + fresh context" isolation to resist self-endorsement.</li>
   </ul>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 486" role="img" aria-label="The same diff config.py:45 changing == to != takes two independent paths: on the self-report path the subagent claims upload succeeded, and following self-reports verify yourself you fetch and measure HTTP 503, judged C hallucination and rejected; on the review path spec compliance takes only the diff and returns PASS, then quality review returns REQUEST_CHANGES for missing regression test; fail-closed rules require passed false when security_concerns is non-empty or the diff cannot be parsed; only after passing is the verified commit prefix applied.">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">One diff, three real verdicts - self-report rejected / PASS / REQUEST_CHANGES</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">Example: config.py:45 changes == to !=, with an "I'm done" self-report</text>
+  <text x="628" y="32" font-size="22">⚖️</text>
+
+  <rect x="20" y="50" width="640" height="68" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="32" y="68" font-size="10" font-weight="700" fill="var(--ink)">1. Shared input - generator submits diff + self-report</text>
+  <text x="32" y="86" font-size="9" font-family="monospace" fill="var(--red)">- config.py:45    if val == expected:</text>
+  <text x="360" y="86" font-size="9" font-family="monospace" fill="var(--accent-ink)">+ config.py:45    if val != expected:</text>
+  <text x="32" y="106" font-size="9" fill="var(--muted)">self-report: ok &quot;changed and uploaded successfully&quot; (a SELF-REPORT, unverified)</text>
+
+  <rect x="20" y="132" width="324" height="170" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="34" y="150" font-size="10" font-weight="700" fill="var(--red)">Path A - self-report rejected (:2923-2929)</text>
+  <text x="34" y="170" font-size="9" fill="var(--ink)">2. Tool-desc rule: Subagent summaries</text>
+  <text x="34" y="184" font-size="9" font-family="monospace" fill="var(--ink)">are SELF-REPORTS, verify it yourself</text>
+  <text x="34" y="204" font-size="9" fill="var(--ink)">claim: ok uploaded successfully</text>
+  <text x="34" y="222" font-size="9" fill="var(--ink)">you fetch the URL and measure a handle:</text>
+  <rect x="34" y="230" width="120" height="22" rx="5" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="94" y="245" text-anchor="middle" font-size="10" font-weight="700" fill="var(--red)">HTTP 503</text>
+  <text x="34" y="272" font-size="9" fill="var(--muted)">demand a handle (URL/ID/path/HTTP status)</text>
+  <text x="34" y="290" font-size="9.5" font-weight="700" fill="var(--red)">verdict: C-hallucination (sincere) - rejected</text>
+
+  <rect x="356" y="132" width="304" height="170" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="370" y="150" font-size="10" font-weight="700" fill="var(--blue)">Path B - independent review (two-stage gate)</text>
+  <rect x="368" y="158" width="280" height="60" rx="7" fill="var(--panel)" stroke="var(--blue)"/>
+  <text x="378" y="174" font-size="9" font-weight="700" fill="var(--blue)">3. Spec compliance - diff only (:127-130)</text>
+  <text x="378" y="190" font-size="9" fill="var(--ink)">reviewer has no generator context, vs spec</text>
+  <rect x="378" y="196" width="78" height="18" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="417" y="209" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">PASS (:113)</text>
+  <rect x="368" y="226" width="280" height="66" rx="7" fill="var(--panel)" stroke="var(--amber)"/>
+  <text x="378" y="242" font-size="9" font-weight="700" fill="var(--amber)">4. Quality - only after PASS (:142-145)</text>
+  <text x="378" y="258" font-size="9" fill="var(--ink)">Verdict: APPROVED / REQUEST_CHANGES</text>
+  <rect x="378" y="264" width="220" height="20" rx="5" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="388" y="278" font-size="9.5" font-weight="700" fill="var(--amber)">REQUEST_CHANGES - no regression test</text>
+
+  <rect x="20" y="312" width="640" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="32" y="330" font-size="10" font-weight="700" fill="var(--purple)">5. Fail-closed - unparseable / any concern is false (:138-140)</text>
+  <text x="32" y="349" font-size="9" font-family="monospace" fill="var(--ink)">security_concerns non-empty -&gt; passed must be false</text>
+  <text x="360" y="349" font-size="9" font-family="monospace" fill="var(--ink)">Cannot parse diff -&gt; passed must be false</text>
+  <text x="32" y="368" font-size="9" font-family="monospace" fill="var(--purple)">{&quot;passed&quot;: false, &quot;security_concerns&quot;:[…], &quot;logic_errors&quot;:[…], &quot;summary&quot;:&quot;…&quot;}</text>
+  <text x="32" y="382" font-size="9" fill="var(--muted)">passed is true only when both security_concerns and logic_errors are empty</text>
+
+  <rect x="20" y="396" width="640" height="40" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="32" y="414" font-size="10" font-weight="700" fill="var(--accent-ink)">6. Only after everything passes apply [verified] (:230-236)</text>
+  <text x="32" y="430" font-size="9" font-family="monospace" fill="var(--ink)">git add -A &amp;&amp; git commit -m &quot;[verified] &lt;description&gt;&quot;</text>
+
+  <rect x="20" y="446" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="460" text-anchor="middle" font-size="9" fill="var(--muted)">Read this: one diff - the self-report path is rejected by a measured 503, the review path goes spec PASS then quality REQUEST_CHANGES; no agent self-certifies, fail-closed</text>
+</svg>
+<div class="fig-cap"><b>One diff, three real verdicts</b>: the generator changes <span class="mono">config.py:45</span> from <span class="mono">==</span> to <span class="mono">!=</span> and self-reports "uploaded successfully". <b>Path A</b> (self-report) follows the tool rule "summaries are SELF-REPORTS, verify it yourself", measures it -&gt; gets <span class="mono">HTTP 503</span> -&gt; judged <b>C-hallucination</b> and rejected; <b>Path B</b> (independent review) runs spec compliance on the diff only -&gt; <span class="mono">PASS</span>, then quality review -&gt; <span class="mono">REQUEST_CHANGES</span> (no regression test). The whole thing is <b>fail-closed</b>: <span class="mono">security_concerns</span> non-empty or unparseable means <span class="mono">passed=false</span>, and only when all pass is <span class="mono">[verified]</span> applied.</div>
 </div>
 
 <div class="selftest">
@@ -4069,6 +4690,72 @@ agent._cached_system_prompt = new_system_prompt      <span class="cm"># write ba
     <li><strong>Fight context rot</strong>: temporal anchoring (to-dos to past tense to prevent re-execution), head-protection decay (no fossilizing), pruning old tool results.</li>
     <li><strong>Also refresh memory</strong>: invalidate triggers <span class="mono">load_from_disk()</span> to reload the memory snapshot (ch.11); the summary is a mid-conversation message, not in the cached prefix.</li>
   </ul>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 432" role="img" aria-label="The content transform of one real compression: the threshold timeline is in ch.27.3 and this figure only shows how content changes; boundaries protect_first_n=3 decaying to 0 and protect_last_n=20, with 5 middle messages to compress; the cheap prune _prune_old_tool_results with no LLM folds old tool results into one line; the template fills a real summary under Completed Actions and Critical Context REDACTED; tokens drop from about 8400 to about 600; the cache's only exception is _invalidate_system_prompt then _build_system_prompt writing back and load_from_disk.">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">One compression's content transform - which 5, folded into what, 8400 to 600 tok</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">This figure shows only how content changes (already triggered; threshold timeline in ch.27.3)</text>
+  <text x="628" y="32" font-size="22">🗜️</text>
+
+  <rect x="20" y="50" width="176" height="214" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="30" y="68" font-size="10" font-weight="700" fill="var(--ink)">2. Boundary (:787-788)</text>
+  <rect x="30" y="76" width="156" height="32" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="38" y="90" font-size="9" font-weight="700" fill="var(--accent-ink)">protect_first_n=3</text>
+  <text x="38" y="103" font-size="9" fill="var(--accent-ink)">head, decays to 0 as it grows (:2024)</text>
+  <rect x="30" y="116" width="156" height="48" rx="6" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="38" y="132" font-size="9" font-weight="700" fill="var(--purple)">middle 5 msgs - to compress</text>
+  <text x="38" y="147" font-size="9" fill="var(--purple)">aux model folds into points</text>
+  <text x="38" y="159" font-size="9" fill="var(--purple)">(keep high-signal, drop low)</text>
+  <rect x="30" y="172" width="156" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="38" y="186" font-size="9" font-weight="700" fill="var(--blue)">protect_last_n=20</text>
+  <text x="38" y="199" font-size="9" fill="var(--blue)">tail, recent context kept as-is</text>
+  <text x="30" y="224" font-size="9" fill="var(--muted)">keep head and tail,</text>
+  <text x="30" y="240" font-size="9" fill="var(--muted)">compress only the middle</text>
+  <text x="30" y="256" font-size="9" fill="var(--muted)">- saves tokens, keeps recents</text>
+
+  <line x1="200" y1="157" x2="218" y2="157" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M224 157 L216 153 L216 161 Z" fill="var(--line)"/>
+
+  <rect x="226" y="50" width="290" height="70" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="238" y="68" font-size="10" font-weight="700" fill="var(--ink)">3. Cheap prune _prune_old_tool_results - no LLM (:990)</text>
+  <text x="238" y="86" font-size="9" fill="var(--ink)">old tool result body -&gt; 1-line summary (free pre-pass)</text>
+  <text x="238" y="104" font-size="9" font-family="monospace" fill="var(--muted)">[old tool output pruned: N lines]</text>
+
+  <rect x="226" y="128" width="290" height="136" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="238" y="146" font-size="10" font-weight="700" fill="var(--accent-ink)">4. Template fills the real summary - context_compressor.py:1565-1575</text>
+  <text x="238" y="164" font-size="9" font-family="monospace" fill="var(--ink)">## Completed Actions</text>
+  <text x="238" y="180" font-size="9" font-family="monospace" fill="var(--ink)">1. READ config.py:45 — found == should be != [tool: read_file]</text>
+  <text x="238" y="196" font-size="9" font-family="monospace" fill="var(--ink)">3. TEST pytest tests/ — 3/50 failed [tool: terminal]</text>
+  <text x="238" y="216" font-size="9" font-family="monospace" fill="var(--ink)">## Critical Context</text>
+  <text x="238" y="232" font-size="9" font-family="monospace" fill="var(--red)">[REDACTED]   &lt;- creds/keys always wiped (:1603)</text>
+  <text x="238" y="252" font-size="9" fill="var(--muted)">format N. ACTION target — outcome [tool: name]</text>
+
+  <rect x="524" y="50" width="136" height="214" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="592" y="68" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">5. Token bill</text>
+  <rect x="556" y="84" width="72" height="40" rx="6" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="592" y="100" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">~8400</text>
+  <text x="592" y="116" text-anchor="middle" font-size="9" fill="var(--amber)">tok (before)</text>
+  <line x1="592" y1="130" x2="592" y2="160" stroke="var(--line)" stroke-width="2"/>
+  <path d="M592 166 L586 156 L598 156 Z" fill="var(--line)"/>
+  <rect x="556" y="172" width="72" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="592" y="188" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">~600</text>
+  <text x="592" y="204" text-anchor="middle" font-size="9" fill="var(--accent-ink)">tok (after)</text>
+  <text x="592" y="234" text-anchor="middle" font-size="10" font-weight="700" fill="var(--purple)">~ -93%</text>
+  <text x="592" y="252" text-anchor="middle" font-size="9" fill="var(--muted)">target ~0.20 ratio</text>
+
+  <rect x="20" y="276" width="640" height="116" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="32" y="294" font-size="10" font-weight="700" fill="var(--blue)">6. The cache's only exception - conversation_compression.py:515-517</text>
+  <text x="32" y="314" font-size="9" font-family="monospace" fill="var(--ink)">agent._invalidate_system_prompt()</text>
+  <text x="32" y="332" font-size="9" font-family="monospace" fill="var(--ink)">new_system_prompt = agent._build_system_prompt(system_message)</text>
+  <text x="32" y="350" font-size="9" font-family="monospace" fill="var(--ink)">agent._cached_system_prompt = new_system_prompt</text>
+  <text x="32" y="370" font-size="9" fill="var(--muted)">the same cut piggybacks load_from_disk() to fold this session's new memory/skills in (ch.11)</text>
+  <text x="32" y="386" font-size="9" fill="var(--purple)">the only operation in the whole book allowed to touch the sacred cache prefix (ch.6)</text>
+
+  <rect x="20" y="402" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="416" text-anchor="middle" font-size="9" fill="var(--muted)">Read this: compress = keep head(3, decays) + tail(20), fold middle 5 into a ## template summary, wipe creds to [REDACTED], 8400 to 600 tok, the one cache rebuild</text>
+</svg>
+<div class="fig-cap"><b>One compression's content transform</b>: boundaries <span class="mono">protect_first_n=3</span> (decays to 0 as it grows) / <span class="mono">protect_last_n=20</span>, with the middle <b>5 messages</b> selected to compress; first <span class="mono">_prune_old_tool_results</span> (<b>no LLM</b>) folds old tool results into one line, then the aux model fills the template summary <span class="mono">## Completed Actions</span> (<span class="mono">1. READ config.py:45 — found == should be !=</span> / <span class="mono">3. TEST pytest tests/ — 3/50 failed</span>) and <span class="mono">## Critical Context: [REDACTED]</span>; about <b>8400 to 600 tok</b>. The finish is the book's <b>only</b> cache-prefix mutation: <span class="mono">_invalidate_system_prompt()</span> -&gt; <span class="mono">_build_system_prompt()</span> write-back + <span class="mono">load_from_disk()</span>.</div>
 </div>
 
 <div class="selftest">
@@ -4332,6 +5019,58 @@ terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st
   </ul>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 484" role="img" aria-label="export TAG=v2 wrapped across local docker and ssh backends with CWD return: the unified middle script is byte-identical across backends, sourcing the snapshot, builtin cd into the session dir, eval the command, write back export -p snapshot, pwd -P to a temp file and printf emits the HERMES_CWD marker; local uses bash -c plus os.setsid; docker uses docker exec id bash -c; ssh uses ssh bash -c shlex.quote; CWD return forks where local reads the temp file and docker and ssh parse the stdout marker; the next command echo TAG yields v2.">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">One command, three real wrappers - same script byte-for-byte + CWD return fork</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">Example: how terminal(&quot;export TAG=v2&quot;) runs on local / docker / ssh</text>
+  <text x="628" y="32" font-size="22">🖥️</text>
+
+  <rect x="20" y="50" width="300" height="258" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="30" y="68" font-size="10" font-weight="700" fill="var(--ink)">1. Unified middle script - shared verbatim by all 3</text>
+  <text x="30" y="82" font-size="9" fill="var(--muted)">tools/environments/base.py:418-470 (_wrap_command)</text>
+  <text x="30" y="102" font-size="9" font-family="monospace" fill="var(--ink)">source &lt;snap&gt; &gt;/dev/null 2&gt;&amp;1 || true</text>
+  <text x="30" y="120" font-size="9" font-family="monospace" fill="var(--accent-ink)">builtin cd -- 'src' || exit 126</text>
+  <text x="30" y="138" font-size="9" font-family="monospace" fill="var(--purple)">eval 'export TAG=v2'</text>
+  <text x="30" y="156" font-size="9" font-family="monospace" fill="var(--ink)">__hermes_ec=$?</text>
+  <text x="30" y="174" font-size="9" font-family="monospace" fill="var(--ink)">export -p &gt; &lt;snap&gt; 2&gt;/dev/null || true</text>
+  <text x="30" y="192" font-size="9" font-family="monospace" fill="var(--blue)">pwd -P &gt; &lt;cwd_file&gt; 2&gt;/dev/null || true</text>
+  <text x="30" y="210" font-size="9" font-family="monospace" fill="var(--purple)">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</text>
+  <text x="42" y="226" font-size="9" font-family="monospace" fill="var(--purple)">&quot;$(pwd -P)&quot;</text>
+  <text x="30" y="244" font-size="9" font-family="monospace" fill="var(--ink)">exit $__hermes_ec</text>
+  <text x="30" y="266" font-size="9" fill="var(--muted)">cd into session cwd -&gt; run -&gt; write env snapshot</text>
+  <text x="30" y="280" font-size="9" fill="var(--muted)">-&gt; emit CWD on two channels (temp file + stdout)</text>
+  <text x="30" y="298" font-size="9" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__ (:280)</text>
+
+  <rect x="336" y="50" width="324" height="74" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="348" y="68" font-size="10" font-weight="700" fill="var(--accent-ink)">2. local - environments/local.py:634-695</text>
+  <text x="348" y="88" font-size="9" font-family="monospace" fill="var(--ink)">args = [bash, &quot;-c&quot;, wrapped]</text>
+  <text x="348" y="108" font-size="9" font-family="monospace" fill="var(--ink)">preexec_fn = os.setsid  # own pgid, group-interruptible</text>
+
+  <rect x="336" y="132" width="324" height="74" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="348" y="150" font-size="10" font-weight="700" fill="var(--blue)">3. docker - environments/docker.py:943-964</text>
+  <text x="348" y="170" font-size="9" font-family="monospace" fill="var(--ink)">cmd = [docker, exec, &lt;id&gt;, bash, -c, wrapped]</text>
+  <text x="348" y="190" font-size="9" fill="var(--muted)">same script, run by bash inside the container</text>
+
+  <rect x="336" y="214" width="324" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="348" y="232" font-size="10" font-weight="700" fill="var(--purple)">4. ssh - environments/ssh.py:343-352</text>
+  <text x="348" y="252" font-size="9" font-family="monospace" fill="var(--ink)">ssh … bash -c shlex.quote(wrapped)</text>
+  <text x="348" y="272" font-size="9" fill="var(--muted)">whole script shlex.quote'd, sent over SSH</text>
+
+  <rect x="20" y="320" width="640" height="74" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="32" y="338" font-size="10" font-weight="700" fill="var(--ink)">5. CWD return fork - base.py:778-812 (_extract_cwd_from_output)</text>
+  <text x="32" y="358" font-size="9" fill="var(--blue)">local: reads the temp file _cwd_file (pwd -P already wrote it)</text>
+  <text x="32" y="378" font-size="9" fill="var(--purple)">docker / ssh: parse the stdout __HERMES_CWD_s1__…__HERMES_CWD_s1__ marker and strip it</text>
+
+  <rect x="20" y="402" width="640" height="40" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="32" y="420" font-size="10" font-weight="700" fill="var(--accent-ink)">6. Next command (env carries across via the snapshot)</text>
+  <text x="32" y="436" font-size="9" font-family="monospace" fill="var(--ink)">terminal(&quot;echo $TAG&quot;)  -&gt;  v2</text>
+
+  <rect x="20" y="452" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="466" text-anchor="middle" font-size="9" fill="var(--muted)">Read this: the same wrapper script is byte-identical across backends; only the spawn (bash -c / docker exec / ssh) and the CWD channel (temp file / stdout marker) differ</text>
+</svg>
+<div class="fig-cap"><b>One command, three real wrappers</b>: the middle script from <span class="mono">_wrap_command</span> is <b>byte-identical</b> across backends - <span class="mono">source &lt;snap&gt;</span> -&gt; <span class="mono">builtin cd -- 'src' || exit 126</span> -&gt; <span class="mono">eval 'export TAG=v2'</span> -&gt; <span class="mono">export -p &gt; &lt;snap&gt;</span> -&gt; <span class="mono">pwd -P &gt; &lt;cwd_file&gt;</span> -&gt; <span class="mono">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</span>. Only the spawn differs: local <span class="mono">[bash,-c]+os.setsid</span>, docker <span class="mono">[docker,exec,&lt;id&gt;,bash,-c]</span>, ssh <span class="mono">bash -c shlex.quote</span>; the CWD return forks - local reads <span class="mono">_cwd_file</span>, docker/ssh parse the stdout marker. The next <span class="mono">echo $TAG</span> -&gt; <span class="mono">v2</span>.</div>
+</div>
+
 <div class="selftest">
 <h2>🧪 Self-test - think about the design</h2>
 <div class="quiz">
@@ -4577,6 +5316,82 @@ terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st
   <p style="margin:.5rem 0 0">Finally, back to the root: this unified abstraction is worth it because of <strong>the single process</strong>. One process is what lets the same memory, skills, cron, and config state be shared, and what keeps each conversation's prompt cache (a project hard rule) alive long-term; if twenty platforms each ran their own process, shared state, unified ops, and cache reuse would all be off the table. The narrow waist keeps the "number of platforms" growth axis entirely out of the core, so core complexity tracks "kinds of capability," not "count of platforms" — that's the real reason hosting 20+ platforms in one process is engineering-feasible at all.</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 392" role="img" aria-label="Worked example: one real IRC line is translated field-by-field through the adapter into a unified MessageEvent. Input frame :alice!~a@host PRIVMSG #ops :hermes: deploy staging. 1 native frame splits into prefix command params; 2 parse and address yields sender_nick alice, target #ops, is_channel True because of the hash, chat_type group, and since channels must be addressed it strips the hermes: prefix to get text deploy staging, an unaddressed line returns and is dropped; 3 build_source makes a SessionSource; 4 the MessageEvent instance has text deploy staging, message_type MessageType.TEXT, message_id str int time times 1000; 5 build_session_key is modulated by group_sessions_per_user True and thread_sessions_per_user False; 6 IRC has no typing so send_typing is a no-op absorbed at the edge.">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">Example: one IRC line → unified MessageEvent</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">input frame :alice!~a@host PRIVMSG #ops :hermes: deploy staging</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🛰️</text>
+
+  <rect x="10" y="56" width="153" height="218" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="75" font-size="10" font-weight="700" fill="var(--blue)">1 Native IRC frame</text>
+  <text x="20" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:429</text>
+  <rect x="18" y="97" width="137" height="58" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="25" y="114" font-size="9" font-family="monospace" fill="var(--ink)">:alice!~a@host</text>
+  <text x="25" y="130" font-size="9" font-family="monospace" fill="var(--ink)">PRIVMSG #ops</text>
+  <text x="25" y="146" font-size="9" font-family="monospace" fill="var(--ink)">hermes: deploy staging</text>
+  <text x="20" y="176" font-size="9" fill="var(--muted)">prefix · command</text>
+  <text x="20" y="192" font-size="9" fill="var(--muted)">params[0]=#ops</text>
+  <text x="20" y="208" font-size="9" fill="var(--muted)">params[1]=trailing</text>
+  <text x="20" y="232" font-size="9" font-family="monospace" fill="var(--ink)">_extract_nick</text>
+  <text x="20" y="246" font-size="9" font-family="monospace" fill="var(--ink)">  (prefix)</text>
+
+  <path d="M165,160 L177,160 M173,156 L177,160 L173,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="179" y="56" width="153" height="218" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="189" y="75" font-size="10" font-weight="700" fill="var(--accent-ink)">2 Parse + address</text>
+  <text x="189" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:447-475</text>
+  <text x="189" y="110" font-size="9" font-family="monospace" fill="var(--purple)">sender_nick=&quot;alice&quot;</text>
+  <text x="189" y="126" font-size="9" font-family="monospace" fill="var(--ink)">target=&quot;#ops&quot;</text>
+  <text x="189" y="142" font-size="9" font-family="monospace" fill="var(--ink)">is_channel=True (#)</text>
+  <text x="189" y="158" font-size="9" font-family="monospace" fill="var(--ink)">chat_type=&quot;group&quot;</text>
+  <text x="189" y="180" font-size="9" fill="var(--muted)">channel needs @ → strip hermes:</text>
+  <text x="189" y="202" font-size="9" font-family="monospace" fill="var(--purple)">text=&quot;deploy</text>
+  <text x="189" y="216" font-size="9" font-family="monospace" fill="var(--purple)">  staging&quot;</text>
+  <text x="189" y="244" font-size="9" fill="var(--red)">unaddressed → return drop</text>
+
+  <path d="M334,160 L346,160 M342,156 L346,160 L342,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="348" y="56" width="153" height="218" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="358" y="75" font-size="10" font-weight="700" fill="var(--accent-ink)">3 build_source</text>
+  <text x="358" y="89" font-size="9" fill="var(--muted)">base.py:5064</text>
+  <text x="358" y="112" font-size="9" font-family="monospace" fill="var(--ink)">build_source(</text>
+  <text x="358" y="128" font-size="9" font-family="monospace" fill="var(--ink)">  chat_id=&quot;#ops&quot;,</text>
+  <text x="358" y="144" font-size="9" font-family="monospace" fill="var(--ink)">  chat_type=&quot;group&quot;,</text>
+  <text x="358" y="160" font-size="9" font-family="monospace" fill="var(--ink)">  user_id=&quot;alice&quot;)</text>
+  <text x="358" y="186" font-size="9" font-family="monospace" fill="var(--accent-ink)">→ SessionSource</text>
+  <text x="358" y="214" font-size="9" fill="var(--muted)">normalized source,</text>
+  <text x="358" y="230" font-size="9" fill="var(--muted)">for session routing</text>
+
+  <path d="M503,160 L515,160 M511,156 L515,160 L511,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="517" y="56" width="153" height="218" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="527" y="75" font-size="10" font-weight="700" fill="var(--purple)">4 MessageEvent</text>
+  <text x="527" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:502</text>
+  <text x="527" y="110" font-size="9" font-family="monospace" fill="var(--purple)">text=&quot;deploy</text>
+  <text x="527" y="124" font-size="9" font-family="monospace" fill="var(--purple)">  staging&quot;</text>
+  <text x="527" y="142" font-size="9" font-family="monospace" fill="var(--ink)">message_type=</text>
+  <text x="527" y="156" font-size="9" font-family="monospace" fill="var(--ink)">  MessageType.TEXT</text>
+  <text x="527" y="174" font-size="9" font-family="monospace" fill="var(--ink)">source=SessionSource</text>
+  <text x="527" y="192" font-size="9" font-family="monospace" fill="var(--ink)">message_id=</text>
+  <text x="527" y="206" font-size="9" font-family="monospace" fill="var(--ink)">  str(int(time*1000))</text>
+  <text x="527" y="232" font-size="9" fill="var(--muted)">all adapters</text>
+  <text x="527" y="248" font-size="9" fill="var(--muted)">produce it</text>
+
+  <rect x="10" y="284" width="330" height="62" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="303" font-size="10" font-weight="700" fill="var(--ink)">5 session_key routing · base.py:4249</text>
+  <text x="20" y="321" font-size="9" font-family="monospace" fill="var(--ink)">build_session_key(source,</text>
+  <text x="20" y="335" font-size="9" font-family="monospace" fill="var(--ink)">  group_sessions_per_user=True, thread_…=False)</text>
+
+  <rect x="348" y="284" width="322" height="62" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="358" y="303" font-size="10" font-weight="700" fill="var(--ink)">6 Capability fallback · adapter.py:281</text>
+  <text x="358" y="321" font-size="9" font-family="monospace" fill="var(--ink)">send_typing(chat_id) → pass</text>
+  <text x="358" y="335" font-size="9" fill="var(--muted)">IRC has no typing, edge no-op absorbs it</text>
+
+  <text x="20" y="368" font-size="9.5" fill="var(--muted)">Read this: one native platform line stops at the adapter; the core sees only a unified MessageEvent + session_key, never the IRC frame.</text>
+</svg>
+<div class="fig-cap"><b>Example: one IRC line → MessageEvent</b>: take the real frame <span class="mono">:alice!~a@host PRIVMSG #ops :hermes: deploy staging</span> and walk it through — 1 split <span class="mono">prefix/command/params</span>; 2 <span class="mono">_extract_nick</span> gives <span class="mono">sender_nick=&quot;alice&quot;</span>, <span class="mono">target=&quot;#ops&quot;</span>, <span class="mono">is_channel=True</span> (<span class="mono">#</span>) → <span class="mono">chat_type=&quot;group&quot;</span>; since channels must be addressed it strips the <span class="mono">hermes:</span> prefix to <span class="mono">text=&quot;deploy staging&quot;</span>, and an unaddressed line just <span class="mono">return</span>s (dropped); 3 <span class="mono">build_source</span> makes a <span class="mono">SessionSource</span>; 4 the real <span class="mono">MessageEvent</span> instance (<span class="mono">message_id=str(int(time*1000))</span>); 5 <span class="mono">build_session_key</span> is modulated by <span class="mono">group_sessions_per_user=True</span>/<span class="mono">thread_sessions_per_user=False</span>; 6 IRC has no typing, so <span class="mono">send_typing</span> is a <span class="mono">pass</span>. Every value traces to a line in <span class="mono">irc/adapter.py</span> and <span class="mono">base.py</span>.</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 Key points</div>
   <ul>
@@ -4813,6 +5628,73 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
   <p style="margin:.5rem 0 0">The anti-pattern: queueing all messages alike — <span class="mono">/approve</span> deadlocks (the agent blocks waiting for approval while the approval waits in the queue for the agent), <span class="mono">/stop</span> is lost, and a mid-run <span class="mono">/model</span> becomes an empty response.</p>
   <p style="margin:.5rem 0 0">Seen together, why are the two guards <strong>each indispensable</strong>: guard one (adapter) only decides "who queues, who bypasses when busy," but a let-through command still needs someone to handle it; guard two (runner) dispatches it by <span class="mono">canonical</span> name to a dedicated handler like <span class="mono">_handle_approve_command</span>, and rejects any command with no handler. Their duties are orthogonal — one decides "<strong>queue or not</strong>," the other "<strong>dispatch to whom</strong>." Drop guard one and <span class="mono">/approve</span> deadlocks in the queue; drop guard two and a bypassed command finds no handler and is discarded as text by the catch-all — an empty response again.</p>
   <p style="margin:.5rem 0 0">Why this layer IS the "<strong>injection isolation</strong>" rung of ch.24's defense-in-depth: control channel and data channel are <strong>physically split</strong> at the gateway — resolvable commands ride code recognition + bypass and never enter conversation history; only genuine conversation enters <span class="mono">_pending_messages</span> to feed the model. This "an instruction is never data" boundary both blocks injection (a forged instruction can't reach the control channel) and incidentally protects ch.6 caching and ch.7 role alternation: because history will <strong>never</strong> sprout a <span class="mono">/stop</span> mistaken for user text, the cached prefix and strict alternation stay stable.</p>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 400" role="img" aria-label="Worked example: how one /approve crosses both guards and sets the Event while the agent is blocked on threading.Event.wait. 1 agent blocked: _ApprovalEntry.event equals threading.Event, entry.event.wait pauses, an asyncio interrupt cannot wake a thread Event; 2 guard one adapter layer base.py, session_key in _active_sessions is True, cmd equals event.get_command giving approve; 3 bypass decision commands.py, should_bypass_active_session approve is True and cmd is not in the stop new reset set so it dispatches inline, forbidding _process_message_background; 4 guard two runner run.py, /approve bypasses interrupt straight to _handle_approve_command; 5 unlock approval.py, resolve_gateway_approval sets entry.result to choice and calls entry.event.set, so step one wait returns and the agent resumes; 6 counterfactual red box: if queued as an ordinary message into _pending_messages the agent stays blocked forever and /approve never arrives, a deadlock.">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">Example: /approve crosses both guards → sets the Event</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">the agent is blocked on threading.Event.wait(); an asyncio interrupt cannot wake it</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🔓</text>
+
+  <rect x="10" y="56" width="150" height="216" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="20" y="75" font-size="10" font-weight="700" fill="var(--amber)">1 agent blocked</text>
+  <text x="20" y="89" font-size="9" fill="var(--muted)">approval.py:690-700</text>
+  <text x="20" y="110" font-size="9" font-family="monospace" fill="var(--ink)">_ApprovalEntry.event</text>
+  <text x="20" y="124" font-size="9" font-family="monospace" fill="var(--ink)">  = threading.Event()</text>
+  <text x="20" y="146" font-size="9" font-family="monospace" fill="var(--ink)">entry.event.wait()</text>
+  <text x="78" y="172" text-anchor="middle" font-size="22">⏸️</text>
+  <text x="20" y="198" font-size="9" fill="var(--muted)">thread Event,</text>
+  <text x="20" y="212" font-size="9" fill="var(--muted)">an asyncio</text>
+  <text x="20" y="226" font-size="9" fill="var(--muted)">interrupt won't wake it</text>
+  <text x="20" y="252" font-size="9" font-weight="700" fill="var(--accent-ink)">after 5: ✓ resumes</text>
+
+  <rect x="186" y="52" width="116" height="26" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.6"/>
+  <text x="244" y="69" text-anchor="middle" font-size="10" font-weight="700" fill="var(--purple)">user sends /approve</text>
+  <path d="M244,78 L244,90 M240,86 L244,90 L248,86" stroke="var(--purple)" stroke-width="1.6" fill="none"/>
+
+  <rect x="186" y="92" width="232" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="196" y="110" font-size="10" font-weight="700" fill="var(--ink)">2 guard 1 · adapter layer</text>
+  <text x="196" y="124" font-size="9" fill="var(--muted)">base.py:4262-4298</text>
+  <text x="196" y="142" font-size="9" font-family="monospace" fill="var(--ink)">session_key in _active_sessions → True</text>
+  <text x="196" y="158" font-size="9" font-family="monospace" fill="var(--ink)">cmd = event.get_command() → &quot;approve&quot;</text>
+  <text x="196" y="172" font-size="9" fill="var(--muted)">ordinary chat would queue in _pending_messages</text>
+
+  <path d="M302,184 L302,196 M298,192 L302,196 L306,192" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="186" y="198" width="232" height="86" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="196" y="216" font-size="10" font-weight="700" fill="var(--accent-ink)">3 bypass decision</text>
+  <text x="196" y="230" font-size="9" fill="var(--muted)">commands.py:379-399</text>
+  <text x="196" y="248" font-size="9" font-family="monospace" fill="var(--purple)">should_bypass_active_session(&quot;approve&quot;)=True</text>
+  <text x="196" y="263" font-size="9" font-family="monospace" fill="var(--ink)">cmd ∉ {stop,new,reset} → inline dispatch</text>
+  <text x="196" y="278" font-size="9" fill="var(--red)">✗ no _process_message_background</text>
+
+  <path d="M418,134 L432,134 M428,130 L432,134 L428,138" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="434" y="92" width="236" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="444" y="110" font-size="10" font-weight="700" fill="var(--ink)">4 guard 2 · runner</text>
+  <text x="444" y="124" font-size="9" fill="var(--muted)">run.py:7764-7771</text>
+  <text x="444" y="142" font-size="9" font-family="monospace" fill="var(--ink)">/approve bypasses interrupt</text>
+  <text x="444" y="158" font-size="9" font-family="monospace" fill="var(--ink)">_handle_approve_command(event)</text>
+  <text x="444" y="172" font-size="9" fill="var(--muted)">interrupt can't wake a thread Event → go direct</text>
+
+  <path d="M552,176 L552,188 L552,198 M548,194 L552,198 L556,194" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="434" y="198" width="236" height="86" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="444" y="216" font-size="10" font-weight="700" fill="var(--accent-ink)">5 unlock the Event</text>
+  <text x="444" y="230" font-size="9" fill="var(--muted)">approval.py:729-754</text>
+  <text x="444" y="248" font-size="9" font-family="monospace" fill="var(--ink)">resolve_gateway_approval(key, choice)</text>
+  <text x="444" y="263" font-size="9" font-family="monospace" fill="var(--ink)">entry.result = choice</text>
+  <text x="444" y="278" font-size="9" font-family="monospace" fill="var(--accent-ink)">entry.event.set() ✓ → 1's wait() returns</text>
+
+  <path d="M434,241 C360,241 160,250 160,170 L160,150 M156,158 L160,150 L164,158" stroke="var(--accent)" stroke-width="1.6" fill="none" stroke-dasharray="3 3"/>
+
+  <rect x="10" y="294" width="660" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="20" y="312" font-size="10" font-weight="700" fill="var(--red)">6 counterfactual: if queued as ordinary text into _pending_messages</text>
+  <text x="20" y="329" font-size="9" fill="var(--red)">the agent stays blocked on wait() forever; /approve never arrives → deadlock (and the safety net discards the text as an empty response).</text>
+
+  <text x="20" y="360" font-size="9.5" fill="var(--muted)">Read this: an approval command must bypass BOTH guards and reach the runner directly to set that thread Event and unblock the agent.</text>
+</svg>
+<div class="fig-cap"><b>Example: one /approve unlock chain</b>: the agent is blocked on <span class="mono">_ApprovalEntry.event=threading.Event()</span>'s <span class="mono">.wait()</span> (an asyncio interrupt can't wake a thread Event). 1 blocked; 2 <b>guard 1</b> (<span class="mono">base.py:4262</span>) <span class="mono">session_key in _active_sessions</span> → <span class="mono">cmd=&quot;approve&quot;</span>; 3 <span class="mono">should_bypass_active_session(&quot;approve&quot;)→True</span> and <span class="mono">∉{stop,new,reset}</span> → <b>inline dispatch</b> (no <span class="mono">_process_message_background</span>); 4 <b>guard 2</b> runner (<span class="mono">run.py:7764</span>) <span class="mono">/approve</span> bypasses <span class="mono">interrupt</span> → <span class="mono">_handle_approve_command</span>; 5 <span class="mono">resolve_gateway_approval</span> → <span class="mono">entry.event.set()</span> → <span class="mono">wait()</span> returns, agent resumes; 6 counterfactual: queueing deadlocks. This is exactly why "approvals must bypass both guards."</div>
 </div>
 
 <div class="card key">
@@ -5083,6 +5965,62 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
   <p style="margin:.5rem 0 0">Zoom out to the whole book: this chapter is the most concrete landing of the <strong>narrow waist</strong>. One AIAgent core (ch.7) is shared by <strong>four shells</strong> — the classic CLI, the Ink TUI, the desktop app, and the messaging gateway (ch.17) — each either a JSON-RPC frontend or a gateway adapter, with the core maintained once. <span class="mono">prompt.submit</span>'s <span class="mono">session busy</span> check is <strong>the same idea</strong> as ch.18's gateway guard "reject new input while the agent runs": one session runs one turn at a time. Dashboard embedding, desktop backend-sharing, and TUI streaming together prove the trade-off that runs through the book — <strong>push volatile frontends to the edges, pull stable capability into the waist</strong>: frontends can bloom and crash without dragging down the core, while sessions, tools, and cache discipline are defined and defended in exactly one place.</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 408" role="img" aria-label="Worked example: the JSON-RPC frame sequence of one real prompt.submit. 1 frontend request, jsonrpc 2.0, id 1, method prompt.submit, params with session_id s1 and text list this directory; 2 backend immediate response result status streaming, when the session is busy it returns error code 4009 session busy; 3 event stream, _emit message.delta sid with payload text delta, real envelope method event, params with type message.delta, session_id, payload text delta, server.py 887 and 7222; 4 the same event envelope pipeline also pushes tool.start, tool.complete, approval.request; 5 history_version guard server.py 7244, history is written only when current_version equals history_version, otherwise the response is visible but not written to history; 6 message.complete payload, text raw, usage, status one of complete or interrupted or error, server.py 7305.">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">Example: the JSON-RPC frames of one prompt.submit</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">request → status:streaming → N×message.delta → message.complete</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🎞️</text>
+
+  <rect x="10" y="56" width="424" height="62" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="74" font-size="10" font-weight="700" fill="var(--blue)">1 frontend request → backend · server.py:6828</text>
+  <text x="20" y="91" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,</text>
+  <text x="20" y="105" font-size="9" font-family="monospace" fill="var(--ink)"> &quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;list this dir&quot;}}</text>
+
+  <path d="M222,118 L222,128 M218,124 L222,128 L226,124" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="130" width="424" height="62" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="148" font-size="10" font-weight="700" fill="var(--accent-ink)">2 immediate response _ok · server.py:953</text>
+  <text x="20" y="165" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</text>
+  <text x="20" y="182" font-size="9" font-family="monospace" fill="var(--red)">busy → _err:{&quot;code&quot;:4009,&quot;message&quot;:&quot;session busy&quot;}</text>
+
+  <path d="M222,192 L222,202 M218,198 L222,202 L226,198" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="204" width="424" height="80" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="20" y="222" font-size="10" font-weight="700" fill="var(--purple)">3 N× message.delta (_emit envelope) · server.py:887,7222</text>
+  <text x="20" y="238" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:</text>
+  <text x="20" y="252" font-size="9" font-family="monospace" fill="var(--ink)"> &quot;message.delta&quot;,&quot;session_id&quot;:sid,</text>
+  <text x="20" y="266" font-size="9" font-family="monospace" fill="var(--purple)"> &quot;payload&quot;:{&quot;text&quot;:delta}}}</text>
+  <text x="20" y="280" font-size="9" fill="var(--muted)">_emit(&quot;message.delta&quot;, sid, {&quot;text&quot;: delta})</text>
+
+  <path d="M222,284 L222,294 M218,290 L222,294 L226,290" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="296" width="424" height="62" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="314" font-size="10" font-weight="700" fill="var(--accent-ink)">6 message.complete payload · server.py:7305</text>
+  <text x="20" y="331" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;text&quot;:raw,&quot;usage&quot;:{…},&quot;status&quot;:&quot;complete&quot;}</text>
+  <text x="20" y="348" font-size="9" font-family="monospace" fill="var(--purple)">status ∈ complete | interrupted | error</text>
+
+  <rect x="446" y="130" width="224" height="80" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="456" y="148" font-size="10" font-weight="700" fill="var(--ink)">4 same event envelope pipe</text>
+  <rect x="456" y="156" width="204" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="463" y="170" font-size="9" font-family="monospace" fill="var(--ink)">tool.start · tool.complete</text>
+  <rect x="456" y="180" width="204" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="463" y="194" font-size="9" font-family="monospace" fill="var(--ink)">approval.request</text>
+
+  <rect x="446" y="220" width="224" height="138" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="456" y="238" font-size="10" font-weight="700" fill="var(--amber)">5 history_version guard</text>
+  <text x="456" y="252" font-size="9" fill="var(--muted)">server.py:7244-7264</text>
+  <text x="456" y="271" font-size="9" font-family="monospace" fill="var(--ink)">current_version ==</text>
+  <text x="456" y="285" font-size="9" font-family="monospace" fill="var(--ink)">  history_version ?</text>
+  <text x="456" y="305" font-size="9" fill="var(--accent-ink)">✓ equal → write history</text>
+  <text x="456" y="324" font-size="9" fill="var(--red)">✗ mismatch → response shown,</text>
+  <text x="456" y="338" font-size="9" fill="var(--red)">  but NOT written (anti-desync)</text>
+  <text x="456" y="352" font-size="9" fill="var(--muted)">backstop during undo/compress</text>
+
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">Read this: a real frame recording of one prompt.submit — the sync result only says "streaming started"; the content arrives frame-by-frame via event envelopes.</text>
+</svg>
+<div class="fig-cap"><b>Example: a JSON frame recording of one prompt.submit</b>: 1 the frontend sends <span class="mono">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,&quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;list this dir&quot;}}</span>; 2 the backend immediately <span class="mono">_ok</span>s <span class="mono">{&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</span> (busy → <span class="mono">_err code 4009</span>); 3 content streams via <span class="mono">_emit</span>'s real envelope <span class="mono">{&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:&quot;message.delta&quot;,&quot;session_id&quot;:sid,&quot;payload&quot;:{&quot;text&quot;:delta}}}</span>; 4 <span class="mono">tool.start/complete</span> and <span class="mono">approval.request</span> ride the same pipe; 5 the <span class="mono">history_version</span> guard — on mismatch the response is shown but not written; 6 <span class="mono">message.complete</span>'s <span class="mono">{text,usage,status}</span> with <span class="mono">status ∈ complete|interrupted|error</span>. Every field traces to a line in <span class="mono">tui_gateway/server.py</span>.</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 Key points</div>
   <ul>
@@ -5346,6 +6284,82 @@ OPTIONAL_ENV_VARS = {
   <p style="margin:.5rem 0 0">One last easily-overlooked symmetry: code reads paths with <span class="mono">get_hermes_home()</span>, but <strong>showing</strong> a path to a human uses <span class="mono">display_hermes_home()</span>. The latter compresses the absolute path into friendly forms like <span class="mono">~/.hermes</span> or <span class="mono">~/.hermes/profiles/coder</span>, so the directory printed in setup, logs, and errors instantly reveals which profile you're in. Hardcode <span class="mono">~/.hermes</span> here to save effort and profile users get burned by a mismatch between the "displayed path" and the "real path" — exactly the shared lesson of those 5 PR #3575 bugs: whether it's disk-writing code or human-readable copy, anytime you touch the home path you must go through that one profile-aware entry.</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 420" role="img" aria-label="Worked example: at hermes -p coder chat startup, how one env var resolves into real paths and effective values. 1 _apply_profile_override runs bare before imports, scans argv to profile_name coder and strips -p coder, main.py 336; 2 resolve_profile_env coder resolves ~/.hermes/profiles/coder and writes os.environ HERMES_HOME, profiles.py 1866; 3 business imports call get_hermes_home, the ContextVar override is empty, the env is read and hit, returning Path ~/.hermes/profiles/coder, hermes_constants.py 54 and 109; 4 load_config merges DEFAULT_CONFIG _config_version 30 with the coder config.yaml via _deep_merge, config.py 5366, the user-written agent.max_turns 40 overrides the default 90 to 40, while unwritten gateway_timeout keeps 1800, terminal.cwd keeps dot, compression.threshold keeps 0.50; 5 on-disk isolation profiles/coder has its own sessions memory logs, separate from default ~/.hermes/sessions; 6 sidebar display_hermes_home is for humans and get_hermes_home is for code and they must be paired, PR 3575.">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">Example: the resolution chain of hermes -p coder chat</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">one env var → real path → merged effective values</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🧭</text>
+
+  <rect x="10" y="56" width="304" height="64" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="74" font-size="10" font-weight="700" fill="var(--blue)">1 _apply_profile_override() · main.py:336</text>
+  <text x="20" y="91" font-size="9" fill="var(--muted)">runs bare before imports, scans sys.argv</text>
+  <text x="20" y="109" font-size="9" font-family="monospace" fill="var(--purple)">profile_name=&quot;coder&quot; (strips -p coder)</text>
+
+  <path d="M162,120 L162,130 M158,126 L162,130 L166,126" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="132" width="304" height="64" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="150" font-size="10" font-weight="700" fill="var(--accent-ink)">2 resolve_profile_env · profiles.py:1866</text>
+  <text x="20" y="167" font-size="9" font-family="monospace" fill="var(--ink)">→ ~/.hermes/profiles/coder</text>
+  <text x="20" y="184" font-size="9" font-family="monospace" fill="var(--ink)">os.environ[&quot;HERMES_HOME&quot;] = …/coder</text>
+
+  <path d="M162,196 L162,206 M158,202 L162,206 L166,202" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="208" width="304" height="78" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="226" font-size="10" font-weight="700" fill="var(--accent-ink)">3 get_hermes_home() · hermes_constants.py:54</text>
+  <text x="20" y="243" font-size="9" font-family="monospace" fill="var(--ink)">override = get_hermes_home_override()</text>
+  <text x="20" y="257" font-size="9" font-family="monospace" fill="var(--muted)">ContextVar empty → read env, hit</text>
+  <text x="20" y="274" font-size="9" font-family="monospace" fill="var(--purple)">→ Path(&quot;~/.hermes/profiles/coder&quot;)</text>
+
+  <path d="M316,160 L330,160 M326,156 L330,160 L326,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="332" y="56" width="338" height="230" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="342" y="74" font-size="10" font-weight="700" fill="var(--ink)">4 load_config · _deep_merge · config.py:5366</text>
+  <text x="342" y="89" font-size="9" fill="var(--muted)">DEFAULT_CONFIG(_config_version:30) ⊕ coder/config.yaml</text>
+  <rect x="342" y="98" width="318" height="18" fill="var(--panel-2)"/>
+  <text x="348" y="111" font-size="9" font-weight="700" fill="var(--ink)">key</text>
+  <text x="498" y="111" font-size="9" font-weight="700" fill="var(--ink)">default</text>
+  <text x="556" y="111" font-size="9" font-weight="700" fill="var(--ink)">user</text>
+  <text x="606" y="111" font-size="9" font-weight="700" fill="var(--ink)">effective</text>
+  <text x="348" y="134" font-size="9" font-family="monospace" fill="var(--ink)">agent.max_turns</text>
+  <text x="498" y="134" font-size="9" font-family="monospace" fill="var(--muted)">90</text>
+  <text x="556" y="134" font-size="9" font-family="monospace" fill="var(--purple)">40</text>
+  <text x="606" y="134" font-size="9" font-family="monospace" font-weight="700" fill="var(--purple)">40 override</text>
+  <line x1="342" y1="142" x2="660" y2="142" stroke="var(--line)"/>
+  <text x="348" y="159" font-size="9" font-family="monospace" fill="var(--ink)">agent.gateway_timeout</text>
+  <text x="498" y="159" font-size="9" font-family="monospace" fill="var(--muted)">1800</text>
+  <text x="556" y="159" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="606" y="159" font-size="9" font-family="monospace" fill="var(--accent-ink)">1800 kept</text>
+  <line x1="342" y1="167" x2="660" y2="167" stroke="var(--line)"/>
+  <text x="348" y="184" font-size="9" font-family="monospace" fill="var(--ink)">terminal.cwd</text>
+  <text x="498" y="184" font-size="9" font-family="monospace" fill="var(--muted)">&quot;.&quot;</text>
+  <text x="556" y="184" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="606" y="184" font-size="9" font-family="monospace" fill="var(--accent-ink)">&quot;.&quot; kept</text>
+  <line x1="342" y1="192" x2="660" y2="192" stroke="var(--line)"/>
+  <text x="348" y="209" font-size="9" font-family="monospace" fill="var(--ink)">compression.threshold</text>
+  <text x="498" y="209" font-size="9" font-family="monospace" fill="var(--muted)">0.50</text>
+  <text x="556" y="209" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="606" y="209" font-size="9" font-family="monospace" fill="var(--accent-ink)">0.50 kept</text>
+  <line x1="342" y1="217" x2="660" y2="217" stroke="var(--line)"/>
+  <text x="342" y="234" font-size="9" fill="var(--muted)">_deep_merge: user keys win, unwritten keys keep defaults</text>
+  <text x="342" y="252" font-size="9" fill="var(--muted)">(defaults at config.py:887/900/1020/1265)</text>
+  <text x="342" y="272" font-size="9" fill="var(--ink)">within one process, these values belong only to the coder island</text>
+
+  <rect x="10" y="298" width="304" height="60" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="316" font-size="10" font-weight="700" fill="var(--ink)">5 on-disk isolation</text>
+  <text x="20" y="333" font-size="9" font-family="monospace" fill="var(--ink)">profiles/coder/{sessions,memory,logs}</text>
+  <text x="20" y="349" font-size="9" font-family="monospace" fill="var(--muted)">vs default ~/.hermes/sessions (disjoint)</text>
+
+  <rect x="332" y="298" width="338" height="60" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="342" y="316" font-size="10" font-weight="700" fill="var(--purple)">6 humans vs code, must be paired · PR #3575</text>
+  <text x="342" y="333" font-size="9" font-family="monospace" fill="var(--ink)">display_hermes_home() → ~/.hermes/profiles/coder</text>
+  <text x="342" y="349" font-size="9" font-family="monospace" fill="var(--ink)">get_hermes_home()     → Path (for code I/O)</text>
+
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">Read this: one -p coder flows bare-call → env var → single entry → deep merge into a set of real paths and effective values, fully isolated from default.</text>
+  <text x="20" y="402" font-size="9.5" fill="var(--muted)">Unwritten keys keep their defaults (1800 / &quot;.&quot; / 0.50); only the explicitly written max_turns:40 overrides the default 90.</text>
+</svg>
+<div class="fig-cap"><b>Example: the resolution chain of hermes -p coder chat</b>: 1 <span class="mono">_apply_profile_override()</span> runs bare before imports, scanning <span class="mono">argv</span> to <span class="mono">profile_name=&quot;coder&quot;</span> and stripping <span class="mono">-p coder</span>; 2 <span class="mono">resolve_profile_env(&quot;coder&quot;)</span> → <span class="mono">~/.hermes/profiles/coder</span> → writes <span class="mono">os.environ[&quot;HERMES_HOME&quot;]</span>; 3 business <span class="mono">get_hermes_home()</span>: ContextVar empty → read env → <span class="mono">Path(profiles/coder)</span>; 4 <span class="mono">load_config()</span> merges <span class="mono">DEFAULT_CONFIG(_config_version:30)</span> with the coder <span class="mono">config.yaml</span> via <span class="mono">_deep_merge</span>: the user-written <span class="mono">agent.max_turns:40</span> overrides the default <span class="mono">90</span> → effective <span class="mono">40</span>; unwritten ones keep <span class="mono">gateway_timeout</span> = <span class="mono">1800</span>, <span class="mono">terminal.cwd</span> = <span class="mono">&quot;.&quot;</span>, <span class="mono">compression.threshold</span> = <span class="mono">0.50</span>; 5 <span class="mono">profiles/coder/{sessions,memory,logs}</span> is isolated from default; 6 <span class="mono">display_hermes_home()</span> (for humans) and <span class="mono">get_hermes_home()</span> (for code) must be paired (PR #3575).</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 Key points</div>
   <ul>
@@ -5526,6 +6540,80 @@ agent = AIAgent(
 </div>
 
 <p>The catchup valve at the other end follows the same "anti-avalanche" logic. Imagine the laptop is closed all night; on boot, firing dozens of backlogged "every 5 min" runs at once would both flood you and burn money. <span class="mono">_compute_grace_seconds</span> sets the tolerance window to <strong>half the period</strong> (clamped 120s–2h): miss by a little and it catches up once; miss by a lot and it <strong>fast-forwards</strong> <span class="mono">next_run_at</span> to the next slot, dropping the backlog. The <span class="mono">.tick.lock</span> file lock (<span class="mono">fcntl.flock</span> underneath) ensures that even with the gateway and a standalone scheduler both running, only one tick advances jobs at a time. Three valves, three failure modes — inactivity for "runaway," catchup for "missed," the lock for "duplicate" — together turning "scheduling" from a toy into infrastructure you can trust. Notably, this valve philosophy shares roots with ch.13's delegation "interrupt cascade": neither chases an absolute kill, but gives runaways a <strong>predictable, recoverable</strong> backstop, leaving the normal path entirely unaffected while letting the abnormal one fail gracefully.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 404" role="img" aria-label="Three real schedule expressions walked through: baseline now is 2026-06-27T19:35; 0 9 star star star parses to kind cron, croniter yields 2026-06-28T09:00, grace is 86400 over 2 equals 43200 clamped to MAX 7200 seconds; every 5m parses to kind interval minutes 5, next run 19:40, grace is 300 over 2 equals 150 seconds; 2026-06-28T14:00 parses to kind once, next run is that instant, grace takes MIN 120 seconds; bottom catchup decides miss within grace catches up once, miss beyond grace fast-forwards and drops the backlog">
+  <rect x="14" y="12" width="652" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="26" y="31" font-size="11.5" fill="var(--ink)">⏱ baseline <tspan class="mono" font-weight="700" fill="var(--purple)">now = 2026-06-27T19:35</tspan> · grace rule = period//2 then clamp(MIN 120s, MAX 7200s)</text>
+
+  <text x="16" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">① schedule string</text>
+  <text x="174" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">② parse_schedule →</text>
+  <text x="332" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">③ compute_next_run →</text>
+  <text x="490" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">④ _compute_grace_seconds</text>
+
+  <rect x="14" y="64" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">A · daily 9am</text>
+  <text x="22" y="105" class="mono" font-size="11" font-weight="700" fill="var(--ink)">"0 9 * * *"</text>
+  <text x="165" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="64" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="82" font-size="10" fill="var(--accent-ink)">{kind:&quot;cron&quot;,</text>
+  <text x="180" y="105" class="mono" font-size="9.5" fill="var(--ink)">expr:&quot;0 9 * * *&quot;}</text>
+  <text x="323" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="64" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="82" font-size="9.5" fill="var(--muted)">croniter next slot</text>
+  <text x="338" y="105" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-28T09:00</text>
+  <text x="481" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="64" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="82" font-size="9.5" fill="var(--ink)">86400//2 = 43200</text>
+  <text x="496" y="105" font-size="10" font-weight="700" fill="var(--amber)">→ clamp MAX 7200s (2h)</text>
+
+  <rect x="14" y="128" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="146" font-size="9.5" font-weight="700" fill="var(--blue)">B · every 5 min</text>
+  <text x="22" y="169" class="mono" font-size="11" font-weight="700" fill="var(--ink)">"every 5m"</text>
+  <text x="165" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="128" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="146" font-size="10" fill="var(--accent-ink)">{kind:&quot;interval&quot;,</text>
+  <text x="180" y="169" class="mono" font-size="9.5" fill="var(--ink)">minutes:5}</text>
+  <text x="323" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="128" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="146" font-size="9.5" fill="var(--muted)">now + 5m</text>
+  <text x="338" y="169" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-27T19:40</text>
+  <text x="481" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="128" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="146" font-size="9.5" fill="var(--ink)">300//2 = 150</text>
+  <text x="496" y="169" font-size="10" font-weight="700" fill="var(--amber)">150s ≥ MIN 120s ✓</text>
+
+  <rect x="14" y="192" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="210" font-size="9.5" font-weight="700" fill="var(--blue)">C · once at instant</text>
+  <text x="22" y="233" class="mono" font-size="9.5" font-weight="700" fill="var(--ink)">"2026-06-28T14:00"</text>
+  <text x="165" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="192" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="210" font-size="10" fill="var(--accent-ink)">{kind:&quot;once&quot;,</text>
+  <text x="180" y="233" class="mono" font-size="9" fill="var(--ink)">run_at:&quot;…T14:00&quot;}</text>
+  <text x="323" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="192" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="210" font-size="9.5" fill="var(--muted)">that instant</text>
+  <text x="338" y="233" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-28T14:00</text>
+  <text x="481" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="192" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="210" font-size="9.5" fill="var(--ink)">once → no period</text>
+  <text x="496" y="233" font-size="10" font-weight="700" fill="var(--amber)">→ takes MIN 120s</text>
+
+  <rect x="14" y="262" width="652" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="279" class="mono" font-size="9" fill="var(--muted)">cron/jobs.py:498  return max(MIN_GRACE, min(grace, MAX_GRACE))   # MIN 120 · MAX 7200</text>
+
+  <text x="16" y="306" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ catchup check · when tick wakes, Δ since the due instant</text>
+  <rect x="14" y="312" width="324" height="46" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="332" font-size="10.5" fill="var(--accent-ink)">Δ ≤ grace → <tspan font-weight="700">catch up once</tspan></text>
+  <text x="26" y="350" font-size="9" fill="var(--muted)">missed by a little, still run that one</text>
+  <rect x="346" y="312" width="320" height="46" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="358" y="332" font-size="10.5" fill="var(--red)">Δ &gt; grace → <tspan font-weight="700">fast-forward · drop backlog</tspan></text>
+  <text x="358" y="350" font-size="9" fill="var(--muted)">so boot does not fire dozens at once</text>
+
+  <text x="16" y="380" font-size="10.5" font-weight="700" fill="var(--muted)">Read this: each expression hits one clamp edge — cron hits MAX 7200, interval lands inside, once hits MIN 120.</text>
+</svg>
+<div class="fig-cap"><b>Three schedule expressions walked through</b>: at one baseline <span class="mono">now=2026-06-27T19:35</span>, <span class="mono">parse_schedule</span> folds three syntaxes into <span class="mono">cron/interval/once</span>, <span class="mono">compute_next_run</span> yields each next fire time, and <span class="mono">_compute_grace_seconds</span> takes <span class="mono">period//2</span> then clamps: <b>cron's 43200s hits MAX 7200</b>, <b>interval's 150s lands inside</b>, <b>once takes MIN 120</b>. Each shows one edge; catchup uses grace to decide catch-up vs fast-forward.</div>
+</div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><span class="mono">tick</span> loop (<span class="mono">.tick.lock</span> file lock prevents duplicates) scans due jobs</span></div>
@@ -5811,6 +6899,72 @@ agent = AIAgent(
 <p>What does locking invariants buy? Tests that can <strong>evolve along with the system</strong>. Assertions like "the gemini catalog has at least one model" or "every model has a context length" lock the <strong>relation that must hold</strong> between two pieces of data, unbroken however the data updates. This mirrors the "narrow waist" philosophy: the more stable and minimal the core's contracts, the more <strong>testable</strong> the system; conversely, precisely because the waist's invariants are locked down, the edges dare to expand fast — new platforms, models, providers (see the chapters on toolsets and constraints). So eval here isn't snapshotting the code but <strong>guarding the whole system's correctness across continuous iteration</strong> — together with the narrow waist, it's what makes "stable core, wild edges" sustainable as engineering.</p>
 <p>One layer deeper: eval's real job is to <strong>quantify error accumulation</strong> (constraint F). In an agent's multi-turn autonomy, one small misjudgment snowballs down the subsequent steps; what invariant tests guard is precisely "don't let these must-hold relations quietly break across iterations." Put it beside the trajectory's quality gate and it's clearer: the quality gate stops low-quality data from flowing into training, lest the error get <strong>baked into the next model</strong>; invariant tests stop regressions from slowly piling up commit by commit. One gatekeeps at the data inlet, the other at code evolution — two gates, front and back, both fighting the inherent LLM constraint of <strong>error accumulation</strong> — which is why this chapter's three things (batch, trajectory, eval) really orbit the same root.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 452" role="img" aria-label="One real conversation becomes one ShareGPT training sample: user prompt count the py files in this dir, two API calls; convert_to_trajectory_format produces a conversations array, in order from system with tools tag, from human raw prompt, from gpt with think reasoning block and tool_call invoking terminal, from tool with tool_response returning 7; the outer batch_runner record holds tool_stats terminal count 1 success 1 failure 0, metadata batch_num 0, api_calls 2; bottom quality gate has_any_reasoning true appends to jsonl, all-empty think means continue and discard but still marked done">
+  <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="26" y="30" font-size="11" fill="var(--ink)">Input conversation: user prompt <tspan class="mono" font-weight="700" fill="var(--blue)">"count the .py files in this dir"</tspan> · 2 API calls → ShareGPT sample</text>
+
+  <rect x="14" y="48" width="400" height="300" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="22" y="64" font-size="9.5" font-weight="700" fill="var(--purple)">conversations[] · ShareGPT {from, value} (not OpenAI role/content)</text>
+
+  <rect x="22" y="70" width="384" height="42" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="30" y="86" class="mono" font-size="9" fill="var(--accent-ink)">{"from":"system",</text>
+  <text x="30" y="103" class="mono" font-size="9" fill="var(--ink)"> "value":"…&lt;tools&gt; tool signatures &lt;/tools&gt;…"}</text>
+
+  <rect x="22" y="116" width="384" height="38" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="30" y="131" class="mono" font-size="9" fill="var(--blue)">{"from":"human",</text>
+  <text x="30" y="148" class="mono" font-size="9" fill="var(--ink)"> "value":"count the .py files in this dir"}</text>
+
+  <rect x="22" y="158" width="384" height="100" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="30" y="174" class="mono" font-size="9" fill="var(--purple)">{"from":"gpt", "value":</text>
+  <text x="30" y="190" class="mono" font-size="9" fill="var(--ink)"> &lt;think&gt;ls then wc to count&lt;/think&gt;</text>
+  <text x="30" y="206" class="mono" font-size="9" fill="var(--ink)"> &lt;tool_call&gt;</text>
+  <text x="30" y="222" class="mono" font-size="9" fill="var(--ink)"> {"name": "terminal", "arguments":</text>
+  <text x="30" y="238" class="mono" font-size="9" fill="var(--ink)"> {"command": "ls *.py | wc -l"}}</text>
+  <text x="30" y="254" class="mono" font-size="9" fill="var(--ink)"> &lt;/tool_call&gt;}</text>
+
+  <rect x="22" y="262" width="384" height="78" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="30" y="278" class="mono" font-size="9" fill="var(--muted)">{"from":"tool", "value":</text>
+  <text x="30" y="294" class="mono" font-size="9" fill="var(--ink)"> &lt;tool_response&gt;</text>
+  <text x="30" y="310" class="mono" font-size="9" fill="var(--ink)"> {"tool_call_id":"…","name":"terminal",</text>
+  <text x="30" y="326" class="mono" font-size="9" fill="var(--ink)"> "content":"7"} &lt;/tool_response&gt;}</text>
+
+  <rect x="426" y="48" width="240" height="300" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="434" y="64" font-size="9.5" font-weight="700" fill="var(--accent-ink)">Outer record · batch_runner</text>
+
+  <rect x="434" y="70" width="224" height="74" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="442" y="86" font-size="9" font-weight="700" fill="var(--accent-ink)">tool_stats(_extract_tool_stats)</text>
+  <text x="442" y="103" class="mono" font-size="9" fill="var(--ink)">{"terminal":{</text>
+  <text x="442" y="119" class="mono" font-size="9" fill="var(--ink)"> "count":1,"success":1,</text>
+  <text x="442" y="135" class="mono" font-size="9" fill="var(--ink)"> "failure":0}}</text>
+
+  <rect x="434" y="152" width="224" height="64" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="442" y="168" font-size="9" font-weight="700" fill="var(--muted)">metadata</text>
+  <text x="442" y="185" class="mono" font-size="9" fill="var(--ink)">{"batch_num":0,</text>
+  <text x="442" y="201" class="mono" font-size="9" fill="var(--ink)"> "model":"…"}</text>
+
+  <rect x="434" y="224" width="224" height="34" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="442" y="245" class="mono" font-size="9.5" fill="var(--blue)">"api_calls": 2</text>
+
+  <rect x="434" y="266" width="224" height="34" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="442" y="287" class="mono" font-size="9" fill="var(--muted)">"completed":true · "partial":false</text>
+
+  <text x="450" y="330" font-size="9" fill="var(--muted)">model is just a per-sample field,</text>
+  <text x="450" y="343" font-size="9" fill="var(--muted)">never a per-model file split</text>
+
+  <text x="16" y="368" font-size="9.5" font-weight="700" fill="var(--muted)">⑥ Quality gate · _extract_reasoning_stats → has_any_reasoning</text>
+  <rect x="14" y="374" width="400" height="44" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="394" font-size="10.5" fill="var(--accent-ink)"><tspan class="mono">has_any_reasoning=True</tspan> (has &lt;think&gt; content)</text>
+  <text x="26" y="411" font-size="10" font-weight="700" fill="var(--accent-ink)">→ append to batch_&lt;N&gt;.jsonl (incremental)</text>
+  <rect x="426" y="374" width="240" height="44" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="438" y="394" font-size="10" fill="var(--red)">all-empty &lt;think&gt; → <tspan class="mono">=False</tspan></text>
+  <text x="438" y="411" font-size="10" font-weight="700" fill="var(--red)">→ continue, discard (still done)</text>
+
+  <text x="16" y="440" font-size="10.5" font-weight="700" fill="var(--muted)">Read this: one conversation is rewritten into a {from,value} ShareGPT frame sequence — a training format, not the inference-time OpenAI role.</text>
+</svg>
+<div class="fig-cap"><b>One conversation → one ShareGPT sample</b>: <span class="mono">convert_to_trajectory_format</span> rewrites internal messages into <span class="mono">conversations[]</span> — <span class="mono">{from:"system"}</span> with <span class="mono">&lt;tools&gt;</span>, <span class="mono">{from:"human"}</span> raw prompt, <span class="mono">{from:"gpt"}</span> with <span class="mono">&lt;think&gt;</span>+<span class="mono">&lt;tool_call&gt;</span>, <span class="mono">{from:"tool"}</span> with <span class="mono">&lt;tool_response&gt;</span>. The outer <span class="mono">batch_runner</span> record attaches <span class="mono">tool_stats={"terminal":{count:1,success:1,failure:0}}</span>, <span class="mono">metadata.batch_num=0</span>, <span class="mono">api_calls=2</span>; the gate writes only when <b>a <span class="mono">&lt;think&gt;</span></b> exists, else <span class="mono">continue</span> discards. Note it is <b><span class="mono">{from,value}</span>, not OpenAI role/content</b>.</div>
+</div>
+
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">a batch of prompts is split and handed to several <span class="mono">_process_batch_worker</span> in parallel</span></div>
   <div class="step"><span class="num">2</span><span class="sc">each worker runs AIAgent independently (ch.7 core loop), producing a trajectory</span></div>
@@ -6045,6 +7199,60 @@ agent = AIAgent(
 
 <p>The cache line even constrains "installing a skill" itself: slash commands that mutate system-prompt state (skills, tools, memory) are <strong>cache-aware</strong> — they <strong>defer invalidation</strong> by default (the change takes effect next session), and you must opt in with <span class="mono">--now</span> for it to apply immediately. <span class="mono">/skills install --now</span> is the canonical template. In other words: edge extension must not only <strong>attach</strong>, it must attach <strong>without disturbing the in-flight conversation</strong> — capability is at the edge, but cache discipline is global.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 418" role="img" aria-label="Two real MCP catalog entries walked through: left linear is remote OAuth over http, manifest sets name linear, description Find create and update Linear issues, transport type http url mcp.linear.app, auth type oauth; after install it writes config.yaml mcp_servers, the MCP client connects via the OAuth browser flow and exposes find get list plus create update; right n8n is a local stdio bridge, transport type stdio command INSTALL_DIR python, install type git, auth type api_key, it exposes 11 tools but default_enabled keeps only 8 read tools and prunes activate deactivate and container_logs; bottom zero-footprint gating: not installed means the tool schema never enters context, and being in optional-mcps equals a PR-reviewed Nous approval">
+  <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="30" font-size="11" fill="var(--accent-ink)">Two real catalog entries: what install exposes + zero-footprint gating (<tspan class="mono">optional-mcps/&lt;name&gt;/manifest.yaml</tspan>)</text>
+
+  <text x="16" y="58" font-size="11" font-weight="700" fill="var(--blue)">🔗 linear · remote OAuth (http)</text>
+  <rect x="14" y="66" width="320" height="98" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="82" class="mono" font-size="9" fill="var(--ink)">name: linear</text>
+  <text x="22" y="97" class="mono" font-size="9" fill="var(--muted)">description: Find, create, and update</text>
+  <text x="22" y="112" class="mono" font-size="9" fill="var(--muted)"> Linear issues, projects, and comments.</text>
+  <text x="22" y="127" class="mono" font-size="9" fill="var(--ink)">transport: {type: http,</text>
+  <text x="22" y="142" class="mono" font-size="9" fill="var(--ink)"> url: https://mcp.linear.app/mcp}</text>
+  <text x="22" y="157" class="mono" font-size="9" fill="var(--purple)">auth: {type: oauth}</text>
+
+  <rect x="14" y="170" width="320" height="40" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="186" class="mono" font-size="9" fill="var(--ink)">hermes mcp install linear</text>
+  <text x="22" y="202" font-size="9" fill="var(--muted)">→ writes config.yaml: mcp_servers.linear</text>
+
+  <rect x="14" y="216" width="320" height="76" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="22" y="233" font-size="9.5" font-weight="700" fill="var(--accent-ink)">MCP client connects → OAuth browser flow</text>
+  <text x="22" y="251" font-size="9.5" fill="var(--ink)">exposes <tspan font-weight="700" fill="var(--purple)">find / get / list</tspan> (read)</text>
+  <text x="22" y="269" font-size="9.5" fill="var(--ink)"> + <tspan font-weight="700" fill="var(--amber)">create / update</tspan> (write)</text>
+  <text x="22" y="286" font-size="9" fill="var(--muted)">across issues / projects / comments</text>
+
+  <text x="348" y="58" font-size="11" font-weight="700" fill="var(--blue)">🖥 n8n · local stdio bridge</text>
+  <rect x="346" y="66" width="320" height="98" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="354" y="82" class="mono" font-size="9" fill="var(--ink)">name: n8n</text>
+  <text x="354" y="98" class="mono" font-size="9" fill="var(--ink)">transport: {type: stdio,</text>
+  <text x="354" y="113" class="mono" font-size="9" fill="var(--ink)"> command: ${INSTALL_DIR}/.venv/bin/python}</text>
+  <text x="354" y="129" class="mono" font-size="9" fill="var(--muted)">install: {type: git, ref: main}</text>
+  <text x="354" y="145" class="mono" font-size="9" fill="var(--purple)">auth: {type: api_key} · N8N_API_KEY</text>
+  <text x="354" y="160" class="mono" font-size="9" fill="var(--muted)">(stdio · no public port)</text>
+
+  <rect x="346" y="170" width="320" height="40" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="354" y="186" class="mono" font-size="9" fill="var(--ink)">git clone + python -m venv .venv</text>
+  <text x="354" y="202" class="mono" font-size="9" fill="var(--muted)"> + pip install -r requirements.txt</text>
+
+  <rect x="346" y="216" width="320" height="76" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="354" y="233" font-size="9.5" font-weight="700" fill="var(--accent-ink)">exposes 11 tools · tools.default_enabled prunes</text>
+  <text x="354" y="251" font-size="9" fill="var(--ink)"><tspan font-weight="700" fill="var(--purple)">✓ 8 read</tspan> health · list_workflows · get_workflow…</text>
+  <text x="354" y="269" font-size="9" fill="var(--ink)"><tspan font-weight="700" fill="var(--red)">✗ 3 pruned</tspan> activate/deactivate · container_logs</text>
+  <text x="354" y="286" font-size="9" fill="var(--muted)">mutating off by default, opt in per threat model</text>
+
+  <text x="16" y="312" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ Zero-footprint gating + "in catalog = reviewed"</text>
+  <rect x="14" y="318" width="652" height="48" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="336" font-size="10" fill="var(--ink)">not installed → tool schema <tspan font-weight="700" fill="var(--purple)">never enters context</tspan> (zero core-schema footprint); <tspan class="mono">check_fn</tspan> hides it until configured.</text>
+  <text x="22" y="356" font-size="10" fill="var(--ink)">presence in <tspan class="mono">optional-mcps/</tspan> = <tspan font-weight="700" fill="var(--accent-ink)">Nous approval (merged via PR)</tspan>; MCPs never auto-update, re-install explicitly.</text>
+
+  <text x="16" y="386" class="mono" font-size="9" fill="var(--muted)">mcp_catalog.py:4  &quot;each catalog entry … ships disabled&quot;   ·   plugins.py:367  register_tool(check_fn=…)</text>
+  <text x="16" y="408" font-size="10.5" font-weight="700" fill="var(--muted)">Read this: one catalog holds two transports — linear remote OAuth, n8n local stdio — both with zero core-schema footprint.</text>
+</svg>
+<div class="fig-cap"><b>Two real manifests, made concrete</b>: <span class="mono">linear</span> (<span class="mono">transport:{type:http, url:https://mcp.linear.app/mcp}</span>, <span class="mono">auth:{type:oauth}</span>) on install writes <span class="mono">mcp_servers.linear</span> into <span class="mono">config.yaml</span>; the MCP client does OAuth and exposes <b>find/get/list + create/update</b>. <span class="mono">n8n</span> (<span class="mono">transport:{type:stdio, command:${INSTALL_DIR}/.venv/bin/python}</span>) exposes <b>11 tools</b>, and <span class="mono">tools.default_enabled</span> keeps only 8 read tools, pruning <span class="mono">activate/deactivate</span> and <span class="mono">container_logs</span>. Not installed → schema <b>never enters context</b> (zero footprint); "in <span class="mono">optional-mcps/</span> = a PR-reviewed Nous approval."</div>
+</div>
+
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">need a new capability → pick the <strong>smallest-footprint</strong> rung on the Footprint Ladder</span></div>
   <div class="step"><span class="num">2</span><span class="sc">plugin: <span class="mono">register(ctx)</span> → <span class="mono">register_tool</span> (delegates to registry) / <span class="mono">register_hook</span>, no core files touched</span></div>
@@ -6234,6 +7442,47 @@ agent = AIAgent(
   <text x="610" y="270" text-anchor="end" font-size="11" font-weight="700" fill="var(--amber)">reversible (convenience) ▶</text>
 </svg>
 <div class="fig-cap"><b>HARDLINE vs DANGEROUS tiering</b>: dangerous commands are graded by <b>irreversibility</b>. <b>HARDLINE</b> (delete-root / format / raw-disk write / fork bomb) is <b>irreversible</b> with almost no legitimate reason, so it's welded into a red line — blocks even <span class="mono">/yolo</span>, zero tolerance. <b>DANGEROUS</b> (the other 61) is risky but can be legitimate in a controlled setting, so it keeps the <span class="mono">/yolo</span> one-shot door, and smart-approval may only <b>loosen</b>, never touching the red lines. Convenience for the reversible, zero tolerance for the irreversible.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 524" role="img" aria-label="Real data flow of one obfuscated command r-backslash-m -rf /home/alice/* being restored to rm -rf ~/* and then blocked by the HARDLINE regex: (1) the attack input hides escaped backslashes and empty quotes to dodge the regex; (2) _normalize_command_for_detection runs six normalization steps (strip_ansi removes ANSI escapes, strip null bytes, NFKC normalize, re.sub strips backslashes turning r-backslash-m into rm, strip empty quotes, _rewrite_resolved_user_home folds /home/alice/ into ~/) restoring rm -rf ~/*; (3) it matches the HARDLINE regex recursive delete of home directory; (4) _hardline_block_result hard-blocks with BLOCKED hardline, refused even with --yolo /yolo approvals.mode=off; (5) contrast: if we instead asked the model whether it is dangerous, it might answer this is a safe cleanup script and allow it, whereas the regex matches deterministically and wording tricks are useless.">
+  <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">Obfuscated command → deterministic normalization → HARDLINE block</text>
+  <text x="20" y="42" font-size="10" fill="var(--muted)">how a delete-home command hidden behind escapes and empty quotes is restored and blocked by the first gate</text>
+  <text x="652" y="32" text-anchor="middle" font-size="22">🛡</text>
+  <rect x="40" y="54" width="600" height="44" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="54" y="72" font-size="10.5" font-weight="700" fill="var(--red)">① Attack input · evading the regex blacklist</text>
+  <text x="54" y="91" font-size="11" fill="var(--ink)">r\m -rf /home/alice/*</text>
+  <text x="300" y="91" font-size="9" fill="var(--muted)">↪ \ escapes + empty quotes split the token to dodge rm</text>
+  <text x="340" y="112" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="116" width="600" height="176" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="54" y="136" font-size="11" font-weight="700" fill="var(--ink)">② Normalize · _normalize_command_for_detection()</text>
+  <text x="626" y="136" text-anchor="end" font-size="9" fill="var(--muted)">approval.py:559</text>
+  <text x="58" y="158" font-size="9" fill="var(--muted)">1  strip_ansi(command) · strip all ANSI escape sequences</text>
+  <text x="58" y="176" font-size="9" fill="var(--muted)">2  command.replace('\x00','') · strip null bytes</text>
+  <text x="58" y="194" font-size="9" fill="var(--muted)">3  unicodedata.normalize('NFKC')</text>
+  <text x="58" y="212" font-size="9" fill="var(--purple)">4  re.sub(r'\\([^\n])', r'\1')</text>
+  <text x="232" y="212" font-size="9" fill="var(--muted)">strip backslashes r\m→rm · approval.py:575</text>
+  <text x="58" y="230" font-size="9" fill="var(--muted)">5  strip empty-string literals r''m→rm · approval.py:577</text>
+  <text x="58" y="248" font-size="9" fill="var(--muted)">6  _rewrite_resolved_user_home · /home/alice/ → ~/</text>
+  <rect x="58" y="260" width="300" height="24" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="70" y="277" font-size="11" font-weight="700" fill="var(--purple)">→ restored rm -rf ~/*</text>
+  <text x="340" y="304" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="310" width="600" height="72" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="54" y="330" font-size="10.5" font-weight="700" fill="var(--red)">③ HARDLINE regex match · HARDLINE_PATTERNS</text>
+  <text x="626" y="330" text-anchor="end" font-size="9" fill="var(--muted)">approval.py:266</text>
+  <text x="58" y="352" font-size="9" fill="var(--ink)">(r'\brm\s+(-[^\s]*\s+)*(~|\$HOME)(/?|/\*)?(\s|$)',</text>
+  <text x="58" y="370" font-size="9" fill="var(--ink)">&quot;recursive delete of home directory&quot;)</text>
+  <text x="340" y="394" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="400" width="600" height="60" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2.5"/>
+  <text x="54" y="420" font-size="10.5" font-weight="700" fill="var(--red)">④ Hard block · _hardline_block_result()</text>
+  <text x="626" y="420" text-anchor="end" font-size="9" fill="var(--muted)">approval.py:346</text>
+  <text x="58" y="438" font-size="9" fill="var(--ink)">BLOCKED (hardline): recursive delete of home directory.</text>
+  <text x="58" y="453" font-size="9" fill="var(--red)">…cannot be executed via the agent — not even with --yolo, /yolo, approvals.mode=off</text>
+  <rect x="40" y="470" width="600" height="44" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="54" y="488" font-size="10" font-weight="700" fill="var(--red)">⑤ Contrast · if we instead asked the model is this dangerous</text>
+  <text x="54" y="505" font-size="9" fill="var(--muted)">it might answer this is a safe cleanup script and allow it — the regex matches deterministically, wording tricks are useless</text>
+</svg>
+<div class="fig-cap"><b>An obfuscated command's deterministic defeat</b>: a <span class="mono">r\m -rf /home/alice/*</span> (using <span class="mono">\</span> escapes and empty quotes to split tokens and dodge the regex) is first restored by <span class="mono">_normalize_command_for_detection</span>'s six steps to <span class="mono">rm -rf ~/*</span> (crucially <span class="mono">re.sub(r'\\([^\n])', r'\1')</span> strips the backslash and <span class="mono">_rewrite_resolved_user_home</span> folds <span class="mono">/home/alice/</span> back to <span class="mono">~/</span>), then matches the HARDLINE regex <span class="mono">"recursive delete of home directory"</span> and is hard-blocked — <b>refused even with <span class="mono">--yolo</span></b>. Contrast: had we let the model judge "dangerous?", a single "safe cleanup script" would fool it. <b>A deterministic regex beats wording obfuscation.</b></div>
 </div>
 
 <h2>Layer two: subagent least-privilege</h2>
@@ -6475,6 +7724,50 @@ dependencies = [
 <p>The narrow-waist line and the cache line are really <strong>two melons on one vine</strong>: the fewer the core tools, the <strong>shorter the tool schema</strong> sent on every API call, and the smaller and stabler the cached prefix — adding one core tool permanently adds a span of tokens to <strong>every call, every user</strong>, which both hits A·lost-in-the-middle (thinning the model's attention) and lengthens the prefix. So the Footprint Ladder's "consider a new core tool only last" (ch.8) is essentially <strong>saving money for the cache and the attention budget</strong>. Pushing capability to the edge has a second payoff: an edge plugin, skill, or MCP server <strong>breaking, being added, or changing touches nothing in the core</strong> — the core stays stable, which again feeds the cache. The three lines <strong>converge</strong> here: the narrow waist keeps the core stable, the stable core keeps the cache alive, the live cache keeps cost low.</p>
 
 <p>The narrow waist isn't a dogma of "the smaller the core the better" — it has a <strong>flip side</strong>: capabilities like terminal (run commands), read_file, and web_search — needed by <strong>nearly every user on every task and impossible to compose from other tools</strong> — <strong>belong</strong> in the core. The Footprint Ladder's test was never "can we avoid adding it," but "<strong>is this truly fundamental, truly universal, truly without an edge substitute</strong>." Judging "what should be thin and what should be thick" is itself the <strong>craft</strong> of design: make fundamental capabilities thin and stable, push long-tail ones to the edge — misplace either way and you get a bloated core or everyone reinventing the wheel.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 436" role="img" aria-label="One real decision: why a skill is injected as an append-only user message, where build_skill_invocation_message satisfies all three design lines at once. (1) Decision point: when a user types /my-skill, rebuild the system-prompt prefix and break the cache, or append one user message? (2) Real implementation agent/skill_commands.py:517, def build_skill_invocation_message returns Optional[str], docstring Build the user message content for a skill slash command, the return value is appended as a user message and never enters the system prompt. (3) Hits line 1 the sacred cache: source comment does NOT invalidate the skills system-prompt cache, preserves prefix caching, skills called by name. (4) Hits line 3 the narrow waist: skills add no core schema, _HERMES_CORE_TOOLS exposes only skills_list, skill_view, skill_manage. (5) Hits line 2 self-evolution: learnings externalized to files, append-only, never rewritten. (6) Counterfactual: if instead stuffed into the system prompt, every skill install changes the prefix byte-for-byte and voids the whole conversation cache, recomputed at full price.">
+  <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">One decision: why a skill is an append-only user message</text>
+  <text x="20" y="42" font-size="10" fill="var(--muted)">build_skill_invocation_message — one function satisfies the cache, evolution, and narrow-waist lines at once</text>
+  <rect x="40" y="54" width="600" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="54" y="73" font-size="10.5" font-weight="700" fill="var(--blue)">① Decision · user types /my-skill</text>
+  <text x="54" y="91" font-size="10" fill="var(--ink)">Rebuild the system-prompt prefix (break cache)? Or append one user message?</text>
+  <text x="340" y="112" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="116" width="600" height="80" rx="9" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="54" y="136" font-size="10.5" font-weight="700" fill="var(--purple)">② Real implementation · agent/skill_commands.py:517</text>
+  <text x="58" y="156" font-size="9" fill="var(--ink)">def build_skill_invocation_message(...) -&gt; Optional[str]:</text>
+  <text x="58" y="172" font-size="9" fill="var(--muted)">&quot;&quot;&quot;Build the user message content for a skill slash command</text>
+  <text x="58" y="190" font-size="9" fill="var(--purple)">↳ return value is appended as a user message, never the system prompt</text>
+  <text x="340" y="214" text-anchor="middle" font-size="10" font-weight="700" fill="var(--accent-ink)">▾ one function hits all three design lines ▾</text>
+  <rect x="40" y="224" width="190" height="140" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="50" y="244" font-size="9.5" font-weight="700" fill="var(--accent-ink)">Line 1 · sacred cache</text>
+  <text x="50" y="264" font-size="9" fill="var(--ink)"># does NOT invalidate</text>
+  <text x="50" y="278" font-size="9" fill="var(--ink)"># the skills system-</text>
+  <text x="50" y="292" font-size="9" fill="var(--ink)"># prompt cache</text>
+  <text x="50" y="312" font-size="9" fill="var(--muted)">preserves prefix caching</text>
+  <text x="50" y="328" font-size="9" fill="var(--muted)">skills called by name</text>
+  <text x="50" y="352" font-size="9" fill="var(--faint)">skill_commands.py:440</text>
+  <rect x="245" y="224" width="190" height="140" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="255" y="244" font-size="9.5" font-weight="700" fill="var(--accent-ink)">Line 3 · narrow waist</text>
+  <text x="255" y="264" font-size="9" fill="var(--muted)">skills add no core schema</text>
+  <text x="255" y="280" font-size="9" fill="var(--muted)">_HERMES_CORE_TOOLS only:</text>
+  <text x="255" y="298" font-size="9" fill="var(--ink)">skills_list</text>
+  <text x="255" y="314" font-size="9" fill="var(--ink)">skill_view</text>
+  <text x="255" y="330" font-size="9" fill="var(--ink)">skill_manage</text>
+  <text x="255" y="352" font-size="9" fill="var(--faint)">toolsets.py:44</text>
+  <rect x="450" y="224" width="190" height="140" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="460" y="244" font-size="9.5" font-weight="700" fill="var(--accent-ink)">Line 2 · self-evolution</text>
+  <text x="460" y="264" font-size="9" fill="var(--muted)">learnings go to files</text>
+  <text x="460" y="280" font-size="9" fill="var(--muted)">append-only, never rewritten</text>
+  <text x="460" y="300" font-size="9" fill="var(--muted)">/my-skill injected as</text>
+  <text x="460" y="316" font-size="9" fill="var(--muted)">an append-only user message</text>
+  <text x="460" y="352" font-size="9" fill="var(--faint)">skill_commands.py:517</text>
+  <rect x="40" y="378" width="600" height="48" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="54" y="397" font-size="10" font-weight="700" fill="var(--red)">⑥ Counterfactual · if instead stuffed into the system prompt</text>
+  <text x="54" y="414" font-size="9" fill="var(--muted)">every skill install changes the prefix byte-for-byte → the whole conversation cache is voided, recomputed at full price</text>
+</svg>
+<div class="fig-cap"><b>One line of code hits all three lines</b>: when a user types <span class="mono">/my-skill</span>, <span class="mono">build_skill_invocation_message(...) -&gt; Optional[str]</span> (<span class="mono">skill_commands.py:517</span>, docstring "Build the user message content for a skill slash command") injects the skill as an <b>append-only user message</b> — that single choice simultaneously satisfies: <b>Line 1 sacred cache</b> (source comment <span class="mono">does NOT invalidate the skills system-prompt cache</span>, <span class="mono">skills called by name</span>), <b>Line 3 narrow waist</b> (skills add no core schema; <span class="mono">_HERMES_CORE_TOOLS</span> exposes only <span class="mono">skills_list / skill_view / skill_manage</span>), and <b>Line 2 self-evolution</b> (learnings externalized to files, append-only). Counterfactual: stuffing it into the system prompt would <b>void the whole cache</b> on every skill install.</div>
+</div>
 
 <div class="card collab">
   <div class="tag">🧩 The A–G constraint matrix · which chapters treat each LLM flaw</div>

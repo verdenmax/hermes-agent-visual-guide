@@ -611,9 +611,9 @@ terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st
   <text x="30" y="210" font-size="9" font-family="monospace" fill="var(--purple)">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</text>
   <text x="42" y="226" font-size="9" font-family="monospace" fill="var(--purple)">&quot;$(pwd -P)&quot;</text>
   <text x="30" y="244" font-size="9" font-family="monospace" fill="var(--ink)">exit $__hermes_ec</text>
-  <text x="30" y="266" font-size="8.5" fill="var(--muted)">cd 入会话 cwd → 跑命令 → 回写 env 快照</text>
-  <text x="30" y="280" font-size="8.5" fill="var(--muted)">→ 双通道吐 CWD（临时文件 + stdout 标记）</text>
-  <text x="30" y="298" font-size="8.5" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__（:280）</text>
+  <text x="30" y="266" font-size="9" fill="var(--muted)">cd 入会话 cwd → 跑命令 → 回写 env 快照</text>
+  <text x="30" y="280" font-size="9" fill="var(--muted)">→ 双通道吐 CWD（临时文件 + stdout 标记）</text>
+  <text x="30" y="298" font-size="9" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__（:280）</text>
 
   <rect x="336" y="50" width="324" height="74" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="348" y="68" font-size="10" font-weight="700" fill="var(--accent-ink)">② local · environments/local.py:634-695</text>
@@ -920,9 +920,9 @@ terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st
   <text x="30" y="210" font-size="9" font-family="monospace" fill="var(--purple)">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</text>
   <text x="42" y="226" font-size="9" font-family="monospace" fill="var(--purple)">&quot;$(pwd -P)&quot;</text>
   <text x="30" y="244" font-size="9" font-family="monospace" fill="var(--ink)">exit $__hermes_ec</text>
-  <text x="30" y="266" font-size="8.5" fill="var(--muted)">cd into session cwd -&gt; run -&gt; write env snapshot</text>
-  <text x="30" y="280" font-size="8.5" fill="var(--muted)">-&gt; emit CWD on two channels (temp file + stdout)</text>
-  <text x="30" y="298" font-size="8.5" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__ (:280)</text>
+  <text x="30" y="266" font-size="9" fill="var(--muted)">cd into session cwd -&gt; run -&gt; write env snapshot</text>
+  <text x="30" y="280" font-size="9" fill="var(--muted)">-&gt; emit CWD on two channels (temp file + stdout)</text>
+  <text x="30" y="298" font-size="9" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__ (:280)</text>
 
   <rect x="336" y="50" width="324" height="74" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="348" y="68" font-size="10" font-weight="700" fill="var(--accent-ink)">2. local - environments/local.py:634-695</text>

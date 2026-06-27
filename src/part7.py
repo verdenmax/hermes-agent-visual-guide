@@ -113,7 +113,7 @@ LESSON_24 = {
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 524" role="img" aria-label="一条混淆命令 r反斜杠m -rf /home/alice/* 被第一道防线归一化还原成 rm -rf ~/* 后命中 HARDLINE 正则被硬阻断的真实数据流：① 攻击输入插入转义反斜杠和空引号躲正则；② _normalize_command_for_detection 六步归一化（strip_ansi 去 ANSI、去 null 字节、NFKC 加小写、re.sub 剥反斜杠 r反斜杠m 变 rm、剥空引号、_rewrite_resolved_user_home 把 /home/alice/ 变 ~/）还原成 rm -rf ~/*；③ 命中 HARDLINE 正则 recursive delete of home directory；④ _hardline_block_result 硬阻断 BLOCKED hardline，连 --yolo /yolo approvals.mode=off 都不放行；⑤ 对照：若改问模型危不危险，模型可能答这是安全清理脚本就放行，正则确定性命中而措辞混淆无效。">
+<svg viewBox="0 0 680 524" role="img" aria-label="一条混淆命令 r反斜杠m -rf /home/alice/* 被第一道防线归一化还原成 rm -rf ~/* 后命中 HARDLINE 正则被硬阻断的真实数据流：① 攻击输入插入转义反斜杠和空引号躲正则；② _normalize_command_for_detection 六步归一化（strip_ansi 去 ANSI、去 null 字节、NFKC 规范化、re.sub 剥反斜杠 r反斜杠m 变 rm、剥空引号、_rewrite_resolved_user_home 把 /home/alice/ 变 ~/）还原成 rm -rf ~/*；③ 命中 HARDLINE 正则 recursive delete of home directory；④ _hardline_block_result 硬阻断 BLOCKED hardline，连 --yolo /yolo approvals.mode=off 都不放行；⑤ 对照：若改问模型危不危险，模型可能答这是安全清理脚本就放行，正则确定性命中而措辞混淆无效。">
   <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">混淆命令 → 确定性归一化 → HARDLINE 焊死拦截</text>
   <text x="20" y="42" font-size="10" fill="var(--muted)">一条插了转义反斜杠与空引号的删家目录命令，如何被第一道防线还原并拦下</text>
   <text x="652" y="32" text-anchor="middle" font-size="22">🛡</text>
@@ -127,9 +127,9 @@ LESSON_24 = {
   <text x="626" y="136" text-anchor="end" font-size="9" fill="var(--muted)">approval.py:559</text>
   <text x="58" y="158" font-size="9" fill="var(--muted)">1  strip_ansi(command) · 去全部 ANSI 转义序列</text>
   <text x="58" y="176" font-size="9" fill="var(--muted)">2  command.replace('\x00','') · 去 null 字节</text>
-  <text x="58" y="194" font-size="9" fill="var(--muted)">3  unicodedata.normalize('NFKC') + .lower()</text>
+  <text x="58" y="194" font-size="9" fill="var(--muted)">3  unicodedata.normalize('NFKC')</text>
   <text x="58" y="212" font-size="9" fill="var(--purple)">4  re.sub(r'\\([^\n])', r'\1')</text>
-  <text x="232" y="212" font-size="9" fill="var(--muted)">剥反斜杠 r\m→rm · approval.py:574</text>
+  <text x="232" y="212" font-size="9" fill="var(--muted)">剥反斜杠 r\m→rm · approval.py:575</text>
   <text x="58" y="230" font-size="9" fill="var(--muted)">5  剥空字符串字面量 r''m→rm · approval.py:577</text>
   <text x="58" y="248" font-size="9" fill="var(--muted)">6  _rewrite_resolved_user_home · /home/alice/ → ~/</text>
   <rect x="58" y="260" width="300" height="24" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
@@ -342,7 +342,7 @@ dependencies = [
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 524" role="img" aria-label="Real data flow of one obfuscated command r-backslash-m -rf /home/alice/* being restored to rm -rf ~/* and then blocked by the HARDLINE regex: (1) the attack input hides escaped backslashes and empty quotes to dodge the regex; (2) _normalize_command_for_detection runs six normalization steps (strip_ansi removes ANSI escapes, strip null bytes, NFKC plus lower, re.sub strips backslashes turning r-backslash-m into rm, strip empty quotes, _rewrite_resolved_user_home folds /home/alice/ into ~/) restoring rm -rf ~/*; (3) it matches the HARDLINE regex recursive delete of home directory; (4) _hardline_block_result hard-blocks with BLOCKED hardline, refused even with --yolo /yolo approvals.mode=off; (5) contrast: if we instead asked the model whether it is dangerous, it might answer this is a safe cleanup script and allow it, whereas the regex matches deterministically and wording tricks are useless.">
+<svg viewBox="0 0 680 524" role="img" aria-label="Real data flow of one obfuscated command r-backslash-m -rf /home/alice/* being restored to rm -rf ~/* and then blocked by the HARDLINE regex: (1) the attack input hides escaped backslashes and empty quotes to dodge the regex; (2) _normalize_command_for_detection runs six normalization steps (strip_ansi removes ANSI escapes, strip null bytes, NFKC normalize, re.sub strips backslashes turning r-backslash-m into rm, strip empty quotes, _rewrite_resolved_user_home folds /home/alice/ into ~/) restoring rm -rf ~/*; (3) it matches the HARDLINE regex recursive delete of home directory; (4) _hardline_block_result hard-blocks with BLOCKED hardline, refused even with --yolo /yolo approvals.mode=off; (5) contrast: if we instead asked the model whether it is dangerous, it might answer this is a safe cleanup script and allow it, whereas the regex matches deterministically and wording tricks are useless.">
   <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">Obfuscated command → deterministic normalization → HARDLINE block</text>
   <text x="20" y="42" font-size="10" fill="var(--muted)">how a delete-home command hidden behind escapes and empty quotes is restored and blocked by the first gate</text>
   <text x="652" y="32" text-anchor="middle" font-size="22">🛡</text>
@@ -356,9 +356,9 @@ dependencies = [
   <text x="626" y="136" text-anchor="end" font-size="9" fill="var(--muted)">approval.py:559</text>
   <text x="58" y="158" font-size="9" fill="var(--muted)">1  strip_ansi(command) · strip all ANSI escape sequences</text>
   <text x="58" y="176" font-size="9" fill="var(--muted)">2  command.replace('\x00','') · strip null bytes</text>
-  <text x="58" y="194" font-size="9" fill="var(--muted)">3  unicodedata.normalize('NFKC') + .lower()</text>
+  <text x="58" y="194" font-size="9" fill="var(--muted)">3  unicodedata.normalize('NFKC')</text>
   <text x="58" y="212" font-size="9" fill="var(--purple)">4  re.sub(r'\\([^\n])', r'\1')</text>
-  <text x="232" y="212" font-size="9" fill="var(--muted)">strip backslashes r\m→rm · approval.py:574</text>
+  <text x="232" y="212" font-size="9" fill="var(--muted)">strip backslashes r\m→rm · approval.py:575</text>
   <text x="58" y="230" font-size="9" fill="var(--muted)">5  strip empty-string literals r''m→rm · approval.py:577</text>
   <text x="58" y="248" font-size="9" fill="var(--muted)">6  _rewrite_resolved_user_home · /home/alice/ → ~/</text>
   <rect x="58" y="260" width="300" height="24" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
@@ -589,16 +589,16 @@ LESSON_25 = {
 <p>窄腰不是"核心越小越好"的教条——它也有<strong>反面</strong>:terminal(跑命令)、read_file(读文件)、web_search(搜网)这些<strong>几乎每个用户每个任务都要、又无法用别的工具拼出来</strong>的能力,就<strong>该</strong>放进核心。Footprint Ladder 的判据从来不是"能不能不加",而是"<strong>这是不是真的根本、真的人人要、真的没有边缘替代</strong>"。判断"什么该窄、什么该厚"本身就是设计的<strong>手艺</strong>:把根本能力做薄做稳,把长尾能力推到边缘——错放任何一边,要么核心臃肿,要么人人重复造轮子。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 436" role="img" aria-label="一个真实决策：技能为何注入为 append-only user 消息——_build_skill_message 同一函数同时命中三条设计线。① 决策点：用户敲 /my-skill，是重建 system prompt 前缀破缓存，还是 append 一条 user 消息？② 真实实现 agent/skill_commands.py:245 / :523，def _build_skill_message 返回 Optional[str]，docstring Build the user message content for a skill slash command，返回值作为 user 消息 append、不进 system prompt。③ 命中线一缓存：源码注释 does NOT invalidate the skills system-prompt cache、preserves prefix caching、no cache-reset cost。④ 命中线三窄腰：技能不占核心 schema，_HERMES_CORE_TOOLS 仅 skills_list、skill_view、skill_manage 三入口。⑤ 命中线二自我进化：学到的外置成文件、只追加、不改写。⑥ 反事实：若改塞进 system prompt，每装一个技能前缀就逐字节变，从该点起全对话 prompt 缓存作废、全价重算。">
+<svg viewBox="0 0 680 436" role="img" aria-label="一个真实决策：技能为何注入为 append-only user 消息——build_skill_invocation_message 同一函数同时命中三条设计线。① 决策点：用户敲 /my-skill，是重建 system prompt 前缀破缓存，还是 append 一条 user 消息？② 真实实现 agent/skill_commands.py:517，def build_skill_invocation_message 返回 Optional[str]，docstring Build the user message content for a skill slash command，返回值作为 user 消息 append、不进 system prompt。③ 命中线一缓存：源码注释 does NOT invalidate the skills system-prompt cache、preserves prefix caching、skills called by name。④ 命中线三窄腰：技能不占核心 schema，_HERMES_CORE_TOOLS 仅 skills_list、skill_view、skill_manage 三入口。⑤ 命中线二自我进化：学到的外置成文件、只追加、不改写。⑥ 反事实：若改塞进 system prompt，每装一个技能前缀就逐字节变，从该点起全对话 prompt 缓存作废、全价重算。">
   <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">一个决策：技能为何注入为 append-only user 消息</text>
-  <text x="20" y="42" font-size="10" fill="var(--muted)">_build_skill_message 同一函数同时满足缓存、进化、窄腰三条设计线</text>
+  <text x="20" y="42" font-size="10" fill="var(--muted)">build_skill_invocation_message 同一函数同时满足缓存、进化、窄腰三条设计线</text>
   <rect x="40" y="54" width="600" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="54" y="73" font-size="10.5" font-weight="700" fill="var(--blue)">① 决策 · 用户敲 /my-skill</text>
   <text x="54" y="91" font-size="10" fill="var(--ink)">重建 system prompt 前缀（破缓存）？还是 append 一条 user 消息？</text>
   <text x="340" y="112" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
   <rect x="40" y="116" width="600" height="80" rx="9" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
-  <text x="54" y="136" font-size="10.5" font-weight="700" fill="var(--purple)">② 真实实现 · agent/skill_commands.py:245 / :523</text>
-  <text x="58" y="156" font-size="9" fill="var(--ink)">def _build_skill_message(...) -&gt; Optional[str]:</text>
+  <text x="54" y="136" font-size="10.5" font-weight="700" fill="var(--purple)">② 真实实现 · agent/skill_commands.py:517</text>
+  <text x="58" y="156" font-size="9" fill="var(--ink)">def build_skill_invocation_message(...) -&gt; Optional[str]:</text>
   <text x="58" y="172" font-size="9" fill="var(--muted)">&quot;&quot;&quot;Build the user message content for a skill slash command</text>
   <text x="58" y="190" font-size="9" fill="var(--purple)">↳ 返回值作为 user 消息 append，绝不进 system prompt</text>
   <text x="340" y="214" text-anchor="middle" font-size="10" font-weight="700" fill="var(--accent-ink)">▾ 同一函数同时命中三条设计线 ▾</text>
@@ -608,7 +608,7 @@ LESSON_25 = {
   <text x="50" y="278" font-size="9" fill="var(--ink)"># the skills system-</text>
   <text x="50" y="292" font-size="9" fill="var(--ink)"># prompt cache</text>
   <text x="50" y="312" font-size="9" fill="var(--muted)">preserves prefix caching</text>
-  <text x="50" y="328" font-size="9" fill="var(--muted)">no cache-reset cost</text>
+  <text x="50" y="328" font-size="9" fill="var(--muted)">skills called by name</text>
   <text x="50" y="352" font-size="9" fill="var(--faint)">skill_commands.py:440</text>
   <rect x="245" y="224" width="190" height="140" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="255" y="244" font-size="9.5" font-weight="700" fill="var(--accent-ink)">线③ · 窄腰</text>
@@ -624,12 +624,12 @@ LESSON_25 = {
   <text x="460" y="280" font-size="9" fill="var(--muted)">只追加、不改写</text>
   <text x="460" y="300" font-size="9" fill="var(--muted)">/my-skill 注入为</text>
   <text x="460" y="316" font-size="9" fill="var(--muted)">append-only user 消息</text>
-  <text x="460" y="352" font-size="9" fill="var(--faint)">skill_commands.py:245</text>
+  <text x="460" y="352" font-size="9" fill="var(--faint)">skill_commands.py:517</text>
   <rect x="40" y="378" width="600" height="48" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="5 4"/>
   <text x="54" y="397" font-size="10" font-weight="700" fill="var(--red)">⑥ 反事实 · 若改塞进 system prompt</text>
   <text x="54" y="414" font-size="9" fill="var(--muted)">每装一个技能前缀就逐字节变 → 从该点起全对话 prompt 缓存作废、全价重算</text>
 </svg>
-<div class="fig-cap"><b>一行代码同时命中三条线</b>：用户敲 <span class="mono">/my-skill</span> 时，<span class="mono">_build_skill_message(...) -&gt; Optional[str]</span>（<span class="mono">skill_commands.py:245</span>，docstring「Build the user message content for a skill slash command」）把技能<b>注入为一条 append-only 的 user 消息</b>——这一个选择同时满足：<b>线①缓存神圣</b>（源码注释 <span class="mono">does NOT invalidate the skills system-prompt cache</span>，<span class="mono">no cache-reset cost</span>）、<b>线③窄腰</b>（技能不占核心 schema，<span class="mono">_HERMES_CORE_TOOLS</span> 仅 <span class="mono">skills_list / skill_view / skill_manage</span> 三入口）、<b>线②自我进化</b>（学到的外置成文件、只追加）。反事实：若塞进 system prompt，每装一个技能就让<b>全对话缓存作废</b>。</div>
+<div class="fig-cap"><b>一行代码同时命中三条线</b>：用户敲 <span class="mono">/my-skill</span> 时，<span class="mono">build_skill_invocation_message(...) -&gt; Optional[str]</span>（<span class="mono">skill_commands.py:517</span>，docstring「Build the user message content for a skill slash command」）把技能<b>注入为一条 append-only 的 user 消息</b>——这一个选择同时满足：<b>线①缓存神圣</b>（源码注释 <span class="mono">does NOT invalidate the skills system-prompt cache</span>，<span class="mono">skills called by name</span>）、<b>线③窄腰</b>（技能不占核心 schema，<span class="mono">_HERMES_CORE_TOOLS</span> 仅 <span class="mono">skills_list / skill_view / skill_manage</span> 三入口）、<b>线②自我进化</b>（学到的外置成文件、只追加）。反事实：若塞进 system prompt，每装一个技能就让<b>全对话缓存作废</b>。</div>
 </div>
 
 <div class="card collab">
@@ -882,16 +882,16 @@ LESSON_25 = {
 <p>The narrow waist isn't a dogma of "the smaller the core the better" — it has a <strong>flip side</strong>: capabilities like terminal (run commands), read_file, and web_search — needed by <strong>nearly every user on every task and impossible to compose from other tools</strong> — <strong>belong</strong> in the core. The Footprint Ladder's test was never "can we avoid adding it," but "<strong>is this truly fundamental, truly universal, truly without an edge substitute</strong>." Judging "what should be thin and what should be thick" is itself the <strong>craft</strong> of design: make fundamental capabilities thin and stable, push long-tail ones to the edge — misplace either way and you get a bloated core or everyone reinventing the wheel.</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 436" role="img" aria-label="One real decision: why a skill is injected as an append-only user message, where _build_skill_message satisfies all three design lines at once. (1) Decision point: when a user types /my-skill, rebuild the system-prompt prefix and break the cache, or append one user message? (2) Real implementation agent/skill_commands.py:245 / :523, def _build_skill_message returns Optional[str], docstring Build the user message content for a skill slash command, the return value is appended as a user message and never enters the system prompt. (3) Hits line 1 the sacred cache: source comment does NOT invalidate the skills system-prompt cache, preserves prefix caching, no cache-reset cost. (4) Hits line 3 the narrow waist: skills add no core schema, _HERMES_CORE_TOOLS exposes only skills_list, skill_view, skill_manage. (5) Hits line 2 self-evolution: learnings externalized to files, append-only, never rewritten. (6) Counterfactual: if instead stuffed into the system prompt, every skill install changes the prefix byte-for-byte and voids the whole conversation cache, recomputed at full price.">
+<svg viewBox="0 0 680 436" role="img" aria-label="One real decision: why a skill is injected as an append-only user message, where build_skill_invocation_message satisfies all three design lines at once. (1) Decision point: when a user types /my-skill, rebuild the system-prompt prefix and break the cache, or append one user message? (2) Real implementation agent/skill_commands.py:517, def build_skill_invocation_message returns Optional[str], docstring Build the user message content for a skill slash command, the return value is appended as a user message and never enters the system prompt. (3) Hits line 1 the sacred cache: source comment does NOT invalidate the skills system-prompt cache, preserves prefix caching, skills called by name. (4) Hits line 3 the narrow waist: skills add no core schema, _HERMES_CORE_TOOLS exposes only skills_list, skill_view, skill_manage. (5) Hits line 2 self-evolution: learnings externalized to files, append-only, never rewritten. (6) Counterfactual: if instead stuffed into the system prompt, every skill install changes the prefix byte-for-byte and voids the whole conversation cache, recomputed at full price.">
   <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">One decision: why a skill is an append-only user message</text>
-  <text x="20" y="42" font-size="10" fill="var(--muted)">_build_skill_message — one function satisfies the cache, evolution, and narrow-waist lines at once</text>
+  <text x="20" y="42" font-size="10" fill="var(--muted)">build_skill_invocation_message — one function satisfies the cache, evolution, and narrow-waist lines at once</text>
   <rect x="40" y="54" width="600" height="46" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="54" y="73" font-size="10.5" font-weight="700" fill="var(--blue)">① Decision · user types /my-skill</text>
   <text x="54" y="91" font-size="10" fill="var(--ink)">Rebuild the system-prompt prefix (break cache)? Or append one user message?</text>
   <text x="340" y="112" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
   <rect x="40" y="116" width="600" height="80" rx="9" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
-  <text x="54" y="136" font-size="10.5" font-weight="700" fill="var(--purple)">② Real implementation · agent/skill_commands.py:245 / :523</text>
-  <text x="58" y="156" font-size="9" fill="var(--ink)">def _build_skill_message(...) -&gt; Optional[str]:</text>
+  <text x="54" y="136" font-size="10.5" font-weight="700" fill="var(--purple)">② Real implementation · agent/skill_commands.py:517</text>
+  <text x="58" y="156" font-size="9" fill="var(--ink)">def build_skill_invocation_message(...) -&gt; Optional[str]:</text>
   <text x="58" y="172" font-size="9" fill="var(--muted)">&quot;&quot;&quot;Build the user message content for a skill slash command</text>
   <text x="58" y="190" font-size="9" fill="var(--purple)">↳ return value is appended as a user message, never the system prompt</text>
   <text x="340" y="214" text-anchor="middle" font-size="10" font-weight="700" fill="var(--accent-ink)">▾ one function hits all three design lines ▾</text>
@@ -901,7 +901,7 @@ LESSON_25 = {
   <text x="50" y="278" font-size="9" fill="var(--ink)"># the skills system-</text>
   <text x="50" y="292" font-size="9" fill="var(--ink)"># prompt cache</text>
   <text x="50" y="312" font-size="9" fill="var(--muted)">preserves prefix caching</text>
-  <text x="50" y="328" font-size="9" fill="var(--muted)">no cache-reset cost</text>
+  <text x="50" y="328" font-size="9" fill="var(--muted)">skills called by name</text>
   <text x="50" y="352" font-size="9" fill="var(--faint)">skill_commands.py:440</text>
   <rect x="245" y="224" width="190" height="140" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="255" y="244" font-size="9.5" font-weight="700" fill="var(--accent-ink)">Line 3 · narrow waist</text>
@@ -917,12 +917,12 @@ LESSON_25 = {
   <text x="460" y="280" font-size="9" fill="var(--muted)">append-only, never rewritten</text>
   <text x="460" y="300" font-size="9" fill="var(--muted)">/my-skill injected as</text>
   <text x="460" y="316" font-size="9" fill="var(--muted)">an append-only user message</text>
-  <text x="460" y="352" font-size="9" fill="var(--faint)">skill_commands.py:245</text>
+  <text x="460" y="352" font-size="9" fill="var(--faint)">skill_commands.py:517</text>
   <rect x="40" y="378" width="600" height="48" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="5 4"/>
   <text x="54" y="397" font-size="10" font-weight="700" fill="var(--red)">⑥ Counterfactual · if instead stuffed into the system prompt</text>
   <text x="54" y="414" font-size="9" fill="var(--muted)">every skill install changes the prefix byte-for-byte → the whole conversation cache is voided, recomputed at full price</text>
 </svg>
-<div class="fig-cap"><b>One line of code hits all three lines</b>: when a user types <span class="mono">/my-skill</span>, <span class="mono">_build_skill_message(...) -&gt; Optional[str]</span> (<span class="mono">skill_commands.py:245</span>, docstring "Build the user message content for a skill slash command") injects the skill as an <b>append-only user message</b> — that single choice simultaneously satisfies: <b>Line 1 sacred cache</b> (source comment <span class="mono">does NOT invalidate the skills system-prompt cache</span>, <span class="mono">no cache-reset cost</span>), <b>Line 3 narrow waist</b> (skills add no core schema; <span class="mono">_HERMES_CORE_TOOLS</span> exposes only <span class="mono">skills_list / skill_view / skill_manage</span>), and <b>Line 2 self-evolution</b> (learnings externalized to files, append-only). Counterfactual: stuffing it into the system prompt would <b>void the whole cache</b> on every skill install.</div>
+<div class="fig-cap"><b>One line of code hits all three lines</b>: when a user types <span class="mono">/my-skill</span>, <span class="mono">build_skill_invocation_message(...) -&gt; Optional[str]</span> (<span class="mono">skill_commands.py:517</span>, docstring "Build the user message content for a skill slash command") injects the skill as an <b>append-only user message</b> — that single choice simultaneously satisfies: <b>Line 1 sacred cache</b> (source comment <span class="mono">does NOT invalidate the skills system-prompt cache</span>, <span class="mono">skills called by name</span>), <b>Line 3 narrow waist</b> (skills add no core schema; <span class="mono">_HERMES_CORE_TOOLS</span> exposes only <span class="mono">skills_list / skill_view / skill_manage</span>), and <b>Line 2 self-evolution</b> (learnings externalized to files, append-only). Counterfactual: stuffing it into the system prompt would <b>void the whole cache</b> on every skill install.</div>
 </div>
 
 <div class="card collab">

@@ -256,7 +256,7 @@ LESSON_17 = {
 
   <rect x="517" y="56" width="153" height="218" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
   <text x="527" y="75" font-size="10" font-weight="700" fill="var(--purple)">④ MessageEvent</text>
-  <text x="527" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:501</text>
+  <text x="527" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:502</text>
   <text x="527" y="110" font-size="9" font-family="monospace" fill="var(--purple)">text=&quot;deploy</text>
   <text x="527" y="124" font-size="9" font-family="monospace" fill="var(--purple)">  staging&quot;</text>
   <text x="527" y="142" font-size="9" font-family="monospace" fill="var(--ink)">message_type=</text>
@@ -550,7 +550,7 @@ LESSON_17 = {
 
   <rect x="517" y="56" width="153" height="218" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
   <text x="527" y="75" font-size="10" font-weight="700" fill="var(--purple)">4 MessageEvent</text>
-  <text x="527" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:501</text>
+  <text x="527" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:502</text>
   <text x="527" y="110" font-size="9" font-family="monospace" fill="var(--purple)">text=&quot;deploy</text>
   <text x="527" y="124" font-size="9" font-family="monospace" fill="var(--purple)">  staging&quot;</text>
   <text x="527" y="142" font-size="9" font-family="monospace" fill="var(--ink)">message_type=</text>
