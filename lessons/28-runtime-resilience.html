@@ -372,9 +372,257 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   </div>
   <div class="lang-zh">
 <p class="lead">一个跑了几十轮、还开着后台进程、正在改文件的 agent，要怎么<strong>安全地急停、可靠地知道后台干完没、原子地落盘</strong>？这一章拆开 Hermes 在运行时最容易出正确性 bug 的三套机制。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 飞行中的紧急程序</div>
+  急停从来不是<strong>瞬间</strong>的——飞行员拉杆之后，飞机要滑到<strong>下一个稳定点</strong>才真正改出（这正是<strong>协作式中断</strong>：信号在某个边界才被收下，而不是发出的那一刻）。
+  <p style="margin:.6rem 0 0">同样的克制在这一章还会出现两次。后台那台引擎，要么<strong>真的还在转</strong>、要么早就停了——仪表必须<strong>如实</strong>反映，而且<strong>同一个状态不能重复报警</strong>（通知去重）。要改飞行计划，你不会在生效的那份上直接涂改：先写一份<strong>草稿</strong>、<strong>校验无误，再原子地换上</strong>（写临时文件，然后 rename）。三个运行时陷阱，一条共同的暗线：一次<strong>停</strong>、一次<strong>看</strong>、一次<strong>存</strong>，都有那么一刻，「看起来完成了」和「真的完成了」会悄悄分叉。</p>
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 运行时的三个正确性陷阱</div>
+  运行时——真正负责<strong>停、看、存</strong>的那一层——藏着三处「直觉模型是错的」的地方：
+  <p style="margin:.6rem 0 0"><strong>① 中断是协作式的，不是抢占式的。</strong>按下 <span class="mono">/stop</span> 只是<strong>置一面标志</strong>；主循环在它的<strong>边界</strong>（两轮迭代之间）才把它收下，而中断对<strong>子代理的传播是手工接线</strong>的——父代理遍历一张 <span class="mono">_active_children</span> 名册、逐个调 <span class="mono">child.interrupt()</span>。漏掉登记（或像异步委派那样主动 detach），子代理就<strong>永远收不到</strong>这次急停。</p>
+  <p><strong>② 后台的「持久」几乎全是进程内幻觉。</strong>一个 <span class="mono">background=true</span> 的 <span class="mono">delegate_task</span> 虽然脱离了当前回合，却仍是<strong>进程本地</strong>的——进程一死它就没了。真正能<strong>熬过重启</strong>的持久，得靠 <span class="mono">cronjob</span> 或后台终端任务，而不是一个活在内存里的 future。</p>
+  <p><strong>③ 落盘的原子性，挂在一个毫不起眼的 rename 上。</strong>一个写到一半的配置或会话文件就是损坏；正确的做法是先写临时文件，再用 <span class="mono">os.replace()</span> 把它<strong>原子换上</strong>，让读者要么看到旧文件、要么看到完整的新文件，<strong>永远不会读到撕裂的中间态</strong>。</p>
+  <p>三个陷阱各自独立，却共享同一条主线：在每一个运行时的边缘，<strong>「看起来完成」都不等于「真的完成」</strong>——而 bug 就住在这条缝里。</p>
+</div>
+
+<p>三套机制里，先拆最微妙的第一套：一次「急停」到底怎么在一个正在运行的 agent 里传播，以及为什么它<strong>那么容易传不到子代理</strong>。</p>
+
+<h3>🔬 28.1 · 中断传播：协作式急停，子代理靠显式扇出</h3>
+<p>用户按下 <span class="mono">/stop</span>（或网关收到一条中断指令），调用的是 <span class="mono">AIAgent.interrupt()</span>。它做两件事：把 <span class="mono">agent._interrupt_requested</span> 置为 <span class="mono">True</span>、记下触发它的那条新消息，然后调用 <span class="mono">_set_interrupt(True, 执行线程 id)</span>，给<strong>这个 agent 自己的执行线程</strong>盖一个线程级中断信号，让正跑在该线程上的工具（比如一条卡在网络 I/O 上的终端命令）下次自查时能提前退出。注意这个信号是<strong>按线程定向</strong>的：网关里同进程还跑着别的 agent，它们的线程不会被误伤。</p>
+<p>但标志置位<strong>不是</strong>中断被「收下」的地方——那一步发生在<strong>主工具循环的边界</strong>。<span class="mono">agent/conversation_loop.py</span> 里的 <span class="mono">while</span> 循环每进入新一轮，先 poll 一次 <span class="mono">agent._interrupt_requested</span>：命中就把 <span class="mono">interrupted</span> 置真、记下 <span class="mono">_turn_exit_reason = "interrupted_by_user"</span>、打一行「Breaking out of tool loop」，然后 <span class="mono">break</span> 退出循环。关键在于：这个检查在<strong>两轮迭代之间</strong>，而不在一次 API 调用、或一个工具执行的<strong>正中间</strong>。</p>
+<p>于是 Hermes 的中断是<strong>协作式（cooperative）而非抢占式（preemptive）</strong>——Python 没法从外部硬杀一个线程，所以没有任何地方能「瞬间叫停」正在执行的代码，一切都靠各处<strong>自愿轮询那面标志</strong>。除了循环边界，迭代内部还有几处自查点：流式响应的逐 token 回调里会检查 <span class="mono">_interrupt_requested</span> 并提前掐断；非流式 API 调用挂着一个后台检查循环，一旦发现中断就<strong>强制关闭 httpx 客户端</strong>，让阻塞的请求立刻抛错返回；失败重试的退避睡眠则<strong>每 200ms 轮询一次</strong>（<span class="mono">time.sleep(0.2)</span>），中断一到就放弃重试。但只要某段代码<strong>不去检查</strong>这面标志（一个纯 CPU 的紧循环、一个不配合的第三方调用），它就会一路跑到自己结束、或撞上自己的超时——循环要等它把控制权交回来，才能在下一个边界真正停下。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py:589</span></div><pre>    while (api_call_count &lt; agent.max_iterations and agent.iteration_budget.remaining &gt; 0) or agent._budget_grace_call:
+        # Reset per-turn checkpoint dedup so each iteration can take one snapshot
+        agent._checkpoint_mgr.new_turn()
+
+        # Check for interrupt request (e.g., user sent new message)
+        if agent._interrupt_requested:
+            interrupted = True
+            _turn_exit_reason = "interrupted_by_user"
+            if not agent.quiet_mode:
+                agent._safe_print("\n⚡ Breaking out of tool loop due to interrupt...")
+            break</pre></div>
+<p>第二个、也更容易踩的坑：中断<strong>对子代理的传播是显式手工接线的</strong>，并非免费。<span class="mono">interrupt()</span> 的末尾会遍历 <span class="mono">self._active_children</span> 这张<strong>活跃子代理名册</strong>，对每一个调 <span class="mono">child.interrupt(message)</span>——而 <span class="mono">child.interrupt()</span> 自己又会遍历它的 <span class="mono">_active_children</span>，于是中断<strong>递归扇出</strong>到孙代理、曾孙代理。但这条链能成立，<strong>完全依赖每个被 spawn 出来的子代理都把自己登记进父代理的 <span class="mono">_active_children</span></strong>（见 <span class="mono">delegate_tool.py</span> 里「Register child for interrupt propagation」那一步），并在跑完时注销。一旦某条委派路径<strong>忘了登记、或主动 detach</strong>，父代理的 <span class="mono">/stop</span> 就会<strong>静默地传不到</strong>那个子代理，它会在自己的流式 / 工具循环里<strong>继续跑</strong>。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">run_agent.py:2433</span></div><pre>        # Propagate interrupt to any running child agents (subagent delegation)
+        with self._active_children_lock:
+            children_copy = list(self._active_children)
+        for child in children_copy:
+            try:
+                child.interrupt(message)
+            except Exception as e:
+                logger.debug("Failed to propagate interrupt to child agent: %s", e)</pre></div>
+<p>异步 / 后台委派正是<strong>故意 detach</strong> 的：一个 <span class="mono">background=true</span> 的批量委派会把子代理从父代理的 <span class="mono">_active_children</span> 里<strong>摘掉</strong>（它们的生命周期改由异步注册表接管，而非这一回合），转而注册一个独立的 <span class="mono">interrupt_fn</span> 去取消它们。这是设计，不是 bug——但它恰好说明了为什么「中断会自己传下去」是个危险假设：<strong>扇出是一条要靠人手维护的不变量，而不是语言级特性</strong>。新增任何一条委派路径时，谁负责把这次急停带到子代理那里，都必须<strong>显式想清楚</strong>。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 432" role="img" aria-label="中断扇出图：中心 agent.interrupt() 置 _interrupt_requested 为 True，向四条路径传播——主循环边界轮询、子代理需显式 child.interrupt()、流式回调逐 token 查标志、retry 退避每 200ms 轮询；子代理那条标红，强调必须显式传播，漏登记或 detach 就传不到">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">中断扇出 · 一面标志，四条协作式传播路径</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">interrupt() 设标志并给本线程盖信号，再由各处自愿轮询收下；唯子代理靠显式扇出</text>
+  <rect x="240" y="58" width="200" height="62" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="340" y="84" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">agent.interrupt()</text>
+  <text x="340" y="104" text-anchor="middle" font-size="9.5" fill="var(--muted)">_interrupt_requested = True</text>
+  <line x1="340" y1="120" x2="92" y2="224" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M92,232 L87,223 L97,223 Z" fill="var(--muted)"/>
+  <line x1="340" y1="120" x2="257" y2="224" stroke="var(--red)" stroke-width="1.8"/>
+  <path d="M257,232 L252,223 L262,223 Z" fill="var(--red)"/>
+  <line x1="340" y1="120" x2="422" y2="224" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M422,232 L417,223 L427,223 Z" fill="var(--muted)"/>
+  <line x1="340" y1="120" x2="587" y2="224" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M587,232 L582,223 L592,223 Z" fill="var(--muted)"/>
+  <rect x="16" y="232" width="152" height="120" rx="10" fill="var(--panel)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="92" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">主循环边界</text>
+  <text x="92" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">loop boundary</text>
+  <line x1="26" y1="281" x2="158" y2="281" stroke="var(--line)"/>
+  <text x="26" y="301" font-size="9.5" fill="var(--ink)">每轮迭代先 poll 标志</text>
+  <text x="26" y="318" font-size="9.5" fill="var(--ink)">命中即 break 退循环</text>
+  <text x="26" y="341" font-size="9" fill="var(--muted)">conversation_loop.py:594</text>
+  <rect x="181" y="232" width="152" height="120" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="257" y="257" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">子代理 · 显式传播</text>
+  <text x="257" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">_active_children fan-out</text>
+  <line x1="191" y1="281" x2="323" y2="281" stroke="var(--line)"/>
+  <text x="191" y="301" font-size="9.5" fill="var(--ink)">遍历名册逐个</text>
+  <text x="191" y="318" font-size="9.5" fill="var(--ink)">child.interrupt()</text>
+  <text x="191" y="341" font-size="9" font-weight="700" fill="var(--red)">⚠ 漏登记 / detach 就断链</text>
+  <rect x="346" y="232" width="152" height="120" rx="10" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="422" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="var(--purple)">流式回调</text>
+  <text x="422" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">streaming delta</text>
+  <line x1="356" y1="281" x2="488" y2="281" stroke="var(--line)"/>
+  <text x="356" y="301" font-size="9.5" fill="var(--ink)">逐 token 查标志</text>
+  <text x="356" y="318" font-size="9.5" fill="var(--ink)">强关 httpx 提前断</text>
+  <text x="356" y="341" font-size="9" fill="var(--muted)">force-close client</text>
+  <rect x="511" y="232" width="152" height="120" rx="10" fill="var(--panel)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="587" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="var(--amber)">retry 退避 poll</text>
+  <text x="587" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">backoff sleep</text>
+  <line x1="521" y1="281" x2="653" y2="281" stroke="var(--line)"/>
+  <text x="521" y="301" font-size="9.5" fill="var(--ink)">每 200ms 轮询一次</text>
+  <text x="521" y="318" font-size="9.5" fill="var(--ink)">time.sleep(0.2)</text>
+  <text x="521" y="341" font-size="9" fill="var(--muted)">中断到即放弃重试</text>
+  <rect x="16" y="372" width="648" height="48" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="340" y="392" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">协作式：没有线程被硬杀</text>
+  <text x="340" y="410" text-anchor="middle" font-size="9.5" fill="var(--ink)">四条路径全靠各处自愿轮询那面标志——某段不检查的代码，会一路跑到自己结束才停</text>
+</svg>
+<div class="fig-cap"><b>中断扇出</b>：<span class="mono">interrupt()</span> 设标志 + 给本线程盖信号后，由四条路径各自<strong>自愿轮询</strong>收下——主循环边界、流式回调、retry 退避（每 <strong>200ms</strong>）都靠自查；唯独<strong>子代理</strong>要靠父代理遍历 <span class="mono">_active_children</span> 显式 <span class="mono">child.interrupt()</span> 才传得到，漏登记 / detach 就断链。</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 356" role="img" aria-label="协作式与抢占式中断时序对比：上轨 Hermes 协作式，工具执行到一半时 /stop 到达，标志置位后进入挂起等待，直到下一个循环边界才真正 break；下轨抢占式对照（Hermes 不这么做），同一时刻当场硬停，用虚线表示">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">cooperative vs preemptive · 同一刻中断，停在不同时点</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">中断在工具执行中途到达——协作式等到循环边界才收下，抢占式当场杀线程</text>
+  <text x="20" y="92" font-size="11" font-weight="700" fill="var(--accent-ink)">Hermes · 协作式</text>
+  <line x1="140" y1="120" x2="660" y2="120" stroke="var(--line)"/>
+  <rect x="140" y="104" width="160" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="220" y="124" text-anchor="middle" font-size="9.5" fill="var(--blue)">工具执行中</text>
+  <rect x="300" y="104" width="170" height="32" rx="6" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="385" y="124" text-anchor="middle" font-size="9" fill="var(--amber)">挂起等待 · 标志已置位</text>
+  <line x1="300" y1="74" x2="300" y2="178" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="300" y="68" text-anchor="middle" font-size="9.5" fill="var(--red)">⚡ /stop 到达（执行中途）</text>
+  <line x1="470" y1="92" x2="470" y2="150" stroke="var(--accent)" stroke-width="1.8"/>
+  <text x="470" y="86" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">↧ 循环边界</text>
+  <rect x="478" y="104" width="158" height="32" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="557" y="124" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">✓ 真正 break 退出</text>
+  <text x="140" y="158" font-size="9" fill="var(--muted)">中断在两轮迭代之间被收下——执行中的工具先跑到自查点或边界，循环才交回控制权</text>
+  <line x1="300" y1="178" x2="300" y2="236" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <text x="20" y="258" font-size="11" font-weight="700" fill="var(--muted)">抢占式 · 对照（Hermes 不这么做）</text>
+  <line x1="140" y1="286" x2="660" y2="286" stroke="var(--line)" stroke-dasharray="4 3"/>
+  <rect x="140" y="270" width="160" height="32" rx="6" fill="var(--panel-2)" stroke="var(--muted)" stroke-dasharray="4 3"/>
+  <text x="220" y="290" text-anchor="middle" font-size="9.5" fill="var(--muted)">执行中</text>
+  <line x1="300" y1="240" x2="300" y2="322" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="300" y="234" text-anchor="middle" font-size="9.5" fill="var(--red)">⚡ /stop 到达</text>
+  <rect x="304" y="270" width="158" height="32" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="383" y="290" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">✗ 当场硬停</text>
+  <text x="140" y="326" font-size="9" fill="var(--muted)">抢占式会立刻杀掉线程——但 Python 做不到，所以 Hermes 只能用协作式轮询</text>
+</svg>
+<div class="fig-cap"><b>协作式 vs 抢占式</b>：同一刻 <span class="mono">/stop</span> 在工具执行中途到达——Hermes <strong>协作式</strong>把它挂起到下一个循环边界才 <span class="mono">break</span>；抢占式（对照）会当场杀线程，而 Python 做不到，故只能靠各处轮询那面标志。</div>
+</div>
 </div>
   <div class="lang-en">
 <p class="lead">An agent that has run dozens of turns, still has background processes open, and is mid-edit on a file — how does it <strong>stop safely, reliably know when background work finishes, and persist atomically</strong>? This chapter opens up the three runtime mechanisms most prone to correctness bugs.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · in-flight emergency procedures</div>
+  An emergency stop is never <strong>instantaneous</strong>. After the pilot pulls back, the aircraft only recovers at the <strong>next stable point</strong> — which is exactly what a <strong>cooperative interrupt</strong> is: the signal is honored at a boundary, not the instant it is raised.
+  <p style="margin:.6rem 0 0">The same restraint returns twice more in this chapter. That background engine is either <strong>really still turning</strong> or it stopped long ago — the instruments must report that <strong>truthfully</strong>, and must <strong>not raise the same alarm twice</strong> (notification de-duplication). To change the flight plan you don't scribble over the live copy: you draft it, <strong>verify it, then swap it in atomically</strong> (write a temp file, then rename). Three runtime traps, one quiet throughline: a <strong>stop</strong>, a <strong>look</strong>, and a <strong>save</strong> each have a moment where "looks done" and "is done" can silently diverge.</p>
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · three runtime correctness traps</div>
+  The runtime — the layer that actually <strong>stops, watches, and persists</strong> — hides three places where the intuitive model is wrong:
+  <p style="margin:.6rem 0 0"><strong>① An interrupt is cooperative, not preemptive.</strong> Pressing <span class="mono">/stop</span> only <strong>sets a flag</strong>; the main loop honors it at its <strong>boundary</strong> (between iterations), and propagation to subagents is <strong>hand-wired</strong> — the parent walks an <span class="mono">_active_children</span> registry and calls <span class="mono">child.interrupt()</span> on each. Miss the registration (or deliberately detach, as async delegation does) and a child <strong>never hears</strong> the stop.</p>
+  <p><strong>② Background "durability" is mostly an in-process illusion.</strong> A <span class="mono">background=true</span> <span class="mono">delegate_task</span> is detached from the turn but still <strong>process-local</strong> — it dies with the process. Durability that survives a <strong>restart</strong> needs <span class="mono">cronjob</span> or a backgrounded terminal job, not a future living in memory.</p>
+  <p><strong>③ On-disk atomicity hangs on one unremarkable rename.</strong> A half-written config or session file is corruption; the fix is to write a temp file and <span class="mono">os.replace()</span> it into place, so a reader only ever sees either the old file or the whole new one — <strong>never a torn middle</strong>.</p>
+  <p>Three independent traps, one throughline: at every runtime edge, <strong>"looks finished" is not "is finished"</strong> — and that seam is where the bug lives.</p>
+</div>
+
+<p>Of the three, we start with the subtlest: how a "stop" actually travels through a running agent — and why it so often <strong>fails to reach a subagent</strong>.</p>
+
+<h3>🔬 28.1 · Interrupt propagation: a cooperative stop, an explicit subagent fan-out</h3>
+<p>When a user presses <span class="mono">/stop</span> (or the gateway receives a stop command), the call is <span class="mono">AIAgent.interrupt()</span>. It does two things: it sets <span class="mono">agent._interrupt_requested = True</span> and records the new message that triggered it, then calls <span class="mono">_set_interrupt(True, execution-thread-id)</span> to stamp a <strong>thread-scoped</strong> interrupt signal on <strong>this agent's own execution thread</strong>, so a tool already running there (say a terminal command hung on network I/O) can bail the next time it self-checks. The signal is <strong>targeted by thread</strong>: other agents running in the same gateway process are left untouched.</p>
+<p>But setting the flag is <strong>not</strong> where the interrupt is "honored" — that happens at the <strong>main tool-loop boundary</strong>. Each time the <span class="mono">while</span> loop in <span class="mono">agent/conversation_loop.py</span> begins a new iteration it polls <span class="mono">agent._interrupt_requested</span>; on a hit it sets <span class="mono">interrupted</span>, records <span class="mono">_turn_exit_reason = "interrupted_by_user"</span>, prints a "Breaking out of tool loop" line, and <span class="mono">break</span>s. The check sits <strong>between iterations</strong> — never in the middle of a single API call or a tool execution.</p>
+<p>So a Hermes interrupt is <strong>cooperative, not preemptive</strong>. Python can't hard-kill a thread from the outside, so nothing instantly halts code that is already running — everything relies on each site <strong>voluntarily polling that flag</strong>. Beyond the loop boundary a few in-iteration check points exist: the streaming delta callback inspects <span class="mono">_interrupt_requested</span> and cuts the stream short; a non-streaming API call runs a background checker that <strong>force-closes the httpx client</strong> so a blocked request raises and returns at once; and the failure-retry backoff sleep <strong>polls every 200ms</strong> (<span class="mono">time.sleep(0.2)</span>) and abandons the retry the moment a stop arrives. But any stretch of code that <strong>doesn't</strong> check the flag — a tight CPU loop, an uncooperative third-party call — runs to its own end or its own timeout, and the loop can only truly stop at the next boundary once control returns.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py:589</span></div><pre>    while (api_call_count &lt; agent.max_iterations and agent.iteration_budget.remaining &gt; 0) or agent._budget_grace_call:
+        # Reset per-turn checkpoint dedup so each iteration can take one snapshot
+        agent._checkpoint_mgr.new_turn()
+
+        # Check for interrupt request (e.g., user sent new message)
+        if agent._interrupt_requested:
+            interrupted = True
+            _turn_exit_reason = "interrupted_by_user"
+            if not agent.quiet_mode:
+                agent._safe_print("\n⚡ Breaking out of tool loop due to interrupt...")
+            break</pre></div>
+<p>The second trap, and the easier one to hit: propagation to subagents is <strong>explicit hand-wiring</strong>, not free. At the end of <span class="mono">interrupt()</span> the agent walks <span class="mono">self._active_children</span> — its <strong>registry of live subagents</strong> — and calls <span class="mono">child.interrupt(message)</span> on each; that child in turn walks its own <span class="mono">_active_children</span>, so the interrupt <strong>fans out recursively</strong> to grandchildren and beyond. But the chain only holds because <strong>every spawned child registers itself in the parent's <span class="mono">_active_children</span></strong> (see the "Register child for interrupt propagation" step in <span class="mono">delegate_tool.py</span>) and unregisters when it finishes. Let a delegation path <strong>forget to register, or deliberately detach</strong>, and the parent's <span class="mono">/stop</span> <strong>silently never reaches</strong> that child — it keeps running in its own streaming / tool loop.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">run_agent.py:2433</span></div><pre>        # Propagate interrupt to any running child agents (subagent delegation)
+        with self._active_children_lock:
+            children_copy = list(self._active_children)
+        for child in children_copy:
+            try:
+                child.interrupt(message)
+            except Exception as e:
+                logger.debug("Failed to propagate interrupt to child agent: %s", e)</pre></div>
+<p>Async / background delegation detaches on purpose: a <span class="mono">background=true</span> batch <strong>removes</strong> its children from the parent's <span class="mono">_active_children</span> (their lifecycle now belongs to the async registry, not this turn) and registers a separate <span class="mono">interrupt_fn</span> to cancel them instead. That's by design, not a bug — but it shows precisely why "the interrupt will propagate on its own" is a dangerous assumption: <strong>the fan-out is a hand-maintained invariant, not a language feature</strong>. Any new delegation path has to decide, explicitly, who carries the stop down to the children.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 432" role="img" aria-label="Interrupt fan-out: the central agent.interrupt() sets _interrupt_requested to True and propagates along four paths — main loop boundary polling, subagents needing an explicit child.interrupt(), the streaming callback checking the flag per token, and retry backoff polling every 200ms; the subagent path is marked red to stress that propagation is explicit and breaks if a child is unregistered or detached">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Interrupt fan-out · one flag, four cooperative paths</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">interrupt() sets the flag and stamps this thread; each site polls it voluntarily — only subagents need an explicit fan-out</text>
+  <rect x="240" y="58" width="200" height="62" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="340" y="84" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">agent.interrupt()</text>
+  <text x="340" y="104" text-anchor="middle" font-size="9.5" fill="var(--muted)">_interrupt_requested = True</text>
+  <line x1="340" y1="120" x2="92" y2="224" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M92,232 L87,223 L97,223 Z" fill="var(--muted)"/>
+  <line x1="340" y1="120" x2="257" y2="224" stroke="var(--red)" stroke-width="1.8"/>
+  <path d="M257,232 L252,223 L262,223 Z" fill="var(--red)"/>
+  <line x1="340" y1="120" x2="422" y2="224" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M422,232 L417,223 L427,223 Z" fill="var(--muted)"/>
+  <line x1="340" y1="120" x2="587" y2="224" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M587,232 L582,223 L592,223 Z" fill="var(--muted)"/>
+  <rect x="16" y="232" width="152" height="120" rx="10" fill="var(--panel)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="92" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">Main loop boundary</text>
+  <text x="92" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">loop boundary</text>
+  <line x1="26" y1="281" x2="158" y2="281" stroke="var(--line)"/>
+  <text x="26" y="301" font-size="9.5" fill="var(--ink)">polls the flag each turn</text>
+  <text x="26" y="318" font-size="9.5" fill="var(--ink)">hit, then break the loop</text>
+  <text x="26" y="341" font-size="9" fill="var(--muted)">conversation_loop.py:594</text>
+  <rect x="181" y="232" width="152" height="120" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="257" y="257" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">Subagents · explicit</text>
+  <text x="257" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">_active_children fan-out</text>
+  <line x1="191" y1="281" x2="323" y2="281" stroke="var(--line)"/>
+  <text x="191" y="301" font-size="9.5" fill="var(--ink)">walk registry, each:</text>
+  <text x="191" y="318" font-size="9.5" fill="var(--ink)">child.interrupt()</text>
+  <text x="191" y="341" font-size="9" font-weight="700" fill="var(--red)">⚠ unregistered / detached = lost</text>
+  <rect x="346" y="232" width="152" height="120" rx="10" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="422" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="var(--purple)">Streaming callback</text>
+  <text x="422" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">streaming delta</text>
+  <line x1="356" y1="281" x2="488" y2="281" stroke="var(--line)"/>
+  <text x="356" y="301" font-size="9.5" fill="var(--ink)">checks flag per token</text>
+  <text x="356" y="318" font-size="9.5" fill="var(--ink)">force-close httpx, cut</text>
+  <text x="356" y="341" font-size="9" fill="var(--muted)">force-close client</text>
+  <rect x="511" y="232" width="152" height="120" rx="10" fill="var(--panel)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="587" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="var(--amber)">Retry backoff poll</text>
+  <text x="587" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">backoff sleep</text>
+  <line x1="521" y1="281" x2="653" y2="281" stroke="var(--line)"/>
+  <text x="521" y="301" font-size="9.5" fill="var(--ink)">polls every 200ms</text>
+  <text x="521" y="318" font-size="9.5" fill="var(--ink)">time.sleep(0.2)</text>
+  <text x="521" y="341" font-size="9" fill="var(--muted)">stop = abandon retry</text>
+  <rect x="16" y="372" width="648" height="48" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="340" y="392" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">Cooperative: no thread is hard-killed</text>
+  <text x="340" y="410" text-anchor="middle" font-size="9.5" fill="var(--ink)">all four paths rely on voluntary polling — code that never checks runs to its own end before it stops</text>
+</svg>
+<div class="fig-cap"><b>Interrupt fan-out</b>: after <span class="mono">interrupt()</span> sets the flag and stamps this thread, four paths <strong>poll it voluntarily</strong> — loop boundary, streaming callback, and retry backoff (every <strong>200ms</strong>) all self-check; only <strong>subagents</strong> require the parent to walk <span class="mono">_active_children</span> and call <span class="mono">child.interrupt()</span> explicitly, so an unregistered / detached child breaks the chain.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 356" role="img" aria-label="Cooperative versus preemptive interrupt timing: the top lane is Hermes cooperative, where /stop arrives mid tool execution, sets the flag, then waits pending until the next loop boundary before it truly breaks; the bottom lane is a preemptive contrast (which Hermes does not do), stopping instantly at the same moment, drawn dashed">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">cooperative vs preemptive · same instant, different stop point</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">the stop arrives mid tool execution — cooperative waits for the loop boundary, preemptive kills the thread on the spot</text>
+  <text x="20" y="92" font-size="11" font-weight="700" fill="var(--accent-ink)">Hermes · cooperative</text>
+  <line x1="140" y1="120" x2="660" y2="120" stroke="var(--line)"/>
+  <rect x="140" y="104" width="160" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="220" y="124" text-anchor="middle" font-size="9.5" fill="var(--blue)">tool executing</text>
+  <rect x="300" y="104" width="170" height="32" rx="6" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="385" y="124" text-anchor="middle" font-size="9" fill="var(--amber)">pending · flag is set</text>
+  <line x1="300" y1="74" x2="300" y2="178" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="300" y="68" text-anchor="middle" font-size="9.5" fill="var(--red)">⚡ /stop arrives (mid-execution)</text>
+  <line x1="470" y1="92" x2="470" y2="150" stroke="var(--accent)" stroke-width="1.8"/>
+  <text x="470" y="86" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">↧ loop boundary</text>
+  <rect x="478" y="104" width="158" height="32" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="557" y="124" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">✓ truly break</text>
+  <text x="140" y="158" font-size="9" fill="var(--muted)">honored between iterations — the running tool first reaches a check point or the boundary, then returns control</text>
+  <line x1="300" y1="178" x2="300" y2="236" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <text x="20" y="258" font-size="11" font-weight="700" fill="var(--muted)">preemptive · contrast (Hermes does not do this)</text>
+  <line x1="140" y1="286" x2="660" y2="286" stroke="var(--line)" stroke-dasharray="4 3"/>
+  <rect x="140" y="270" width="160" height="32" rx="6" fill="var(--panel-2)" stroke="var(--muted)" stroke-dasharray="4 3"/>
+  <text x="220" y="290" text-anchor="middle" font-size="9.5" fill="var(--muted)">executing</text>
+  <line x1="300" y1="240" x2="300" y2="322" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="300" y="234" text-anchor="middle" font-size="9.5" fill="var(--red)">⚡ /stop arrives</text>
+  <rect x="304" y="270" width="158" height="32" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="383" y="290" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">✗ halted on the spot</text>
+  <text x="140" y="326" font-size="9" fill="var(--muted)">preemption would kill the thread at once — but Python can't, so Hermes only polls cooperatively</text>
+</svg>
+<div class="fig-cap"><b>Cooperative vs preemptive</b>: the same <span class="mono">/stop</span> arrives mid tool execution — Hermes <strong>cooperatively</strong> holds it pending until the next loop boundary, then <span class="mono">break</span>s; a preemptive stop (contrast) would kill the thread on the spot, which Python can't do, so everything relies on polling the flag.</div>
+</div>
 </div>
   <div class="footnav"><a class="prev" href="27-model-credentials-routing.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">模型·凭证·路由层</span><span class="lang-en">Model · credentials · routing</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
 </div>
