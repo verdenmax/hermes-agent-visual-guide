@@ -8154,6 +8154,89 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
 <div class="fig-cap"><b>Three rotation strategies</b>: from one pool of 5 keys, <span class="mono">random</span> hits any key, <span class="mono">least_used</span> picks the smallest request count, <span class="mono">round_robin</span> takes the head and moves it to the tail — each strategy's "next" is a different key.</div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 392" role="img" aria-label="Credential pool frame-by-frame snapshots: an anthropic pool of 3 keys with the least_used strategy. T0 all three healthy, the lowest request_count key #2 is selected; after #2 hits HTTP 429, T1 enters the EXHAUSTED cooldown with reset_at = now plus 3600 seconds and the available set holds only #1 and #3; T2 re-selects #1 within available while #2 is skipped and never re-poked; after the 1 hour TTL expires T3 revives #2 back to OK and the pool returns to 3 selectable keys. Side note: 401 cools down for only 300 seconds; token_revoked or terminal-auth errors go straight to DEAD and never revive.">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Credential pool, frame by frame · least_used hits 429 → cool down → skip → revive</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">An anthropic pool of 3 keys; follow one key along the timeline as it leaves and re-enters available</text>
+  <text x="600" y="32" text-anchor="middle" font-size="22">🔄</text>
+  <rect x="10" y="66" width="122" height="216" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="86" font-size="9.5" font-weight="700" fill="var(--ink)">T0 · all three healthy</text>
+  <rect x="19" y="98" width="104" height="28" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="27" y="116" font-size="9" fill="var(--ink)">#1  count=12</text>
+  <circle cx="115" cy="112" r="4" fill="var(--accent)"/>
+  <rect x="19" y="132" width="104" height="28" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2.5"/>
+  <text x="27" y="150" font-size="9" font-weight="700" fill="var(--purple)">#2  count=8</text>
+  <circle cx="115" cy="146" r="4" fill="var(--accent)"/>
+  <rect x="19" y="166" width="104" height="28" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="27" y="184" font-size="9" fill="var(--ink)">#3  count=15</text>
+  <circle cx="115" cy="180" r="4" fill="var(--accent)"/>
+  <text x="20" y="214" font-size="9" fill="var(--purple)">least_used → pick min</text>
+  <text x="20" y="230" font-size="9" fill="var(--muted)">selected #2 → count→9</text>
+  <text x="20" y="250" font-size="9" fill="var(--muted)">available = {#1,#2,#3}</text>
+  <line x1="136" y1="174" x2="184" y2="174" stroke="var(--line)" stroke-width="1.6"/>
+  <path d="M190,174 L182,170 L182,178 Z" fill="var(--line)"/>
+  <text x="161" y="156" text-anchor="middle" font-size="9" fill="var(--amber)">#2 hits</text>
+  <text x="161" y="168" text-anchor="middle" font-size="9" fill="var(--amber)">HTTP 429</text>
+  <rect x="190" y="66" width="122" height="216" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="200" y="86" font-size="9.5" font-weight="700" fill="var(--ink)">T1 · #2 cooling down</text>
+  <rect x="199" y="98" width="104" height="28" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="207" y="116" font-size="9" fill="var(--ink)">#1  count=12</text>
+  <circle cx="295" cy="112" r="4" fill="var(--accent)"/>
+  <rect x="199" y="132" width="104" height="28" rx="6" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="207" y="150" font-size="9" font-weight="700" fill="var(--amber)">#2  EXHAUSTED</text>
+  <circle cx="295" cy="146" r="4" fill="var(--amber)"/>
+  <rect x="199" y="166" width="104" height="28" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="207" y="184" font-size="9" fill="var(--ink)">#3  count=15</text>
+  <circle cx="295" cy="180" r="4" fill="var(--accent)"/>
+  <text x="200" y="214" font-size="9" fill="var(--amber)">stamp reset_at</text>
+  <text x="200" y="230" font-size="9" fill="var(--muted)">reset_at = now+3600s</text>
+  <text x="200" y="250" font-size="9" fill="var(--muted)">available = {#1, #3}</text>
+  <line x1="316" y1="174" x2="364" y2="174" stroke="var(--line)" stroke-width="1.6"/>
+  <path d="M370,174 L362,170 L362,178 Z" fill="var(--line)"/>
+  <text x="341" y="156" text-anchor="middle" font-size="9" fill="var(--muted)">next</text>
+  <text x="341" y="168" text-anchor="middle" font-size="9" fill="var(--muted)">request</text>
+  <rect x="370" y="66" width="122" height="216" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="380" y="86" font-size="9.5" font-weight="700" fill="var(--ink)">T2 · skip empty bucket</text>
+  <rect x="379" y="98" width="104" height="28" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2.5"/>
+  <text x="387" y="116" font-size="9" font-weight="700" fill="var(--purple)">#1  count=12</text>
+  <circle cx="475" cy="112" r="4" fill="var(--accent)"/>
+  <rect x="379" y="132" width="104" height="28" rx="6" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="387" y="150" font-size="9" fill="var(--amber)">#2  skipped</text>
+  <circle cx="475" cy="146" r="4" fill="var(--amber)"/>
+  <rect x="379" y="166" width="104" height="28" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="387" y="184" font-size="9" fill="var(--ink)">#3  count=15</text>
+  <circle cx="475" cy="180" r="4" fill="var(--accent)"/>
+  <text x="380" y="214" font-size="9" fill="var(--purple)">pick within available</text>
+  <text x="380" y="230" font-size="9" fill="var(--muted)">selected #1 → count→13</text>
+  <text x="380" y="250" font-size="9" fill="var(--muted)">no re-poking empty bucket</text>
+  <line x1="496" y1="174" x2="544" y2="174" stroke="var(--line)" stroke-width="1.6"/>
+  <path d="M550,174 L542,170 L542,178 Z" fill="var(--line)"/>
+  <text x="521" y="156" text-anchor="middle" font-size="9" fill="var(--accent-ink)">after 1h</text>
+  <text x="521" y="168" text-anchor="middle" font-size="9" fill="var(--accent-ink)">TTL expires</text>
+  <rect x="550" y="66" width="122" height="216" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="560" y="86" font-size="9.5" font-weight="700" fill="var(--ink)">T3 · #2 revived</text>
+  <rect x="559" y="98" width="104" height="28" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="567" y="116" font-size="9" fill="var(--ink)">#1  count=13</text>
+  <circle cx="655" cy="112" r="4" fill="var(--accent)"/>
+  <rect x="559" y="132" width="104" height="28" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="567" y="150" font-size="9" font-weight="700" fill="var(--accent-ink)">#2  back→OK</text>
+  <circle cx="655" cy="146" r="4" fill="var(--accent)"/>
+  <rect x="559" y="166" width="104" height="28" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="567" y="184" font-size="9" fill="var(--ink)">#3  count=15</text>
+  <circle cx="655" cy="180" r="4" fill="var(--accent)"/>
+  <text x="560" y="214" font-size="9" fill="var(--accent-ink)">TTL expired→clear</text>
+  <text x="560" y="230" font-size="9" fill="var(--muted)">re-enters available</text>
+  <text x="560" y="250" font-size="9" fill="var(--muted)">pool back to 3 keys</text>
+  <rect x="10" y="298" width="662" height="86" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="318" font-size="9.5" font-weight="700" fill="var(--ink)">Side note · two other exits &amp; reclaim</text>
+  <circle cx="26" cy="338" r="4" fill="var(--amber)"/>
+  <text x="38" y="342" font-size="9" fill="var(--muted)">401 (token issue) → cooldown only 300s (5min), shorter than 429's 3600s</text>
+  <circle cx="26" cy="362" r="4" fill="var(--red)"/>
+  <text x="38" y="366" font-size="9" fill="var(--muted)">token_revoked / terminal-auth → straight to DEAD ●, never revives; cleared only by re-auth sync, manual DEAD pruned after 24h</text>
+</svg>
+<div class="fig-cap"><b>Frame-by-frame snapshots</b>: one key walks the timeline from healthy → hitting <span class="mono">429</span> → <span class="mono">EXHAUSTED</span> cooldown → skipped → revived at <span class="mono">reset_at</span>; each frame <span class="mono">least_used</span> picks the smallest request count only within the available set, never re-poking a bucket already proven empty.</div>
+</div>
+
 <h3>🔬 27.2 · Side-LLM routing: every side task runs its own resolution chain</h3>
 <p>Beyond the main conversation, Hermes runs a whole batch of <strong>side-LLM tasks</strong> — context compression, vision, web extraction, title generation, skill maintenance (curator)… each one is an <strong>independent model call</strong>, all funneled through one entry point: <span class="mono">_resolve_auto()</span> in <span class="mono">agent/auxiliary_client.py</span>. Its job is not "grab any model that works" but to route each side task to the "most appropriate provider + model" along a <strong>three-stage resolution chain</strong>.</p>
 <p><strong>① First, your current main provider + main model.</strong> The key is it uses the <strong>runtime</strong> copy, not the possibly-stale default in <span class="mono">config.yaml</span>: at the top of every turn <span class="mono">set_runtime_main()</span> syncs in the provider, model, <span class="mono">base_url</span>, and key that the CLI / gateway temporarily switched to, so side tasks ride the <strong>same model and the same already-verified key</strong> as the main conversation — predictable, never silently dropping to some cheap default model. A biting example: if you used <span class="mono">hermes model</span> to switch providers just for this session, then without this runtime sync side tasks would still fire against the old provider from <span class="mono">config.yaml</span> — hitting the wrong endpoint, or an account you no longer want to use. <strong>② When the main provider is unavailable</strong>, it checks that task's own <span class="mono">auxiliary.&lt;task&gt;.fallback_chain</span> first, then the main agent's top-level fallback policy. <strong>③ Only if nothing hits</strong> does it walk the hardcoded discovery chain: <span class="mono">openrouter → nous → local/custom → api-key</span>.</p>
@@ -8309,6 +8392,74 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
 <div class="fig-cap"><b>Per-task routing matrix</b>: every side task can be pinned independently via <span class="mono">auxiliary.&lt;task&gt;.provider</span> / <span class="mono">.model</span>, so different tasks point at different models (values shown are illustrative); unpinned means <span class="mono">auto</span>, with a shared fallback of <span class="mono">openrouter:google/gemini-3-flash-preview</span>.</div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 402" role="img" aria-label="Side-LLM routing frame-by-frame snapshots: one compression side task runs the three-stage _resolve_auto resolution. Frame 1 tries the main provider plus main model (illustrative anthropic plus claude-opus); that model is not usable for side tasks, result MISS, triggering main-unusable to the next stage. Frame 2 tries the task-level auxiliary.compression.fallback_chain which is empty here and the top-level fallback also misses, result MISS, triggering chain-exhausted to discovery. Frame 3 probes openrouter then nous then local/custom then api-key in order; the first healthy one openrouter hits while the other three are not reached, result HIT. Side notes: an unhealthy provider hit (402 or credit exhausted) is stamped and hidden for 600 seconds which is 10 minutes and skipped within the TTL; the side-task slots on this separate path are compression, vision, web_extract, title_generation and curator, each pinning its own provider and model.">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Side-LLM routing, frame by frame · one compression request, stage MISS→HIT</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">Follow one request along the timeline: misses each stage, finally hits in discovery</text>
+  <text x="600" y="34" text-anchor="middle" font-size="24">🎞️</text>
+  <rect x="10" y="70" width="188" height="230" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="88" font-size="9.5" font-weight="700" fill="var(--accent-ink)">Frame 1 · main provider+model</text>
+  <text x="20" y="102" font-size="9" fill="var(--muted)">main config from set_runtime_main</text>
+  <rect x="19" y="110" width="170" height="56" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="28" y="130" font-size="9" fill="var(--ink)">provider = anthropic</text>
+  <text x="28" y="148" font-size="9" fill="var(--ink)">model = claude-opus</text>
+  <text x="28" y="163" font-size="9" fill="var(--muted)">same as main chat, runtime-synced</text>
+  <text x="20" y="186" font-size="9" fill="var(--ink)">verdict: this model is not</text>
+  <text x="20" y="200" font-size="9" fill="var(--ink)">usable for side tasks (plan-only)</text>
+  <rect x="19" y="224" width="170" height="58" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="34" y="252" font-size="16" font-weight="700" fill="var(--red)">✗</text>
+  <text x="54" y="251" font-size="11" font-weight="700" fill="var(--red)">MISS</text>
+  <text x="34" y="271" font-size="9" fill="var(--red)">main unusable</text>
+  <line x1="200" y1="190" x2="242" y2="190" stroke="var(--line)" stroke-width="1.6"/>
+  <path d="M246,190 L238,186 L238,194 Z" fill="var(--line)"/>
+  <text x="221" y="171" text-anchor="middle" font-size="9" fill="var(--red)">main unusable</text>
+  <text x="221" y="182" text-anchor="middle" font-size="9" fill="var(--red)">→ next stage</text>
+  <rect x="246" y="70" width="188" height="230" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="256" y="88" font-size="9.5" font-weight="700" fill="var(--blue)">Frame 2 · task fallback_chain</text>
+  <text x="256" y="102" font-size="9" fill="var(--muted)">auxiliary.compression block</text>
+  <rect x="255" y="110" width="170" height="56" rx="6" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="264" y="130" font-size="9" fill="var(--ink)">fallback_chain:</text>
+  <text x="264" y="148" font-size="9" fill="var(--muted)">[ ]  ← unset / empty</text>
+  <text x="264" y="163" font-size="9" fill="var(--muted)">top-level fallback misses too</text>
+  <text x="256" y="186" font-size="9" fill="var(--ink)">verdict: no fallback</text>
+  <text x="256" y="200" font-size="9" fill="var(--ink)">candidate for this task</text>
+  <rect x="255" y="224" width="170" height="58" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="270" y="252" font-size="16" font-weight="700" fill="var(--red)">✗</text>
+  <text x="290" y="251" font-size="11" font-weight="700" fill="var(--red)">MISS</text>
+  <text x="270" y="271" font-size="9" fill="var(--red)">chain empty</text>
+  <line x1="436" y1="190" x2="478" y2="190" stroke="var(--line)" stroke-width="1.6"/>
+  <path d="M482,190 L474,186 L474,194 Z" fill="var(--line)"/>
+  <text x="458" y="171" text-anchor="middle" font-size="9" fill="var(--red)">chain empty</text>
+  <text x="458" y="182" text-anchor="middle" font-size="9" fill="var(--red)">→ discovery</text>
+  <rect x="482" y="70" width="188" height="230" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="492" y="88" font-size="9.5" font-weight="700" fill="var(--purple)">Frame 3 · discovery probes</text>
+  <text x="492" y="102" font-size="9" fill="var(--muted)">probe each; first healthy hits</text>
+  <rect x="491" y="110" width="170" height="22" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="500" y="125" font-size="9" font-weight="700" fill="var(--accent-ink)">openrouter</text>
+  <text x="652" y="125" text-anchor="end" font-size="12" fill="var(--accent)">✓</text>
+  <rect x="491" y="134" width="170" height="22" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="500" y="149" font-size="9" fill="var(--muted)">nous</text>
+  <text x="652" y="149" text-anchor="end" font-size="9" fill="var(--muted)">not reached</text>
+  <rect x="491" y="158" width="170" height="22" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="500" y="173" font-size="9" fill="var(--muted)">local/custom</text>
+  <text x="652" y="173" text-anchor="end" font-size="9" fill="var(--muted)">not reached</text>
+  <rect x="491" y="182" width="170" height="22" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="500" y="197" font-size="9" fill="var(--muted)">api-key</text>
+  <text x="652" y="197" text-anchor="end" font-size="9" fill="var(--muted)">not reached</text>
+  <rect x="491" y="224" width="170" height="58" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="506" y="252" font-size="16" font-weight="700" fill="var(--accent)">✓</text>
+  <text x="526" y="251" font-size="11" font-weight="700" fill="var(--accent-ink)">HIT</text>
+  <text x="506" y="271" font-size="9" fill="var(--accent-ink)">openrouter healthy</text>
+  <rect x="10" y="312" width="660" height="80" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="332" font-size="9.5" font-weight="700" fill="var(--ink)">Side note · two facts about this separate resolution</text>
+  <circle cx="26" cy="352" r="4" fill="var(--red)"/>
+  <text x="38" y="356" font-size="9" fill="var(--muted)">an unhealthy provider hit (402 / credit) → hidden for 600s (10min); within the TTL later requests skip it, no doomed retries</text>
+  <circle cx="26" cy="376" r="4" fill="var(--purple)"/>
+  <text x="38" y="380" font-size="9" fill="var(--muted)">side-task slots on this path: compression / vision / web_extract / title_generation / curator (each pins its own provider / model)</text>
+</svg>
+<div class="fig-cap"><b>Frame-by-frame resolution</b>: one <span class="mono">compression</span> request along the three stages — Frame 1 main <span class="mono">provider+model</span> not usable for side tasks (MISS) → Frame 2 task <span class="mono">fallback_chain</span> empty (MISS) → Frame 3 <span class="mono">discovery</span> probes in order, <span class="mono">openrouter</span> is the first healthy hit (HIT). An unhealthy provider is hidden for <span class="mono">600s (10min)</span> and skipped within the TTL.</div>
+</div>
+
 <h3>🔬 27.3 · Context window: resolve in layers first, then compute the compression threshold</h3>
 <p>Compression never fires off a hardcoded "compress at X%" — first you have to <strong>know how large this model's window actually is</strong>. And "how large" is contested for one model name: the user may have overridden it in <span class="mono">config.yaml</span>, last probe's value is cached on disk, the provider's <span class="mono">/models</span> endpoint can report it, <span class="mono">models.dev</span> has it registered, a local server can be queried, and failing all that there's a hardcoded default guessed by model family. <span class="mono">get_model_context_length()</span> in <span class="mono">agent/model_metadata.py</span> arranges these sources into a <strong>layered resolution chain</strong>, top-down, returning on the first hit.</p>
 <p>The order (excerpted from its docstring's resolution order): <strong>⓪ explicit config override</strong> (<span class="mono">model.context_length</span> or a custom provider's per-model setting — the user knows their endpoint best) → <strong>① persistent cache</strong> (a previously-probed value on disk) → <strong>①b AWS Bedrock static table</strong> → <strong>② custom-endpoint /models metadata</strong> → <strong>③ local server query</strong> → <strong>④ Anthropic /v1/models</strong> (API-key only, not OAuth) → <strong>⑤ provider-aware probes</strong> (Copilot, Nous live, Codex OAuth, GMI, Ollama, <span class="mono">models.dev</span>) → <strong>⑥ OpenRouter live metadata</strong> (with a Kimi 32k guard) → <strong>⑦ hardcoded defaults</strong> (by model family, longest-key-first) → <strong>⑧ local server last resort</strong> → <strong>⑨ default 256K</strong>.</p>
@@ -8435,6 +8586,89 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <text x="34" y="350" font-size="9.5" fill="var(--ink)">too small / floor degeneracy unhandled → compresses too early, wastes a prefix still in cache</text>
 </svg>
 <div class="fig-cap"><b>Window → threshold</b>: the trigger = <span class="mono">max(effective input budget × 0.50, 64K)</span>; a large window lands mid-bar, a small one degenerates via the floor to <strong>85%</strong>. The <span class="mono">max_tokens</span> reserve must be subtracted from the window, or compressing <strong>too late</strong> hits a provider 400; leaving the floor degeneracy unhandled compresses <strong>too early</strong> and wastes the cache.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 412" role="img" aria-label="Compression-trigger frame-by-frame snapshot: in one long conversation on a 256K window, tokens climb frame by frame to the 50% threshold, fire compression, then fall back; each frame draws a horizontal token progress bar plus a 50% threshold dashed line. T0 early, token about 30% (green), noting effective input budget equals window 256K minus the max_tokens reserve, not fired; after the chat keeps growing, T1 token reaches exactly 50% (amber) right onto the threshold line, reaching threshold_percent = 0.50, trigger decision; compression firing is the one exception to the cache rule; T2 compressing folds 5 long history messages into 1 summary block (blue) and the token bar shrinks a lot; after more chat, T3 token falls back to about 20% (green) and keeps growing into the next loop. Bottom side notes: when the window cannot be resolved it falls back to MINIMUM_CONTEXT_LENGTH = 64K; a small window uses _MIN_CTX_TRIGGER_RATIO = 0.85 as a cap to avoid mis-firing, trigger is about max(budget times 0.50, 64K), a small window degenerates to 85%, default 256K, Codex 272K.">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Compression-trigger frames · token climbs to the 50% threshold then falls back</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">one long conversation on a 256K window, watch the token bar reach the threshold and fall back</text>
+  <text x="600" y="34" text-anchor="middle" font-size="24">📉</text>
+  <rect x="10" y="66" width="122" height="226" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="86" font-size="9.5" font-weight="700" fill="var(--ink)">T0 · early</text>
+  <text x="20" y="100" font-size="9" fill="var(--muted)">not fired</text>
+  <text x="20" y="122" font-size="9" font-weight="700" fill="var(--accent-ink)">~30%</text>
+  <text x="71" y="120" text-anchor="middle" font-size="9" fill="var(--amber)">50%</text>
+  <rect x="19" y="128" width="104" height="16" rx="4" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="19" y="128" width="31.2" height="16" rx="4" fill="var(--accent)"/>
+  <line x1="71" y1="124" x2="71" y2="148" stroke="var(--amber)" stroke-width="1.6" stroke-dasharray="3 3"/>
+  <text x="20" y="170" font-size="9" fill="var(--muted)">input budget =</text>
+  <text x="20" y="184" font-size="9" fill="var(--muted)">window 256K −</text>
+  <text x="20" y="198" font-size="9" fill="var(--muted)">max_tokens reserve</text>
+  <text x="20" y="222" font-size="9" fill="var(--accent-ink)">tokens piling up</text>
+  <text x="20" y="236" font-size="9" fill="var(--muted)">below threshold</text>
+  <line x1="136" y1="174" x2="184" y2="174" stroke="var(--line)" stroke-width="1.6"/>
+  <path d="M190,174 L182,170 L182,178 Z" fill="var(--line)"/>
+  <text x="161" y="158" text-anchor="middle" font-size="9" fill="var(--muted)">chat keeps</text>
+  <text x="161" y="170" text-anchor="middle" font-size="9" fill="var(--muted)">growing</text>
+  <rect x="190" y="66" width="122" height="226" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="200" y="86" font-size="9.5" font-weight="700" fill="var(--ink)">T1 · at threshold</text>
+  <text x="200" y="100" font-size="9" fill="var(--amber)">fires</text>
+  <text x="200" y="122" font-size="9" font-weight="700" fill="var(--amber)">50%</text>
+  <text x="251" y="120" text-anchor="middle" font-size="9" fill="var(--amber)">50%</text>
+  <rect x="199" y="128" width="104" height="16" rx="4" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="199" y="128" width="52" height="16" rx="4" fill="var(--amber)"/>
+  <line x1="251" y1="124" x2="251" y2="148" stroke="var(--amber)" stroke-width="1.6" stroke-dasharray="3 3"/>
+  <text x="200" y="170" font-size="9" fill="var(--muted)">reaches threshold_</text>
+  <text x="200" y="184" font-size="9" fill="var(--muted)">percent = 0.50</text>
+  <text x="200" y="208" font-size="9" fill="var(--amber)">token hits the line</text>
+  <text x="200" y="222" font-size="9" fill="var(--amber)">→ fire compress</text>
+  <line x1="316" y1="174" x2="364" y2="174" stroke="var(--line)" stroke-width="1.6"/>
+  <path d="M370,174 L362,170 L362,178 Z" fill="var(--line)"/>
+  <text x="341" y="158" text-anchor="middle" font-size="9" fill="var(--amber)">compress</text>
+  <text x="341" y="170" text-anchor="middle" font-size="9" fill="var(--amber)">only exception</text>
+  <rect x="370" y="66" width="122" height="226" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="380" y="86" font-size="9.5" font-weight="700" fill="var(--ink)">T2 · compressing</text>
+  <text x="380" y="100" font-size="9" fill="var(--blue)">history → summary</text>
+  <rect x="379" y="110" width="9" height="9" rx="2" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="390" y="110" width="9" height="9" rx="2" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="401" y="110" width="9" height="9" rx="2" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="412" y="110" width="9" height="9" rx="2" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="423" y="110" width="9" height="9" rx="2" fill="var(--panel-2)" stroke="var(--line)"/>
+  <line x1="436" y1="114" x2="448" y2="114" stroke="var(--blue)" stroke-width="1.4"/>
+  <path d="M452,114 L445,111 L445,117 Z" fill="var(--blue)"/>
+  <rect x="454" y="106" width="28" height="18" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="468" y="118" text-anchor="middle" font-size="9" fill="var(--blue)">sum</text>
+  <text x="380" y="142" font-size="9" fill="var(--blue)">5 msgs → 1 summary</text>
+  <text x="380" y="162" font-size="9" font-weight="700" fill="var(--blue)">token ↓</text>
+  <text x="431" y="160" text-anchor="middle" font-size="9" fill="var(--amber)">50%</text>
+  <rect x="379" y="168" width="104" height="14" rx="4" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="379" y="168" width="23" height="14" rx="4" fill="var(--blue)"/>
+  <line x1="431" y1="164" x2="431" y2="186" stroke="var(--amber)" stroke-width="1.6" stroke-dasharray="3 3"/>
+  <text x="380" y="206" font-size="9" fill="var(--muted)">history folds to sum</text>
+  <text x="380" y="220" font-size="9" fill="var(--muted)">token bar shrinks</text>
+  <text x="380" y="234" font-size="9" fill="var(--muted)">cache rebuilt once</text>
+  <line x1="496" y1="174" x2="544" y2="174" stroke="var(--line)" stroke-width="1.6"/>
+  <path d="M550,174 L542,170 L542,178 Z" fill="var(--line)"/>
+  <text x="521" y="164" text-anchor="middle" font-size="9" fill="var(--muted)">more chat</text>
+  <rect x="550" y="66" width="122" height="226" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="560" y="86" font-size="9.5" font-weight="700" fill="var(--ink)">T3 · falls back</text>
+  <text x="560" y="100" font-size="9" fill="var(--accent-ink)">next round</text>
+  <text x="560" y="122" font-size="9" font-weight="700" fill="var(--accent-ink)">~20%</text>
+  <text x="611" y="120" text-anchor="middle" font-size="9" fill="var(--amber)">50%</text>
+  <rect x="559" y="128" width="104" height="16" rx="4" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="559" y="128" width="20.8" height="16" rx="4" fill="var(--accent)"/>
+  <line x1="611" y1="124" x2="611" y2="148" stroke="var(--amber)" stroke-width="1.6" stroke-dasharray="3 3"/>
+  <text x="560" y="170" font-size="9" fill="var(--muted)">tokens grow on</text>
+  <text x="560" y="184" font-size="9" fill="var(--muted)">into the next loop</text>
+  <text x="560" y="208" font-size="9" fill="var(--accent-ink)">→ back to T0 state</text>
+  <rect x="10" y="304" width="662" height="96" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="324" font-size="9.5" font-weight="700" fill="var(--ink)">Side notes · fallback and small-window guard (only real constants)</text>
+  <circle cx="26" cy="346" r="4" fill="var(--blue)"/>
+  <text x="38" y="350" font-size="9" fill="var(--muted)">window unresolved → fallback MINIMUM_CONTEXT_LENGTH = 64K (floor context)</text>
+  <circle cx="26" cy="372" r="4" fill="var(--amber)"/>
+  <text x="38" y="376" font-size="9" fill="var(--muted)">small window uses _MIN_CTX_TRIGGER_RATIO = 0.85 as a cap; trigger ≈ max(budget × 0.50, 64K), small window degenerates to 85%; default 256K, Codex 272K</text>
+</svg>
+<div class="fig-cap"><b>Compression trigger, frame by frame</b>: in one 256K conversation tokens climb <span class="mono">T0 ~30% → T1 50%</span> (right onto the <span class="mono">threshold_percent = 0.50</span> line), <strong>firing compression</strong> — the <strong>one exception</strong> to the cache rule — long history folds into a summary, then <span class="mono">T3</span> falls back into the next loop; threshold = <span class="mono">effective input budget × 0.50</span>, floor <span class="mono">64K</span>, small window degenerates to <span class="mono">85%</span>.</div>
 </div>
 
 <div class="card design">
@@ -8621,6 +8855,98 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
 <div class="fig-cap"><b>Cooperative vs preemptive</b>: the same <span class="mono">/stop</span> arrives mid tool execution — Hermes <strong>cooperatively</strong> holds it pending until the next loop boundary, then <span class="mono">break</span>s; a preemptive stop (contrast) would kill the thread on the spot, which Python can't do, so everything relies on polling the flag.</div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 456" role="img" aria-label="/stop interrupt frame-by-frame timeline snapshot: one concrete /stop arrives mid execution of a slow tool, showing a cooperative stop. Four frames advance along the timeline, each drawing two small tracks: a top main-loop-state track and a bottom _interrupt_requested flag-value track. T0 at 0ms, iteration N runs the terminal tool at 55 percent progress with the flag false. T1 at plus 50ms the signal arrives, interrupt() only sets the flag without a hard kill, the tool still runs at 82 percent, and the flag flips to true in amber. T2 the tool finishes naturally and returns its result back to the loop boundary while the flag stays true awaiting a read. T3 the loop boundary reads _interrupt_requested as true and breaks cleanly, saving state with no data loss. Center annotation: the flag is set true at T1 yet only read at T3, and that interval where the tool still finishes naturally is the cooperative stop set-versus-read gap. Bottom side notes: polling granularity time.sleep(0.2) equals 200ms with the streaming callback and retry backoff both self-checking this flag; interrupt() also fans out to _active_children where the parent walks each registered child and calls child.interrupt(), but a detached or unregistered child is off the list and breaks the chain so it never receives the interrupt.">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">/stop interrupt frame-by-frame timeline · flag false to true to read</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">one concrete /stop: watch _interrupt_requested flip along the timeline, plus the gap where the tool still finishes after the flag is set</text>
+  <text x="600" y="36" text-anchor="middle" font-size="24">🛑</text>
+  <rect x="10" y="70" width="132" height="240" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="21" y="90" font-size="9.5" font-weight="700" fill="var(--ink)">T0 · 0ms</text>
+  <text x="21" y="105" font-size="9" fill="var(--accent-ink)">running</text>
+  <text x="21" y="126" font-size="9" fill="var(--muted)">① main-loop state</text>
+  <rect x="20" y="132" width="112" height="30" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="76" y="146" text-anchor="middle" font-size="9" fill="var(--accent-ink)">iteration N</text>
+  <text x="76" y="157" text-anchor="middle" font-size="9" fill="var(--accent-ink)">terminal tool running</text>
+  <rect x="20" y="170" width="112" height="8" rx="3" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="20" y="170" width="61.6" height="8" rx="3" fill="var(--accent)"/>
+  <text x="21" y="191" font-size="9" fill="var(--muted)">▶ tool running · 55%</text>
+  <text x="21" y="206" font-size="9" fill="var(--muted)">② _interrupt_requested</text>
+  <rect x="20" y="212" width="112" height="28" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="76" y="231" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">false</text>
+  <text x="21" y="260" font-size="9" fill="var(--muted)">tool advancing normally</text>
+  <text x="21" y="274" font-size="9" fill="var(--muted)">flag is false · no interrupt</text>
+  <line x1="142" y1="196" x2="180" y2="196" stroke="var(--red)" stroke-width="1.6"/>
+  <path d="M186,196 L178,192 L178,200 Z" fill="var(--red)"/>
+  <text x="164" y="150" text-anchor="middle" font-size="9" fill="var(--red)">user sends</text>
+  <text x="164" y="162" text-anchor="middle" font-size="9" fill="var(--red)">/stop</text>
+  <rect x="186" y="70" width="132" height="240" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="197" y="90" font-size="9.5" font-weight="700" fill="var(--ink)">T1 · +50ms</text>
+  <text x="197" y="105" font-size="9" fill="var(--amber)">signal arrives</text>
+  <text x="197" y="126" font-size="9" fill="var(--muted)">① main-loop state</text>
+  <rect x="196" y="132" width="112" height="30" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="252" y="146" text-anchor="middle" font-size="9" fill="var(--accent-ink)">iteration N</text>
+  <text x="252" y="157" text-anchor="middle" font-size="9" fill="var(--accent-ink)">tool still running</text>
+  <rect x="196" y="170" width="112" height="8" rx="3" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="196" y="170" width="91.8" height="8" rx="3" fill="var(--accent)"/>
+  <text x="197" y="191" font-size="9" fill="var(--muted)">▶ not interrupted · 82%</text>
+  <text x="197" y="206" font-size="9" fill="var(--muted)">② _interrupt_requested</text>
+  <rect x="196" y="212" width="112" height="28" rx="5" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="252" y="231" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">true</text>
+  <text x="197" y="260" font-size="9" fill="var(--amber)">interrupt() only sets flag</text>
+  <text x="197" y="274" font-size="9" fill="var(--muted)">no hard-kill of the tool</text>
+  <line x1="318" y1="196" x2="356" y2="196" stroke="var(--accent)" stroke-width="1.6"/>
+  <path d="M362,196 L354,192 L354,200 Z" fill="var(--accent)"/>
+  <text x="340" y="150" text-anchor="middle" font-size="9" fill="var(--accent-ink)">tool</text>
+  <text x="340" y="162" text-anchor="middle" font-size="9" fill="var(--accent-ink)">finishes</text>
+  <rect x="362" y="70" width="132" height="240" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="373" y="90" font-size="9.5" font-weight="700" fill="var(--ink)">T2 · tool done</text>
+  <text x="373" y="105" font-size="9" fill="var(--blue)">back to boundary</text>
+  <text x="373" y="126" font-size="9" fill="var(--muted)">① main-loop state</text>
+  <rect x="372" y="132" width="112" height="30" rx="5" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="428" y="146" text-anchor="middle" font-size="9" fill="var(--blue)">tool returns result</text>
+  <text x="428" y="157" text-anchor="middle" font-size="9" fill="var(--blue)">-&gt; back to boundary</text>
+  <rect x="372" y="170" width="112" height="8" rx="3" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="372" y="170" width="112" height="8" rx="3" fill="var(--blue)"/>
+  <text x="373" y="191" font-size="9" fill="var(--muted)">✓ tool finished</text>
+  <text x="373" y="206" font-size="9" fill="var(--muted)">② _interrupt_requested</text>
+  <rect x="372" y="212" width="112" height="28" rx="5" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="428" y="231" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">true</text>
+  <text x="373" y="260" font-size="9" fill="var(--muted)">flag already set</text>
+  <text x="373" y="274" font-size="9" fill="var(--amber)">but not yet read</text>
+  <line x1="494" y1="196" x2="532" y2="196" stroke="var(--blue)" stroke-width="1.6"/>
+  <path d="M538,196 L530,192 L530,200 Z" fill="var(--blue)"/>
+  <text x="516" y="150" text-anchor="middle" font-size="9" fill="var(--blue)">loop boundary</text>
+  <text x="516" y="162" text-anchor="middle" font-size="9" fill="var(--blue)">checks flag</text>
+  <rect x="538" y="70" width="132" height="240" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="549" y="90" font-size="9.5" font-weight="700" fill="var(--ink)">T3 · clean exit</text>
+  <text x="549" y="105" font-size="9" fill="var(--red)">clean break</text>
+  <text x="549" y="126" font-size="9" fill="var(--muted)">① main-loop state</text>
+  <rect x="548" y="132" width="112" height="30" rx="5" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="604" y="146" text-anchor="middle" font-size="9" fill="var(--red)">boundary reads true</text>
+  <text x="604" y="157" text-anchor="middle" font-size="9" fill="var(--red)">-&gt; clean break, exit</text>
+  <rect x="548" y="170" width="112" height="8" rx="3" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="548" y="170" width="112" height="8" rx="3" fill="var(--red)"/>
+  <text x="549" y="191" font-size="9" fill="var(--muted)">⏹ break · leave loop</text>
+  <text x="549" y="206" font-size="9" fill="var(--muted)">② _interrupt_requested</text>
+  <rect x="548" y="212" width="112" height="28" rx="5" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="604" y="231" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">true</text>
+  <text x="549" y="260" font-size="9" fill="var(--red)">✓ flag is read</text>
+  <text x="549" y="274" font-size="9" fill="var(--muted)">state saved · no data loss</text>
+  <line x1="252" y1="330" x2="604" y2="330" stroke="var(--amber)" stroke-width="1.4"/>
+  <line x1="252" y1="324" x2="252" y2="330" stroke="var(--amber)" stroke-width="1.4"/>
+  <line x1="604" y1="324" x2="604" y2="330" stroke="var(--amber)" stroke-width="1.4"/>
+  <text x="340" y="322" text-anchor="middle" font-size="9.5" fill="var(--amber)">flag set true at T1 yet only read at T3 — that interval, where the tool still finishes naturally, is the cooperative stop set-vs-read gap</text>
+  <rect x="10" y="350" width="660" height="96" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="372" font-size="9.5" font-weight="700" fill="var(--ink)">Side note · polling granularity and subagent fan-out (only real constants here)</text>
+  <circle cx="26" cy="392" r="4" fill="var(--blue)"/>
+  <text x="38" y="396" font-size="9" fill="var(--muted)">polling granularity time.sleep(0.2) = 200ms: streaming callback per token and retry backoff both self-check this flag</text>
+  <circle cx="26" cy="416" r="4" fill="var(--amber)"/>
+  <text x="38" y="420" font-size="9" fill="var(--muted)">interrupt() also fans out to _active_children: the parent walks them and calls child.interrupt() on each registered child</text>
+  <text x="38" y="434" font-size="9" fill="var(--muted)">but a detached / unregistered child is off the list -&gt; chain broken, no interrupt (async delegation registers its own interrupt_fn)</text>
+</svg>
+<div class="fig-cap"><b>/stop frame-by-frame</b>: a 4-frame snapshot of one concrete /stop — <span class="mono">_interrupt_requested</span> flips <span class="mono">false-&gt;true</span> at <span class="mono">T1(+50ms)</span>, yet the in-flight tool is not hard-killed and <strong>runs to T2</strong> before finishing, and the loop only <strong>reads</strong> the flag at the <span class="mono">T3</span> boundary to <span class="mono">break</span> cleanly; the gap between set and read is the essence of a cooperative stop. Each self-check runs at <span class="mono">time.sleep(0.2)=200ms</span>, and <span class="mono">interrupt()</span> must explicitly fan out to <span class="mono">_active_children</span>.</div>
+</div>
+
 <p>With the stop covered, on to the second trap: where a <span class="mono">background=true</span> process actually <strong>lives</strong>, how its "I'm done" fires <strong>exactly once</strong>, and why it almost never <strong>survives a restart</strong>.</p>
 
 <h3>🔬 28.2 · Background-process lifecycle: in-memory registry, de-duplicated notification, best-effort recovery</h3>
@@ -8749,6 +9075,107 @@ WATCH_STRIKE_LIMIT = 3            # Strikes in a row → disable watch + promote
 <div class="fig-cap"><b>Durability tiers</b>: <strong>in-process background</strong> (dicts / buffer / threads all in memory, lost on restart), <strong>detached</strong> (<span class="mono">processes.json</span> for gateway crash recovery only, host-PID only, status + kill only, best-effort), <strong>cron</strong> (handed to the scheduler / system, truly durable across restarts). For durability don't bet on a future in memory — echoing ch26 · E6.</div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 456" role="img" aria-label="The life of a single background process in five state snapshots. Frame 1 spawn: the process starts and enters the _running registry, badge running, with a PID and a start timestamp. Frame 2 running monitor: the watcher polls periodically and it stays in _running; a side branch notes that if watch_patterns are set, after WATCH_STRIKE_LIMIT three strike windows watch is disabled and notify_on_complete is flipped on. Frame 3 exit migrate: the process exits or is killed and goes through _move_to_finished, which under the lock pops the session out of _running and into _finished, sets the completion event and writes the checkpoint, and finished is kept for 1800 seconds which is a 30 minute TTL. Frame 4 de-dup gate: when was_running is true and it is not in the _completion_consumed set, completion is decided just this once and added to that set, so repeat calls enqueue only once. Frame 5 notify once: the completion is put on completion_queue and triggers one new agent turn injecting the completion message, after which read-only status checks go through _poll_observed without consuming, and the drain skips anything already polled so the notification is not duplicated. Bottom notes: the processes.json checkpoint is only for gateway crash recovery re-registration of detached handles and is not the completion decider, completion is decided entirely in-memory by _running and _finished; the two gates split the work, gate one was_running on the producer side where kill and the reader thread both call but only one pop succeeds and enqueues, gate two _completion_consumed and _poll_observed on the consumer side where anything already waited or polled is skipped by the drain.">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">The life of one background process · 5 state snapshots</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">from spawn to completion notice: watch it go frame by frame running → exit → migrate → gate → notify once</text>
+  <text x="650" y="34" text-anchor="middle" font-size="24">🔁</text>
+  <text x="134.5" y="64" text-anchor="middle" font-size="9" fill="var(--accent-ink)">watcher polls</text>
+  <text x="271.5" y="64" text-anchor="middle" font-size="9" fill="var(--ink)">process exit / kill</text>
+  <text x="408.5" y="64" text-anchor="middle" font-size="9" fill="var(--purple)">completion de-dup</text>
+  <text x="545.5" y="64" text-anchor="middle" font-size="9" fill="var(--accent-ink)">trigger new turn</text>
+  <rect x="16" y="72" width="100" height="240" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="25" y="90" font-size="9.5" font-weight="700" fill="var(--ink)">F1 · spawn</text>
+  <text x="25" y="104" font-size="9" fill="var(--accent-ink)">start → into _running</text>
+  <text x="25" y="124" font-size="9" fill="var(--muted)">1 state badge</text>
+  <rect x="23" y="130" width="86" height="32" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="66" y="146" text-anchor="middle" font-size="9" font-weight="700" fill="var(--accent-ink)">running</text>
+  <text x="66" y="157" text-anchor="middle" font-size="9" fill="var(--muted)">new session</text>
+  <text x="25" y="180" font-size="9" fill="var(--muted)">2 registry</text>
+  <rect x="23" y="186" width="86" height="24" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="66" y="202" text-anchor="middle" font-size="9" font-weight="700" fill="var(--accent-ink)">_running{}</text>
+  <text x="25" y="230" font-size="9" fill="var(--muted)">PID 4127</text>
+  <text x="25" y="244" font-size="9" fill="var(--muted)">start 18:06:41</text>
+  <text x="25" y="258" font-size="9" fill="var(--muted)">notify=true</text>
+  <text x="25" y="272" font-size="9" fill="var(--muted)">reader pumps buf</text>
+  <rect x="153" y="72" width="100" height="240" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="162" y="90" font-size="9.5" font-weight="700" fill="var(--ink)">F2 · monitor</text>
+  <text x="162" y="104" font-size="9" fill="var(--accent-ink)">watcher polls</text>
+  <text x="162" y="124" font-size="9" fill="var(--muted)">1 state badge</text>
+  <rect x="160" y="130" width="86" height="32" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="203" y="146" text-anchor="middle" font-size="9" font-weight="700" fill="var(--accent-ink)">running</text>
+  <text x="203" y="157" text-anchor="middle" font-size="9" fill="var(--muted)">still alive</text>
+  <text x="162" y="180" font-size="9" fill="var(--muted)">2 registry</text>
+  <rect x="160" y="186" width="86" height="24" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="203" y="202" text-anchor="middle" font-size="9" font-weight="700" fill="var(--accent-ink)">in _running</text>
+  <rect x="160" y="220" width="86" height="88" rx="6" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="203" y="236" text-anchor="middle" font-size="9" font-weight="700" fill="var(--amber)">branch · watch demote</text>
+  <text x="164" y="250" font-size="9" fill="var(--muted)">watch_patterns set</text>
+  <text x="164" y="264" font-size="9" fill="var(--muted)">STRIKE=3 windows</text>
+  <text x="164" y="278" font-size="9" fill="var(--amber)">→ disable + flip</text>
+  <text x="164" y="292" font-size="9" fill="var(--muted)">notify=true</text>
+  <rect x="290" y="72" width="100" height="240" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="299" y="90" font-size="9.5" font-weight="700" fill="var(--ink)">F3 · migrate</text>
+  <text x="299" y="104" font-size="9" fill="var(--blue)">exit/kill → migrate</text>
+  <text x="299" y="124" font-size="9" fill="var(--muted)">1 state badge</text>
+  <rect x="297" y="130" width="86" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="146" text-anchor="middle" font-size="9" font-weight="700" fill="var(--blue)">finished</text>
+  <text x="340" y="157" text-anchor="middle" font-size="9" fill="var(--muted)">event set</text>
+  <text x="299" y="180" font-size="9" fill="var(--muted)">2 registry</text>
+  <rect x="297" y="186" width="86" height="24" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="202" text-anchor="middle" font-size="9" font-weight="700" fill="var(--blue)">into _finished{}</text>
+  <text x="299" y="230" font-size="9" fill="var(--muted)">lock pop _running</text>
+  <text x="299" y="244" font-size="9" fill="var(--muted)">set event + ckpt</text>
+  <text x="299" y="258" font-size="9" fill="var(--muted)">finished kept 1800s</text>
+  <text x="299" y="272" font-size="9" fill="var(--muted)">= 30min TTL</text>
+  <rect x="427" y="72" width="100" height="240" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="436" y="90" font-size="9.5" font-weight="700" fill="var(--ink)">F4 · de-dup gate</text>
+  <text x="436" y="104" font-size="9" fill="var(--purple)">completion · once</text>
+  <text x="436" y="124" font-size="9" fill="var(--muted)">1 state badge</text>
+  <rect x="434" y="130" width="86" height="32" rx="6" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="477" y="146" text-anchor="middle" font-size="9" font-weight="700" fill="var(--purple)">completion ✓</text>
+  <text x="477" y="157" text-anchor="middle" font-size="9" fill="var(--muted)">first move</text>
+  <text x="436" y="180" font-size="9" fill="var(--muted)">2 registry</text>
+  <rect x="434" y="186" width="86" height="24" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="477" y="202" text-anchor="middle" font-size="9" font-weight="700" fill="var(--blue)">in _finished</text>
+  <text x="436" y="230" font-size="9" fill="var(--muted)">was_running=true</text>
+  <text x="436" y="244" font-size="9" fill="var(--muted)">and not in consumed</text>
+  <text x="436" y="258" font-size="9" fill="var(--purple)">→ decide once</text>
+  <text x="436" y="272" font-size="9" fill="var(--muted)">add to set · one enq</text>
+  <rect x="564" y="72" width="100" height="240" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="573" y="90" font-size="9.5" font-weight="700" fill="var(--ink)">F5 · notify</text>
+  <text x="573" y="104" font-size="9" fill="var(--accent-ink)">enqueue → one turn</text>
+  <text x="573" y="124" font-size="9" fill="var(--muted)">1 state badge</text>
+  <rect x="571" y="130" width="86" height="32" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="614" y="146" text-anchor="middle" font-size="9" font-weight="700" fill="var(--accent-ink)">notified</text>
+  <text x="614" y="157" text-anchor="middle" font-size="9" fill="var(--muted)">inject msg</text>
+  <text x="573" y="180" font-size="9" fill="var(--muted)">2 registry</text>
+  <rect x="571" y="186" width="86" height="24" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="614" y="202" text-anchor="middle" font-size="9" font-weight="700" fill="var(--blue)">in _finished</text>
+  <text x="573" y="230" font-size="9" fill="var(--muted)">→ completion_queue</text>
+  <text x="573" y="244" font-size="9" fill="var(--muted)">one new agent turn</text>
+  <text x="573" y="258" font-size="9" fill="var(--muted)">then read-only via</text>
+  <text x="573" y="272" font-size="9" fill="var(--muted)">_poll_observed · no eat</text>
+  <line x1="117" y1="200" x2="144" y2="200" stroke="var(--accent)" stroke-width="1.6"/>
+  <path d="M152,200 L144,195 L144,205 Z" fill="var(--accent)"/>
+  <line x1="254" y1="200" x2="281" y2="200" stroke="var(--blue)" stroke-width="1.6"/>
+  <path d="M289,200 L281,195 L281,205 Z" fill="var(--blue)"/>
+  <line x1="391" y1="200" x2="418" y2="200" stroke="var(--purple)" stroke-width="1.6"/>
+  <path d="M426,200 L418,195 L418,205 Z" fill="var(--purple)"/>
+  <line x1="528" y1="200" x2="555" y2="200" stroke="var(--accent)" stroke-width="1.6"/>
+  <path d="M563,200 L555,195 L555,205 Z" fill="var(--accent)"/>
+  <rect x="10" y="324" width="660" height="122" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="346" font-size="9.5" font-weight="700" fill="var(--ink)">Side notes · the checkpoint is not the decider · two gates split the work (only real constants 1800s/30min · STRIKE=3)</text>
+  <circle cx="26" cy="368" r="4" fill="var(--blue)"/>
+  <text x="38" y="372" font-size="9" fill="var(--muted)">1. processes.json checkpoint is only for gateway crash recovery of detached handles — not the completion decider</text>
+  <text x="38" y="386" font-size="9" fill="var(--muted)">completion is decided entirely in-memory by the _running / _finished dicts; the checkpoint takes no part</text>
+  <circle cx="26" cy="408" r="4" fill="var(--purple)"/>
+  <text x="38" y="412" font-size="9" fill="var(--muted)">2. gate one was_running (producer side · kill and the reader thread both call but only one pop wins and enqueues)</text>
+  <text x="38" y="426" font-size="9" fill="var(--muted)">gate two _completion_consumed / _poll_observed (consumer side · anything already waited or polled is skipped by the drain)</text>
+</svg>
+<div class="fig-cap"><b>One process, frame by frame</b>: 5 frames follow a single <span class="mono">background=true</span> process — <span class="mono">spawn</span> into <span class="mono">_running</span> → <span class="mono">running</span> monitor → exit via <span class="mono">_move_to_finished</span> into <span class="mono">_finished</span> → <strong>de-dup gate</strong> decides completion once → <span class="mono">completion_queue</span> triggers <strong>one</strong> new turn. Both gates appear only in frame <span class="mono">F4</span> and the bottom notes: gate one <span class="mono">was_running</span> producer-side, gate two <span class="mono">_completion_consumed</span> / <span class="mono">_poll_observed</span> consumer-side; the <span class="mono">processes.json</span> checkpoint is crash-recovery only and <strong>takes no part</strong> in the completion decision.</div>
+</div>
+
 <p>Stop covered, look covered — one mechanism is left: how a "save" lands either <strong>whole</strong> or <strong>not at all</strong>, and how that atomic guarantee collapses the moment a <strong>temp file is put in the wrong directory</strong>.</p>
 
 <h3>🔬 28.3 · Atomic file edits: a same-directory temp + rename, verified by a post-write re-read</h3>
@@ -8860,6 +9287,104 @@ WATCH_STRIKE_LIMIT = 3            # Strikes in a row → disable watch + promote
   <text x="340" y="334" text-anchor="middle" font-size="9" fill="var(--muted)">the temp's location is load-bearing — a cross-dir shortcut trades the atomic guarantee for a maybe-half-written file</text>
 </svg>
 <div class="fig-cap"><b>Cross-FS rename breaks atomicity</b>: <strong>same dir = same filesystem</strong>, so <span class="mono">mv</span> is a one-step atomic rename (repoint the directory entry to the new inode) and a crash shows only old or whole-new; <strong>across filesystems</strong> <span class="mono">mv</span> degrades to <span class="mono">copy + unlink</span>, two steps, a mid-copy crash leaving half a file. So the temp must <span class="mono">mktemp -p "$d"</span> into the <strong>target's own dir</strong> — the location is load-bearing.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 416" role="img" aria-label="Filesystem state snapshots per frame: _atomic_write overwrites foo.py, and along the timeline each frame draws which files exist right now in the same project directory and whether each holds old or new bytes. Frame 1 stage: mktemp -p &quot;$d&quot; makes an empty temp file .hermes-tmp.XXXXXX in foo.py's own directory, while foo.py still holds the old, intact bytes. Frame 2 write temp: cat writes all the new bytes into .hermes-tmp.XXXXXX, foo.py is still old and intact, and this is the crash-safe point because a crash here only drops the temp file and never touches the original. Frame 3 atomic swap: mv -f atomically renames the temp into foo.py in one step, so the directory's foo.py now holds the new bytes and the temp file is gone, with no half file. Frame 4 read back: on the patch path, after writing it re-reads foo.py with cat byte-for-byte to confirm it landed, and a mismatch errors out and rolls back. Two bottom notes: one, use shell mv -f over one terminal backend so docker and ssh behave alike, not os.replace; two, the location is load-bearing because mktemp -p &quot;$d&quot; must land in the target's own dir on the same filesystem, since across filesystems mv degrades to copy plus unlink, two steps, and a mid-copy crash leaves half a file, breaking atomicity. No frame ever leaves foo.py half-written.">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Filesystem state per frame · no frame leaves foo.py half-written</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">_atomic_write overwrites foo.py: each frame shows which files exist now, old / new / empty</text>
+  <text x="600" y="34" font-size="22">📸</text>
+
+  <rect x="10" y="64" width="128" height="240" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="18" y="84" font-size="9.5" font-weight="700" fill="var(--ink)">Frame 1 · stage</text>
+  <text x="18" y="99" font-size="9" fill="var(--blue)">empty temp in same dir</text>
+  <rect x="18" y="106" width="112" height="148" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="122" font-size="9" fill="var(--muted)">📁 project dir/</text>
+  <rect x="24" y="128" width="100" height="46" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="30" y="144" font-size="9" fill="var(--ink)">foo.py</text>
+  <rect x="30" y="150" width="88" height="16" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="74" y="162" text-anchor="middle" font-size="9" fill="var(--accent-ink)">old · intact</text>
+  <rect x="24" y="180" width="100" height="46" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="30" y="196" font-size="9" fill="var(--ink)">.hermes-tmp.XXXXXX</text>
+  <rect x="30" y="202" width="88" height="16" rx="3" fill="var(--panel)" stroke="var(--blue)" stroke-dasharray="4 3"/>
+  <text x="74" y="214" text-anchor="middle" font-size="9" fill="var(--blue)">empty</text>
+  <rect x="18" y="262" width="112" height="38" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="24" y="278" font-size="9" fill="var(--blue)">mktemp -p &quot;$d&quot;</text>
+  <text x="24" y="292" font-size="9" fill="var(--muted)">into foo.py's dir</text>
+
+  <line x1="140" y1="186" x2="178" y2="186" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M184,186 L176,182 L176,190 Z" fill="var(--line)"/>
+  <text x="162" y="168" text-anchor="middle" font-size="9" fill="var(--blue)">cat &gt; tmp</text>
+  <text x="162" y="180" text-anchor="middle" font-size="9" fill="var(--muted)">write</text>
+
+  <rect x="187" y="64" width="128" height="240" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="195" y="84" font-size="9.5" font-weight="700" fill="var(--ink)">Frame 2 · write temp</text>
+  <text x="195" y="99" font-size="9" fill="var(--blue)">new bytes all in temp</text>
+  <rect x="195" y="106" width="112" height="148" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="201" y="122" font-size="9" fill="var(--muted)">📁 project dir/</text>
+  <rect x="201" y="128" width="100" height="46" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="207" y="144" font-size="9" fill="var(--ink)">foo.py</text>
+  <rect x="207" y="150" width="88" height="16" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="251" y="162" text-anchor="middle" font-size="9" fill="var(--accent-ink)">old · still intact</text>
+  <rect x="201" y="180" width="100" height="46" rx="6" fill="var(--panel)" stroke="var(--blue)"/>
+  <text x="207" y="196" font-size="9" fill="var(--ink)">.hermes-tmp.XXXXXX</text>
+  <rect x="207" y="202" width="88" height="16" rx="3" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="251" y="214" text-anchor="middle" font-size="9" fill="var(--blue)">new bytes · all</text>
+  <rect x="195" y="262" width="112" height="38" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="201" y="278" font-size="9" font-weight="700" fill="var(--red)">⛨ crash-safe point</text>
+  <text x="201" y="292" font-size="9" fill="var(--muted)">crash drops temp · foo.py intact</text>
+
+  <line x1="317" y1="186" x2="355" y2="186" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M361,186 L353,182 L353,190 Z" fill="var(--line)"/>
+  <text x="339" y="168" text-anchor="middle" font-size="9" fill="var(--accent-ink)">mv -f</text>
+  <text x="339" y="180" text-anchor="middle" font-size="9" fill="var(--muted)">tmp→foo.py</text>
+
+  <rect x="364" y="64" width="128" height="240" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="372" y="84" font-size="9.5" font-weight="700" fill="var(--ink)">Frame 3 · atomic swap</text>
+  <text x="372" y="99" font-size="9" fill="var(--accent-ink)">mv -f swaps in one step</text>
+  <rect x="372" y="106" width="112" height="148" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="378" y="122" font-size="9" fill="var(--muted)">📁 project dir/</text>
+  <rect x="378" y="128" width="100" height="46" rx="6" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="384" y="144" font-size="9" fill="var(--ink)">foo.py</text>
+  <rect x="384" y="150" width="88" height="16" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="428" y="162" text-anchor="middle" font-size="9" fill="var(--accent-ink)">new · in place</text>
+  <rect x="378" y="180" width="100" height="46" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-dasharray="4 3"/>
+  <text x="384" y="196" font-size="9" fill="var(--muted)">.hermes-tmp.XXXXXX</text>
+  <text x="428" y="214" text-anchor="middle" font-size="9" fill="var(--muted)">(renamed away)</text>
+  <rect x="372" y="262" width="112" height="38" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="378" y="278" font-size="9" font-weight="700" fill="var(--accent-ink)">mv -f atomic rename</text>
+  <text x="378" y="292" font-size="9" fill="var(--muted)">one step · no half file</text>
+
+  <line x1="494" y1="186" x2="532" y2="186" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M538,186 L530,182 L530,190 Z" fill="var(--line)"/>
+  <text x="516" y="168" text-anchor="middle" font-size="9" fill="var(--purple)">patch path</text>
+  <text x="516" y="180" text-anchor="middle" font-size="9" fill="var(--muted)">cat read-back</text>
+
+  <rect x="541" y="64" width="128" height="240" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="549" y="84" font-size="9.5" font-weight="700" fill="var(--ink)">Frame 4 · read back</text>
+  <text x="549" y="99" font-size="9" fill="var(--purple)">cat re-reads byte-for-byte</text>
+  <rect x="549" y="106" width="112" height="148" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="555" y="122" font-size="9" fill="var(--muted)">📁 project dir/</text>
+  <rect x="555" y="128" width="100" height="46" rx="6" fill="var(--panel)" stroke="var(--purple)"/>
+  <text x="561" y="144" font-size="9" fill="var(--ink)">foo.py ✓</text>
+  <rect x="561" y="150" width="88" height="16" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="605" y="162" text-anchor="middle" font-size="9" fill="var(--accent-ink)">new · on disk</text>
+  <rect x="555" y="180" width="100" height="46" rx="6" fill="var(--panel)" stroke="var(--line)" stroke-dasharray="4 3"/>
+  <text x="561" y="196" font-size="9" fill="var(--muted)">(no temp file)</text>
+  <text x="605" y="214" text-anchor="middle" font-size="9" fill="var(--purple)">cat foo.py == expected</text>
+  <rect x="549" y="262" width="112" height="38" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="555" y="278" font-size="9" font-weight="700" fill="var(--purple)">✓ verify read-back</text>
+  <text x="555" y="292" font-size="9" fill="var(--muted)">mismatch → error + rollback</text>
+
+  <rect x="10" y="312" width="662" height="98" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="331" font-size="9.5" font-weight="700" fill="var(--ink)">Note · two premises you cannot drop</text>
+  <circle cx="26" cy="350" r="4" fill="var(--accent)"/>
+  <text x="38" y="354" font-size="9" fill="var(--muted)">① use shell mv -f over one terminal backend (docker / ssh alike), not os.replace — one atomic path</text>
+  <circle cx="26" cy="378" r="4" fill="var(--red)"/>
+  <text x="38" y="378" font-size="9" fill="var(--muted)">② the location is load-bearing: mktemp -p &quot;$d&quot; must land in the target's own dir / same FS;</text>
+  <text x="48" y="394" font-size="9" fill="var(--muted)">across filesystems mv degrades to copy + unlink, a mid-copy crash leaves half a file → atomicity broken</text>
+</svg>
+<div class="fig-cap"><b>Filesystem state per frame</b>: four file snapshots of one directory along the timeline — <span class="mono">Frame 1</span> <span class="mono">mktemp -p &quot;$d&quot;</span> makes an empty same-dir temp, <span class="mono">foo.py</span> old &amp; intact → <span class="mono">Frame 2</span> new bytes all in temp, <span class="mono">foo.py</span> <strong>still intact</strong> (<span style="color:var(--red)">⛨ crash-safe point</span>: a crash only drops the temp) → <span class="mono">Frame 3</span> <span class="mono">mv -f</span> atomically renames in one step, <span class="mono">foo.py</span> turns new, temp gone → <span class="mono">Frame 4</span> (patch path) <span class="mono">cat</span> re-reads byte-for-byte to <strong>verify</strong>. The point: <strong>no frame leaves <span class="mono">foo.py</span> half-written</strong>; the premise is a same-dir temp + <span class="mono">mv -f</span> rather than <span class="mono">os.replace</span>.</div>
 </div>
 
 <div class="card design">
