@@ -924,7 +924,7 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
 
   <rect x="30" y="70" width="620" height="50" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="44" y="88" font-size="10.5" fill="var(--faint)">Guard ① adapter layer · gateway/platforms/base.py</text>
-  <text x="340" y="110" text-anchor="middle" font-size="12.5" fill="var(--ink)">session_key ∈ _active_sessions ？ → session busy？</text>
+  <text x="340" y="110" text-anchor="middle" font-size="12.5" fill="var(--ink)">session_key ∈ _active_sessions ? → session busy?</text>
 
   <text x="228" y="137" text-anchor="middle" font-size="10.5" fill="var(--muted)">ordinary chat →</text>
   <text x="455" y="137" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">resolvable command → bypass</text>
@@ -2118,7 +2118,7 @@ _apply_profile_override()   <span class="cm"># module-level: runs before the oth
   <line x1="451" y1="190" x2="451" y2="344" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="4 4"/>
   <text x="451" y="261" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">✕</text>
 
-  <text x="340" y="378" text-anchor="middle" font-size="10.5" fill="var(--muted)"><tspan fill="var(--red)" font-weight="700">✕</tspan> no live inheritance　·　hardcoding ~/.hermes pierces isolation (PR #3575)</text>
+  <text x="340" y="378" text-anchor="middle" font-size="10.5" fill="var(--muted)"><tspan fill="var(--red)" font-weight="700">✕</tspan> no live inheritance  ·  hardcoding ~/.hermes pierces isolation (PR #3575)</text>
 </svg>
 <div class="fig-cap"><b>Profiles: independent islands</b>: <span class="mono">_apply_profile_override()</span> sets <span class="mono">HERMES_HOME</span> before any import, and the whole codebase then goes through the single <span class="mono">get_hermes_home()</span> entry — so each profile's config/secrets/memory/sessions/skills/gateway <b>land in their own directory, fully isolated</b>. Islands <b>deliberately do no live inheritance</b> (so one edit can't pollute all); to "start from default," use the one-time copy-at-creation <span class="mono">--clone</span>.</div>
 </div>
@@ -2177,8 +2177,8 @@ OPTIONAL_ENV_VARS = {
   <text x="364" y="151" font-size="10.5" fill="var(--muted)">credentials (password:True · masked in setup)</text>
   <line x1="362" y1="160" x2="646" y2="160" stroke="var(--accent)" stroke-opacity="0.5"/>
   <g font-size="11" fill="var(--ink)">
-    <text x="364" y="182">🔒 OPENROUTER_API_KEY　password:True</text>
-    <text x="364" y="203">🔒 TELEGRAM_BOT_TOKEN　password:True</text>
+    <text x="364" y="182">🔒 OPENROUTER_API_KEY  password:True</text>
+    <text x="364" y="203">🔒 TELEGRAM_BOT_TOKEN  password:True</text>
   </g>
   <rect x="362" y="216" width="284" height="100" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
   <text x="374" y="236" font-size="10.5" font-weight="700" fill="var(--ink)">⚠ Historical baggage · not absolute</text>

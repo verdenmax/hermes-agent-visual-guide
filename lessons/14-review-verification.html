@@ -779,7 +779,7 @@ Verdict: APPROVED or REQUEST_CHANGES.
   <text x="340" y="184" text-anchor="middle" font-size="11" fill="var(--muted)">Order locked: don't waste quality review on off-target code</text>
   <rect x="24" y="198" width="632" height="62" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="340" y="220" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">fail-closed · default to blocking</text>
-  <text x="340" y="242" text-anchor="middle" font-size="11" fill="var(--ink)">can't parse → passed=false　·　security_concerns non-empty → passed=false　·　pass only when both empty</text>
+  <text x="340" y="242" text-anchor="middle" font-size="11" fill="var(--ink)">can't parse → passed=false  ·  security_concerns non-empty → passed=false  ·  pass only when both empty</text>
 </svg>
 <div class="fig-cap"><b>Two-stage review · enforced order</b>: spec-compliance first (“built the wrong thing?”, PASS or list gaps); <b>only after PASS</b> comes code-quality (“built the thing wrong?”, APPROVED/REQUEST_CHANGES). The two gates catch <b>orthogonal</b> failure classes, and the locked order avoids polishing off-target code; the whole thing is <b>fail-closed</b> — can't-parse or security concerns judge false, passing only when both lists are empty.</div>
 </div>

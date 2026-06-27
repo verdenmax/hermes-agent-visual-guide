@@ -1466,7 +1466,7 @@ From the moment you hit enter to the moment Hermes hands back a final answer, wh
 <svg viewBox="0 0 680 366" role="img" aria-label="The synchronous main loop: a while gate on top, then call model, check tool_calls, run tools and append, or return final_response">
   <rect x="30" y="14" width="620" height="48" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
   <text x="340" y="35" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">Top gate · while (api_call_count &lt; max_iterations, default 90) and (iteration_budget.remaining &gt; 0)</text>
-  <text x="340" y="52" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">＋ _budget_grace_call: a reserved one-shot grace hook (core default False, never fires in normal chat)</text>
+  <text x="340" y="52" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">+ _budget_grace_call: a reserved one-shot grace hook (core default False, never fires in normal chat)</text>
 
   <line x1="300" y1="62" x2="300" y2="72" stroke="var(--muted)"/>
   <polygon points="295,64 305,64 300,72" fill="var(--muted)"/>
@@ -1693,7 +1693,7 @@ merged: List[Dict] = []
   <div class="collab-sub">① Component list</div>
   <strong>conversation_loop</strong> (main loop, <span class="mono">conversation_loop.py:589</span>) sets the rhythm; <strong>IterationBudget</strong> (<span class="mono">iteration_budget.py</span>) guards <span class="mono">consume/remaining</span>; <strong>_interrupt_requested</strong> (set by <span class="mono">interrupt()</span> @ <span class="mono">run_agent.py:2400</span>) handles the e-stop; <strong>repair_message_sequence</strong> (<span class="mono">agent_runtime_helpers.py:348</span>) keeps alternation; <strong>_execute_tool_calls</strong> runs tools and appends the <span class="mono">tool</span> results; <strong>chat_completion_helpers</strong> (<span class="mono">:885</span>) builds the assistant message with reasoning. Cross-chapter: messages externalize all state (Ch. 2, B), the budget fights error-compounding (Ch. 3, F), the alternation invariant serves prompt caching (Ch. 6).
   <div class="collab-sub">② Data-flow sequence</div>
-  user message → enter the <span class="mono">while</span> loop →〔check interrupt → <span class="mono">consume</span> budget → LLM call → handle <span class="mono">tool_calls</span> → append <span class="mono">tool</span> results〕many turns → a turn with <strong>no tool_calls</strong> → finish as <span class="mono">final_response</span>.
+  user message → enter the <span class="mono">while</span> loop →[check interrupt → <span class="mono">consume</span> budget → LLM call → handle <span class="mono">tool_calls</span> → append <span class="mono">tool</span> results]many turns → a turn with <strong>no tool_calls</strong> → finish as <span class="mono">final_response</span>.
   <div class="collab-sub">③ Key point</div>
   All state lives in <span class="mono">messages</span>, the loop is synchronous and interruptible, and the budget is bounded — together they let the agent loop work freely yet <strong>never spin out of control</strong>.
 </div>
@@ -3079,7 +3079,7 @@ In ch.9, the background review keeps <strong>creating</strong> new skills. A pro
   <rect x="286" y="48" width="108" height="296" rx="10" fill="var(--panel)" stroke="var(--line)" stroke-width="1.5"/>
   <text x="340" y="178" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">whitelist gate</text>
   <text x="340" y="198" text-anchor="middle" font-size="9.5" fill="var(--muted)">is_agent_created</text>
-  <text x="340" y="222" text-anchor="middle" font-size="9.5" fill="var(--muted)">＋ prune_builtins</text>
+  <text x="340" y="222" text-anchor="middle" font-size="9.5" fill="var(--muted)">+ prune_builtins</text>
   <text x="340" y="236" text-anchor="middle" font-size="9.5" fill="var(--muted)">default True</text>
 
   <g font-size="11">
@@ -3408,7 +3408,7 @@ Memory lets Hermes remember across sessions "<strong>who you are and what you pr
   <text x="30" y="110" text-anchor="middle" font-size="10" fill="var(--red)" transform="rotate(-90 30 110)">③ in-session, only compression (ch.15) rebuilds + refreshes</text>
 
   <text x="340" y="344" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">Memory is both external (cures amnesia) and cache-safe (guards ch.6)</text>
-  <text x="340" y="362" text-anchor="middle" font-size="9.5" fill="var(--muted)">read/write split: write to disk/live; inject only the ① session-start snapshot ＋ ② current user-message copy</text>
+  <text x="340" y="362" text-anchor="middle" font-size="9.5" fill="var(--muted)">read/write split: write to disk/live; inject only the ① session-start snapshot + ② current user-message copy</text>
 </svg>
 <div class="fig-cap"><b>Memory externalized yet cache-safe</b>: the kernel is a <b>pure function</b> that forgets across sessions (ch.2 B), so "who you are, what state the project is in" is distilled onto <span class="mono">MEMORY.md/USER.md</span> disk — its <b>external hard drive</b>. But memory must enter the most stable (volatile) tier of the cache prefix, and injecting live memory would shatter the cache on every write. The fix is <b>read/write separation</b>: ① at session start <span class="mono">load_from_disk</span> takes a <b>frozen snapshot</b> into the prefix, byte-stable all session; ② mid-session writes hit disk only, <b>not the snapshot</b>; ③ in-session, only a compression boundary (ch.15) rebuilds the prefix and refreshes the snapshot from the latest memory. So memory is both external and honors "the cache is sacred."</div>
 </div>
@@ -3464,7 +3464,7 @@ should_review_memory = <span class="kw">False</span>
 
 <div class="figure">
 <svg viewBox="0 0 680 352" role="img" aria-label="MemoryProvider ABC plus orchestrator: the built-in is the first provider and always ordered first, third parties plug in via the same ABC, only one external provider is allowed, and a second one is rejected with a warning">
-  <text x="340" y="22" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">The core knows one abstraction · one ABC ＋ one orchestrator (echoing ch.23)</text>
+  <text x="340" y="22" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">The core knows one abstraction · one ABC + one orchestrator (echoing ch.23)</text>
 
   <rect x="24" y="44" width="240" height="250" rx="10" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
   <text x="144" y="68" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">MemoryProvider</text>
@@ -3493,13 +3493,13 @@ should_review_memory = <span class="kw">False</span>
   <text x="477" y="190" text-anchor="middle" font-size="9" fill="var(--blue)">Honcho / Mem0 / Supermemory… same ABC, same discovery</text>
 
   <rect x="314" y="216" width="326" height="52" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-dasharray="5 4"/>
-  <text x="477" y="236" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✕ a second external provider → rejected ＋ warning log</text>
+  <text x="477" y="236" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✕ a second external provider → rejected + warning log</text>
   <text x="477" y="253" text-anchor="middle" font-size="9" fill="var(--red)">guards the waist: each one = another per-call tool schema</text>
 
   <text x="340" y="312" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">the built-in isn't a special case but the "first provider"; third parties plug in via the same ABC</text>
   <text x="340" y="332" text-anchor="middle" font-size="9.5" fill="var(--muted)">recall always takes prefetch → appended to the current user-message copy, never polluting the system prompt</text>
 </svg>
-<div class="fig-cap"><b>MemoryProvider ABC ＋ orchestrator</b>: the core branches for no memory backend; it defines <b>one ABC contract</b> (<span class="mono">is_available/initialize/prefetch/sync_turn/shutdown</span>) orchestrated by <span class="mono">MemoryManager</span>. The built-in <span class="mono">MEMORY.md/USER.md</span> isn't a special case but the <b>"first provider,"</b> always ordered first; third parties like Honcho/Mem0/Supermemory plug in via <b>the same ABC</b> over <b>the same discovery path</b>. To guard the <b>narrow waist</b>, <span class="mono">add_provider</span> allows <b>only one external provider</b> — a second is rejected outright and logs a warning (each extra one adds a set of tool schemas shipped on every request). This is the "define an ABC to corral the category" paradigm (echoing ch.23).</div>
+<div class="fig-cap"><b>MemoryProvider ABC + orchestrator</b>: the core branches for no memory backend; it defines <b>one ABC contract</b> (<span class="mono">is_available/initialize/prefetch/sync_turn/shutdown</span>) orchestrated by <span class="mono">MemoryManager</span>. The built-in <span class="mono">MEMORY.md/USER.md</span> isn't a special case but the <b>"first provider,"</b> always ordered first; third parties like Honcho/Mem0/Supermemory plug in via <b>the same ABC</b> over <b>the same discovery path</b>. To guard the <b>narrow waist</b>, <span class="mono">add_provider</span> allows <b>only one external provider</b> — a second is rejected outright and logs a warning (each extra one adds a set of tool schemas shipped on every request). This is the "define an ABC to corral the category" paradigm (echoing ch.23).</div>
 </div>
 
 <div class="vflow">
@@ -3753,7 +3753,7 @@ merges all of that into a single calling shape with no mode parameter,
   <text x="250" y="231" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">hundreds of old sessions loaded verbatim…</text>
   <text x="606" y="230" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">✕ overflow</text>
 
-  <text x="20" y="282" font-size="11" fill="var(--muted)">① blows the context window　② lost-in-the-middle: key info buried in the long tail → recall quality drops</text>
+  <text x="20" y="282" font-size="11" fill="var(--muted)">① blows the context window  ② lost-in-the-middle: key info buried in the long tail → recall quality drops</text>
 </svg>
 <div class="fig-cap"><b>Recall, not full-load</b>: a new session hits a problem; <b>session_search</b> queries the local <b>SQLite FTS5</b> index (BM25 ranking + snippet highlighting, CJK via a trigram substring fallback) and pulls back <b>only</b> the few most relevant fragments from <b>hundreds of old sessions</b>, appended as a tool message — zero LLM, zero-ops, no cache break. Loading <b>all</b> old sessions instead only <b>blows the context window</b> and triggers <b>lost-in-the-middle</b> (ch.2 A): key info drowns in the long tail and recall quality falls.</div>
 </div>
@@ -4067,7 +4067,7 @@ effective_role = role <span class="kw">if</span> (role == <span class="st">"orch
   <rect x="24" y="240" width="372" height="74" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="40" y="262" font-size="11" font-weight="700" fill="var(--muted)">nesting depth cap</text>
   <text x="40" y="283" font-size="11" fill="var(--ink)">max_spawn_depth = 1 (flat by default)</text>
-  <text x="40" y="303" font-size="11" fill="var(--ink)">parent → child ✓　　child → grandchild ✗ (raise in config)</text>
+  <text x="40" y="303" font-size="11" fill="var(--ink)">parent → child ✓    child → grandchild ✗ (raise in config)</text>
 
   <line x1="576" y1="176" x2="556" y2="246" stroke="var(--red)" stroke-width="2" stroke-dasharray="4 3"/>
   <text x="600" y="214" font-size="15" font-weight="700" fill="var(--red)">✖</text>
@@ -4366,7 +4366,7 @@ Verdict: APPROVED or REQUEST_CHANGES.
   <text x="340" y="184" text-anchor="middle" font-size="11" fill="var(--muted)">Order locked: don't waste quality review on off-target code</text>
   <rect x="24" y="198" width="632" height="62" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="340" y="220" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">fail-closed · default to blocking</text>
-  <text x="340" y="242" text-anchor="middle" font-size="11" fill="var(--ink)">can't parse → passed=false　·　security_concerns non-empty → passed=false　·　pass only when both empty</text>
+  <text x="340" y="242" text-anchor="middle" font-size="11" fill="var(--ink)">can't parse → passed=false  ·  security_concerns non-empty → passed=false  ·  pass only when both empty</text>
 </svg>
 <div class="fig-cap"><b>Two-stage review · enforced order</b>: spec-compliance first (“built the wrong thing?”, PASS or list gaps); <b>only after PASS</b> comes code-quality (“built the thing wrong?”, APPROVED/REQUEST_CHANGES). The two gates catch <b>orthogonal</b> failure classes, and the locked order avoids polishing off-target code; the whole thing is <b>fail-closed</b> — can't-parse or security concerns judge false, passing only when both lists are empty.</div>
 </div>
@@ -4936,7 +4936,7 @@ For an agent to "act" it must run commands — but <strong>where</strong>? Your 
 
   <rect x="40" y="224" width="600" height="44" rx="9" fill="var(--panel)" stroke="var(--line)"/>
   <text x="340" y="244" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">How is CWD carried across processes?</text>
-  <text x="340" y="261" text-anchor="middle" font-size="9.5" fill="var(--muted)">local backend → temp file, read back next time　|　remote (ssh) → stdout markers wrap pwd, base class parses &amp; strips</text>
+  <text x="340" y="261" text-anchor="middle" font-size="9.5" fill="var(--muted)">local backend → temp file, read back next time  |  remote (ssh) → stdout markers wrap pwd, base class parses &amp; strips</text>
 
   <text x="340" y="296" text-anchor="middle" font-size="11" font-weight="700" fill="var(--muted)">underlying bash is stateless (constraint B) → continuity rebuilt from external snapshots</text>
 </svg>
@@ -5507,7 +5507,7 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
 
   <rect x="30" y="70" width="620" height="50" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="44" y="88" font-size="10.5" fill="var(--faint)">Guard ① adapter layer · gateway/platforms/base.py</text>
-  <text x="340" y="110" text-anchor="middle" font-size="12.5" fill="var(--ink)">session_key ∈ _active_sessions ？ → session busy？</text>
+  <text x="340" y="110" text-anchor="middle" font-size="12.5" fill="var(--ink)">session_key ∈ _active_sessions ? → session busy?</text>
 
   <text x="228" y="137" text-anchor="middle" font-size="10.5" fill="var(--muted)">ordinary chat →</text>
   <text x="455" y="137" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">resolvable command → bypass</text>
@@ -6183,7 +6183,7 @@ _apply_profile_override()   <span class="cm"># module-level: runs before the oth
   <line x1="451" y1="190" x2="451" y2="344" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="4 4"/>
   <text x="451" y="261" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">✕</text>
 
-  <text x="340" y="378" text-anchor="middle" font-size="10.5" fill="var(--muted)"><tspan fill="var(--red)" font-weight="700">✕</tspan> no live inheritance　·　hardcoding ~/.hermes pierces isolation (PR #3575)</text>
+  <text x="340" y="378" text-anchor="middle" font-size="10.5" fill="var(--muted)"><tspan fill="var(--red)" font-weight="700">✕</tspan> no live inheritance  ·  hardcoding ~/.hermes pierces isolation (PR #3575)</text>
 </svg>
 <div class="fig-cap"><b>Profiles: independent islands</b>: <span class="mono">_apply_profile_override()</span> sets <span class="mono">HERMES_HOME</span> before any import, and the whole codebase then goes through the single <span class="mono">get_hermes_home()</span> entry — so each profile's config/secrets/memory/sessions/skills/gateway <b>land in their own directory, fully isolated</b>. Islands <b>deliberately do no live inheritance</b> (so one edit can't pollute all); to "start from default," use the one-time copy-at-creation <span class="mono">--clone</span>.</div>
 </div>
@@ -6242,8 +6242,8 @@ OPTIONAL_ENV_VARS = {
   <text x="364" y="151" font-size="10.5" fill="var(--muted)">credentials (password:True · masked in setup)</text>
   <line x1="362" y1="160" x2="646" y2="160" stroke="var(--accent)" stroke-opacity="0.5"/>
   <g font-size="11" fill="var(--ink)">
-    <text x="364" y="182">🔒 OPENROUTER_API_KEY　password:True</text>
-    <text x="364" y="203">🔒 TELEGRAM_BOT_TOKEN　password:True</text>
+    <text x="364" y="182">🔒 OPENROUTER_API_KEY  password:True</text>
+    <text x="364" y="203">🔒 TELEGRAM_BOT_TOKEN  password:True</text>
   </g>
   <rect x="362" y="216" width="284" height="100" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
   <text x="374" y="236" font-size="10.5" font-weight="700" fill="var(--ink)">⚠ Historical baggage · not absolute</text>

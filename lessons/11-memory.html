@@ -729,7 +729,7 @@ Memory lets Hermes remember across sessions "<strong>who you are and what you pr
   <text x="30" y="110" text-anchor="middle" font-size="10" fill="var(--red)" transform="rotate(-90 30 110)">③ in-session, only compression (ch.15) rebuilds + refreshes</text>
 
   <text x="340" y="344" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">Memory is both external (cures amnesia) and cache-safe (guards ch.6)</text>
-  <text x="340" y="362" text-anchor="middle" font-size="9.5" fill="var(--muted)">read/write split: write to disk/live; inject only the ① session-start snapshot ＋ ② current user-message copy</text>
+  <text x="340" y="362" text-anchor="middle" font-size="9.5" fill="var(--muted)">read/write split: write to disk/live; inject only the ① session-start snapshot + ② current user-message copy</text>
 </svg>
 <div class="fig-cap"><b>Memory externalized yet cache-safe</b>: the kernel is a <b>pure function</b> that forgets across sessions (ch.2 B), so "who you are, what state the project is in" is distilled onto <span class="mono">MEMORY.md/USER.md</span> disk — its <b>external hard drive</b>. But memory must enter the most stable (volatile) tier of the cache prefix, and injecting live memory would shatter the cache on every write. The fix is <b>read/write separation</b>: ① at session start <span class="mono">load_from_disk</span> takes a <b>frozen snapshot</b> into the prefix, byte-stable all session; ② mid-session writes hit disk only, <b>not the snapshot</b>; ③ in-session, only a compression boundary (ch.15) rebuilds the prefix and refreshes the snapshot from the latest memory. So memory is both external and honors "the cache is sacred."</div>
 </div>
@@ -785,7 +785,7 @@ should_review_memory = <span class="kw">False</span>
 
 <div class="figure">
 <svg viewBox="0 0 680 352" role="img" aria-label="MemoryProvider ABC plus orchestrator: the built-in is the first provider and always ordered first, third parties plug in via the same ABC, only one external provider is allowed, and a second one is rejected with a warning">
-  <text x="340" y="22" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">The core knows one abstraction · one ABC ＋ one orchestrator (echoing ch.23)</text>
+  <text x="340" y="22" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">The core knows one abstraction · one ABC + one orchestrator (echoing ch.23)</text>
 
   <rect x="24" y="44" width="240" height="250" rx="10" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
   <text x="144" y="68" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">MemoryProvider</text>
@@ -814,13 +814,13 @@ should_review_memory = <span class="kw">False</span>
   <text x="477" y="190" text-anchor="middle" font-size="9" fill="var(--blue)">Honcho / Mem0 / Supermemory… same ABC, same discovery</text>
 
   <rect x="314" y="216" width="326" height="52" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-dasharray="5 4"/>
-  <text x="477" y="236" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✕ a second external provider → rejected ＋ warning log</text>
+  <text x="477" y="236" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✕ a second external provider → rejected + warning log</text>
   <text x="477" y="253" text-anchor="middle" font-size="9" fill="var(--red)">guards the waist: each one = another per-call tool schema</text>
 
   <text x="340" y="312" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">the built-in isn't a special case but the "first provider"; third parties plug in via the same ABC</text>
   <text x="340" y="332" text-anchor="middle" font-size="9.5" fill="var(--muted)">recall always takes prefetch → appended to the current user-message copy, never polluting the system prompt</text>
 </svg>
-<div class="fig-cap"><b>MemoryProvider ABC ＋ orchestrator</b>: the core branches for no memory backend; it defines <b>one ABC contract</b> (<span class="mono">is_available/initialize/prefetch/sync_turn/shutdown</span>) orchestrated by <span class="mono">MemoryManager</span>. The built-in <span class="mono">MEMORY.md/USER.md</span> isn't a special case but the <b>"first provider,"</b> always ordered first; third parties like Honcho/Mem0/Supermemory plug in via <b>the same ABC</b> over <b>the same discovery path</b>. To guard the <b>narrow waist</b>, <span class="mono">add_provider</span> allows <b>only one external provider</b> — a second is rejected outright and logs a warning (each extra one adds a set of tool schemas shipped on every request). This is the "define an ABC to corral the category" paradigm (echoing ch.23).</div>
+<div class="fig-cap"><b>MemoryProvider ABC + orchestrator</b>: the core branches for no memory backend; it defines <b>one ABC contract</b> (<span class="mono">is_available/initialize/prefetch/sync_turn/shutdown</span>) orchestrated by <span class="mono">MemoryManager</span>. The built-in <span class="mono">MEMORY.md/USER.md</span> isn't a special case but the <b>"first provider,"</b> always ordered first; third parties like Honcho/Mem0/Supermemory plug in via <b>the same ABC</b> over <b>the same discovery path</b>. To guard the <b>narrow waist</b>, <span class="mono">add_provider</span> allows <b>only one external provider</b> — a second is rejected outright and logs a warning (each extra one adds a set of tool schemas shipped on every request). This is the "define an ABC to corral the category" paradigm (echoing ch.23).</div>
 </div>
 
 <div class="vflow">

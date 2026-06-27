@@ -2059,7 +2059,7 @@ From the moment you hit enter to the moment Hermes hands back a final answer, wh
 <svg viewBox="0 0 680 366" role="img" aria-label="The synchronous main loop: a while gate on top, then call model, check tool_calls, run tools and append, or return final_response">
   <rect x="30" y="14" width="620" height="48" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
   <text x="340" y="35" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">Top gate · while (api_call_count &lt; max_iterations, default 90) and (iteration_budget.remaining &gt; 0)</text>
-  <text x="340" y="52" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">＋ _budget_grace_call: a reserved one-shot grace hook (core default False, never fires in normal chat)</text>
+  <text x="340" y="52" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">+ _budget_grace_call: a reserved one-shot grace hook (core default False, never fires in normal chat)</text>
 
   <line x1="300" y1="62" x2="300" y2="72" stroke="var(--muted)"/>
   <polygon points="295,64 305,64 300,72" fill="var(--muted)"/>
@@ -2286,7 +2286,7 @@ merged: List[Dict] = []
   <div class="collab-sub">① Component list</div>
   <strong>conversation_loop</strong> (main loop, <span class="mono">conversation_loop.py:589</span>) sets the rhythm; <strong>IterationBudget</strong> (<span class="mono">iteration_budget.py</span>) guards <span class="mono">consume/remaining</span>; <strong>_interrupt_requested</strong> (set by <span class="mono">interrupt()</span> @ <span class="mono">run_agent.py:2400</span>) handles the e-stop; <strong>repair_message_sequence</strong> (<span class="mono">agent_runtime_helpers.py:348</span>) keeps alternation; <strong>_execute_tool_calls</strong> runs tools and appends the <span class="mono">tool</span> results; <strong>chat_completion_helpers</strong> (<span class="mono">:885</span>) builds the assistant message with reasoning. Cross-chapter: messages externalize all state (Ch. 2, B), the budget fights error-compounding (Ch. 3, F), the alternation invariant serves prompt caching (Ch. 6).
   <div class="collab-sub">② Data-flow sequence</div>
-  user message → enter the <span class="mono">while</span> loop →〔check interrupt → <span class="mono">consume</span> budget → LLM call → handle <span class="mono">tool_calls</span> → append <span class="mono">tool</span> results〕many turns → a turn with <strong>no tool_calls</strong> → finish as <span class="mono">final_response</span>.
+  user message → enter the <span class="mono">while</span> loop →[check interrupt → <span class="mono">consume</span> budget → LLM call → handle <span class="mono">tool_calls</span> → append <span class="mono">tool</span> results]many turns → a turn with <strong>no tool_calls</strong> → finish as <span class="mono">final_response</span>.
   <div class="collab-sub">③ Key point</div>
   All state lives in <span class="mono">messages</span>, the loop is synchronous and interruptible, and the budget is bounded — together they let the agent loop work freely yet <strong>never spin out of control</strong>.
 </div>

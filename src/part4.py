@@ -391,7 +391,7 @@ effective_role = role <span class="kw">if</span> (role == <span class="st">"orch
   <rect x="24" y="240" width="372" height="74" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="40" y="262" font-size="11" font-weight="700" fill="var(--muted)">nesting depth cap</text>
   <text x="40" y="283" font-size="11" fill="var(--ink)">max_spawn_depth = 1 (flat by default)</text>
-  <text x="40" y="303" font-size="11" fill="var(--ink)">parent → child ✓　　child → grandchild ✗ (raise in config)</text>
+  <text x="40" y="303" font-size="11" fill="var(--ink)">parent → child ✓    child → grandchild ✗ (raise in config)</text>
 
   <line x1="576" y1="176" x2="556" y2="246" stroke="var(--red)" stroke-width="2" stroke-dasharray="4 3"/>
   <text x="600" y="214" font-size="15" font-weight="700" fill="var(--red)">✖</text>
@@ -890,7 +890,7 @@ Verdict: APPROVED or REQUEST_CHANGES.
   <text x="340" y="184" text-anchor="middle" font-size="11" fill="var(--muted)">Order locked: don't waste quality review on off-target code</text>
   <rect x="24" y="198" width="632" height="62" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="340" y="220" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--red)">fail-closed · default to blocking</text>
-  <text x="340" y="242" text-anchor="middle" font-size="11" fill="var(--ink)">can't parse → passed=false　·　security_concerns non-empty → passed=false　·　pass only when both empty</text>
+  <text x="340" y="242" text-anchor="middle" font-size="11" fill="var(--ink)">can't parse → passed=false  ·  security_concerns non-empty → passed=false  ·  pass only when both empty</text>
 </svg>
 <div class="fig-cap"><b>Two-stage review · enforced order</b>: spec-compliance first (“built the wrong thing?”, PASS or list gaps); <b>only after PASS</b> comes code-quality (“built the thing wrong?”, APPROVED/REQUEST_CHANGES). The two gates catch <b>orthogonal</b> failure classes, and the locked order avoids polishing off-target code; the whole thing is <b>fail-closed</b> — can't-parse or security concerns judge false, passing only when both lists are empty.</div>
 </div>
@@ -1925,7 +1925,7 @@ For an agent to "act" it must run commands — but <strong>where</strong>? Your 
 
   <rect x="40" y="224" width="600" height="44" rx="9" fill="var(--panel)" stroke="var(--line)"/>
   <text x="340" y="244" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">How is CWD carried across processes?</text>
-  <text x="340" y="261" text-anchor="middle" font-size="9.5" fill="var(--muted)">local backend → temp file, read back next time　|　remote (ssh) → stdout markers wrap pwd, base class parses &amp; strips</text>
+  <text x="340" y="261" text-anchor="middle" font-size="9.5" fill="var(--muted)">local backend → temp file, read back next time  |  remote (ssh) → stdout markers wrap pwd, base class parses &amp; strips</text>
 
   <text x="340" y="296" text-anchor="middle" font-size="11" font-weight="700" fill="var(--muted)">underlying bash is stateless (constraint B) → continuity rebuilt from external snapshots</text>
 </svg>

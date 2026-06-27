@@ -783,7 +783,7 @@ merges all of that into a single calling shape with no mode parameter,
   <text x="250" y="231" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">hundreds of old sessions loaded verbatim…</text>
   <text x="606" y="230" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">✕ overflow</text>
 
-  <text x="20" y="282" font-size="11" fill="var(--muted)">① blows the context window　② lost-in-the-middle: key info buried in the long tail → recall quality drops</text>
+  <text x="20" y="282" font-size="11" fill="var(--muted)">① blows the context window  ② lost-in-the-middle: key info buried in the long tail → recall quality drops</text>
 </svg>
 <div class="fig-cap"><b>Recall, not full-load</b>: a new session hits a problem; <b>session_search</b> queries the local <b>SQLite FTS5</b> index (BM25 ranking + snippet highlighting, CJK via a trigram substring fallback) and pulls back <b>only</b> the few most relevant fragments from <b>hundreds of old sessions</b>, appended as a tool message — zero LLM, zero-ops, no cache break. Loading <b>all</b> old sessions instead only <b>blows the context window</b> and triggers <b>lost-in-the-middle</b> (ch.2 A): key info drowns in the long tail and recall quality falls.</div>
 </div>
