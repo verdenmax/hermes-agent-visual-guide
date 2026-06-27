@@ -496,6 +496,134 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 </svg>
 <div class="fig-cap"><b>协作式 vs 抢占式</b>：同一刻 <span class="mono">/stop</span> 在工具执行中途到达——Hermes <strong>协作式</strong>把它挂起到下一个循环边界才 <span class="mono">break</span>；抢占式（对照）会当场杀线程，而 Python 做不到，故只能靠各处轮询那面标志。</div>
 </div>
+
+<p>急停讲完，看第二个陷阱：一个 <span class="mono">background=true</span> 的进程到底<strong>活在哪</strong>、它那声「干完了」怎么做到<strong>只报一次</strong>、以及为什么它几乎<strong>熬不过一次重启</strong>。</p>
+
+<h3>🔬 28.2 · 后台进程生命周期：内存登记、去重通知、尽力恢复</h3>
+<p>当 agent 跑起一条 <span class="mono">terminal(background=True)</span>，进程并不直接交给操作系统不管，而是登记进 <span class="mono">ProcessRegistry</span>——一张<strong>进程内</strong>的注册表，核心是两个字典：<span class="mono">_running</span>（在跑的）与 <span class="mono">_finished</span>（跑完的，留 30 分钟 TTL）。每条 <span class="mono">ProcessSession</span> 挂着一个<strong>滚动输出缓冲</strong>（上限 <span class="mono">MAX_OUTPUT_CHARS</span> = 200KB，超了从头截）、可选的 <span class="mono">watch_patterns</span>、以及一个 <span class="mono">notify_on_complete</span> 标志；后台 reader 线程不停把子进程输出泵进缓冲，agent 则用 <span class="mono">wait</span> / <span class="mono">poll</span> / <span class="mono">kill</span> / 读 log 这几个动作去等它、查它、杀它。</p>
+<p>进程<strong>退出</strong>（reader 读到 EOF）或<strong>被 kill</strong> 时，都会走到同一个出口 <span class="mono">_move_to_finished()</span>。它在锁内把 session 从 <span class="mono">_running</span> 弹出、塞进 <span class="mono">_finished</span>，置上完成事件（唤醒所有阻塞在 <span class="mono">wait()</span> 上的调用），再 <span class="mono">_write_checkpoint()</span> 落一次盘。<strong>关键在最后那个 <span class="mono">if</span></strong>：只有当 <span class="mono">notify_on_complete</span> 开着、且<strong>这一次调用确实是第一次</strong>把它移走时，才往 <span class="mono">completion_queue</span> 里塞一条完成通知。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/process_registry.py:1022 · 简化</span></div><pre>    def _move_to_finished(self, session: ProcessSession):
+        with self._lock:
+            was_running = self._running.pop(session.id, None) is not None
+            self._finished[session.id] = session
+        session._completion_event.set()
+        self._write_checkpoint()
+
+        # Only enqueue completion notification on the FIRST move.  Without
+        # this guard, kill_process() and the reader thread can both call
+        # _move_to_finished(), producing duplicate [IMPORTANT: ...] messages.
+        if was_running and session.notify_on_complete:
+            from tools.ansi_strip import strip_ansi
+            output_tail = strip_ansi(session.output_buffer[-2000:]) if session.output_buffer else ""
+            self.completion_queue.put({
+                "type": "completion",
+                "session_id": session.id,
+                "session_key": session.session_key,
+                "command": session.command,
+                "exit_code": session.exit_code,
+                "completion_reason": session.completion_reason,
+                "termination_source": session.termination_source,
+                "output": output_tail,
+            })</pre></div>
+<p>那个「第一次」靠 <span class="mono">was_running = self._running.pop(...) is not None</span> 拿到——这就是<strong>第一道去重闸</strong>。<span class="mono">_move_to_finished()</span> 是<strong>幂等</strong>的：<span class="mono">kill_process()</span> 和 reader 线程可能<strong>同时</strong>发现进程没了、<strong>都来调它一次</strong>，但字典的 <span class="mono">pop</span> 只有一方拿得到非 <span class="mono">None</span>，于是只有那一方 <span class="mono">was_running</span> 为真、只有它入队。没有这道守卫，一次退出就会被报两遍 <span class="mono">[IMPORTANT: ...]</span>。这是生产端（谁来通知）的去重。</p>
+<p>但入队不等于一定送达。<strong>第二道闸在消费端</strong>：CLI 的 drain 与网关 / TUI 的 watcher 取走这条通知前，都会先查 <span class="mono">_completion_consumed</span>——只要 agent 已用阻塞 <span class="mono">wait()</span> 或完整 <span class="mono">read_log()</span> 把输出拿到手，就跳过；CLI 还额外查 <span class="mono">_poll_observed</span>（只读的 <span class="mono">poll()</span> 当场看到了退出、结果已在同一回合内联返回，而网关 / TUI <strong>故意不查</strong>这个，免得一次只读探测压掉它那次自主送达）。命中任一集合，drain 就<strong>跳过</strong>这条通知，避免重复注入一条 <span class="mono">[SYSTEM: ...]</span>。两道闸合起来保证：一次完成<strong>至多报一次</strong>，agent 早已知道就<strong>一次都不报</strong>。</p>
+<p>还有一条路也会汇进 <span class="mono">notify_on_complete</span>：<strong>watch 限流降级</strong>。带 <span class="mono">watch_patterns</span> 的进程，命中通知被严格限速——每 <span class="mono">WATCH_MIN_INTERVAL_SECONDS</span>（15 秒）至多一条，落在冷却窗里的命中会被丢弃并记<strong>一次 strike</strong>。连着 <span class="mono">WATCH_STRIKE_LIMIT</span> = <strong>3</strong> 个 strike 窗口后，这个 session 的 watch 被<strong>永久禁用</strong>（<span class="mono">_watch_disabled = True</span>），同时<strong>翻转</strong> <span class="mono">notify_on_complete = True</span>——一个本来狂刷中间态的 watcher，就这样自动降级成「进程真正退出时只报一次」，再走回上面那条唯一出口。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/process_registry.py:65</span></div><pre># After WATCH_STRIKE_LIMIT consecutive strike windows, watch_patterns for that
+# session is permanently disabled and the session falls back to notify_on_complete
+# semantics (one notification when the process actually exits).
+WATCH_MIN_INTERVAL_SECONDS = 15   # Minimum spacing between consecutive watch matches
+WATCH_STRIKE_LIMIT = 3            # Strikes in a row → disable watch + promote to notify_on_complete</pre></div>
+<p>现在说<strong>最大的坑</strong>。上面这一整套——两个字典、输出缓冲、完成事件、reader 与 watcher 线程——全都<strong>活在进程内存里</strong>。<span class="mono">_move_to_finished()</span> 里那次 <span class="mono">_write_checkpoint()</span> 会把状态写到 <span class="mono">CHECKPOINT_PATH</span>（<span class="mono">processes.json</span>），但它<strong>仅为网关崩溃恢复</strong>而存在，而且恢复是<strong>尽力而为</strong>的：网关重启后只会重新登记那些 <strong>detached 的 host-PID 进程</strong>，还必须校验检查点里记下的 <span class="mono">host_start_time</span> 与当前 PID 仍匹配（否则 PID 可能已被内核回收给别的进程，贸然认领会误杀陌生进程）。被恢复的 session 一律标 <span class="mono">detached=True</span>——<strong>读不回输出，只能报状态 + kill</strong>。换句话说，检查点恢复的是「还能不能查 / 能不能杀」的<strong>句柄</strong>，不是进程的<strong>完整状态</strong>。</p>
+<p>所以 <span class="mono">background=true</span> 的「持久」几乎全是<strong>进程内幻觉</strong>：进程一重启，内存态全丢，detached 恢复也只是尽力而为的状态 / kill 句柄。要让任务<strong>真的跨重启存活</strong>，得用真正落地的机制——<span class="mono">cron</span> 定时任务，或 <span class="mono">terminal(background=True, notify_on_complete=True)</span> 把进程交给系统托管、完成时回调（正是 ch26 的 E6 那条对策）。把「脱离本轮」误当成「持久化」，就是后台任务凭空消失的根因。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 430" role="img" aria-label="后台进程生命周期与完成通知去重图。中间竖向主线：running 进程退出或被 kill 后进入 _move_to_finished，在锁内把 session 从 _running 弹出并塞入 _finished、置完成事件、写检查点，只有第一次移走且 notify_on_complete 为真才把通知放进 completion_queue，最后至多送出一次。左侧分支：带 watch_patterns 的进程命中被限流，每 15 秒至多一条，落在冷却窗内记一次 strike，连满 WATCH_STRIKE_LIMIT 三次后禁用 watch 并翻转 notify_on_complete，汇入同一出口。右侧两道去重闸：闸一 was_running 守卫在生产端，kill 与 reader 线程都会调用但只有一方 pop 成功才入队；闸二在消费端，_completion_consumed 与 CLI 专用的 _poll_observed 集合命中时让 drain 跳过该通知，避免重复注入">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">后台进程生命周期 · 完成通知的两道去重闸</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">一条主线 running → _move_to_finished → 通知；watch 限流满 3 次翻转 notify_on_complete，最终经两道闸至多发一次</text>
+  <rect x="265" y="70" width="170" height="64" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="350" y="94" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">running 进程</text>
+  <text x="350" y="112" text-anchor="middle" font-size="9" fill="var(--muted)">_running{} · 输出缓冲 200KB</text>
+  <text x="350" y="127" text-anchor="middle" font-size="9" fill="var(--muted)">reader 线程 · wait / poll / kill / log</text>
+  <line x1="350" y1="134" x2="350" y2="168" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M350,176 L345,167 L355,167 Z" fill="var(--muted)"/>
+  <text x="358" y="158" font-size="9" fill="var(--muted)">退出 / 被 kill</text>
+  <rect x="245" y="176" width="210" height="78" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="350" y="198" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">_move_to_finished()</text>
+  <text x="350" y="216" text-anchor="middle" font-size="9" fill="var(--muted)">锁内 _running.pop → _finished</text>
+  <text x="350" y="231" text-anchor="middle" font-size="9" fill="var(--muted)">set 完成事件 + _write_checkpoint</text>
+  <text x="350" y="248" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">闸① was_running 守卫</text>
+  <line x1="350" y1="254" x2="350" y2="286" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M350,294 L345,285 L355,285 Z" fill="var(--muted)"/>
+  <text x="358" y="276" font-size="9" fill="var(--muted)">首次 + notify_on_complete</text>
+  <rect x="265" y="294" width="170" height="52" rx="10" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="350" y="316" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--purple)">completion_queue</text>
+  <text x="350" y="334" text-anchor="middle" font-size="9" fill="var(--muted)">type: completion 入队</text>
+  <line x1="350" y1="346" x2="350" y2="376" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M350,384 L345,375 L355,375 Z" fill="var(--muted)"/>
+  <rect x="245" y="386" width="210" height="38" rx="9" fill="var(--panel-2)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="350" y="410" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">至多发一次（已知道就一次都不发）</text>
+  <rect x="18" y="176" width="182" height="78" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="109" y="197" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">watch 命中限流</text>
+  <text x="109" y="214" text-anchor="middle" font-size="9" fill="var(--ink)">每 15s 至多 1 条</text>
+  <text x="109" y="229" text-anchor="middle" font-size="9" fill="var(--ink)">落冷却窗 = 1 strike</text>
+  <text x="109" y="245" text-anchor="middle" font-size="9" font-weight="700" fill="var(--ink)">连满 3 次 → 禁 watch + 翻转</text>
+  <line x1="200" y1="208" x2="241" y2="208" stroke="var(--amber)" stroke-width="1.6"/>
+  <path d="M249,208 L240,203 L240,213 Z" fill="var(--amber)"/>
+  <text x="205" y="266" font-size="9" fill="var(--muted)">notify_on_complete=True · 同一出口</text>
+  <rect x="470" y="176" width="192" height="78" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="478" y="196" font-size="10" font-weight="700" fill="var(--red)">闸① 生产端去重</text>
+  <text x="478" y="213" font-size="9" fill="var(--ink)">kill 与 reader 线程都会调</text>
+  <text x="478" y="228" font-size="9" fill="var(--ink)">pop 只有一方拿到非 None</text>
+  <text x="478" y="243" font-size="9" fill="var(--ink)">只有它入队，否则报两遍</text>
+  <line x1="470" y1="208" x2="457" y2="208" stroke="var(--red)" stroke-width="1.3" stroke-dasharray="3 3"/>
+  <rect x="470" y="294" width="192" height="92" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="478" y="314" font-size="10" font-weight="700" fill="var(--red)">闸② 消费端去重</text>
+  <text x="478" y="331" font-size="9" fill="var(--ink)">_completion_consumed（已 wait/log）</text>
+  <text x="478" y="346" font-size="9" fill="var(--ink)">_poll_observed（CLI 只读 poll）</text>
+  <text x="478" y="361" font-size="9" fill="var(--ink)">命中 → drain 跳过该通知</text>
+  <text x="478" y="376" font-size="9" fill="var(--ink)">免重复注入 [SYSTEM: ...]</text>
+  <line x1="470" y1="340" x2="437" y2="362" stroke="var(--red)" stroke-width="1.3" stroke-dasharray="3 3"/>
+</svg>
+<div class="fig-cap"><b>生命周期 + 通知去重</b>：进程退出 / 被 kill → <span class="mono">_move_to_finished()</span> 锁内移表、置事件、写检查点；<strong>闸①</strong> <span class="mono">was_running</span> 让重复调用只入队一次，<strong>闸②</strong>消费端 <span class="mono">_completion_consumed</span> / <span class="mono">_poll_observed</span> 让已 wait / poll 过的通知被 drain 跳过——<strong>至多发一次</strong>。watch 限流满 <span class="mono">WATCH_STRIKE_LIMIT</span>=3 会禁 watch 并翻转 <span class="mono">notify_on_complete</span>，汇入同一出口。</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="后台任务持久性三档对比。第一档进程内 background：delegate_task 后台或终端后台，_running 与 _finished 字典、输出缓冲、完成事件、reader 与 watcher 线程全在进程内存里，重启即全部丢失。第二档 detached：状态写在 processes.json 检查点，仅供网关崩溃恢复，重启后只重新登记 host-PID 仍存活且 start_time 匹配的进程，且只能报状态加 kill、读不回输出，是尽力而为而非持久态。第三档 cron：用 cron 定时任务或 terminal 后台加 notify_on_complete，把进程交给调度器与系统托管、完成回调，才是真正跨重启持久。底部主线：durability 几乎全是进程内幻觉，要跨重启用 cron 或终端后台，别押一个活在内存里的 future，呼应 ch26 的 E6">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">durability 三档 · 哪些状态能熬过一次重启</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">进程内 background（全在内存）/ detached（host-PID 尽力恢复）/ cron（真跨重启持久）</text>
+  <rect x="20" y="70" width="200" height="214" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="20" y="70" width="200" height="44" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="120" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">进程内 background</text>
+  <text x="120" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">delegate_task(bg) / 终端后台</text>
+  <text x="32" y="143" font-size="9.5" fill="var(--muted)">✗ _running / _finished 字典</text>
+  <text x="32" y="169" font-size="9.5" fill="var(--muted)">✗ 输出缓冲 + 完成事件</text>
+  <text x="32" y="195" font-size="9.5" fill="var(--muted)">✗ reader / watcher 线程</text>
+  <rect x="38" y="246" width="164" height="28" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="120" y="264" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">重启 = 内存态全丢</text>
+  <rect x="240" y="70" width="200" height="214" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="240" y="70" width="200" height="44" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="340" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--amber)">detached（host-PID）</text>
+  <text x="340" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">processes.json · 仅网关恢复</text>
+  <text x="252" y="143" font-size="9.5" fill="var(--ink)">✓ host-PID + start_time 校验</text>
+  <text x="252" y="169" font-size="9.5" fill="var(--ink)">✓ 报状态 + kill · detached</text>
+  <text x="252" y="195" font-size="9.5" fill="var(--muted)">✗ 输出读不回</text>
+  <rect x="258" y="246" width="164" height="28" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="340" y="264" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--amber)">尽力而为 · 非持久态</text>
+  <rect x="460" y="70" width="200" height="214" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="460" y="70" width="200" height="44" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="560" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">cron（真持久）</text>
+  <text x="560" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">cron / terminal 后台</text>
+  <text x="472" y="143" font-size="9.5" fill="var(--ink)">✓ cron 定时任务（ch21）</text>
+  <text x="472" y="169" font-size="9.5" fill="var(--ink)">✓ terminal(background,notify)</text>
+  <text x="472" y="195" font-size="9.5" fill="var(--ink)">✓ 交系统托管 · 完成回调</text>
+  <rect x="478" y="246" width="164" height="28" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="560" y="264" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">真 · 跨重启持久</text>
+  <rect x="20" y="304" width="640" height="44" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="340" y="324" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">durability 几乎全是进程内幻觉——跨重启请用 cron 或 terminal 后台</text>
+  <text x="340" y="340" text-anchor="middle" font-size="9" fill="var(--muted)">别押一个活在内存里的 future（呼应 ch26 · E6）</text>
+</svg>
+<div class="fig-cap"><b>durability 三档</b>：<strong>进程内 background</strong>（字典 / 缓冲 / 线程全在内存，重启即丢）、<strong>detached</strong>（<span class="mono">processes.json</span> 仅网关崩溃恢复，只认 host-PID、只能报状态 + kill，尽力而为）、<strong>cron</strong>（交调度器 / 系统托管，真跨重启持久）。要持久别押内存里的 future——呼应 ch26 · E6。</div>
+</div>
 </div>
   <div class="lang-en">
 <p class="lead">An agent that has run dozens of turns, still has background processes open, and is mid-edit on a file — how does it <strong>stop safely, reliably know when background work finishes, and persist atomically</strong>? This chapter opens up the three runtime mechanisms most prone to correctness bugs.</p>
@@ -622,6 +750,134 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <text x="140" y="326" font-size="9" fill="var(--muted)">preemption would kill the thread at once — but Python can't, so Hermes only polls cooperatively</text>
 </svg>
 <div class="fig-cap"><b>Cooperative vs preemptive</b>: the same <span class="mono">/stop</span> arrives mid tool execution — Hermes <strong>cooperatively</strong> holds it pending until the next loop boundary, then <span class="mono">break</span>s; a preemptive stop (contrast) would kill the thread on the spot, which Python can't do, so everything relies on polling the flag.</div>
+</div>
+
+<p>With the stop covered, on to the second trap: where a <span class="mono">background=true</span> process actually <strong>lives</strong>, how its "I'm done" fires <strong>exactly once</strong>, and why it almost never <strong>survives a restart</strong>.</p>
+
+<h3>🔬 28.2 · Background-process lifecycle: in-memory registry, de-duplicated notification, best-effort recovery</h3>
+<p>When an agent launches a <span class="mono">terminal(background=True)</span>, the process isn't handed straight to the OS and forgotten — it's registered in the <span class="mono">ProcessRegistry</span>, an <strong>in-process</strong> table whose core is two dicts: <span class="mono">_running</span> (live) and <span class="mono">_finished</span> (exited, kept for a 30-minute TTL). Each <span class="mono">ProcessSession</span> carries a <strong>rolling output buffer</strong> (capped at <span class="mono">MAX_OUTPUT_CHARS</span> = 200KB, trimmed from the front), optional <span class="mono">watch_patterns</span>, and a <span class="mono">notify_on_complete</span> flag; a background reader thread keeps pumping the child's output into the buffer, while the agent uses <span class="mono">wait</span> / <span class="mono">poll</span> / <span class="mono">kill</span> / read-log to wait on it, query it, or kill it.</p>
+<p>When the process <strong>exits</strong> (the reader hits EOF) or is <strong>killed</strong>, both paths reach the same exit, <span class="mono">_move_to_finished()</span>. Under the lock it pops the session out of <span class="mono">_running</span>, drops it into <span class="mono">_finished</span>, sets the completion event (waking every call blocked on <span class="mono">wait()</span>), then <span class="mono">_write_checkpoint()</span> persists once. <strong>The crux is that final <span class="mono">if</span></strong>: only when <span class="mono">notify_on_complete</span> is on <strong>and this call is genuinely the first</strong> to move it does it push one completion notification onto <span class="mono">completion_queue</span>.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/process_registry.py:1022 · abridged</span></div><pre>    def _move_to_finished(self, session: ProcessSession):
+        with self._lock:
+            was_running = self._running.pop(session.id, None) is not None
+            self._finished[session.id] = session
+        session._completion_event.set()
+        self._write_checkpoint()
+
+        # Only enqueue completion notification on the FIRST move.  Without
+        # this guard, kill_process() and the reader thread can both call
+        # _move_to_finished(), producing duplicate [IMPORTANT: ...] messages.
+        if was_running and session.notify_on_complete:
+            from tools.ansi_strip import strip_ansi
+            output_tail = strip_ansi(session.output_buffer[-2000:]) if session.output_buffer else ""
+            self.completion_queue.put({
+                "type": "completion",
+                "session_id": session.id,
+                "session_key": session.session_key,
+                "command": session.command,
+                "exit_code": session.exit_code,
+                "completion_reason": session.completion_reason,
+                "termination_source": session.termination_source,
+                "output": output_tail,
+            })</pre></div>
+<p>That "first" is captured by <span class="mono">was_running = self._running.pop(...) is not None</span> — the <strong>first de-dup gate</strong>. <span class="mono">_move_to_finished()</span> is <strong>idempotent</strong>: <span class="mono">kill_process()</span> and the reader thread may notice the process is gone <strong>at the same time</strong> and <strong>both call it</strong>, but the dict <span class="mono">pop</span> only hands one of them a non-<span class="mono">None</span>, so only that caller has <span class="mono">was_running</span> true and only it enqueues. Without the guard a single exit gets reported twice as <span class="mono">[IMPORTANT: ...]</span>. This is producer-side (who notifies) de-duplication.</p>
+<p>But enqueued is not delivered. <strong>The second gate is on the consumer side</strong>: before taking the notification, the CLI drain and the gateway / TUI watcher both check <span class="mono">_completion_consumed</span> — if the agent already grabbed the output via a blocking <span class="mono">wait()</span> or a full <span class="mono">read_log()</span>, skip it; the CLI additionally checks <span class="mono">_poll_observed</span> (a read-only <span class="mono">poll()</span> saw the exit and the result is returned inline this turn, whereas the gateway / TUI <strong>deliberately do not</strong> consult it, so a read-only probe can't suppress their autonomous delivery turn). A hit in either set makes the drain <strong>skip</strong> the completion, avoiding a duplicate <span class="mono">[SYSTEM: ...]</span> injection. Together the two gates guarantee a completion fires <strong>at most once</strong>, and <strong>not at all</strong> if the agent already knows.</p>
+<p>One more path also feeds <span class="mono">notify_on_complete</span>: <strong>watch rate-limit demotion</strong>. For a process with <span class="mono">watch_patterns</span>, match notifications are hard-throttled — at most one per <span class="mono">WATCH_MIN_INTERVAL_SECONDS</span> (15s); a match arriving inside the cooldown is dropped and counts as <strong>one strike</strong>. After <span class="mono">WATCH_STRIKE_LIMIT</span> = <strong>3</strong> consecutive strike windows the session's watch is <strong>permanently disabled</strong> (<span class="mono">_watch_disabled = True</span>) and <span class="mono">notify_on_complete = True</span> is <strong>flipped on</strong> — a watcher that was spamming mid-process state quietly demotes to "report once when the process actually exits," routing back through that single exit.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/process_registry.py:65</span></div><pre># After WATCH_STRIKE_LIMIT consecutive strike windows, watch_patterns for that
+# session is permanently disabled and the session falls back to notify_on_complete
+# semantics (one notification when the process actually exits).
+WATCH_MIN_INTERVAL_SECONDS = 15   # Minimum spacing between consecutive watch matches
+WATCH_STRIKE_LIMIT = 3            # Strikes in a row → disable watch + promote to notify_on_complete</pre></div>
+<p>Now the <strong>biggest trap</strong>. Everything above — the two dicts, the output buffer, the completion event, the reader and watcher threads — <strong>lives in process memory</strong>. The <span class="mono">_write_checkpoint()</span> inside <span class="mono">_move_to_finished()</span> writes state to <span class="mono">CHECKPOINT_PATH</span> (<span class="mono">processes.json</span>), but it exists <strong>only for gateway crash recovery</strong>, and that recovery is <strong>best-effort</strong>: after a gateway restart it re-registers only the <strong>detached host-PID processes</strong>, and only after re-validating that the <span class="mono">host_start_time</span> recorded in the checkpoint still matches the live PID (or the kernel may have recycled that number onto an unrelated process, and adopting it would kill a stranger). Recovered sessions are all flagged <span class="mono">detached=True</span> — <strong>output can't be read back, only status + kill</strong>. The checkpoint restores a <strong>handle</strong> ("can I still query / kill it?"), not the process's <strong>full state</strong>.</p>
+<p>So a <span class="mono">background=true</span> process's "durability" is mostly an <strong>in-process illusion</strong>: a restart wipes the in-memory state, and detached recovery is only a best-effort status / kill handle. To make work <strong>truly survive a restart</strong>, use a mechanism that actually lands — a <span class="mono">cron</span> job, or <span class="mono">terminal(background=True, notify_on_complete=True)</span> that hands the process to the system and calls back on completion (exactly ch26's E6 fix). Mistaking "detached from this turn" for "made durable" is precisely why background tasks vanish.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 430" role="img" aria-label="Background-process lifecycle and completion-notification de-duplication. Center vertical spine: a running process, on exit or kill, enters _move_to_finished, which under the lock pops the session out of _running and into _finished, sets the completion event, and writes the checkpoint; only the first move with notify_on_complete true puts a notification onto completion_queue, sent at most once. Left branch: a process with watch_patterns is rate-limited to at most one match per 15 seconds, a match inside the cooldown counts as one strike, and after WATCH_STRIKE_LIMIT three strikes watch is disabled and notify_on_complete flipped on, merging into the same exit. Right side two de-dup gates: gate one was_running on the producer side, since kill and the reader thread both call but only one pop succeeds and enqueues; gate two on the consumer side, where the _completion_consumed and CLI-only _poll_observed sets make the drain skip the notification to avoid duplicate injection">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Background lifecycle · two de-dup gates on the completion notice</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">one spine running → _move_to_finished → notify; 3 watch strikes flip notify_on_complete, two gates send at most once</text>
+  <rect x="265" y="70" width="170" height="64" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="350" y="94" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">running process</text>
+  <text x="350" y="112" text-anchor="middle" font-size="9" fill="var(--muted)">_running{} · 200KB output buffer</text>
+  <text x="350" y="127" text-anchor="middle" font-size="9" fill="var(--muted)">reader thread · wait / poll / kill / log</text>
+  <line x1="350" y1="134" x2="350" y2="168" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M350,176 L345,167 L355,167 Z" fill="var(--muted)"/>
+  <text x="358" y="158" font-size="9" fill="var(--muted)">exit / killed</text>
+  <rect x="245" y="176" width="210" height="78" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="350" y="198" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">_move_to_finished()</text>
+  <text x="350" y="216" text-anchor="middle" font-size="9" fill="var(--muted)">under lock _running.pop → _finished</text>
+  <text x="350" y="231" text-anchor="middle" font-size="9" fill="var(--muted)">set event + _write_checkpoint</text>
+  <text x="350" y="248" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">gate ① was_running guard</text>
+  <line x1="350" y1="254" x2="350" y2="286" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M350,294 L345,285 L355,285 Z" fill="var(--muted)"/>
+  <text x="358" y="276" font-size="9" fill="var(--muted)">first move + notify_on_complete</text>
+  <rect x="265" y="294" width="170" height="52" rx="10" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="350" y="316" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--purple)">completion_queue</text>
+  <text x="350" y="334" text-anchor="middle" font-size="9" fill="var(--muted)">type: completion enqueued</text>
+  <line x1="350" y1="346" x2="350" y2="376" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M350,384 L345,375 L355,375 Z" fill="var(--muted)"/>
+  <rect x="245" y="386" width="210" height="38" rx="9" fill="var(--panel-2)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="350" y="410" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">at most once (zero if already known)</text>
+  <rect x="18" y="176" width="182" height="78" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="109" y="197" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">watch rate-limit</text>
+  <text x="109" y="214" text-anchor="middle" font-size="9" fill="var(--ink)">≤ 1 per 15s</text>
+  <text x="109" y="229" text-anchor="middle" font-size="9" fill="var(--ink)">inside cooldown = 1 strike</text>
+  <text x="109" y="245" text-anchor="middle" font-size="9" font-weight="700" fill="var(--ink)">3 strikes → disable + flip</text>
+  <line x1="200" y1="208" x2="241" y2="208" stroke="var(--amber)" stroke-width="1.6"/>
+  <path d="M249,208 L240,203 L240,213 Z" fill="var(--amber)"/>
+  <text x="205" y="266" font-size="9" fill="var(--muted)">notify_on_complete=True · same exit</text>
+  <rect x="470" y="176" width="192" height="78" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="478" y="196" font-size="10" font-weight="700" fill="var(--red)">gate ① producer dedup</text>
+  <text x="478" y="213" font-size="9" fill="var(--ink)">kill + reader both call it</text>
+  <text x="478" y="228" font-size="9" fill="var(--ink)">only one pop gets non-None</text>
+  <text x="478" y="243" font-size="9" fill="var(--ink)">only it enqueues, else twice</text>
+  <line x1="470" y1="208" x2="457" y2="208" stroke="var(--red)" stroke-width="1.3" stroke-dasharray="3 3"/>
+  <rect x="470" y="294" width="192" height="92" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="478" y="314" font-size="10" font-weight="700" fill="var(--red)">gate ② consumer dedup</text>
+  <text x="478" y="331" font-size="9" fill="var(--ink)">_completion_consumed (wait/log)</text>
+  <text x="478" y="346" font-size="9" fill="var(--ink)">_poll_observed (CLI read-only poll)</text>
+  <text x="478" y="361" font-size="9" fill="var(--ink)">hit → drain skips the notice</text>
+  <text x="478" y="376" font-size="9" fill="var(--ink)">no duplicate [SYSTEM: ...]</text>
+  <line x1="470" y1="340" x2="437" y2="362" stroke="var(--red)" stroke-width="1.3" stroke-dasharray="3 3"/>
+</svg>
+<div class="fig-cap"><b>Lifecycle + notification de-dup</b>: exit / kill → <span class="mono">_move_to_finished()</span> moves the table, sets the event, writes the checkpoint; <strong>gate ①</strong> <span class="mono">was_running</span> lets a duplicate call enqueue only once, <strong>gate ②</strong> the consumer's <span class="mono">_completion_consumed</span> / <span class="mono">_poll_observed</span> make the drain skip a notice the agent already saw via wait / poll — <strong>at most once</strong>. A watch hitting <span class="mono">WATCH_STRIKE_LIMIT</span>=3 disables watch and flips <span class="mono">notify_on_complete</span>, merging into the same exit.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="Three tiers of background-task durability. Tier one in-process background: delegate_task background or a terminal background job, where the _running and _finished dicts, output buffer, completion event, and reader and watcher threads all live in process memory and are entirely lost on restart. Tier two detached: state is written to the processes.json checkpoint for gateway crash recovery only; after a restart it re-registers only host-PID processes that are still alive with a matching start_time, and can only report status and kill, not read output back, making it best-effort rather than durable state. Tier three cron: a cron job or terminal background with notify_on_complete hands the process to the scheduler and the system with a completion callback, which is truly durable across restarts. Bottom throughline: durability is mostly an in-process illusion; for cross-restart work use cron or a terminal background job, not a future living in memory, echoing ch26 E6">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">durability tiers · what survives a restart</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">in-process background (all in memory) / detached (host-PID best-effort) / cron (truly durable)</text>
+  <rect x="20" y="70" width="200" height="214" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="20" y="70" width="200" height="44" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="120" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">in-process background</text>
+  <text x="120" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">delegate_task(bg) / terminal bg</text>
+  <text x="32" y="143" font-size="9.5" fill="var(--muted)">✗ _running / _finished dicts</text>
+  <text x="32" y="169" font-size="9.5" fill="var(--muted)">✗ output buffer + event</text>
+  <text x="32" y="195" font-size="9.5" fill="var(--muted)">✗ reader / watcher threads</text>
+  <rect x="38" y="246" width="164" height="28" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="120" y="264" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">restart = all in-memory lost</text>
+  <rect x="240" y="70" width="200" height="214" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="240" y="70" width="200" height="44" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="340" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--amber)">detached (host-PID)</text>
+  <text x="340" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">processes.json · gateway-only</text>
+  <text x="252" y="143" font-size="9.5" fill="var(--ink)">✓ host-PID + start_time match</text>
+  <text x="252" y="169" font-size="9.5" fill="var(--ink)">✓ status + kill · detached</text>
+  <text x="252" y="195" font-size="9.5" fill="var(--muted)">✗ output not readable back</text>
+  <rect x="258" y="246" width="164" height="28" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="340" y="264" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--amber)">best-effort · not durable</text>
+  <rect x="460" y="70" width="200" height="214" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="460" y="70" width="200" height="44" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="560" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">cron (durable)</text>
+  <text x="560" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">cron / terminal bg</text>
+  <text x="472" y="143" font-size="9.5" fill="var(--ink)">✓ cron job (ch21)</text>
+  <text x="472" y="169" font-size="9.5" fill="var(--ink)">✓ terminal(background,notify)</text>
+  <text x="472" y="195" font-size="9.5" fill="var(--ink)">✓ handed to the system</text>
+  <rect x="478" y="246" width="164" height="28" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="560" y="264" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">true cross-restart durable</text>
+  <rect x="20" y="304" width="640" height="44" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="340" y="324" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">durability is mostly an in-process illusion — for cross-restart use cron or a terminal bg job</text>
+  <text x="340" y="340" text-anchor="middle" font-size="9" fill="var(--muted)">don't bet on a future living in memory (echoes ch26 · E6)</text>
+</svg>
+<div class="fig-cap"><b>Durability tiers</b>: <strong>in-process background</strong> (dicts / buffer / threads all in memory, lost on restart), <strong>detached</strong> (<span class="mono">processes.json</span> for gateway crash recovery only, host-PID only, status + kill only, best-effort), <strong>cron</strong> (handed to the scheduler / system, truly durable across restarts). For durability don't bet on a future in memory — echoing ch26 · E6.</div>
 </div>
 </div>
   <div class="footnav"><a class="prev" href="27-model-credentials-routing.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">模型·凭证·路由层</span><span class="lang-en">Model · credentials · routing</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
