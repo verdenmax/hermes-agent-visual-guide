@@ -384,7 +384,7 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   运行时——真正负责<strong>停、看、存</strong>的那一层——藏着三处「直觉模型是错的」的地方：
   <p style="margin:.6rem 0 0"><strong>① 中断是协作式的，不是抢占式的。</strong>按下 <span class="mono">/stop</span> 只是<strong>置一面标志</strong>；主循环在它的<strong>边界</strong>（两轮迭代之间）才把它收下，而中断对<strong>子代理的传播是手工接线</strong>的——父代理遍历一张 <span class="mono">_active_children</span> 名册、逐个调 <span class="mono">child.interrupt()</span>。漏掉登记（或像异步委派那样主动 detach），子代理就<strong>永远收不到</strong>这次急停。</p>
   <p><strong>② 后台的「持久」几乎全是进程内幻觉。</strong>一个 <span class="mono">background=true</span> 的 <span class="mono">delegate_task</span> 虽然脱离了当前回合，却仍是<strong>进程本地</strong>的——进程一死它就没了。真正能<strong>熬过重启</strong>的持久，得靠 <span class="mono">cronjob</span> 或后台终端任务，而不是一个活在内存里的 future。</p>
-  <p><strong>③ 落盘的原子性，挂在一个毫不起眼的 rename 上。</strong>一个写到一半的配置或会话文件就是损坏；正确的做法是先写临时文件，再用 <span class="mono">os.replace()</span> 把它<strong>原子换上</strong>，让读者要么看到旧文件、要么看到完整的新文件，<strong>永远不会读到撕裂的中间态</strong>。</p>
+  <p><strong>③ 落盘的原子性，挂在一个毫不起眼的 rename 上。</strong>一个写到一半的配置或会话文件就是损坏；正确的做法是先写临时文件，再<strong>原子地 rename</strong> 把它换上，让读者要么看到旧文件、要么看到完整的新文件，<strong>永远不会读到撕裂的中间态</strong>。</p>
   <p>三个陷阱各自独立，却共享同一条主线：在每一个运行时的边缘，<strong>「看起来完成」都不等于「真的完成」</strong>——而 bug 就住在这条缝里。</p>
 </div>
 
@@ -771,7 +771,7 @@ WATCH_STRIKE_LIMIT = 3            # Strikes in a row → disable watch + promote
   The runtime — the layer that actually <strong>stops, watches, and persists</strong> — hides three places where the intuitive model is wrong:
   <p style="margin:.6rem 0 0"><strong>① An interrupt is cooperative, not preemptive.</strong> Pressing <span class="mono">/stop</span> only <strong>sets a flag</strong>; the main loop honors it at its <strong>boundary</strong> (between iterations), and propagation to subagents is <strong>hand-wired</strong> — the parent walks an <span class="mono">_active_children</span> registry and calls <span class="mono">child.interrupt()</span> on each. Miss the registration (or deliberately detach, as async delegation does) and a child <strong>never hears</strong> the stop.</p>
   <p><strong>② Background "durability" is mostly an in-process illusion.</strong> A <span class="mono">background=true</span> <span class="mono">delegate_task</span> is detached from the turn but still <strong>process-local</strong> — it dies with the process. Durability that survives a <strong>restart</strong> needs <span class="mono">cronjob</span> or a backgrounded terminal job, not a future living in memory.</p>
-  <p><strong>③ On-disk atomicity hangs on one unremarkable rename.</strong> A half-written config or session file is corruption; the fix is to write a temp file and <span class="mono">os.replace()</span> it into place, so a reader only ever sees either the old file or the whole new one — <strong>never a torn middle</strong>.</p>
+  <p><strong>③ On-disk atomicity hangs on one unremarkable rename.</strong> A half-written config or session file is corruption; the fix is to write a temp file and <strong>atomically rename</strong> it into place, so a reader only ever sees either the old file or the whole new one — <strong>never a torn middle</strong>.</p>
   <p>Three independent traps, one throughline: at every runtime edge, <strong>"looks finished" is not "is finished"</strong> — and that seam is where the bug lives.</p>
 </div>
 
