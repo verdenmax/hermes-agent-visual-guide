@@ -624,6 +624,138 @@ WATCH_STRIKE_LIMIT = 3            # Strikes in a row → disable watch + promote
 </svg>
 <div class="fig-cap"><b>durability 三档</b>：<strong>进程内 background</strong>（字典 / 缓冲 / 线程全在内存，重启即丢）、<strong>detached</strong>（<span class="mono">processes.json</span> 仅网关崩溃恢复，只认 host-PID、只能报状态 + kill，尽力而为）、<strong>cron</strong>（交调度器 / 系统托管，真跨重启持久）。要持久别押内存里的 future——呼应 ch26 · E6。</div>
 </div>
+
+<p>停讲完、看讲完，剩最后一套：一次「存」怎么做到要么<strong>整体生效</strong>、要么<strong>完全没发生</strong>——以及这份原子保证，怎么会因为一个<strong>临时文件放错目录</strong>就整盘崩掉。</p>
+
+<h3>🔬 28.3 · 原子文件编辑：同目录 temp + rename，写后再读回校验</h3>
+<p>三套机制的最后一套是<strong>落盘</strong>。Hermes 的文件能力收在四个工具里——<span class="mono">read_file</span> / <span class="mono">write_file</span> / <span class="mono">patch</span>（替换）/ <span class="mono">search</span>，全部由 <span class="mono">tools/file_operations.py</span> 的 shell 后端实现。其中<strong>会改盘的两个</strong>（write 与 patch）都不直接覆盖目标文件，而是统一走一个私有方法 <span class="mono">_atomic_write()</span>：<strong>先在目标的同一个目录里建一个临时文件、把新内容写进去、再用一次 rename 把它原子地换到目标位置</strong>。</p>
+<p><span class="mono">_atomic_write()</span> 的实现是一段全引号转义的 shell 脚本：用 <span class="mono">mktemp -p "$d"</span> 把临时文件落在<strong>目标自己的目录</strong> <span class="mono">d = dirname(path)</span>（不是 <span class="mono">/tmp</span>），内容经 <strong>stdin</strong> 流入（绕开 ARG_MAX），<span class="mono">cat &gt; "$tmp"</span> 写好草稿后，再 <span class="mono">mv -f "$tmp" "$t"</span> 一步换上。三个细节值得记：① 它<strong>不是</strong> <span class="mono">os.replace()</span> 这类 Python 调用，而是落到真实的 shell <span class="mono">mv</span>（语义即同一文件系统内的原子 rename）；② 一个 <span class="mono">trap 'rm -f "$tmp"' EXIT</span> 保证<strong>任何失败路径</strong>（cat 失败、mv 失败、被信号打断）都会清掉临时文件，绝不在用户数据旁边留下半个 <span class="mono">.hermes-tmp</span> 残渣；③ 写之前还会 <span class="mono">stat</span> + <span class="mono">chmod</span> 尽力把目标原有权限复制到临时文件上，避免原子换上后<strong>悄悄放宽或收紧</strong>权限。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/file_operations.py:937 · 简化</span></div><pre>    def _atomic_write(self, path: str, content: str) -&gt; "ExecuteResult":
+        q_path = self._escape_shell_arg(path)
+        parent = os.path.dirname(path) or "."
+        q_parent = self._escape_shell_arg(parent)
+        tmpl = self._escape_shell_arg(".hermes-tmp.XXXXXX")
+        script = (
+            "set -e; "
+            f"d={q_parent}; t={q_path}; "
+            'tmp="$(mktemp -p "$d" ' + tmpl + ' 2&gt;/dev/null '
+            '|| mktemp "$d/.hermes-tmp.$$.XXXXXX" 2&gt;/dev/null '
+            '|| { tmp="$d/.hermes-tmp.$$"; : &gt; "$tmp" &amp;&amp; echo "$tmp"; })"; '
+            "trap 'rm -f \"$tmp\"' EXIT; "
+            'cat &gt; "$tmp"; '
+            'mv -f "$tmp" "$t"; '
+            "trap - EXIT"
+        )
+        return self._exec(script, stdin_data=content)</pre></div>
+<p><strong>核心坑就在这里：整套原子性，全挂在「临时文件与目标同目录」这一个不起眼的前提上。</strong>rename 只有在<strong>同一个文件系统内</strong>才是原子的——内核只是把一个目录项从旧 inode 改指向新 inode，一步到位。一旦临时文件落在<strong>别的文件系统</strong>（比如把草稿写到 <span class="mono">/tmp</span> 再 mv 回项目目录），<span class="mono">mv</span> 没法做真 rename，只能<strong>降级成 copy 到目标 + unlink 源</strong>两步；要是在 copy 中途崩溃 / 断电，目标就只写了一半，留下一个<strong>撕裂的损坏文件</strong>——恰恰是原子写本想消灭的失败。所以 <span class="mono">mktemp -p "$d"</span> 里那个 <span class="mono">-p "$d"</span> 是 <strong>load-bearing</strong> 的，不是随手的选择。</p>
+<p><span class="mono">patch</span>（替换）在 <span class="mono">_atomic_write</span> 之上又加了一道<strong>写后校验</strong>。它先把文件读进来、剥掉可能的 UTF-8 BOM，用<strong>模糊匹配</strong>定位 <span class="mono">old_string</span>——除非 <span class="mono">replace_all=True</span>，否则要求匹配<strong>唯一</strong>，命中多处或零处都直接报错；替换后按文件<strong>原有的行尾</strong>（LF / CRLF）规整再写回（写出去时把 BOM 补回，往返保留标记）。落盘之后，它<strong>再把文件读回来、逐字节和打算写入的内容比对</strong>：对不上就报「<span class="mono">The patch did not persist</span>」、要求重读重试。这道校验专抓<strong>静默落盘失败</strong>——后端 FS 怪癖、截断的管道，<strong>以及和另一个任务的并发改动</strong>：若在 patch 写盘到 re-read 之间，别的编辑动了同一个文件，re-read 出来的字节就和本次的 <span class="mono">new_content</span> 不一致，<strong>校验失败</strong>，patch 不会假报成功。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/file_operations.py:1534</span></div><pre>        # Post-write verification — re-read the file and confirm the bytes we
+        # intended to write actually landed. Catches silent persistence
+        # failures (backend FS oddities, race with another task, truncated
+        # pipe, etc.) that would otherwise return success-with-diff while the
+        # file is unchanged on disk.
+        verify_cmd = f"cat {self._escape_shell_arg(path)} 2&gt;/dev/null"
+        verify_result = self._exec(verify_cmd)
+        if verify_result.exit_code != 0:
+            return PatchResult(error=f"Post-write verification failed: could not re-read {path}")</pre></div>
+<p>四个工具周围还有一圈防护：<strong>路径安全 deny-list</strong> 在 write / patch 前拦掉敏感文件——<span class="mono">~/.ssh/{id_rsa,authorized_keys,config}</span>、各 profile 与顶层的 <span class="mono">.env</span>、<span class="mono">.git-credentials</span>、<span class="mono">/etc/{passwd,shadow,sudoers}</span> 以及 <span class="mono">~/.aws</span>、<span class="mono">/etc/systemd</span> 等前缀，免得一次误写泄露凭证或改坏系统。<span class="mono">read_file</span> 默认<strong>分页</strong>（offset / limit，默认 500 行、上限 2000），并带<strong>二进制探测</strong>——非打印字符超过 30% 判为二进制、不返回正文，图片类扩展名则转 base64 走视觉通道。<span class="mono">search</span> 是<strong>行级</strong>的（<span class="mono">output_mode="content"</span> 给出命中行 + 可选上下文），内容查找与文件名查找分开。这些都不改变那条主线：<strong>每一次写盘，都先把「完整的新文件」准备好，再用一次原子动作让它整体生效——读者永远看不到中间态。</strong></p>
+
+<div class="figure">
+<svg viewBox="0 0 680 466" role="img" aria-label="安全文件编辑管线图。竖向主线自上而下：目标文件 t 所在的同一目录 d 等于 dirname(path)，先用 mktemp -p 在该目录里建一个隐藏 temp 文件 .hermes-tmp.XXXXXX，把新内容 cat 写进 temp 草稿，patch 路径随后再把文件读回并逐字节与打算写入的内容比对校验，校验通过才用 mv -f 把 temp 原子 rename 换到目标位置，读者于是要么看到旧文件、要么看到完整的新文件，永不读到撕裂的中间态。右侧失败分支：校验失败或写入异常时 trap 会 rm -f 删掉 temp，原文件保持不动完成回滚。左侧注记：temp 与目标同目录即同一文件系统，mv 才是真 rename。">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">安全编辑管线 · 同目录 temp → 写 → 校验 → 原子 rename</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">草稿写进同目录 temp，校验通过再 mv -f 原子换上；任一步失败则回滚，原文件不动</text>
+  <rect x="130" y="64" width="200" height="44" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="230" y="85" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">① 目标文件 t</text>
+  <text x="230" y="101" text-anchor="middle" font-size="9" fill="var(--muted)">同目录 d = dirname(path)</text>
+  <line x1="230" y1="110" x2="230" y2="124" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,132 L225,123 L235,123 Z" fill="var(--muted)"/>
+  <rect x="130" y="132" width="200" height="50" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="230" y="153" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">② mktemp -p "$d"</text>
+  <text x="230" y="170" text-anchor="middle" font-size="9" fill="var(--muted)">同目录建隐藏 temp · .hermes-tmp.XXXXXX</text>
+  <line x1="230" y1="184" x2="230" y2="198" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,206 L225,197 L235,197 Z" fill="var(--muted)"/>
+  <text x="14" y="150" font-size="9.5" font-weight="700" fill="var(--accent-ink)">同目录 = 同 FS</text>
+  <text x="14" y="165" font-size="9" fill="var(--muted)">mv 才是真 rename</text>
+  <text x="14" y="178" font-size="9" fill="var(--muted)">（详见下图 ⑬）</text>
+  <line x1="120" y1="156" x2="128" y2="156" stroke="var(--accent)" stroke-width="1.4"/>
+  <rect x="130" y="206" width="200" height="44" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="230" y="227" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">③ cat &gt; "$tmp" 写草稿</text>
+  <text x="230" y="243" text-anchor="middle" font-size="9" fill="var(--muted)">内容走 stdin · 无 ARG_MAX 限制</text>
+  <line x1="230" y1="252" x2="230" y2="266" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,274 L225,265 L235,265 Z" fill="var(--muted)"/>
+  <rect x="130" y="274" width="200" height="58" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="230" y="295" text-anchor="middle" font-size="12" font-weight="700" fill="var(--amber)">④ 读回验证字节</text>
+  <text x="230" y="311" text-anchor="middle" font-size="9" fill="var(--ink)">patch：re-read 比对打算写入的内容</text>
+  <text x="230" y="325" text-anchor="middle" font-size="9" fill="var(--ink)">捕获静默落盘失败 / 并发改动</text>
+  <line x1="230" y1="332" x2="230" y2="346" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,354 L225,345 L235,345 Z" fill="var(--muted)"/>
+  <text x="238" y="345" font-size="9" fill="var(--muted)">验证通过</text>
+  <rect x="458" y="274" width="206" height="58" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="466" y="294" font-size="10" font-weight="700" fill="var(--red)">失败分支 · 异常 / 校验不过</text>
+  <text x="466" y="311" font-size="9" fill="var(--ink)">trap 'rm -f "$tmp"' 删掉 temp</text>
+  <text x="466" y="326" font-size="9" fill="var(--ink)">原文件保持不动（回滚）</text>
+  <line x1="330" y1="303" x2="450" y2="303" stroke="var(--red)" stroke-width="1.3" stroke-dasharray="3 3"/>
+  <path d="M458,303 L449,298 L449,308 Z" fill="var(--red)"/>
+  <rect x="130" y="354" width="200" height="50" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="230" y="375" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">⑤ mv -f "$tmp" "$t"</text>
+  <text x="230" y="391" text-anchor="middle" font-size="9" fill="var(--muted)">原子 rename · 一步换上目标</text>
+  <line x1="230" y1="406" x2="230" y2="420" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,428 L225,419 L235,419 Z" fill="var(--muted)"/>
+  <rect x="130" y="428" width="200" height="34" rx="9" fill="var(--panel-2)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="230" y="449" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">⑥ 读者：旧 或 完整新（永不撕裂）</text>
+</svg>
+<div class="fig-cap"><b>安全编辑管线</b>：write / patch 走 <span class="mono">_atomic_write</span>——<span class="mono">mktemp -p "$d"</span> 在<strong>同目录</strong>建 temp → <span class="mono">cat</span> 写草稿 →（patch 还会<strong>读回逐字节校验</strong>）→ <span class="mono">mv -f</span> 原子 rename 换上；任一步失败，<span class="mono">trap</span> 删 temp、<strong>原文件不动</strong>。读者要么见旧、要么见完整新，<strong>永不撕裂</strong>。</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="跨文件系统 rename 破坏原子性的对比图。左列同一文件系统：temp 与目标同目录，rename 是单步原子操作，内核只切换目录项指向新 inode，读者要么看到旧 inode 要么看到新 inode，断电或崩溃后原文件完好，结论是原子且永不撕裂。右列跨文件系统：temp 落在别的文件系统比如 /tmp，mv 无法做真 rename 只能退化为先 copy 到目标再 unlink 源的两步操作，一旦在 copy 中途崩溃目标就只写了一半，留下撕裂的半个文件，结论是非原子且可能损坏。底部结论条：所以 temp 必须用 mktemp -p 落在目标自己的目录，保证与目标同一文件系统、让 mv 成为真正的原子 rename。">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">跨 FS rename 破原子性 · 为什么 temp 必须与目标同目录</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">同 FS = 一步原子指针切换；跨 FS = mv 降级为 copy + unlink 两步，中途崩溃留半个文件</text>
+  <rect x="20" y="70" width="300" height="206" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="20" y="70" width="300" height="44" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="170" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">同 FS · 真原子 rename</text>
+  <text x="170" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">temp 与目标同目录（mktemp -p "$d"）</text>
+  <text x="34" y="140" font-size="9.5" fill="var(--ink)">① rename() = 单步切换目录项</text>
+  <text x="34" y="164" font-size="9.5" fill="var(--ink)">② 指向新 inode，旧 inode 释放</text>
+  <text x="34" y="188" font-size="9.5" fill="var(--ink)">③ 读者：要么旧、要么新 inode</text>
+  <text x="34" y="212" font-size="9.5" fill="var(--ink)">④ 断电 / 崩溃：原文件完好</text>
+  <rect x="38" y="234" width="264" height="30" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="170" y="253" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">✓ 原子 · 永不读到撕裂中间态</text>
+  <rect x="360" y="70" width="300" height="206" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="360" y="70" width="300" height="44" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="510" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">跨 FS · mv 降级 copy+unlink</text>
+  <text x="510" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">temp 落在别的文件系统（如 /tmp）</text>
+  <text x="374" y="140" font-size="9.5" fill="var(--ink)">① rename 跨设备失败 → mv 兜底</text>
+  <text x="374" y="164" font-size="9.5" fill="var(--ink)">② 退化为 copy 到目标 + unlink 源</text>
+  <text x="374" y="188" font-size="9.5" fill="var(--ink)">③ copy 中途崩溃：目标只写一半</text>
+  <text x="374" y="212" font-size="9.5" fill="var(--ink)">④ 留下撕裂 / 半个损坏文件</text>
+  <rect x="378" y="234" width="264" height="30" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="510" y="253" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">✗ 非原子 · 可能读到损坏文件</text>
+  <rect x="20" y="296" width="640" height="48" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="340" y="317" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">结论：temp 必须 mktemp -p 落在目标自己的目录 → 同一 FS、让 mv 成为真原子 rename</text>
+  <text x="340" y="334" text-anchor="middle" font-size="9" fill="var(--muted)">temp 的位置是 load-bearing 的——跨目录省事，却把原子保证悄悄换成了「可能半写」</text>
+</svg>
+<div class="fig-cap"><b>跨 FS rename 破原子性</b>：<strong>同目录 = 同文件系统</strong>，<span class="mono">mv</span> 是一步原子 rename（切换目录项指向新 inode），崩溃也只见旧或完整新；<strong>跨文件系统</strong> <span class="mono">mv</span> 降级为 <span class="mono">copy + unlink</span> 两步，中途崩溃留半个文件。所以 temp 必须 <span class="mono">mktemp -p "$d"</span> 落在<strong>目标自己的目录</strong>——位置是 load-bearing 的。</div>
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 异步世界里的正确性边界</div>
+  本章三套机制——<strong>中断传播</strong>、<strong>后台进程生命周期</strong>、<strong>原子文件编辑</strong>——表面分管「停 / 看 / 存」三件互不相干的事，底层却守着同一条线：<strong>在一个异步、连续运行、随时可能被打断或重启的世界里，把「看起来完成」和「真的完成」死死焊在一起。</strong>
+  <p style="margin:.5rem 0 0"><strong>三者各自守的边界：</strong>① 中断是一份<strong>协作式契约</strong>——置标志、在循环边界收下、对子代理显式扇出，谁都不许从外部硬杀线程，于是「停」既<strong>及时</strong>又<strong>不撕裂</strong>正在执行的工具；② 后台进程给出<strong>诚实的状态</strong>——完成至多报一次（生产端 <span class="mono">was_running</span> + 消费端 <span class="mono">_completion_consumed</span> 两道闸），且<strong>不把进程内幻觉谎称为持久</strong>；③ 落盘给出<strong>原子保证</strong>——同目录 temp + rename + 写后校验，读者要么见旧、要么见完整新。</p>
+  <p style="margin:.5rem 0 0"><strong>呼应全书两条主线：</strong>这正是<strong>韧性</strong>的地基——失败有界、可回滚（<span class="mono">trap</span> 删 temp）、可恢复（detached / cron）、可纠错（re-read 校验）；也守着<strong>窄腰</strong>：核心只暴露 <span class="mono">/stop</span>、查状态、原子写这几个最小原语，真正的复杂度全下沉到循环边界、进程注册表与一段 shell 脚本里。三处「看起来完成 ≠ 真的完成」的缝，正是<strong>「自主、连续运行」可靠性的地基</strong>。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>中断是协作式、不是抢占式</strong>：<span class="mono">/stop</span> 只置一面 <span class="mono">_interrupt_requested</span> 标志，主循环在<strong>迭代边界</strong>轮询收下；Python 杀不了线程，流式回调 / 非流式后台检查 / retry 退避（每 <strong>200ms</strong>）都靠<strong>自愿轮询</strong>。中断对<strong>子代理是显式手工扇出</strong>——遍历 <span class="mono">_active_children</span> 逐个 <span class="mono">child.interrupt()</span>，漏登记或异步 detach 就<strong>静默断链</strong>。</li>
+    <li><strong>后台 durability 多是进程内幻觉</strong>：<span class="mono">_running</span> / <span class="mono">_finished</span> 字典、输出缓冲、reader / watcher 线程全在内存，重启即丢；detached 恢复只认 host-PID + <span class="mono">start_time</span> 校验、只能报状态 + kill。要<strong>真跨重启</strong>用 <span class="mono">cron</span> 或 <span class="mono">terminal(background, notify_on_complete)</span>。</li>
+    <li><strong>完成通知至多报一次</strong>：生产端 <span class="mono">was_running</span> 守卫（<span class="mono">pop</span> 只有一方拿到非 <span class="mono">None</span>）+ 消费端 <span class="mono">_completion_consumed</span> / <span class="mono">_poll_observed</span> 两道去重闸；watch 命中限流连满 <span class="mono">WATCH_STRIKE_LIMIT</span>=3 会禁 watch 并翻转 <span class="mono">notify_on_complete</span>，汇入同一出口。</li>
+    <li><strong>原子写靠同目录 temp + rename</strong>：<span class="mono">_atomic_write</span> 用 <span class="mono">mktemp -p "$d"</span> 在<strong>目标同目录</strong>建 temp、<span class="mono">cat</span> 写、<span class="mono">mv -f</span> 原子换上、<span class="mono">trap</span> 失败清理；<strong>跨文件系统 rename 非原子</strong>（降级 copy + unlink，半写损坏），所以 temp 位置 load-bearing。</li>
+    <li><strong>patch 写后再读回校验</strong>：模糊匹配要求<strong>唯一</strong>、保 BOM / CRLF、只报<strong>新增</strong> lint 错；写盘后 re-read 逐字节比对，<strong>并发编辑</strong>会让校验失败、报「did not persist」而非假成功。外加路径 deny-list、读分页、二进制 / 图片拦截、search 行级。</li>
+    <li><strong>共同理念</strong>：三套机制守的都是<strong>异步世界里的正确性边界</strong>——停得及时不撕裂、状态诚实不重复、落盘原子不半写；是<strong>「自主、连续运行」可靠性的地基</strong>，也是韧性与窄腰的又一次落地。</li>
+  </ul>
+</div>
 </div>
   <div class="lang-en">
 <p class="lead">An agent that has run dozens of turns, still has background processes open, and is mid-edit on a file — how does it <strong>stop safely, reliably know when background work finishes, and persist atomically</strong>? This chapter opens up the three runtime mechanisms most prone to correctness bugs.</p>
@@ -878,6 +1010,138 @@ WATCH_STRIKE_LIMIT = 3            # Strikes in a row → disable watch + promote
   <text x="340" y="340" text-anchor="middle" font-size="9" fill="var(--muted)">don't bet on a future living in memory (echoes ch26 · E6)</text>
 </svg>
 <div class="fig-cap"><b>Durability tiers</b>: <strong>in-process background</strong> (dicts / buffer / threads all in memory, lost on restart), <strong>detached</strong> (<span class="mono">processes.json</span> for gateway crash recovery only, host-PID only, status + kill only, best-effort), <strong>cron</strong> (handed to the scheduler / system, truly durable across restarts). For durability don't bet on a future in memory — echoing ch26 · E6.</div>
+</div>
+
+<p>Stop covered, look covered — one mechanism is left: how a "save" lands either <strong>whole</strong> or <strong>not at all</strong>, and how that atomic guarantee collapses the moment a <strong>temp file is put in the wrong directory</strong>.</p>
+
+<h3>🔬 28.3 · Atomic file edits: a same-directory temp + rename, verified by a post-write re-read</h3>
+<p>The last of the three mechanisms is <strong>landing bytes</strong>. Hermes' file capability is four tools — <span class="mono">read_file</span> / <span class="mono">write_file</span> / <span class="mono">patch</span> (replace) / <span class="mono">search</span>, all implemented by the shell backend in <span class="mono">tools/file_operations.py</span>. The <strong>two that mutate disk</strong> (write and patch) never overwrite the target in place; they both funnel through one private method, <span class="mono">_atomic_write()</span>: <strong>create a temp file in the target's own directory, write the new content into it, then rename it atomically over the target in one step</strong>.</p>
+<p><span class="mono">_atomic_write()</span> is one fully-quoted shell script: <span class="mono">mktemp -p "$d"</span> lands the temp in the <strong>target's own directory</strong> <span class="mono">d = dirname(path)</span> (not <span class="mono">/tmp</span>), the content streams in over <strong>stdin</strong> (sidestepping ARG_MAX), and after <span class="mono">cat &gt; "$tmp"</span> writes the draft, <span class="mono">mv -f "$tmp" "$t"</span> swaps it in one step. Three details to keep: ① it is <strong>not</strong> a Python call like <span class="mono">os.replace()</span> — it lands on a real shell <span class="mono">mv</span> (semantically a same-filesystem atomic rename); ② a <span class="mono">trap 'rm -f "$tmp"' EXIT</span> guarantees <strong>every failure path</strong> (cat fails, mv fails, a signal) cleans the temp up, never leaving half a <span class="mono">.hermes-tmp</span> turd beside the user's data; ③ before writing it does a best-effort <span class="mono">stat</span> + <span class="mono">chmod</span> to copy the target's existing mode onto the temp, so the atomic swap doesn't silently <strong>widen or narrow</strong> permissions.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/file_operations.py:937 · abridged</span></div><pre>    def _atomic_write(self, path: str, content: str) -&gt; "ExecuteResult":
+        q_path = self._escape_shell_arg(path)
+        parent = os.path.dirname(path) or "."
+        q_parent = self._escape_shell_arg(parent)
+        tmpl = self._escape_shell_arg(".hermes-tmp.XXXXXX")
+        script = (
+            "set -e; "
+            f"d={q_parent}; t={q_path}; "
+            'tmp="$(mktemp -p "$d" ' + tmpl + ' 2&gt;/dev/null '
+            '|| mktemp "$d/.hermes-tmp.$$.XXXXXX" 2&gt;/dev/null '
+            '|| { tmp="$d/.hermes-tmp.$$"; : &gt; "$tmp" &amp;&amp; echo "$tmp"; })"; '
+            "trap 'rm -f \"$tmp\"' EXIT; "
+            'cat &gt; "$tmp"; '
+            'mv -f "$tmp" "$t"; '
+            "trap - EXIT"
+        )
+        return self._exec(script, stdin_data=content)</pre></div>
+<p><strong>The core trap is right here: the whole atomicity hangs on one unremarkable premise — the temp file shares the target's directory.</strong> A rename is only atomic <strong>within the same filesystem</strong> — the kernel just repoints one directory entry from the old inode to the new one, in a single step. The moment the temp lands on <strong>a different filesystem</strong> (say you draft into <span class="mono">/tmp</span> and then mv back into the project dir), <span class="mono">mv</span> can't do a true rename — it <strong>degrades to copy-into-target + unlink-source</strong>, two steps; and if a crash / power loss hits mid-copy, the target is only half-written, leaving a <strong>torn, corrupt file</strong> — exactly the failure atomic writes set out to kill. So the <span class="mono">-p "$d"</span> in <span class="mono">mktemp -p "$d"</span> is <strong>load-bearing</strong>, not a casual choice.</p>
+<p><span class="mono">patch</span> (replace) adds a <strong>post-write verification</strong> on top of <span class="mono">_atomic_write</span>. It reads the file in, strips any UTF-8 BOM, locates <span class="mono">old_string</span> by <strong>fuzzy matching</strong> — and unless <span class="mono">replace_all=True</span> it requires the match to be <strong>unique</strong>, erroring out on multiple or zero hits; after substituting it normalizes to the file's <strong>existing line ending</strong> (LF / CRLF) before writing back (the BOM is restored on the way out, so the round-trip preserves the marker). Once it lands, it <strong>re-reads the file and compares it byte-for-byte against what it meant to write</strong>: a mismatch errors with "<span class="mono">The patch did not persist</span>" and asks for a re-read + retry. This verification is aimed at <strong>silent persistence failures</strong> — backend FS oddities, a truncated pipe, <strong>and a concurrent edit by another task</strong>: if something else touches the same file between patch's write and the re-read, the bytes read back won't equal this turn's <span class="mono">new_content</span>, the <strong>check fails</strong>, and patch won't falsely report success.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/file_operations.py:1534</span></div><pre>        # Post-write verification — re-read the file and confirm the bytes we
+        # intended to write actually landed. Catches silent persistence
+        # failures (backend FS oddities, race with another task, truncated
+        # pipe, etc.) that would otherwise return success-with-diff while the
+        # file is unchanged on disk.
+        verify_cmd = f"cat {self._escape_shell_arg(path)} 2&gt;/dev/null"
+        verify_result = self._exec(verify_cmd)
+        if verify_result.exit_code != 0:
+            return PatchResult(error=f"Post-write verification failed: could not re-read {path}")</pre></div>
+<p>A ring of guards surrounds the four tools: a <strong>path-security deny-list</strong> blocks writes to sensitive files before write / patch — <span class="mono">~/.ssh/{id_rsa,authorized_keys,config}</span>, the per-profile and top-level <span class="mono">.env</span>, <span class="mono">.git-credentials</span>, <span class="mono">/etc/{passwd,shadow,sudoers}</span>, plus prefixes like <span class="mono">~/.aws</span> and <span class="mono">/etc/systemd</span> — so one stray write can't leak credentials or break the system. <span class="mono">read_file</span> is <strong>paginated</strong> by default (offset / limit, 500 lines default, 2000 cap) and carries <strong>binary detection</strong> — over 30% non-printable chars is judged binary and its body isn't returned, while image extensions are base64'd onto the vision channel. <span class="mono">search</span> is <strong>line-level</strong> (<span class="mono">output_mode="content"</span> yields matching lines + optional context), with content search and filename search kept separate. None of this changes the throughline: <strong>every write first stages a "whole new file," then makes it take effect in one atomic act — readers never see an in-between state.</strong></p>
+
+<div class="figure">
+<svg viewBox="0 0 680 466" role="img" aria-label="Safe file-edit pipeline. Vertical spine top to bottom: target file t lives in the same directory d equals dirname(path); mktemp -p first creates a hidden temp .hermes-tmp.XXXXXX in that directory, cat writes the new content into the temp draft, the patch path then re-reads the file and compares it byte-for-byte against the intended content, and only on a passing verify does mv -f atomically rename the temp over the target, so readers see either the old file or the whole new file, never a torn in-between state. Right failure branch: on a verify miss or a write error, trap runs rm -f to drop the temp and the original file is left untouched, a rollback. Left annotation: temp sharing the target directory means the same filesystem, so mv is a true rename.">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Safe edit pipeline · same-dir temp → write → verify → atomic rename</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">draft into a same-dir temp, verify, then mv -f atomically; on any failure roll back, original untouched</text>
+  <rect x="130" y="64" width="200" height="44" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="230" y="85" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">① target file t</text>
+  <text x="230" y="101" text-anchor="middle" font-size="9" fill="var(--muted)">same dir d = dirname(path)</text>
+  <line x1="230" y1="110" x2="230" y2="124" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,132 L225,123 L235,123 Z" fill="var(--muted)"/>
+  <rect x="130" y="132" width="200" height="50" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="230" y="153" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">② mktemp -p "$d"</text>
+  <text x="230" y="170" text-anchor="middle" font-size="9" fill="var(--muted)">same-dir hidden temp · .hermes-tmp.XXXXXX</text>
+  <line x1="230" y1="184" x2="230" y2="198" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,206 L225,197 L235,197 Z" fill="var(--muted)"/>
+  <text x="14" y="150" font-size="9.5" font-weight="700" fill="var(--accent-ink)">same dir = same FS</text>
+  <text x="14" y="165" font-size="9" fill="var(--muted)">mv is a true rename</text>
+  <text x="14" y="178" font-size="9" fill="var(--muted)">(see fig ⑬ below)</text>
+  <line x1="120" y1="156" x2="128" y2="156" stroke="var(--accent)" stroke-width="1.4"/>
+  <rect x="130" y="206" width="200" height="44" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="230" y="227" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">③ cat &gt; "$tmp" write draft</text>
+  <text x="230" y="243" text-anchor="middle" font-size="9" fill="var(--muted)">content via stdin · no ARG_MAX limit</text>
+  <line x1="230" y1="252" x2="230" y2="266" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,274 L225,265 L235,265 Z" fill="var(--muted)"/>
+  <rect x="130" y="274" width="200" height="58" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="230" y="295" text-anchor="middle" font-size="12" font-weight="700" fill="var(--amber)">④ re-read &amp; verify bytes</text>
+  <text x="230" y="311" text-anchor="middle" font-size="9" fill="var(--ink)">patch: re-read vs the intended content</text>
+  <text x="230" y="325" text-anchor="middle" font-size="9" fill="var(--ink)">catches silent persist fail / concurrent edit</text>
+  <line x1="230" y1="332" x2="230" y2="346" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,354 L225,345 L235,345 Z" fill="var(--muted)"/>
+  <text x="238" y="345" font-size="9" fill="var(--muted)">verified</text>
+  <rect x="458" y="274" width="206" height="58" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="466" y="294" font-size="10" font-weight="700" fill="var(--red)">fail branch · error / verify miss</text>
+  <text x="466" y="311" font-size="9" fill="var(--ink)">trap 'rm -f "$tmp"' drops temp</text>
+  <text x="466" y="326" font-size="9" fill="var(--ink)">original left untouched (rollback)</text>
+  <line x1="330" y1="303" x2="450" y2="303" stroke="var(--red)" stroke-width="1.3" stroke-dasharray="3 3"/>
+  <path d="M458,303 L449,298 L449,308 Z" fill="var(--red)"/>
+  <rect x="130" y="354" width="200" height="50" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="230" y="375" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">⑤ mv -f "$tmp" "$t"</text>
+  <text x="230" y="391" text-anchor="middle" font-size="9" fill="var(--muted)">atomic rename · one-step swap</text>
+  <line x1="230" y1="406" x2="230" y2="420" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,428 L225,419 L235,419 Z" fill="var(--muted)"/>
+  <rect x="130" y="428" width="200" height="34" rx="9" fill="var(--panel-2)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="230" y="449" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">⑥ readers: old or whole-new (never torn)</text>
+</svg>
+<div class="fig-cap"><b>Safe edit pipeline</b>: write / patch go through <span class="mono">_atomic_write</span> — <span class="mono">mktemp -p "$d"</span> makes a temp in the <strong>same dir</strong> → <span class="mono">cat</span> writes the draft → (patch also <strong>re-reads and verifies byte-for-byte</strong>) → <span class="mono">mv -f</span> renames it in atomically; any step fails and <span class="mono">trap</span> drops the temp, <strong>original untouched</strong>. Readers see either the old or the whole new file, <strong>never torn</strong>.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="Cross-filesystem rename breaks atomicity, a comparison. Left column same filesystem: the temp shares the target directory, rename is a single atomic step, the kernel just repoints the directory entry to the new inode, readers see either the old inode or the new inode, and after a power loss or crash the original file is intact, so it is atomic and never torn. Right column cross filesystem: the temp lands on another filesystem such as /tmp, mv cannot do a true rename and degrades to first copying into the target then unlinking the source, two steps, and if a crash hits mid-copy the target is only half-written, leaving a torn half file, so it is non-atomic and may be corrupt. Bottom takeaway bar: therefore the temp must use mktemp -p into the target's own directory to guarantee the same filesystem and let mv be a true atomic rename.">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Cross-FS rename breaks atomicity · why temp must share the target dir</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">same FS = one-step atomic pointer swap; cross FS = mv degrades to copy + unlink, a crash mid-way leaves half a file</text>
+  <rect x="20" y="70" width="300" height="206" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="20" y="70" width="300" height="44" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="170" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">same FS · true atomic rename</text>
+  <text x="170" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">temp shares target dir (mktemp -p "$d")</text>
+  <text x="34" y="140" font-size="9.5" fill="var(--ink)">① rename() = single-step entry swap</text>
+  <text x="34" y="164" font-size="9.5" fill="var(--ink)">② repoints to new inode, old freed</text>
+  <text x="34" y="188" font-size="9.5" fill="var(--ink)">③ readers: old or new inode, never both</text>
+  <text x="34" y="212" font-size="9.5" fill="var(--ink)">④ power loss / crash: original intact</text>
+  <rect x="38" y="234" width="264" height="30" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="170" y="253" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">✓ atomic · never a torn read</text>
+  <rect x="360" y="70" width="300" height="206" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="360" y="70" width="300" height="44" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="510" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">cross FS · mv degrades to copy+unlink</text>
+  <text x="510" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">temp on another FS (e.g. /tmp)</text>
+  <text x="374" y="140" font-size="9.5" fill="var(--ink)">① cross-device rename fails → mv fallback</text>
+  <text x="374" y="164" font-size="9.5" fill="var(--ink)">② degrades to copy-in + unlink-source</text>
+  <text x="374" y="188" font-size="9.5" fill="var(--ink)">③ crash mid-copy: target half-written</text>
+  <text x="374" y="212" font-size="9.5" fill="var(--ink)">④ leaves a torn / half-corrupt file</text>
+  <rect x="378" y="234" width="264" height="30" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="510" y="253" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">✗ non-atomic · may read a corrupt file</text>
+  <rect x="20" y="296" width="640" height="48" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="340" y="317" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">Takeaway: temp must mktemp -p into the target's own dir → same FS, mv becomes a true atomic rename</text>
+  <text x="340" y="334" text-anchor="middle" font-size="9" fill="var(--muted)">the temp's location is load-bearing — a cross-dir shortcut trades the atomic guarantee for a maybe-half-written file</text>
+</svg>
+<div class="fig-cap"><b>Cross-FS rename breaks atomicity</b>: <strong>same dir = same filesystem</strong>, so <span class="mono">mv</span> is a one-step atomic rename (repoint the directory entry to the new inode) and a crash shows only old or whole-new; <strong>across filesystems</strong> <span class="mono">mv</span> degrades to <span class="mono">copy + unlink</span>, two steps, a mid-copy crash leaving half a file. So the temp must <span class="mono">mktemp -p "$d"</span> into the <strong>target's own dir</strong> — the location is load-bearing.</div>
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · correctness boundaries in an async world</div>
+  This chapter's three mechanisms — <strong>interrupt propagation</strong>, <strong>background-process lifecycle</strong>, and <strong>atomic file edits</strong> — manage three seemingly unrelated jobs on the surface ("stop / look / save"), yet guard one line underneath: <strong>in an async, continuously-running world that may be interrupted or restarted at any moment, weld "looks done" and "is actually done" tightly together.</strong>
+  <p style="margin:.5rem 0 0"><strong>The boundary each one guards:</strong> ① interrupt is a <strong>cooperative contract</strong> — set a flag, take it at a loop boundary, fan out to subagents explicitly, and never hard-kill a thread from outside, so a "stop" is both <strong>timely</strong> and <strong>doesn't tear</strong> a tool mid-execution; ② background processes give an <strong>honest status</strong> — a completion fires at most once (producer-side <span class="mono">was_running</span> + consumer-side <span class="mono">_completion_consumed</span>, two gates), and an <strong>in-process illusion is never passed off as durable</strong>; ③ landing bytes gives an <strong>atomic guarantee</strong> — same-dir temp + rename + post-write verify, so readers see either the old or the whole new file.</p>
+  <p style="margin:.5rem 0 0"><strong>Echoing the book's two throughlines:</strong> this is the bedrock of <strong>resilience</strong> — failure bounded, rollbackable (<span class="mono">trap</span> drops the temp), recoverable (detached / cron), correctable (the re-read verify); and it guards the <strong>narrow waist</strong>: the core exposes only a few minimal primitives — <span class="mono">/stop</span>, query status, atomic write — and sinks the real complexity into the loop boundary, the process registry, and one shell script. Those three seams where "looks done" and "is done" quietly diverge are exactly <strong>the bedrock of reliable autonomous, continuous operation</strong>.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Interrupt is cooperative, not preemptive</strong>: <span class="mono">/stop</span> only sets an <span class="mono">_interrupt_requested</span> flag; the main loop takes it at an <strong>iteration boundary</strong>. Python can't kill a thread, so the streaming callback / the non-streaming background check / the retry backoff (every <strong>200ms</strong>) all rely on <strong>voluntary polling</strong>. Interrupt fans out to <strong>subagents by explicit hand-wiring</strong> — walk <span class="mono">_active_children</span> calling <span class="mono">child.interrupt()</span>; a missed registration or an async detach is a <strong>silent broken link</strong>.</li>
+    <li><strong>Background durability is mostly an in-process illusion</strong>: the <span class="mono">_running</span> / <span class="mono">_finished</span> dicts, output buffer, and reader / watcher threads all live in memory and are lost on restart; detached recovery only takes host-PID processes with a matching <span class="mono">start_time</span>, and offers status + kill only. For <strong>true cross-restart</strong> work use <span class="mono">cron</span> or <span class="mono">terminal(background, notify_on_complete)</span>.</li>
+    <li><strong>A completion fires at most once</strong>: the producer-side <span class="mono">was_running</span> guard (only one caller's <span class="mono">pop</span> gets non-<span class="mono">None</span>) plus the consumer-side <span class="mono">_completion_consumed</span> / <span class="mono">_poll_observed</span> dedup gates; a watch hitting <span class="mono">WATCH_STRIKE_LIMIT</span>=3 disables watch and flips <span class="mono">notify_on_complete</span>, merging into the same exit.</li>
+    <li><strong>Atomic writes ride a same-dir temp + rename</strong>: <span class="mono">_atomic_write</span> uses <span class="mono">mktemp -p "$d"</span> to make a temp in the <strong>target's own dir</strong>, <span class="mono">cat</span> writes, <span class="mono">mv -f</span> swaps it in atomically, <span class="mono">trap</span> cleans up on failure; a <strong>cross-filesystem rename is not atomic</strong> (degrades to copy + unlink, half-write corruption), so the temp's location is load-bearing.</li>
+    <li><strong>patch verifies with a post-write re-read</strong>: fuzzy match must be <strong>unique</strong>, BOM / CRLF preserved, only <strong>newly-introduced</strong> lint surfaced; after landing it re-reads and compares byte-for-byte, so a <strong>concurrent edit</strong> fails the check and reports "did not persist" instead of a false success. Plus the path deny-list, read pagination, binary / image interception, and line-level search.</li>
+    <li><strong>The shared idea</strong>: all three guard <strong>correctness boundaries in an async world</strong> — stop timely without tearing, state honest without duplicates, land bytes atomically without half-writes; the <strong>bedrock of reliable autonomous, continuous operation</strong>, and one more landing of resilience and the narrow waist.</li>
+  </ul>
 </div>
 </div>
   <div class="footnav"><a class="prev" href="27-model-credentials-routing.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">模型·凭证·路由层</span><span class="lang-en">Model · credentials · routing</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
