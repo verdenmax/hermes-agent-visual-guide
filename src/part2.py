@@ -130,7 +130,7 @@ LESSON_06 = {
 <p>不过，这 4 个断点也不能<strong>无脑</strong>打。<span class="mono">_apply_cache_marker</span> 会把 marker 加到目标消息的<strong>最后一个内容块</strong>上——万一那一块恰好是 <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span>，marker 就会<strong>破坏签名验证</strong>。所以转成 Anthropic 格式时，<span class="mono">anthropic_adapter</span> 会把这些块上的 <span class="mono">cache_control</span> 再<strong>剥掉</strong>（注释直说 <span class="inline">cache markers interfere with signature validation</span>），并让带 marker 的 system prompt 保持为 <strong>content blocks</strong> 而非纯字符串：</p>
 
 <div class="figure">
-<svg viewBox="0 0 720 388" role="img" aria-label="Anthropic 缓存的 4 个 cache_control 断点放置与 thinking 签名安全">
+<svg viewBox="0 0 680 388" role="img" aria-label="Anthropic 缓存的 4 个 cache_control 断点放置与 thinking 签名安全">
   <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">system_and_3 · 4 个 cache_control 断点 + thinking 签名安全</text>
   <text x="20" y="52" font-size="11.5" font-weight="700" fill="var(--muted)">① 在 deepcopy 副本上打 4 断点：system 前缀 + 末 3 条非 system 消息（同 TTL）</text>
 
@@ -144,30 +144,30 @@ LESSON_06 = {
   <text x="286" y="99" text-anchor="middle" font-size="11" fill="var(--muted)">… 中间历史消息（无断点）…</text>
   <text x="286" y="118" text-anchor="middle" font-size="10" fill="var(--faint)">整段命中前缀缓存 · 不重算</text>
 
-  <rect x="398" y="72" width="92" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
-  <text x="444" y="103" text-anchor="middle" font-size="22">🔖</text>
-  <text x="444" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-3</text>
-  <circle cx="444" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
-  <text x="444" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">2</text>
+  <rect x="398" y="72" width="84" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="440" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="440" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-3</text>
+  <circle cx="440" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="440" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">2</text>
 
-  <rect x="498" y="72" width="92" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
-  <text x="544" y="103" text-anchor="middle" font-size="22">🔖</text>
-  <text x="544" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-2</text>
-  <circle cx="544" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
-  <text x="544" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">3</text>
+  <rect x="488" y="72" width="84" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="530" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="530" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-2</text>
+  <circle cx="530" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="530" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">3</text>
 
-  <rect x="598" y="72" width="92" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
-  <text x="644" y="103" text-anchor="middle" font-size="22">🔖</text>
-  <text x="644" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-1</text>
-  <circle cx="644" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
-  <text x="644" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">4</text>
+  <rect x="578" y="72" width="84" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="620" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="620" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-1</text>
+  <circle cx="620" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="620" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">4</text>
 
   <rect x="24" y="148" width="340" height="40" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="40" y="173" font-size="11" fill="var(--accent-ink)">deepcopy 副本：marker 只打副本，原 api_messages 不动</text>
-  <rect x="374" y="148" width="316" height="40" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <rect x="374" y="148" width="288" height="40" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="390" y="173" font-size="11" fill="var(--blue)">4 断点同一 TTL：ephemeral，5m（默认）或 1h</text>
 
-  <rect x="24" y="202" width="666" height="176" rx="12" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <rect x="24" y="202" width="638" height="176" rx="12" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
   <text x="42" y="230" font-size="24">⚠️</text>
   <text x="74" y="228" font-size="12.5" font-weight="700" fill="var(--red)">关键坑：thinking / redacted_thinking 块上的 cache_control 必须剥掉</text>
 
@@ -179,7 +179,7 @@ LESSON_06 = {
   <text x="358" y="292" text-anchor="middle" font-size="22">✂️</text>
   <text x="358" y="316" text-anchor="middle" font-size="10" fill="var(--muted)">注入后 pop</text>
 
-  <rect x="398" y="246" width="274" height="92" rx="9" fill="var(--panel)" stroke="var(--accent)"/>
+  <rect x="398" y="246" width="252" height="92" rx="9" fill="var(--panel)" stroke="var(--accent)"/>
   <text x="414" y="268" font-size="10.5" font-weight="700" fill="var(--ink)">anthropic_adapter 转换时</text>
   <text x="414" y="292" font-size="10.5" fill="var(--accent-ink)">b.pop("cache_control", None)</text>
   <text x="414" y="316" font-size="10.5" font-weight="700" fill="var(--accent-ink)">✅ 仅留 signature，验证通过</text>
@@ -397,7 +397,7 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
 <p>But these 4 breakpoints can't be applied <strong>blindly</strong>. <span class="mono">_apply_cache_marker</span> attaches the marker to the target message's <strong>last content block</strong> — and if that block happens to be a <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span> block, the marker <strong>breaks signature validation</strong>. So when converting to Anthropic format, <span class="mono">anthropic_adapter</span> <strong>strips</strong> <span class="mono">cache_control</span> back off those blocks (the comment is blunt: <span class="inline">cache markers interfere with signature validation</span>) and keeps a marker-bearing system prompt as <strong>content blocks</strong> rather than a plain string:</p>
 
 <div class="figure">
-<svg viewBox="0 0 720 388" role="img" aria-label="Placement of Anthropic's 4 cache_control breakpoints and thinking-signature safety">
+<svg viewBox="0 0 680 388" role="img" aria-label="Placement of Anthropic's 4 cache_control breakpoints and thinking-signature safety">
   <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">system_and_3 · 4 cache_control breakpoints + thinking-signature safety</text>
   <text x="20" y="52" font-size="11.5" font-weight="700" fill="var(--muted)">① 4 breakpoints on the deepcopy: system prefix + last 3 non-system messages (same TTL)</text>
 
@@ -411,30 +411,30 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
   <text x="286" y="99" text-anchor="middle" font-size="11" fill="var(--muted)">… middle history (no breakpoint) …</text>
   <text x="286" y="118" text-anchor="middle" font-size="10" fill="var(--faint)">whole block hits the prefix cache · not recomputed</text>
 
-  <rect x="398" y="72" width="92" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
-  <text x="444" y="103" text-anchor="middle" font-size="22">🔖</text>
-  <text x="444" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-3</text>
-  <circle cx="444" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
-  <text x="444" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">2</text>
+  <rect x="398" y="72" width="84" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="440" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="440" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-3</text>
+  <circle cx="440" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="440" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">2</text>
 
-  <rect x="498" y="72" width="92" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
-  <text x="544" y="103" text-anchor="middle" font-size="22">🔖</text>
-  <text x="544" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-2</text>
-  <circle cx="544" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
-  <text x="544" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">3</text>
+  <rect x="488" y="72" width="84" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="530" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="530" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-2</text>
+  <circle cx="530" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="530" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">3</text>
 
-  <rect x="598" y="72" width="92" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
-  <text x="644" y="103" text-anchor="middle" font-size="22">🔖</text>
-  <text x="644" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-1</text>
-  <circle cx="644" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
-  <text x="644" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">4</text>
+  <rect x="578" y="72" width="84" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="620" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="620" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-1</text>
+  <circle cx="620" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="620" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">4</text>
 
   <rect x="24" y="148" width="340" height="40" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="40" y="173" font-size="11" fill="var(--accent-ink)">deepcopy: marker only on the copy; original api_messages untouched</text>
-  <rect x="374" y="148" width="316" height="40" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <rect x="374" y="148" width="288" height="40" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="390" y="173" font-size="11" fill="var(--blue)">all 4 share one TTL: ephemeral, 5m (default) or 1h</text>
 
-  <rect x="24" y="202" width="666" height="176" rx="12" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <rect x="24" y="202" width="638" height="176" rx="12" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
   <text x="42" y="230" font-size="24">⚠️</text>
   <text x="74" y="228" font-size="12.5" font-weight="700" fill="var(--red)">Key trap: strip cache_control off thinking / redacted_thinking blocks</text>
 
@@ -446,7 +446,7 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
   <text x="358" y="292" text-anchor="middle" font-size="22">✂️</text>
   <text x="358" y="316" text-anchor="middle" font-size="10" fill="var(--muted)">pop after inject</text>
 
-  <rect x="398" y="246" width="274" height="92" rx="9" fill="var(--panel)" stroke="var(--accent)"/>
+  <rect x="398" y="246" width="252" height="92" rx="9" fill="var(--panel)" stroke="var(--accent)"/>
   <text x="414" y="268" font-size="10.5" font-weight="700" fill="var(--ink)">anthropic_adapter, on conversion</text>
   <text x="414" y="292" font-size="10.5" fill="var(--accent-ink)">b.pop("cache_control", None)</text>
   <text x="414" y="316" font-size="10.5" font-weight="700" fill="var(--accent-ink)">✅ only signature remains — validates</text>
