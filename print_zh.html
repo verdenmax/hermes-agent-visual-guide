@@ -390,6 +390,8 @@ details[open] > summary { list-style: none; }
   <li>安全与威胁模型</li>
   <li>设计原则横向收束</li>
   <li>自己做 agent 的避坑指南</li>
+  <li>模型·凭证·路由层</li>
+  <li>运行时韧性：中断·后台·文件</li>
 </ol></div>
 <section class="lesson-print">
 <h1>Hermes 是什么</h1>
@@ -1715,6 +1717,68 @@ merged: List[Dict] = []
   <text x="668" y="206" text-anchor="end" font-size="11.5" font-weight="700" fill="var(--red)">本轮成本 ↑↑</text>
 </svg>
 <div class="fig-cap"><b>缓存的两副面孔</b>：前缀逐字节不变时，长长的固定前缀按<b>缓存读取价</b>（约原价 1/10）计费，整段对话成本压到约四分之一；可一旦在会话中途动了前缀<b>一个字节</b>，从那点起的缓存<b>整体丢失、按全价重算</b>——这就是「每个会话的 prompt 缓存神圣不可侵犯」的代价根源。</div>
+</div>
+
+<p>不过，这 4 个断点也不能<strong>无脑</strong>打。<span class="mono">_apply_cache_marker</span> 会把 marker 加到目标消息的<strong>最后一个内容块</strong>上——万一那一块恰好是 <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span>，marker 就会<strong>破坏签名验证</strong>。所以转成 Anthropic 格式时，<span class="mono">anthropic_adapter</span> 会把这些块上的 <span class="mono">cache_control</span> 再<strong>剥掉</strong>（注释直说 <span class="inline">cache markers interfere with signature validation</span>），并让带 marker 的 system prompt 保持为 <strong>content blocks</strong> 而非纯字符串：</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 388" role="img" aria-label="Anthropic 缓存的 4 个 cache_control 断点放置与 thinking 签名安全">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">system_and_3 · 4 个 cache_control 断点 + thinking 签名安全</text>
+  <text x="20" y="52" font-size="11.5" font-weight="700" fill="var(--muted)">① 在 deepcopy 副本上打 4 断点：system 前缀 + 末 3 条非 system 消息（同 TTL）</text>
+
+  <rect x="24" y="72" width="150" height="58" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="99" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="99" y="121" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">system 前缀</text>
+  <circle cx="99" cy="72" r="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="99" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--accent-ink)">1</text>
+
+  <rect x="182" y="72" width="208" height="58" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="286" y="99" text-anchor="middle" font-size="11" fill="var(--muted)">… 中间历史消息（无断点）…</text>
+  <text x="286" y="118" text-anchor="middle" font-size="10" fill="var(--faint)">整段命中前缀缓存 · 不重算</text>
+
+  <rect x="398" y="72" width="84" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="440" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="440" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-3</text>
+  <circle cx="440" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="440" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">2</text>
+
+  <rect x="488" y="72" width="84" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="530" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="530" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-2</text>
+  <circle cx="530" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="530" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">3</text>
+
+  <rect x="578" y="72" width="84" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="620" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="620" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-1</text>
+  <circle cx="620" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="620" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">4</text>
+
+  <rect x="24" y="148" width="340" height="40" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="40" y="173" font-size="11" fill="var(--accent-ink)">deepcopy 副本：marker 只打副本，原 api_messages 不动</text>
+  <rect x="374" y="148" width="288" height="40" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="390" y="173" font-size="11" fill="var(--blue)">4 断点同一 TTL：ephemeral，5m（默认）或 1h</text>
+
+  <rect x="24" y="202" width="638" height="176" rx="12" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="42" y="230" font-size="24">⚠️</text>
+  <text x="74" y="228" font-size="12.5" font-weight="700" fill="var(--red)">关键坑：thinking / redacted_thinking 块上的 cache_control 必须剥掉</text>
+
+  <rect x="42" y="246" width="276" height="92" rx="9" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="58" y="268" font-size="10.5" font-weight="700" fill="var(--ink)">assistant 消息，末块 = thinking</text>
+  <text x="58" y="292" font-size="10.5" fill="var(--muted)">若 marker 落到 thinking 块上</text>
+  <text x="58" y="316" font-size="10.5" font-weight="700" fill="var(--red)">✗ 破坏 Anthropic 签名验证</text>
+
+  <text x="358" y="292" text-anchor="middle" font-size="22">✂️</text>
+  <text x="358" y="316" text-anchor="middle" font-size="10" fill="var(--muted)">注入后 pop</text>
+
+  <rect x="398" y="246" width="252" height="92" rx="9" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="414" y="268" font-size="10.5" font-weight="700" fill="var(--ink)">anthropic_adapter 转换时</text>
+  <text x="414" y="292" font-size="10.5" fill="var(--accent-ink)">b.pop("cache_control", None)</text>
+  <text x="414" y="316" font-size="10.5" font-weight="700" fill="var(--accent-ink)">✅ 仅留 signature，验证通过</text>
+
+  <text x="42" y="362" font-size="10.5" fill="var(--muted)">附：带 marker 的 system prompt 保持为 content blocks（list）而非纯字符串，cache_control 才不丢。</text>
+</svg>
+<div class="fig-cap"><b>4 断点 + 签名安全</b>：<span class="mono">system_and_3</span> 在 system 前缀和末 3 条非 system 上打 4 个 <span class="mono">cache_control</span> 断点（同 TTL、打在 deepcopy 副本上）；但 marker 必须从 <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span> 块上<b>剥掉</b>，否则破坏签名验证。</div>
 </div>
 
 <h2>守住前缀的最后一道闸：注入前扫描</h2>
@@ -7796,6 +7860,992 @@ for m in _PROVIDER_MODELS["huggingface"]:
   <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
   <ul>
     <li>举一个你自己做 agent 最可能踩的坑，写出它的「症状 → 根因（对应哪条 A–G 缺陷）→ 对策」，并说明它对应 Hermes 的哪条设计线（缓存神圣 / 自我进化 / 窄腰 / 安全横切）。</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>模型·凭证·路由层</h1>
+
+<p class="lead">模型不是一个端点，而是一个需要<strong>调度</strong>的资源池——多把 API key 要轮换与熔断、不同的副任务要路由到不同模型、每个模型的上下文窗口要先<strong>算出来</strong>才能决定何时压缩。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 能源调度中心</div>
+  把模型层想成一座<strong>电网调度中心</strong>：你手里不是一台发电机，而是<strong>一堆电厂</strong>——每座电厂是一把 API key、一个 provider。它们状态各不相同：有的<strong>满载跳闸</strong>、进入冷却等一会儿才恢复（被限流的 key），有的干脆<strong>烧毁退役</strong>、再也不会来电（被吊销的凭证）。
+  <p style="margin:.6rem 0 0">调度员要同时把三件事做对：第一，<strong>绝不反复去戳一座已确认没电的电厂</strong>——明知它的额度已经归零，还一遍遍发请求，只是白白浪费往返、甚至招来更重的惩罚；第二，要按<strong>负载分派机组</strong>：主厨房的大灶（主对话）上主力机组，后勤打杂（起标题、压缩、搜索这些副 LLM 活）派一台<strong>便宜的小机组</strong>就够了；第三，排班之前得先知道每座电厂的<strong>额定功率</strong>（上下文窗口有多大），否则你根本不知道什么时候该把负载挪走（触发压缩）。这一章讲的，就是 Hermes 怎么把这三件事做成<strong>有状态的调度</strong>，而不是把模型当成一个随叫随到的无状态插座。</p>
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 模型层的三个隐藏复杂度</div>
+  「调用一个模型」听起来是最简单的一步，可一旦你要把它做<strong>稳</strong>，就会冒出三层平时看不见的复杂度——
+  <p style="margin:.6rem 0 0"><strong>① 凭证不是一把 key，是一个有状态的池。</strong>同一个 provider 你可能握着好几把 key；它们要轮换、要在限流时熔断进冷却、烧毁的要永久退役，还得随时记住「哪一把现在能用」。这套状态机住在 <span class="mono">agent/credential_pool.py</span>，而它最忌讳的一件事，就是去<strong>反复试探一把已确认没额度的 key</strong>——熔断只在 <span class="mono">remaining=0</span> 的确凿证据下才该触发。</p>
+  <p><strong>② 「调用模型」不止主对话，还有一大堆副 LLM 任务。</strong>压缩、会话搜索、网页提取、视觉、起标题……每一项都是一次<strong>独立的模型调用</strong>，各自走各自的<strong>解析链与回退顺序</strong>，还能在 <span class="mono">config.yaml</span> 的 <span class="mono">auxiliary.&lt;task&gt;</span> 下<strong>各自钉住自己的 provider 与 model</strong>。统一入口在 <span class="mono">agent/auxiliary_client.py</span>。</p>
+  <p><strong>③ 「上下文多大」不是常量，是分层解析出来的。</strong>同一个模型名，窗口大小可能来自已知表、<span class="mono">models.dev</span>、运行时探测，或兜底默认——必须先把这个数<strong>算出来</strong>，压缩才知道该在百分之多少处触发。错算一步，要么过早压缩、白砸缓存，要么超出窗口、直接报错。</p>
+  <p>三件事各自独立，却共享同一条主线：<strong>把模型当成需要调度的有状态资源，而不是一个无状态端点</strong>。</p>
+</div>
+
+<p>把这三套机制摊到一张图上看——三栏分别是<strong>凭证池</strong>、<strong>副 LLM 路由</strong>、<strong>上下文窗口</strong>，每栏一句「它管什么 + 最大的坑」，底部托着三者共享的那条主线：</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 338" role="img" aria-label="模型层三套机制总览：凭证池、副 LLM 路由、上下文窗口三栏，各列出它管什么与最大的坑，底部共享一条把模型当成有状态资源来调度的主线">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">模型层三套机制 · 三栏各管一摊，共享一条主线</text>
+  <g>
+    <rect x="14" y="42" width="208" height="216" rx="12" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/>
+    <text x="30" y="78" font-size="24">🔑</text>
+    <text x="64" y="68" font-size="13" font-weight="700" fill="var(--accent-ink)">① 凭证池</text>
+    <text x="64" y="86" font-size="9.5" fill="var(--muted)">credentials</text>
+    <line x1="22" y1="98" x2="214" y2="98" stroke="var(--line)"/>
+    <text x="24" y="120" font-size="10" font-weight="700" fill="var(--accent-ink)">▸ 管什么</text>
+    <text x="24" y="139" font-size="10.5" fill="var(--ink)">同 provider 多把 key</text>
+    <text x="24" y="156" font-size="10.5" fill="var(--ink)">轮换 · 熔断 · 冷却恢复</text>
+    <rect x="22" y="170" width="192" height="76" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="34" y="190" font-size="10" font-weight="700" fill="var(--accent-ink)">▸ 最大的坑</text>
+    <text x="34" y="210" font-size="10" fill="var(--ink)">别反复戳已确认空的 bucket</text>
+    <text x="34" y="228" font-size="10" fill="var(--muted)">（remaining=0 才算熔断）</text>
+  </g>
+  <g>
+    <rect x="236" y="42" width="208" height="216" rx="12" fill="var(--panel)" stroke="var(--blue)" stroke-width="1.5"/>
+    <text x="252" y="78" font-size="24">🔀</text>
+    <text x="286" y="68" font-size="13" font-weight="700" fill="var(--blue)">② 副 LLM 路由</text>
+    <text x="286" y="86" font-size="9.5" fill="var(--muted)">side-LLM routing</text>
+    <line x1="244" y1="98" x2="436" y2="98" stroke="var(--line)"/>
+    <text x="246" y="120" font-size="10" font-weight="700" fill="var(--blue)">▸ 管什么</text>
+    <text x="246" y="139" font-size="10.5" fill="var(--ink)">压缩 / 搜索 / 视觉 / 标题</text>
+    <text x="246" y="156" font-size="10.5" fill="var(--ink)">副任务各走各的解析链</text>
+    <rect x="244" y="170" width="192" height="76" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="256" y="190" font-size="10" font-weight="700" fill="var(--blue)">▸ 最大的坑</text>
+    <text x="256" y="210" font-size="10" fill="var(--ink)">副任务别全压主模型</text>
+    <text x="256" y="228" font-size="10" fill="var(--muted)">可 per-task 钉 provider/model</text>
+  </g>
+  <g>
+    <rect x="458" y="42" width="208" height="216" rx="12" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
+    <text x="474" y="78" font-size="24">📏</text>
+    <text x="508" y="68" font-size="13" font-weight="700" fill="var(--purple)">③ 上下文窗口</text>
+    <text x="508" y="86" font-size="9.5" fill="var(--muted)">context-length</text>
+    <line x1="466" y1="98" x2="658" y2="98" stroke="var(--line)"/>
+    <text x="468" y="120" font-size="10" font-weight="700" fill="var(--purple)">▸ 管什么</text>
+    <text x="468" y="139" font-size="10.5" fill="var(--ink)">分层解析窗口大小</text>
+    <text x="468" y="156" font-size="10.5" fill="var(--ink)">查表 → models.dev → 探测</text>
+    <rect x="466" y="170" width="192" height="76" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+    <text x="478" y="190" font-size="10" font-weight="700" fill="var(--purple)">▸ 最大的坑</text>
+    <text x="478" y="210" font-size="10" fill="var(--ink)">先算出来才知何时压缩</text>
+    <text x="478" y="228" font-size="10" fill="var(--muted)">用常量会压错时机</text>
+  </g>
+  <line x1="118" y1="258" x2="118" y2="278" stroke="var(--muted)" stroke-width="1.3"/>
+  <line x1="340" y1="258" x2="340" y2="278" stroke="var(--muted)" stroke-width="1.3"/>
+  <line x1="562" y1="258" x2="562" y2="278" stroke="var(--muted)" stroke-width="1.3"/>
+  <rect x="14" y="278" width="652" height="46" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="28" y="290" width="64" height="20" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="60" y="304" text-anchor="middle" font-size="10" font-weight="700" fill="var(--accent-ink)">共同主线</text>
+  <text x="104" y="305" font-size="12" font-weight="700" fill="var(--ink)">把模型当成需要调度的「有状态资源」，而非无状态端点</text>
+</svg>
+<div class="fig-cap"><b>模型层三套机制</b>：凭证要轮换熔断、副任务要路由、窗口要先算出来——三者都把「调用模型」从一次性动作变成有状态调度。</div>
+</div>
+
+<h3>🔬 27.1 · 凭证池：从一把 key 到有状态的资源池</h3>
+<p>同一个 provider，你常常握着不止一把 key——免费额度叠付费、几个账号轮着用。Hermes 把它们收进一个<strong>持久化的凭证池</strong>（<span class="mono">agent/credential_pool.py</span>）：每把 key 是池里一条 <span class="mono">PooledCredential</span>，带着自己的状态——<span class="mono">OK</span>（可用、进轮换）、<span class="mono">EXHAUSTED</span>（限时冷却、暂时退出）、<span class="mono">DEAD</span>（永久排除、再不回来）。<span class="mono">select()</span> 每次取 key，先把<strong>冷却到期</strong>的 <span class="mono">EXHAUSTED</span> 清回 <span class="mono">OK</span>（<span class="mono">clear_expired</span>），再按策略（<span class="mono">random</span> / <span class="mono">least_used</span> / <span class="mono">round_robin</span>）从可用集合里挑一把。</p>
+<p>这套机制最在意的一条铁律是——<strong>绝不去反复试探一个已确认空的 bucket</strong>。一把 key 被限流，不是把它从池里删掉、也不是每隔几秒再戳一下看「好了没」，而是给它<strong>盖一个到期时间戳</strong>然后<strong>跳过</strong>：<span class="mono">DEAD</span> 无条件排除（<span class="mono">select()</span> 里直接 <span class="mono">continue</span>），<span class="mono">EXHAUSTED</span> 只有在 <span class="mono">last_error_reset_at</span> 或 TTL 到点后才回到候选。失败发生时，<span class="mono">mark_exhausted_and_rotate()</span> 先给闯祸的那把 key 盖章，再<strong>立刻重选</strong>下一把，主请求不必空等。</p>
+<p>冷却时长按触发它的 HTTP 状态分档（<span class="mono">_exhausted_ttl</span>）：<strong>429 限流给 1 小时</strong>、<strong>401 认证失效只给 5 分钟</strong>（让单 key 用户能快点恢复）、其它失败默认 1 小时。但这只是<strong>兜底默认</strong>：只要 provider 在响应里给了 <span class="mono">reset_at</span>，或报错文本里写着「retry after …」「resets in 2 hr 13 min」，Hermes 就<strong>解析出真实恢复时刻去覆盖默认值</strong>，绝不提前撞一堵明知还锁着的墙。还有一种更狠的失败：401 且原因是 <span class="mono">token_revoked</span> / <span class="mono">invalid_grant</span> 这类<strong>永久 OAuth 失效</strong>——它不该走 1 小时冷却（否则每小时回来撞一次、撞完又冷却），而是直接打成 <span class="mono">DEAD</span>，只有用户<strong>重新登录、把新 token 写回</strong>时才清除。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/credential_pool.py:108</span></div><pre># Cooldown before retrying an exhausted credential.
+# Transient 401 auth failures cool down briefly so single-key setups can recover.
+# 429 (rate-limited), 402 (billing/quota), and other failures cool down after 1 hour.
+# Provider-supplied reset_at timestamps override these defaults.
+EXHAUSTED_TTL_401_SECONDS = 5 * 60           # 5 minutes
+EXHAUSTED_TTL_429_SECONDS = 60 * 60          # 1 hour
+EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/credential_pool.py:250</span></div><pre>def _exhausted_ttl(error_code: Optional[int]) -&gt; int:
+    &quot;&quot;&quot;Return cooldown seconds based on the HTTP status that caused exhaustion.&quot;&quot;&quot;
+    if error_code == 401:
+        return EXHAUSTED_TTL_401_SECONDS
+    if error_code == 429:
+        return EXHAUSTED_TTL_429_SECONDS
+    return EXHAUSTED_TTL_DEFAULT_SECONDS</pre></div>
+
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="凭证池状态机：OK、EXHAUSTED、DEAD 三个状态及其转移条件——失败盖到期戳进 EXHAUSTED，reset_at 或 TTL 到期清回 OK，401 永久认证失效直接进 DEAD 永久排除，只有重新登录写回 token 才回到 OK">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">凭证池状态机 · 每把 key 三种状态，select() 只从 OK 挑</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">EXHAUSTED 限时退出、到期自动回归；DEAD 永久排除，不靠 TTL 回来</text>
+  <rect x="44" y="72" width="180" height="94" rx="14" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="134" y="110" text-anchor="middle" font-size="18" font-weight="700" fill="var(--accent-ink)">OK</text>
+  <text x="134" y="130" text-anchor="middle" font-size="9.5" fill="var(--muted)">STATUS_OK</text>
+  <text x="134" y="150" text-anchor="middle" font-size="10.5" fill="var(--ink)">可用，进入轮换</text>
+  <rect x="456" y="72" width="180" height="94" rx="14" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="546" y="106" text-anchor="middle" font-size="14" font-weight="700" fill="var(--amber)">EXHAUSTED</text>
+  <text x="546" y="125" text-anchor="middle" font-size="9" fill="var(--muted)">STATUS_EXHAUSTED</text>
+  <text x="546" y="145" text-anchor="middle" font-size="10.5" fill="var(--ink)">限时冷却，暂时退出</text>
+  <rect x="44" y="244" width="180" height="94" rx="14" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="134" y="280" text-anchor="middle" font-size="16" font-weight="700" fill="var(--red)">DEAD</text>
+  <text x="134" y="299" text-anchor="middle" font-size="9" fill="var(--muted)">STATUS_DEAD</text>
+  <text x="134" y="319" text-anchor="middle" font-size="10.5" fill="var(--ink)">永久排除</text>
+  <line x1="224" y1="104" x2="447" y2="104" stroke="var(--amber)" stroke-width="2"/>
+  <path d="M456,104 L447,99 L447,109 Z" fill="var(--amber)"/>
+  <text x="335" y="95" text-anchor="middle" font-size="10" fill="var(--amber)">限流 / 认证失败 → 盖到期戳</text>
+  <line x1="447" y1="138" x2="233" y2="138" stroke="var(--accent)" stroke-width="2"/>
+  <path d="M224,138 L233,133 L233,143 Z" fill="var(--accent)"/>
+  <text x="335" y="153" text-anchor="middle" font-size="10" fill="var(--accent-ink)">reset_at / TTL 到期 → 清冷却回 OK</text>
+  <line x1="158" y1="166" x2="158" y2="240" stroke="var(--red)" stroke-width="2"/>
+  <path d="M158,244 L153,235 L163,235 Z" fill="var(--red)"/>
+  <line x1="190" y1="240" x2="190" y2="170" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <path d="M190,166 L185,175 L195,175 Z" fill="var(--muted)"/>
+  <rect x="266" y="250" width="370" height="88" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="282" y="276" font-size="10.5" fill="var(--red)">↓ 401 terminal-auth → DEAD（永久排除）</text>
+  <text x="298" y="296" font-size="9.5" fill="var(--muted)">token_revoked · invalid_grant · token_invalidated…</text>
+  <text x="282" y="322" font-size="10.5" fill="var(--accent-ink)">↑ 仅重新登录写回 token（sync）才回到 OK</text>
+</svg>
+<div class="fig-cap"><b>凭证池状态机</b>：失败给 key 盖一个到期戳进 <span class="mono">EXHAUSTED</span>、到 <span class="mono">reset_at</span> / TTL 才回 <span class="mono">OK</span>；401 永久认证失效（<span class="mono">token_revoked…</span>）直接打成 <span class="mono">DEAD</span>，只有重新登录写回 token 才复活——绝不反复戳一个已确认空的 bucket。</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 348" role="img" aria-label="限流冷却时长决策：按触发的 HTTP 状态码分档——401 给 5 分钟、429 给 1 小时、其它默认 1 小时；provider 给的 reset_at 或 retry-after 文本会覆盖这些默认值">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">限流冷却时长 · 按 HTTP 状态分档，provider 文本可覆盖</text>
+  <rect x="260" y="44" width="160" height="46" rx="10" fill="var(--panel-2)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="340" y="66" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">HTTP 失败状态码</text>
+  <text x="340" y="82" text-anchor="middle" font-size="9" fill="var(--muted)">status_code</text>
+  <line x1="340" y1="90" x2="340" y2="103" stroke="var(--muted)" stroke-width="1.6"/>
+  <path d="M340,107 L335,98 L345,98 Z" fill="var(--muted)"/>
+  <rect x="236" y="107" width="208" height="44" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="340" y="134" text-anchor="middle" font-size="11.5" fill="var(--blue)">_exhausted_ttl(error_code)</text>
+  <line x1="318" y1="151" x2="146" y2="192" stroke="var(--amber)" stroke-width="1.6"/>
+  <path d="M132,196 L127,187 L137,187 Z" fill="var(--amber)"/>
+  <text x="200" y="176" text-anchor="middle" font-size="10" font-weight="700" fill="var(--amber)">== 401</text>
+  <line x1="340" y1="151" x2="340" y2="192" stroke="var(--amber)" stroke-width="1.6"/>
+  <path d="M340,196 L335,187 L345,187 Z" fill="var(--amber)"/>
+  <text x="356" y="176" text-anchor="middle" font-size="10" font-weight="700" fill="var(--amber)">== 429</text>
+  <line x1="362" y1="151" x2="534" y2="192" stroke="var(--amber)" stroke-width="1.6"/>
+  <path d="M548,196 L543,187 L553,187 Z" fill="var(--amber)"/>
+  <text x="480" y="176" text-anchor="middle" font-size="10" font-weight="700" fill="var(--amber)">else</text>
+  <rect x="44" y="198" width="176" height="92" rx="10" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="132" y="224" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--amber)">401 · 认证失效</text>
+  <text x="132" y="248" text-anchor="middle" font-size="9" fill="var(--muted)">EXHAUSTED_TTL_401_SECONDS</text>
+  <text x="132" y="274" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">5 分钟（300s）</text>
+  <rect x="252" y="198" width="176" height="92" rx="10" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="340" y="224" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--amber)">429 · 限流</text>
+  <text x="340" y="248" text-anchor="middle" font-size="9" fill="var(--muted)">EXHAUSTED_TTL_429_SECONDS</text>
+  <text x="340" y="274" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">1 小时（3600s）</text>
+  <rect x="460" y="198" width="176" height="92" rx="10" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="548" y="224" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--amber)">402 / 其它失败</text>
+  <text x="548" y="248" text-anchor="middle" font-size="9" fill="var(--muted)">EXHAUSTED_TTL_DEFAULT_SECONDS</text>
+  <text x="548" y="274" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">1 小时（3600s）</text>
+  <rect x="44" y="300" width="592" height="36" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="340" y="323" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">⚡ provider 给的 reset_at 或「retry after / resets in N hr」会覆盖以上默认 TTL</text>
+</svg>
+<div class="fig-cap"><b>冷却时长决策</b>：<span class="mono">_exhausted_ttl</span> 按触发的状态码分档——401 给 5 分钟、429 与其它给 1 小时；但只要 provider 在响应或报错文本里给了 <span class="mono">reset_at</span> / 「retry after」，就用真实恢复时刻覆盖默认值。</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 372" role="img" aria-label="三种轮换策略对比：同一个含 5 把 key 的池，random 随机取一把、least_used 取请求计数最小的一把、round_robin 取队首再把它移到队尾——三种策略各选中不同的下一把 key">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">轮换策略 · 同一个 5 把 key 的池，三种选法挑出不同「下一把」</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">select() 清掉过期冷却后，按 strategy 从可用集合里挑一把</text>
+  <text x="28" y="90" font-size="12" font-weight="700" fill="var(--blue)">random</text>
+  <text x="28" y="107" font-size="9" fill="var(--muted)">random.choice(available)</text>
+  <rect x="236" y="70" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="269" y="97" text-anchor="middle" font-size="11" fill="var(--ink)">k1</text>
+  <rect x="314" y="70" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="347" y="97" text-anchor="middle" font-size="11" fill="var(--ink)">k2</text>
+  <rect x="392" y="70" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="425" y="97" text-anchor="middle" font-size="11" fill="var(--ink)">k3</text>
+  <rect x="470" y="70" width="66" height="44" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2.5"/>
+  <text x="503" y="97" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">k4</text>
+  <rect x="548" y="70" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="581" y="97" text-anchor="middle" font-size="11" fill="var(--ink)">k5</text>
+  <text x="503" y="130" text-anchor="middle" font-size="9.5" fill="var(--blue)">🎲 随机命中</text>
+  <text x="28" y="202" font-size="12" font-weight="700" fill="var(--purple)">least_used</text>
+  <text x="28" y="219" font-size="9" fill="var(--muted)">min(request_count)</text>
+  <rect x="236" y="182" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="269" y="209" text-anchor="middle" font-size="11" fill="var(--ink)">k1</text>
+  <rect x="314" y="182" width="66" height="44" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2.5"/>
+  <text x="347" y="209" text-anchor="middle" font-size="11" font-weight="700" fill="var(--purple)">k2</text>
+  <rect x="392" y="182" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="425" y="209" text-anchor="middle" font-size="11" fill="var(--ink)">k3</text>
+  <rect x="470" y="182" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="503" y="209" text-anchor="middle" font-size="11" fill="var(--ink)">k4</text>
+  <rect x="548" y="182" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="581" y="209" text-anchor="middle" font-size="11" fill="var(--ink)">k5</text>
+  <text x="269" y="240" text-anchor="middle" font-size="9.5" fill="var(--muted)">req 7</text>
+  <text x="347" y="240" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--purple)">req 3</text>
+  <text x="425" y="240" text-anchor="middle" font-size="9.5" fill="var(--muted)">req 9</text>
+  <text x="503" y="240" text-anchor="middle" font-size="9.5" fill="var(--muted)">req 5</text>
+  <text x="581" y="240" text-anchor="middle" font-size="9.5" fill="var(--muted)">req 8</text>
+  <text x="347" y="258" text-anchor="middle" font-size="9.5" fill="var(--purple)">↑ 取最小</text>
+  <text x="28" y="314" font-size="12" font-weight="700" fill="var(--accent-ink)">round_robin</text>
+  <text x="28" y="331" font-size="9" fill="var(--muted)">取队首 → 移到队尾</text>
+  <rect x="236" y="294" width="66" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="269" y="321" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">k1</text>
+  <rect x="314" y="294" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="347" y="321" text-anchor="middle" font-size="11" fill="var(--ink)">k2</text>
+  <rect x="392" y="294" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="425" y="321" text-anchor="middle" font-size="11" fill="var(--ink)">k3</text>
+  <rect x="470" y="294" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="503" y="321" text-anchor="middle" font-size="11" fill="var(--ink)">k4</text>
+  <rect x="548" y="294" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="581" y="321" text-anchor="middle" font-size="11" fill="var(--ink)">k5</text>
+  <path d="M269,294 C269,278 600,278 600,290" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <path d="M600,294 L595,285 L605,285 Z" fill="var(--accent)"/>
+  <text x="470" y="274" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">→ 移到队尾</text>
+  <text x="269" y="356" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">↑ 取队首</text>
+</svg>
+<div class="fig-cap"><b>三种轮换策略</b>：同一个 5 把 key 的池，<span class="mono">random</span> 随机命中一把、<span class="mono">least_used</span> 挑请求计数最小的一把、<span class="mono">round_robin</span> 取队首再把它挪到队尾——各自选中的「下一把」并不相同。</div>
+</div>
+
+<h3>🔬 27.2 · 副 LLM 路由：每个副任务各走各的解析链</h3>
+<p>主对话之外，Hermes 还跑着一大批<strong>副 LLM 任务</strong>——上下文压缩、视觉识图、网页提取、起标题、技能维护（curator）……每一项都是一次<strong>独立的模型调用</strong>，全部走同一个入口 <span class="mono">agent/auxiliary_client.py</span> 的 <span class="mono">_resolve_auto()</span>。它要做的不是「随便抓个能用的模型」，而是按一条<strong>三段解析链</strong>，把每个副任务路由到「最合适的 provider + model」。</p>
+<p><strong>① 先用你当前的主 provider + 主 model。</strong>关键是用<strong>运行期</strong>的那一份，而不是 <span class="mono">config.yaml</span> 里可能已经陈旧的默认值：每轮开头由 <span class="mono">set_runtime_main()</span> 把 CLI / 网关临时切到的 provider、model、<span class="mono">base_url</span>、key 同步进来，副任务于是跟主对话用<strong>同一个模型、同一把已验证可用的 key</strong>，行为可预期，不会偷偷掉到某个便宜的默认模型。举个会咬人的场景：你这一会话用 <span class="mono">hermes model</span> 临时切到了另一个 provider，若没有这步运行期同步，副任务仍会按 <span class="mono">config.yaml</span> 里那份旧 provider 去发请求——要么打到错的端点，要么用了你已经不想再用的账号。<strong>② 主 provider 不可用时</strong>，先查该任务自己的 <span class="mono">auxiliary.&lt;task&gt;.fallback_chain</span>，再查主 agent 顶层的 fallback 策略。<strong>③ 都没命中</strong>，才走那条硬编码的 discovery 链：<span class="mono">openrouter → nous → local/custom → api-key</span>。</p>
+<p>三个真实的坑必须记住。第一，<strong>per-task pinning 是真的</strong>：每个副任务都能在 <span class="mono">auxiliary.&lt;task&gt;</span> 下<strong>各自钉死</strong> <span class="mono">provider</span> 与 <span class="mono">model</span>——压缩钉一个、视觉钉另一个、起标题再钉第三个，互不干扰。第二，<strong>402 / 额度错误会把 provider 标成 unhealthy 藏一段时间</strong>：命中付费或额度耗尽时，<span class="mono">_mark_provider_unhealthy()</span> 给它盖一个到期戳，默认藏 <span class="mono">_AUX_UNHEALTHY_TTL_SECONDS = 600</span>（10 分钟）；这段时间内第 ① 步与第 ③ 步都直接<strong>跳过</strong>它，免得每次副调用都先白撞一个必败的 402，到点自动恢复、充值后无需手动干预。第三，<strong>通用 fallback 链可能静默选了一个更便宜 / 不同的模型</strong>——它只保证「找得到能用的」，不保证「和你主模型同款」；要避免，就把该任务<strong>显式钉死</strong>。举个具体的：视觉任务若被静默落到一个只有文本的便宜模型上，每次看图都会 404——这正是该把 <span class="mono">vision</span> 单独钉死的理由。</p>
+<p>还有一个刻意的取舍：discovery 链里<strong>故意不含 Codex</strong>。ChatGPT 账号版的 Codex 端点只认一份不断变动、未公开的 model 白名单，拿一个猜的 model 去回退反而更易失败——所以 Codex 只在你的<strong>主 provider 本身就是</strong> <span class="mono">openai-codex</span>、或调用方显式带上 model 时才用。（顺带一提：<span class="mono">session_search</span> 自 PR #27590 起已不再走副 LLM，工具直接返回库内容，故不在下方矩阵内。）</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/auxiliary_client.py:3322 · 简化</span></div><pre>def _resolve_auto(main_runtime=None, task=None):        # abridged
+    # ... normalize runtime (set_runtime_main records base_url / key)
+    # ── Step 1: main provider + main model → use them directly ──
+    main_provider = str(runtime_provider or _read_main_provider() or "")
+    main_model = str(runtime_model or _read_main_model() or "")
+    if (main_provider and main_model
+            and main_provider not in {"auto", ""}):
+        main_chain_label = _normalize_chain_label(main_provider)
+        if main_chain_label and _is_provider_unhealthy(main_chain_label):
+            _log_skip_unhealthy(main_chain_label)        # just 402'd -&gt; skip
+        else:
+            client, resolved = resolve_provider_client(main_provider, main_model, ...)
+            if client is not None:
+                return client, resolved or main_model    # (1) main provider+model
+
+    # ── Step 2: user-configured fallback policy ──
+    if task:
+        fb_client, fb_model, _ = _try_configured_fallback_chain(task, ...)  # auxiliary.&lt;task&gt;.fallback_chain
+        if fb_client is not None:
+            return fb_client, fb_model
+    fb_client, fb_model, _ = _try_main_fallback_chain(task, ...)            # top-level fallback
+    if fb_client is not None:
+        return fb_client, fb_model                       # (2) configured fallback
+
+    # ── Step 3: aggregator / fallback chain ──
+    for label, try_fn in _get_provider_chain():          # openrouter → nous → local/custom → api-key
+        if _is_provider_unhealthy(label):
+            _log_skip_unhealthy(label)                   # 402/credit -&gt; hidden 10 min, skip
+            continue
+        client, model = try_fn()
+        if client is not None:
+            return client, model                         # (3) discovery chain
+    return None, None</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/auxiliary_client.py:2325 · 简化</span></div><pre>def _get_provider_chain() -&gt; List[tuple]:
+    &quot;&quot;&quot;Return the ordered provider detection chain.  ... (abridged)
+
+    NOTE: ``openai-codex`` is deliberately NOT in this chain.  The
+    ChatGPT-account Codex endpoint only accepts a shifting, undocumented
+    allow-list of model IDs, so falling back to it with a guessed model
+    fails more often than not.  Codex is used only when the user's main
+    provider *is* openai-codex (see Step 1 of ``_resolve_auto``) or when
+    a caller explicitly requests it with a model.&quot;&quot;&quot;
+    return [
+        ("openrouter", _try_openrouter),
+        ("nous", _try_nous),
+        ("local/custom", _try_custom_endpoint),
+        ("api-key", _resolve_api_key_provider),
+    ]</pre></div>
+
+<div class="figure">
+<svg viewBox="0 0 680 436" role="img" aria-label="副 LLM 路由决策树：副任务请求依次尝试第一段主 provider 加主 model、第二段任务级 fallback_chain 与顶层 fallback、第三段硬编码 discovery 链 openrouter 到 nous 到 local/custom 到 api-key，任一段命中即返回选定的 provider 与 model；命中 unhealthy 的 provider（402 或额度耗尽）会被盖到期戳藏 10 分钟并跳过">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">副 LLM 路由决策树 · 三段解析，按序命中即返回</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">每个副任务独立走一遍；命中 unhealthy 的 provider 直接跳过</text>
+  <rect x="44" y="58" width="280" height="32" rx="10" fill="var(--panel-2)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="184" y="79" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">副任务请求（压缩 / 视觉 / 起标题…）</text>
+  <line x1="184" y1="90" x2="184" y2="104" stroke="var(--muted)" stroke-width="1.6"/>
+  <path d="M184,108 L179,99 L189,99 Z" fill="var(--muted)"/>
+  <rect x="44" y="110" width="280" height="76" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="60" y="135" font-size="12.5" font-weight="700" fill="var(--accent-ink)">① 主 provider + 主 model</text>
+  <text x="60" y="155" font-size="9.5" fill="var(--muted)">set_runtime_main() 同步运行期 base_url / key</text>
+  <text x="60" y="173" font-size="9.5" fill="var(--ink)">命中即用主对话同款模型，行为可预期</text>
+  <line x1="184" y1="186" x2="184" y2="200" stroke="var(--muted)" stroke-width="1.6"/>
+  <path d="M184,204 L179,195 L189,195 Z" fill="var(--muted)"/>
+  <text x="200" y="199" font-size="9" fill="var(--red)">未命中 / 主刚 402 被藏</text>
+  <rect x="44" y="204" width="280" height="72" rx="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="60" y="228" font-size="12.5" font-weight="700" fill="var(--blue)">② 配置的回退策略</text>
+  <text x="60" y="248" font-size="9" fill="var(--muted)">auxiliary.&lt;task&gt;.fallback_chain（任务级）</text>
+  <text x="60" y="265" font-size="9" fill="var(--muted)">→ 主 agent 顶层 fallback（兜底策略）</text>
+  <line x1="184" y1="276" x2="184" y2="288" stroke="var(--muted)" stroke-width="1.6"/>
+  <path d="M184,292 L179,283 L189,283 Z" fill="var(--muted)"/>
+  <text x="200" y="289" font-size="9" fill="var(--muted)">未命中</text>
+  <rect x="44" y="292" width="592" height="128" rx="12" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="60" y="316" font-size="12.5" font-weight="700" fill="var(--purple)">③ discovery 链 · 硬编码兜底（Codex 不在内）</text>
+  <rect x="64" y="328" width="116" height="40" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="122" y="349" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">openrouter</text>
+  <text x="122" y="362" text-anchor="middle" font-size="9" fill="var(--muted)">聚合器</text>
+  <text x="190" y="352" text-anchor="middle" font-size="12" fill="var(--purple)">→</text>
+  <rect x="200" y="328" width="116" height="40" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="258" y="349" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">nous</text>
+  <text x="258" y="362" text-anchor="middle" font-size="9" fill="var(--muted)">Nous</text>
+  <text x="326" y="352" text-anchor="middle" font-size="12" fill="var(--purple)">→</text>
+  <rect x="336" y="328" width="116" height="40" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="394" y="349" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">local/custom</text>
+  <text x="394" y="362" text-anchor="middle" font-size="9" fill="var(--muted)">本地 / 自建</text>
+  <text x="462" y="352" text-anchor="middle" font-size="12" fill="var(--purple)">→</text>
+  <rect x="472" y="328" width="116" height="40" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="530" y="349" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">api-key</text>
+  <text x="530" y="362" text-anchor="middle" font-size="9" fill="var(--muted)">直连 key</text>
+  <rect x="52" y="376" width="536" height="34" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="64" y="397" font-size="9.5" fill="var(--red)">✗ 命中 unhealthy 的 provider（刚吃 402 / 额度耗尽）→ 盖到期戳藏 10 分钟，本轮跳到下一个</text>
+  <rect x="430" y="120" width="210" height="120" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="535" y="164" text-anchor="middle" font-size="15" font-weight="700" fill="var(--accent-ink)">✓ 选定</text>
+  <text x="535" y="189" text-anchor="middle" font-size="11.5" fill="var(--ink)">provider + model</text>
+  <text x="535" y="212" text-anchor="middle" font-size="9" fill="var(--muted)">交给该副任务发起调用</text>
+  <line x1="324" y1="148" x2="427" y2="160" stroke="var(--accent)" stroke-width="1.8"/>
+  <path d="M430,161 L421,158 L423,168 Z" fill="var(--accent)"/>
+  <text x="372" y="142" text-anchor="middle" font-size="9" fill="var(--accent-ink)">命中 ✓</text>
+  <line x1="324" y1="240" x2="427" y2="214" stroke="var(--accent)" stroke-width="1.8"/>
+  <path d="M430,213 L421,212 L424,222 Z" fill="var(--accent)"/>
+  <text x="372" y="244" text-anchor="middle" font-size="9" fill="var(--accent-ink)">命中 ✓</text>
+  <line x1="600" y1="292" x2="574" y2="244" stroke="var(--accent)" stroke-width="1.8"/>
+  <path d="M572,240 L569,250 L578,247 Z" fill="var(--accent)"/>
+  <text x="606" y="280" text-anchor="middle" font-size="9" fill="var(--accent-ink)">命中 ✓</text>
+</svg>
+<div class="fig-cap"><b>路由决策树</b>：副任务请求按 ① 主 provider+model → ② 任务级 <span class="mono">fallback_chain</span> 与顶层 fallback → ③ 硬编码 discovery 链（<span class="mono">openrouter→nous→local/custom→api-key</span>）依次解析，任一段命中即返回；命中 unhealthy 的 provider（402 / 额度）会被藏 10 分钟并跳过，避免每次副调用都白撞一个必败请求。</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 352" role="img" aria-label="副 LLM per-task 路由矩阵：行是各副任务 compression、vision、web_extract、title_generation、curator，每个任务都能在 config.yaml 的 auxiliary 任务块下各自钉住 provider 与 model，不同任务可指向不同模型；不配则为 auto，共同兜底 openrouter google gemini-3-flash-preview">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">per-task 路由矩阵 · 每个副任务各自 pin provider 与 model</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">在 config.yaml 的 auxiliary.&lt;task&gt; 下钉死；不配 = auto（= 主对话模型）</text>
+  <rect x="40" y="60" width="600" height="34" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="52" y="82" font-size="11" font-weight="700" fill="var(--accent-ink)">副任务</text>
+  <text x="172" y="82" font-size="10" font-weight="700" fill="var(--accent-ink)">provider · 可 pin</text>
+  <text x="322" y="82" font-size="10" font-weight="700" fill="var(--accent-ink)">model · 可 pin</text>
+  <text x="532" y="82" font-size="10" font-weight="700" fill="var(--accent-ink)">典型用途</text>
+  <rect x="40" y="94" width="600" height="40" fill="var(--panel)"/>
+  <rect x="40" y="134" width="600" height="40" fill="var(--panel-2)"/>
+  <rect x="40" y="174" width="600" height="40" fill="var(--panel)"/>
+  <rect x="40" y="214" width="600" height="40" fill="var(--panel-2)"/>
+  <rect x="40" y="254" width="600" height="40" fill="var(--panel)"/>
+  <text x="52" y="119" font-size="10.5" font-weight="700" fill="var(--ink)">compression</text>
+  <text x="172" y="119" font-size="10" fill="var(--accent-ink)">openrouter</text>
+  <text x="322" y="119" font-size="9.5" fill="var(--accent-ink)">google/gemini-3-flash-preview</text>
+  <text x="532" y="119" font-size="9" fill="var(--muted)">压缩长上下文</text>
+  <text x="52" y="159" font-size="10.5" font-weight="700" fill="var(--ink)">vision</text>
+  <text x="172" y="159" font-size="10" fill="var(--accent-ink)">openrouter</text>
+  <text x="322" y="159" font-size="9.5" fill="var(--accent-ink)">google/gemini-2.5-flash</text>
+  <text x="532" y="159" font-size="9" fill="var(--muted)">看图 / 多模态</text>
+  <text x="52" y="199" font-size="10.5" font-weight="700" fill="var(--ink)">web_extract</text>
+  <text x="172" y="199" font-size="10" fill="var(--accent-ink)">nous</text>
+  <text x="322" y="199" font-size="9.5" fill="var(--muted)">（provider 默认）</text>
+  <text x="532" y="199" font-size="9" fill="var(--muted)">网页正文摘要</text>
+  <text x="52" y="239" font-size="10.5" font-weight="700" fill="var(--ink)">title_generation</text>
+  <text x="172" y="239" font-size="10" fill="var(--accent-ink)">openrouter</text>
+  <text x="322" y="239" font-size="9.5" fill="var(--accent-ink)">google/gemini-3-flash-preview</text>
+  <text x="532" y="239" font-size="9" fill="var(--muted)">会话起标题</text>
+  <text x="52" y="279" font-size="10.5" font-weight="700" fill="var(--ink)">curator</text>
+  <text x="172" y="279" font-size="10" fill="var(--muted)">auto</text>
+  <text x="322" y="279" font-size="9.5" fill="var(--muted)">（= 主对话模型）</text>
+  <text x="532" y="279" font-size="9" fill="var(--muted)">技能维护复盘</text>
+  <line x1="160" y1="60" x2="160" y2="294" stroke="var(--line)" stroke-width="1"/>
+  <line x1="310" y1="60" x2="310" y2="294" stroke="var(--line)" stroke-width="1"/>
+  <line x1="520" y1="60" x2="520" y2="294" stroke="var(--line)" stroke-width="1"/>
+  <rect x="40" y="304" width="600" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="325" text-anchor="middle" font-size="9.5" fill="var(--blue)">▸ 示意值：任一任务不 pin 则走 _resolve_auto 三段链，共同兜底 openrouter:google/gemini-3-flash-preview</text>
+</svg>
+<div class="fig-cap"><b>per-task 路由矩阵</b>：每个副任务都能在 <span class="mono">auxiliary.&lt;task&gt;.provider</span> / <span class="mono">.model</span> 下各自钉住，不同任务可指向不同模型（图中为示意值）；不 pin 则为 <span class="mono">auto</span>，共同兜底 <span class="mono">openrouter:google/gemini-3-flash-preview</span>。</div>
+</div>
+
+<h3>🔬 27.3 · 上下文窗口：先分层解析，再算压缩阈值</h3>
+<p>压缩的触发，靠的从来不是「用到 X% 就压」这么一个写死的百分比——前提是你<strong>先得知道这个模型的窗口到底多大</strong>。可「窗口多大」对同一个 model 名往往众说纷纭：用户在 <span class="mono">config.yaml</span> 里覆盖过、上次探测的值缓存在磁盘上、provider 的 <span class="mono">/models</span> 接口能报、<span class="mono">models.dev</span> 有登记、本地 server 能查、再不行还有按模型家族猜的硬编码默认。<span class="mono">agent/model_metadata.py</span> 的 <span class="mono">get_model_context_length()</span> 把这些来源排成一条<strong>分层解析链</strong>，自上而下、命中即返回。</p>
+<p>解析顺序（节选自其 docstring 的 resolution order）是：<strong>⓪ 显式 config 覆盖</strong>（<span class="mono">model.context_length</span> 或自定义 provider 的 per-model 设置，用户最清楚自己的端点）→ <strong>① 持久缓存</strong>（上次探测落盘的值）→ <strong>①b AWS Bedrock 静态表</strong> → <strong>② 自定义端点 /models 元数据</strong> → <strong>③ 本地 server 查询</strong> → <strong>④ Anthropic /v1/models</strong>（仅 API-key、不含 OAuth）→ <strong>⑤ provider 感知探测</strong>（Copilot、Nous live、Codex OAuth、GMI、Ollama、<span class="mono">models.dev</span>）→ <strong>⑥ OpenRouter live 元数据</strong>（带 Kimi 32k 守卫）→ <strong>⑦ 硬编码默认</strong>（按模型家族、最长键优先）→ <strong>⑧ 本地 server 兜底</strong> → <strong>⑨ 默认 256K</strong>。</p>
+<p>这里最锋利的坑，是<strong>「缓存可能是陈旧的、对某些 provider 必须主动跳过」</strong>。缓存本是优化——一次探测、长期复用；可有几类 provider 的窗口要么会变、要么曾被错误落盘，盲信缓存就把窗口算错：<strong>LM Studio</strong> 的已加载上下文是<strong>瞬态</strong>的（用户随时能用别的 <span class="mono">context_length</span> 重载模型），所以它<strong>整段跳过持久缓存</strong>；<strong>Nous</strong> 的 URL 在缓存这步直接 bypass，永远以门户 <span class="mono">/v1/models</span> 为准；<strong>Codex</strong> OAuth 对每个 slug 都封顶 272K，凡缓存里 ≥ 400K 的都是旧解析路径留下的脏值，丢弃重探；<strong>Kimi</strong> 系 ≤ 32768 的缓存是 OpenRouter 的低报，<strong>MiniMax-M3</strong> ≤ 204800、<strong>Grok-4.3</strong> ≤ 256000 则都是「catalog 收录新值之前」落盘的旧值——这三者一律丢弃、回落到硬编码默认（它们其实都是 1M）。一句话：<strong>缓存命中 ≠ 可信，边角 provider 要先验真。</strong></p>
+<p>窗口一旦解析出来，<span class="mono">agent/context_compressor.py</span> 的 <span class="mono">_compute_threshold_tokens()</span> 才算<strong>触发阈值</strong>。它不是简单的「窗口 × 50%」，而是三步：① 基准 = <strong>有效输入预算 × <span class="mono">threshold_percent</span></strong>（默认 <strong>0.50</strong>）；② 用 <strong><span class="mono">MINIMUM_CONTEXT_LENGTH</span> = 64K</strong> 做 floor，免得大窗口模型在 50% 就过早压缩；③ 但这个 floor 在<strong>小窗口</strong>会退化：一个 64K 的本地模型，<span class="mono">max(0.5×64000, 64000) == 64000</span> 让阈值等于<strong>整个窗口</strong>，自动压缩永远触发不了——provider 会在用量到 100% 之前就拒掉请求。所以当 floor ≥ 窗口时，改在 <strong><span class="mono">_MIN_CTX_TRIGGER_RATIO</span> = 85%</strong> 处触发。还有一层：provider 会从同一个窗口里<strong>预留 <span class="mono">max_tokens</span> 的输出空间</strong>，所以真正可用的<strong>输入</strong>预算是 <span class="mono">context_length − max_tokens</span>——百分比和退化判断都跑在这个「有效输入预算」上，否则一个大 <span class="mono">max_tokens</span>（如自定义 provider 的 65536）会让会话在压缩前就先撞 provider 的 400。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/context_compressor.py:742 · 简化</span></div><pre>def _compute_threshold_tokens(
+    context_length: int, threshold_percent: float, max_tokens: int | None = None,
+) -&gt; int:
+    &quot;&quot;&quot;Compute the compaction trigger threshold in tokens.
+
+    The base value is ``effective_input_budget * threshold_percent``, floored
+    at ``MINIMUM_CONTEXT_LENGTH`` so large-context models don't compress
+    prematurely at 50%. ...（docstring 略：#14690 退化窗口 / #43547 max_tokens 预留）
+    &quot;&quot;&quot;
+    effective_window = context_length - (max_tokens or 0)   # 扣掉输出预留
+    if effective_window &lt;= 0:
+        effective_window = context_length
+    pct_value = int(effective_window * threshold_percent)   # 默认 0.50
+    floored = max(pct_value, MINIMUM_CONTEXT_LENGTH)        # 64_000 floor
+    # If flooring pushed the threshold to/over the effective window it can
+    # never be reached. Trigger at 85% of the effective input budget so a
+    # minimum-context model rides most of its budget before compacting
+    # instead of wasting half.
+    if effective_window &gt; 0 and floored &gt;= effective_window:
+        return max(1, min(int(effective_window * ContextCompressor._MIN_CTX_TRIGGER_RATIO),
+                          effective_window - 1))
+    return floored</pre></div>
+
+<div class="figure">
+<svg viewBox="0 0 680 446" role="img" aria-label="上下文窗口分层解析瀑布图：自上而下依次为 config 覆盖、持久缓存、provider 逐个探测（Bedrock、自定义端点、本地、Anthropic、Codex、Nous、OpenRouter、models.dev）、硬编码默认兜底 256K，任一层解析出值即短路返回；右侧标注某些 provider 必须 bypass 陈旧缓存，包括 LM Studio、Nous、Codex、Kimi、MiniMax、Grok">
+  <text x="20" y="24" font-size="13.5" font-weight="700" fill="var(--ink)">上下文窗口分层解析 · 自上而下，命中即短路返回</text>
+  <text x="20" y="44" font-size="10.5" fill="var(--muted)">get_model_context_length()：同一个 model 名，窗口大小可能来自任一层</text>
+  <line x1="30" y1="79" x2="30" y2="384" stroke="var(--accent)" stroke-width="1.6"/>
+  <path d="M30,392 L25,382 L35,382 Z" fill="var(--accent)"/>
+  <text x="38" y="74" font-size="9" font-weight="700" fill="var(--accent-ink)">✓ 命中→返回</text>
+  <rect x="58" y="60" width="320" height="38" rx="9" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="70" y="80" font-size="12" font-weight="700" fill="var(--purple)">⓪ config 覆盖（最高优先）</text>
+  <text x="70" y="93" font-size="9" fill="var(--muted)">model.context_length · 自定义 provider per-model</text>
+  <line x1="58" y1="79" x2="34" y2="79" stroke="var(--accent)" stroke-width="1.4"/>
+  <path d="M30,79 L39,74 L39,84 Z" fill="var(--accent)"/>
+  <line x1="218" y1="98" x2="218" y2="109" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M218,112 L213,103 L223,103 Z" fill="var(--muted)"/>
+  <text x="228" y="109" font-size="9" fill="var(--red)">未命中</text>
+  <rect x="58" y="112" width="320" height="38" rx="9" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="70" y="132" font-size="12" font-weight="700" fill="var(--purple)">① 持久缓存（曾探测落盘）</text>
+  <text x="70" y="145" font-size="9" fill="var(--muted)">Nous URL 在此跳过，以门户 /v1/models 为准</text>
+  <line x1="58" y1="131" x2="34" y2="131" stroke="var(--accent)" stroke-width="1.4"/>
+  <path d="M30,131 L39,126 L39,136 Z" fill="var(--accent)"/>
+  <line x1="218" y1="150" x2="218" y2="161" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M218,164 L213,155 L223,155 Z" fill="var(--muted)"/>
+  <text x="228" y="161" font-size="9" fill="var(--red)">未命中</text>
+  <rect x="58" y="164" width="320" height="142" rx="9" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="70" y="183" font-size="11.5" font-weight="700" fill="var(--purple)">②–⑥ provider 逐个探测（按序）</text>
+  <rect x="66" y="194" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="100" y="213" text-anchor="middle" font-size="9" fill="var(--ink)">Bedrock</text>
+  <rect x="142" y="194" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="176" y="213" text-anchor="middle" font-size="9" fill="var(--ink)">自定义端点</text>
+  <rect x="218" y="194" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="252" y="213" text-anchor="middle" font-size="9" fill="var(--ink)">本地探测</text>
+  <rect x="294" y="194" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="328" y="213" text-anchor="middle" font-size="9" fill="var(--ink)">Anthropic</text>
+  <rect x="66" y="230" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="100" y="249" text-anchor="middle" font-size="9" fill="var(--ink)">Codex</text>
+  <rect x="142" y="230" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="176" y="249" text-anchor="middle" font-size="9" fill="var(--ink)">Nous</text>
+  <rect x="218" y="230" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="252" y="249" text-anchor="middle" font-size="9" fill="var(--ink)">OpenRouter</text>
+  <rect x="294" y="230" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="328" y="249" text-anchor="middle" font-size="9" fill="var(--ink)">models.dev</text>
+  <text x="70" y="280" font-size="9" fill="var(--muted)">探测成功即落盘缓存（LM Studio / Nous 除外，故下次仍重探）</text>
+  <text x="70" y="296" font-size="9" fill="var(--muted)">⑥ OpenRouter 带 Kimi 32k 守卫，避免低报覆盖真实窗口</text>
+  <line x1="58" y1="235" x2="34" y2="235" stroke="var(--accent)" stroke-width="1.4"/>
+  <path d="M30,235 L39,230 L39,240 Z" fill="var(--accent)"/>
+  <line x1="218" y1="306" x2="218" y2="317" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M218,320 L213,311 L223,311 Z" fill="var(--muted)"/>
+  <text x="228" y="317" font-size="9" fill="var(--red)">未命中</text>
+  <rect x="58" y="320" width="320" height="42" rx="9" fill="var(--panel-2)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="70" y="340" font-size="12" font-weight="700" fill="var(--purple)">⑦–⑨ 硬编码默认 → 兜底 256K</text>
+  <text x="70" y="354" font-size="9" fill="var(--muted)">按模型家族、最长键优先；都不中则 DEFAULT_FALLBACK_CONTEXT</text>
+  <line x1="58" y1="341" x2="34" y2="341" stroke="var(--accent)" stroke-width="1.4"/>
+  <path d="M30,341 L39,336 L39,346 Z" fill="var(--accent)"/>
+  <rect x="406" y="112" width="250" height="96" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="418" y="132" font-size="10" font-weight="700" fill="var(--ink)">⚠ 边角 provider 须 bypass 陈旧缓存</text>
+  <text x="418" y="151" font-size="9" fill="var(--muted)">缓存命中 ≠ 可信：窗口会变 / 曾错写</text>
+  <text x="418" y="170" font-size="9.5" fill="var(--ink)">LM Studio · Nous · Codex</text>
+  <text x="418" y="188" font-size="9.5" fill="var(--ink)">Kimi · MiniMax · Grok</text>
+  <text x="418" y="202" font-size="9" fill="var(--amber)">→ 丢弃旧值、重新探测</text>
+  <line x1="406" y1="140" x2="382" y2="133" stroke="var(--amber)" stroke-width="1.4"/>
+  <path d="M378,132 L388,130 L385,139 Z" fill="var(--amber)"/>
+  <rect x="24" y="384" width="632" height="42" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="44" y="404" font-size="11" font-weight="700" fill="var(--accent-ink)">✓ 命中即返回：解析出的 window 值</text>
+  <text x="44" y="419" font-size="9.5" fill="var(--ink)">→ 交给 _compute_threshold_tokens() 计算压缩触发阈值（不是固定百分比）</text>
+</svg>
+<div class="fig-cap"><b>分层解析瀑布</b>：<span class="mono">get_model_context_length()</span> 自上而下走 config 覆盖 → 持久缓存 → provider 逐个探测（Bedrock / 自定义 / 本地 / Anthropic / Codex / Nous / OpenRouter / models.dev）→ 硬编码默认兜底 256K，<strong>命中即短路返回</strong>；右侧那条是真正的坑——<strong>LM Studio / Nous / Codex / Kimi / MiniMax / Grok</strong> 必须主动 bypass 陈旧缓存，否则窗口算错。</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 372" role="img" aria-label="窗口到压缩阈值示意图：上行大窗口 256K，有效输入预算等于窗口减去 max_tokens 预留，触发阈值在有效预算的 50% 处且 floor 在 64K；下行小窗口 64K，50% 乘以预算被 floor 抬到整窗会永不触发，故退化为在 85% 处触发；底部标注窗口算错会导致压缩过早浪费缓存或过晚被 provider 拒">
+  <text x="20" y="24" font-size="13.5" font-weight="700" fill="var(--ink)">窗口 → 压缩阈值 · 有效输入预算 × 百分比，floor 在 64K</text>
+  <text x="20" y="44" font-size="10.5" fill="var(--muted)">阈值 = max(有效预算 × 0.50, 64K)；若 floor ≥ 窗口则退化为 85%（示意，非等比）</text>
+  <text x="20" y="74" font-size="11.5" font-weight="700" fill="var(--purple)">大窗口（resolved window = 256K）</text>
+  <rect x="40" y="84" width="600" height="34" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="40" y="84" width="258" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <rect x="556" y="84" width="84" height="34" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="160" y="105" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">已用 tokens（增长 →）</text>
+  <text x="598" y="100" text-anchor="middle" font-size="9" fill="var(--amber)">max_tokens</text>
+  <text x="598" y="111" text-anchor="middle" font-size="9" fill="var(--amber)">预留（输出）</text>
+  <line x1="298" y1="76" x2="298" y2="126" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="298" y="139" text-anchor="middle" font-size="9" fill="var(--red)">触发阈值 = 50% × 有效预算（≥ 64K floor）</text>
+  <text x="420" y="79" font-size="9" fill="var(--muted)">有效输入预算 = 窗口 − max_tokens</text>
+  <text x="335" y="105" font-size="11" fill="var(--red)">→ 越过即触发压缩</text>
+  <text x="20" y="172" font-size="11.5" font-weight="700" fill="var(--purple)">小窗口（resolved window = 64K，本地模型）</text>
+  <rect x="40" y="182" width="320" height="34" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="40" y="182" width="247" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <rect x="330" y="182" width="30" height="34" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="150" y="203" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">已用 tokens（增长 →）</text>
+  <line x1="287" y1="174" x2="287" y2="224" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="287" y="237" text-anchor="middle" font-size="9" fill="var(--red)">floor ≥ 窗口 → 退化 → 在 85% 触发</text>
+  <text x="372" y="195" font-size="9" fill="var(--muted)">50%×64K = 32K，但 floor 64K = 整窗</text>
+  <text x="372" y="208" font-size="9" fill="var(--muted)">→ 永不触发，故改 85%（_MIN_CTX_TRIGGER_RATIO）</text>
+  <rect x="20" y="296" width="640" height="60" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="34" y="316" font-size="10" font-weight="700" fill="var(--red)">⚠ 窗口算错的两种代价</text>
+  <text x="34" y="334" font-size="9.5" fill="var(--ink)">偏大 → 阈值过高 → 压缩太晚，先被 provider 400 拒（max_tokens 没扣，输入预算虚高）</text>
+  <text x="34" y="350" font-size="9.5" fill="var(--ink)">偏小 / floor 退化没处理 → 压缩太早，把还在缓存里的前缀白砸掉</text>
+</svg>
+<div class="fig-cap"><b>窗口 → 阈值</b>：触发点 = <span class="mono">max(有效输入预算 × 0.50, 64K)</span>；大窗口落在中段、小窗口因 floor 退化改在 <strong>85%</strong>。<span class="mono">max_tokens</span> 预留要从窗口里扣，否则<strong>过晚</strong>压缩会先撞 provider 400；floor 退化不处理则<strong>过早</strong>压缩、白砸缓存。</div>
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 把「模型」当成有状态资源来调度</div>
+  本章三套机制——<strong>凭证池</strong>、<strong>副 LLM 路由</strong>、<strong>context-length 解析</strong>——表面各管一摊，底层却共享同一个理念：<strong>模型不是一个无状态端点，而是需要调度的有状态资源。</strong>
+  <p style="margin:.5rem 0 0"><strong>三者各自的「状态」：</strong>① 凭证池给每把 key 维护 <span class="mono">OK / EXHAUSTED / DEAD</span> 状态与到期戳，熔断只在<strong>确凿的空 bucket</strong> 上触发、绝不反复试探；② 副 LLM 路由为每个副任务维护一条解析链与 <span class="mono">unhealthy</span> 隐藏窗口，把「调用模型」从一次动作变成可路由、可钉死、可熔断的调度；③ context-length 把「窗口多大」从常量变成<strong>分层解析出的运行期事实</strong>，再据此算压缩阈值。</p>
+  <p style="margin:.5rem 0 0"><strong>呼应全书两条主线：</strong>这正是<strong>韧性 / 可演化</strong>的体现——状态外置、失败有界、错值可纠（陈旧缓存主动 bypass）；同时副任务路由也守住了<strong>窄腰</strong>：核心不必把多 provider、多模型的选路逻辑内嵌进主循环，而是交给一个独立解析器按 config 调度，核心只管「拿到一个能用的 client」。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>凭证池是状态机</strong>：每把 key 在 <span class="mono">OK → EXHAUSTED → DEAD</span> 间流转——429 限流冷却 <strong>1 小时</strong>、401 认证失败 <strong>5 分钟</strong>，<span class="mono">token_revoked</span> 类永久失效直接 <span class="mono">DEAD</span>；铁律是<strong>绝不 re-probe 一个已确认空的 bucket</strong>，只在 <span class="mono">remaining=0</span> 的确凿证据下熔断。</li>
+    <li><strong>副 LLM 三段路由</strong>：① 主 provider+model（运行期同步）→ ② 任务级 <span class="mono">fallback_chain</span> 与顶层 fallback → ③ 硬编码 discovery 链；每个副任务可在 <span class="mono">auxiliary.&lt;task&gt;</span> 下<strong>per-task 钉死</strong>，命中 402 的 provider 被标 <span class="mono">unhealthy</span> 藏 <strong>10 分钟</strong>跳过。</li>
+    <li><strong>窗口先解析、阈值再计算</strong>：<span class="mono">get_model_context_length()</span> 走 config → 持久缓存 → provider 探测（Bedrock / 自定义 / 本地 / Anthropic / Codex / Nous / OpenRouter / models.dev）→ 硬编码默认（兜底 256K）的<strong>分层链</strong>，命中即返回；压缩阈值由此而来，<strong>不是固定百分比</strong>。</li>
+    <li><strong>缓存命中 ≠ 可信</strong>：LM Studio / Nous / Codex / Kimi / MiniMax / Grok 等边角 provider 必须<strong>主动 bypass 陈旧缓存</strong>，否则窗口算错——过早压缩（白砸缓存）或过晚（超窗被 provider 400 拒）。</li>
+    <li><strong>阈值三步</strong>：基准 = 有效输入预算（<span class="mono">window − max_tokens</span>）× <strong>0.50</strong>，floor 在 <strong>64K</strong>（<span class="mono">MINIMUM_CONTEXT_LENGTH</span>）；当 floor ≥ 窗口（小模型退化）时改在 <strong>85%</strong>（<span class="mono">_MIN_CTX_TRIGGER_RATIO</span>）触发，避免永不压缩。</li>
+    <li><strong>共同理念</strong>：三套机制都把模型当成<strong>需要调度的有状态资源</strong>——轮换 / 熔断、路由 / 钉死、解析 / 算阈值，而非一个随叫随到的无状态插座；这是 agent 韧性与窄腰的又一次落地。</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. 凭证池为什么绝不重试一个刚被确认耗尽 / 失效（EXHAUSTED / DEAD）的 key？</div>
+  <ol class="opts">
+    <li>为了省内存——池里 key 越少轮换越快</li>
+    <li>由模型随机决定这把 key 要不要重试</li>
+    <li>重试一个已确认空的 bucket 必然再失败、白费一次往返——DEAD 无条件排除，EXHAUSTED 也只在 reset_at 或分档 TTL（429 给 1 小时、401 给 5 分钟）到点后才回到候选</li>
+    <li>key 限流后会自己悄悄复活，随手再戳一下就能用</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：C</strong>。这撞的是凭证池的铁律——绝不反复试探一个已确认空的 bucket。失败时 mark_exhausted_and_rotate() 给闯祸的那把 key 盖一个到期戳、立刻重选下一把，而不是删掉它、也不是每隔几秒再戳一下问「好了没」。DEAD（401 token_revoked / invalid_grant 这类永久失效）在 select() 里直接 continue 排除，只有用户重新登录写回新 token 才复活；EXHAUSTED 只有等 last_error_reset_at 或分档 TTL（429=1 小时、401=5 分钟）到点才清回 OK。在那之前重试，撞的还是同一堵明知锁着的墙，必然再失败、白白浪费一次往返。</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. 副 LLM 路由 _resolve_auto 的第一优先级（第 ① 步）是什么？</div>
+  <ol class="opts">
+    <li>从所有可用模型里随机挑一个</li>
+    <li>当前会话运行期的主 provider + 主 model——由 set_runtime_main() 同步进来的那一份，而不是 config.yaml 里可能已经陈旧的默认值</li>
+    <li>硬编码 discovery 链的头一个：openrouter</li>
+    <li>全网最便宜的那个模型</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：B</strong>。_resolve_auto 的第 ① 步就是「先用你当前的主 provider + 主 model」，关键是用运行期的那一份：每轮开头 set_runtime_main() 把 CLI / 网关临时切到的 provider、model、base_url、key 同步进来，副任务于是跟主对话用同一个模型、同一把已验证可用的 key，行为可预期，不会偷偷掉到某个便宜的默认模型。openrouter 只是第 ③ 步硬编码 discovery 链的兜底头部，只有当主 provider 不可用、且用户配置的 fallback 也没命中时才轮到它。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>举一个你会给某个副任务（上下文压缩 / 起标题 / 视觉识图）单独「钉死」provider + model 的场景，说明你想避免的具体失败（比如视觉被静默落到只有文本的便宜模型上、每次看图都 404），以及它对应哪条设计线。</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>运行时韧性：中断·后台·文件</h1>
+
+<p class="lead">一个跑了几十轮、还开着后台进程、正在改文件的 agent，要怎么<strong>安全地急停、可靠地知道后台干完没、原子地落盘</strong>？这一章拆开 Hermes 在运行时最容易出正确性 bug 的三套机制。</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 类比 · 飞行中的紧急程序</div>
+  急停从来不是<strong>瞬间</strong>的——飞行员拉杆之后，飞机要滑到<strong>下一个稳定点</strong>才真正改出（这正是<strong>协作式中断</strong>：信号在某个边界才被收下，而不是发出的那一刻）。
+  <p style="margin:.6rem 0 0">同样的克制在这一章还会出现两次。后台那台引擎，要么<strong>真的还在转</strong>、要么早就停了——仪表必须<strong>如实</strong>反映，而且<strong>同一个状态不能重复报警</strong>（通知去重）。要改飞行计划，你不会在生效的那份上直接涂改：先写一份<strong>草稿</strong>、<strong>校验无误，再原子地换上</strong>（写临时文件，然后 rename）。三个运行时陷阱，一条共同的暗线：一次<strong>停</strong>、一次<strong>看</strong>、一次<strong>存</strong>，都有那么一刻，「看起来完成了」和「真的完成了」会悄悄分叉。</p>
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 宏观 · 运行时的三个正确性陷阱</div>
+  运行时——真正负责<strong>停、看、存</strong>的那一层——藏着三处「直觉模型是错的」的地方：
+  <p style="margin:.6rem 0 0"><strong>① 中断是协作式的，不是抢占式的。</strong>按下 <span class="mono">/stop</span> 只是<strong>置一面标志</strong>；主循环在它的<strong>边界</strong>（两轮迭代之间）才把它收下，而中断对<strong>子代理的传播是手工接线</strong>的——父代理遍历一张 <span class="mono">_active_children</span> 名册、逐个调 <span class="mono">child.interrupt()</span>。漏掉登记（或像异步委派那样主动 detach），子代理就<strong>永远收不到</strong>这次急停。</p>
+  <p><strong>② 后台的「持久」几乎全是进程内幻觉。</strong>一个 <span class="mono">background=true</span> 的 <span class="mono">delegate_task</span> 虽然脱离了当前回合，却仍是<strong>进程本地</strong>的——进程一死它就没了。真正能<strong>熬过重启</strong>的持久，得靠 <span class="mono">cronjob</span> 或后台终端任务，而不是一个活在内存里的 future。</p>
+  <p><strong>③ 落盘的原子性，挂在一个毫不起眼的 rename 上。</strong>一个写到一半的配置或会话文件就是损坏；正确的做法是先写临时文件，再<strong>原子地 rename</strong> 把它换上，让读者要么看到旧文件、要么看到完整的新文件，<strong>永远不会读到撕裂的中间态</strong>。</p>
+  <p>三个陷阱各自独立，却共享同一条主线：在每一个运行时的边缘，<strong>「看起来完成」都不等于「真的完成」</strong>——而 bug 就住在这条缝里。</p>
+</div>
+
+<p>三套机制里，先拆最微妙的第一套：一次「急停」到底怎么在一个正在运行的 agent 里传播，以及为什么它<strong>那么容易传不到子代理</strong>。</p>
+
+<h3>🔬 28.1 · 中断传播：协作式急停，子代理靠显式扇出</h3>
+<p>用户按下 <span class="mono">/stop</span>（或网关收到一条中断指令），调用的是 <span class="mono">AIAgent.interrupt()</span>。它做两件事：把 <span class="mono">agent._interrupt_requested</span> 置为 <span class="mono">True</span>、记下触发它的那条新消息，然后调用 <span class="mono">_set_interrupt(True, 执行线程 id)</span>，给<strong>这个 agent 自己的执行线程</strong>盖一个线程级中断信号，让正跑在该线程上的工具（比如一条卡在网络 I/O 上的终端命令）下次自查时能提前退出。注意这个信号是<strong>按线程定向</strong>的：网关里同进程还跑着别的 agent，它们的线程不会被误伤。</p>
+<p>但标志置位<strong>不是</strong>中断被「收下」的地方——那一步发生在<strong>主工具循环的边界</strong>。<span class="mono">agent/conversation_loop.py</span> 里的 <span class="mono">while</span> 循环每进入新一轮，先 poll 一次 <span class="mono">agent._interrupt_requested</span>：命中就把 <span class="mono">interrupted</span> 置真、记下 <span class="mono">_turn_exit_reason = "interrupted_by_user"</span>、打一行「Breaking out of tool loop」，然后 <span class="mono">break</span> 退出循环。关键在于：这个检查在<strong>两轮迭代之间</strong>，而不在一次 API 调用、或一个工具执行的<strong>正中间</strong>。</p>
+<p>于是 Hermes 的中断是<strong>协作式（cooperative）而非抢占式（preemptive）</strong>——Python 没法从外部硬杀一个线程，所以没有任何地方能「瞬间叫停」正在执行的代码，一切都靠各处<strong>自愿轮询那面标志</strong>。除了循环边界，迭代内部还有几处自查点：流式响应的逐 token 回调里会检查 <span class="mono">_interrupt_requested</span> 并提前掐断；非流式 API 调用挂着一个后台检查循环，一旦发现中断就<strong>强制关闭 httpx 客户端</strong>，让阻塞的请求立刻抛错返回；失败重试的退避睡眠则<strong>每 200ms 轮询一次</strong>（<span class="mono">time.sleep(0.2)</span>），中断一到就放弃重试。但只要某段代码<strong>不去检查</strong>这面标志（一个纯 CPU 的紧循环、一个不配合的第三方调用），它就会一路跑到自己结束、或撞上自己的超时——循环要等它把控制权交回来，才能在下一个边界真正停下。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py:589</span></div><pre>    while (api_call_count &lt; agent.max_iterations and agent.iteration_budget.remaining &gt; 0) or agent._budget_grace_call:
+        # Reset per-turn checkpoint dedup so each iteration can take one snapshot
+        agent._checkpoint_mgr.new_turn()
+
+        # Check for interrupt request (e.g., user sent new message)
+        if agent._interrupt_requested:
+            interrupted = True
+            _turn_exit_reason = "interrupted_by_user"
+            if not agent.quiet_mode:
+                agent._safe_print("\n⚡ Breaking out of tool loop due to interrupt...")
+            break</pre></div>
+<p>第二个、也更容易踩的坑：中断<strong>对子代理的传播是显式手工接线的</strong>，并非免费。<span class="mono">interrupt()</span> 的末尾会遍历 <span class="mono">self._active_children</span> 这张<strong>活跃子代理名册</strong>，对每一个调 <span class="mono">child.interrupt(message)</span>——而 <span class="mono">child.interrupt()</span> 自己又会遍历它的 <span class="mono">_active_children</span>，于是中断<strong>递归扇出</strong>到孙代理、曾孙代理。但这条链能成立，<strong>完全依赖每个被 spawn 出来的子代理都把自己登记进父代理的 <span class="mono">_active_children</span></strong>（见 <span class="mono">delegate_tool.py</span> 里「Register child for interrupt propagation」那一步），并在跑完时注销。一旦某条委派路径<strong>忘了登记、或主动 detach</strong>，父代理的 <span class="mono">/stop</span> 就会<strong>静默地传不到</strong>那个子代理，它会在自己的流式 / 工具循环里<strong>继续跑</strong>。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">run_agent.py:2433</span></div><pre>        # Propagate interrupt to any running child agents (subagent delegation)
+        with self._active_children_lock:
+            children_copy = list(self._active_children)
+        for child in children_copy:
+            try:
+                child.interrupt(message)
+            except Exception as e:
+                logger.debug("Failed to propagate interrupt to child agent: %s", e)</pre></div>
+<p>异步 / 后台委派正是<strong>故意 detach</strong> 的：一个 <span class="mono">background=true</span> 的批量委派会把子代理从父代理的 <span class="mono">_active_children</span> 里<strong>摘掉</strong>（它们的生命周期改由异步注册表接管，而非这一回合），转而注册一个独立的 <span class="mono">interrupt_fn</span> 去取消它们。这是设计，不是 bug——但它恰好说明了为什么「中断会自己传下去」是个危险假设：<strong>扇出是一条要靠人手维护的不变量，而不是语言级特性</strong>。新增任何一条委派路径时，谁负责把这次急停带到子代理那里，都必须<strong>显式想清楚</strong>。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 432" role="img" aria-label="中断扇出图：中心 agent.interrupt() 置 _interrupt_requested 为 True，向四条路径传播——主循环边界轮询、子代理需显式 child.interrupt()、流式回调逐 token 查标志、retry 退避每 200ms 轮询；子代理那条标红，强调必须显式传播，漏登记或 detach 就传不到">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">中断扇出 · 一面标志，四条协作式传播路径</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">interrupt() 设标志并给本线程盖信号，再由各处自愿轮询收下；唯子代理靠显式扇出</text>
+  <rect x="240" y="58" width="200" height="62" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="340" y="84" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">agent.interrupt()</text>
+  <text x="340" y="104" text-anchor="middle" font-size="9.5" fill="var(--muted)">_interrupt_requested = True</text>
+  <line x1="340" y1="120" x2="92" y2="224" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M92,232 L87,223 L97,223 Z" fill="var(--muted)"/>
+  <line x1="340" y1="120" x2="257" y2="224" stroke="var(--red)" stroke-width="1.8"/>
+  <path d="M257,232 L252,223 L262,223 Z" fill="var(--red)"/>
+  <line x1="340" y1="120" x2="422" y2="224" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M422,232 L417,223 L427,223 Z" fill="var(--muted)"/>
+  <line x1="340" y1="120" x2="587" y2="224" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M587,232 L582,223 L592,223 Z" fill="var(--muted)"/>
+  <rect x="16" y="232" width="152" height="120" rx="10" fill="var(--panel)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="92" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">主循环边界</text>
+  <text x="92" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">loop boundary</text>
+  <line x1="26" y1="281" x2="158" y2="281" stroke="var(--line)"/>
+  <text x="26" y="301" font-size="9.5" fill="var(--ink)">每轮迭代先 poll 标志</text>
+  <text x="26" y="318" font-size="9.5" fill="var(--ink)">命中即 break 退循环</text>
+  <text x="26" y="341" font-size="9" fill="var(--muted)">conversation_loop.py:594</text>
+  <rect x="181" y="232" width="152" height="120" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="257" y="257" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">子代理 · 显式传播</text>
+  <text x="257" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">_active_children fan-out</text>
+  <line x1="191" y1="281" x2="323" y2="281" stroke="var(--line)"/>
+  <text x="191" y="301" font-size="9.5" fill="var(--ink)">遍历名册逐个</text>
+  <text x="191" y="318" font-size="9.5" fill="var(--ink)">child.interrupt()</text>
+  <text x="191" y="341" font-size="9" font-weight="700" fill="var(--red)">⚠ 漏登记 / detach 就断链</text>
+  <rect x="346" y="232" width="152" height="120" rx="10" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="422" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="var(--purple)">流式回调</text>
+  <text x="422" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">streaming delta</text>
+  <line x1="356" y1="281" x2="488" y2="281" stroke="var(--line)"/>
+  <text x="356" y="301" font-size="9.5" fill="var(--ink)">逐 token 查标志</text>
+  <text x="356" y="318" font-size="9.5" fill="var(--ink)">强关 httpx 提前断</text>
+  <text x="356" y="341" font-size="9" fill="var(--muted)">force-close client</text>
+  <rect x="511" y="232" width="152" height="120" rx="10" fill="var(--panel)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="587" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="var(--amber)">retry 退避 poll</text>
+  <text x="587" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">backoff sleep</text>
+  <line x1="521" y1="281" x2="653" y2="281" stroke="var(--line)"/>
+  <text x="521" y="301" font-size="9.5" fill="var(--ink)">每 200ms 轮询一次</text>
+  <text x="521" y="318" font-size="9.5" fill="var(--ink)">time.sleep(0.2)</text>
+  <text x="521" y="341" font-size="9" fill="var(--muted)">中断到即放弃重试</text>
+  <rect x="16" y="372" width="648" height="48" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="340" y="392" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">协作式：没有线程被硬杀</text>
+  <text x="340" y="410" text-anchor="middle" font-size="9.5" fill="var(--ink)">四条路径全靠各处自愿轮询那面标志——某段不检查的代码，会一路跑到自己结束才停</text>
+</svg>
+<div class="fig-cap"><b>中断扇出</b>：<span class="mono">interrupt()</span> 设标志 + 给本线程盖信号后，由四条路径各自<strong>自愿轮询</strong>收下——主循环边界、流式回调、retry 退避（每 <strong>200ms</strong>）都靠自查；唯独<strong>子代理</strong>要靠父代理遍历 <span class="mono">_active_children</span> 显式 <span class="mono">child.interrupt()</span> 才传得到，漏登记 / detach 就断链。</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 356" role="img" aria-label="协作式与抢占式中断时序对比：上轨 Hermes 协作式，工具执行到一半时 /stop 到达，标志置位后进入挂起等待，直到下一个循环边界才真正 break；下轨抢占式对照（Hermes 不这么做），同一时刻当场硬停，用虚线表示">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">cooperative vs preemptive · 同一刻中断，停在不同时点</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">中断在工具执行中途到达——协作式等到循环边界才收下，抢占式当场杀线程</text>
+  <text x="20" y="92" font-size="11" font-weight="700" fill="var(--accent-ink)">Hermes · 协作式</text>
+  <line x1="140" y1="120" x2="660" y2="120" stroke="var(--line)"/>
+  <rect x="140" y="104" width="160" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="220" y="124" text-anchor="middle" font-size="9.5" fill="var(--blue)">工具执行中</text>
+  <rect x="300" y="104" width="170" height="32" rx="6" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="385" y="124" text-anchor="middle" font-size="9" fill="var(--amber)">挂起等待 · 标志已置位</text>
+  <line x1="300" y1="74" x2="300" y2="178" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="300" y="68" text-anchor="middle" font-size="9.5" fill="var(--red)">⚡ /stop 到达（执行中途）</text>
+  <line x1="470" y1="92" x2="470" y2="150" stroke="var(--accent)" stroke-width="1.8"/>
+  <text x="470" y="86" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">↧ 循环边界</text>
+  <rect x="478" y="104" width="158" height="32" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="557" y="124" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">✓ 真正 break 退出</text>
+  <text x="140" y="158" font-size="9" fill="var(--muted)">中断在两轮迭代之间被收下——执行中的工具先跑到自查点或边界，循环才交回控制权</text>
+  <line x1="300" y1="178" x2="300" y2="236" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <text x="20" y="258" font-size="11" font-weight="700" fill="var(--muted)">抢占式 · 对照（Hermes 不这么做）</text>
+  <line x1="140" y1="286" x2="660" y2="286" stroke="var(--line)" stroke-dasharray="4 3"/>
+  <rect x="140" y="270" width="160" height="32" rx="6" fill="var(--panel-2)" stroke="var(--muted)" stroke-dasharray="4 3"/>
+  <text x="220" y="290" text-anchor="middle" font-size="9.5" fill="var(--muted)">执行中</text>
+  <line x1="300" y1="240" x2="300" y2="322" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="300" y="234" text-anchor="middle" font-size="9.5" fill="var(--red)">⚡ /stop 到达</text>
+  <rect x="304" y="270" width="158" height="32" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="383" y="290" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">✗ 当场硬停</text>
+  <text x="140" y="326" font-size="9" fill="var(--muted)">抢占式会立刻杀掉线程——但 Python 做不到，所以 Hermes 只能用协作式轮询</text>
+</svg>
+<div class="fig-cap"><b>协作式 vs 抢占式</b>：同一刻 <span class="mono">/stop</span> 在工具执行中途到达——Hermes <strong>协作式</strong>把它挂起到下一个循环边界才 <span class="mono">break</span>；抢占式（对照）会当场杀线程，而 Python 做不到，故只能靠各处轮询那面标志。</div>
+</div>
+
+<p>急停讲完，看第二个陷阱：一个 <span class="mono">background=true</span> 的进程到底<strong>活在哪</strong>、它那声「干完了」怎么做到<strong>只报一次</strong>、以及为什么它几乎<strong>熬不过一次重启</strong>。</p>
+
+<h3>🔬 28.2 · 后台进程生命周期：内存登记、去重通知、尽力恢复</h3>
+<p>当 agent 跑起一条 <span class="mono">terminal(background=True)</span>，进程并不直接交给操作系统不管，而是登记进 <span class="mono">ProcessRegistry</span>——一张<strong>进程内</strong>的注册表，核心是两个字典：<span class="mono">_running</span>（在跑的）与 <span class="mono">_finished</span>（跑完的，留 30 分钟 TTL）。每条 <span class="mono">ProcessSession</span> 挂着一个<strong>滚动输出缓冲</strong>（上限 <span class="mono">MAX_OUTPUT_CHARS</span> = 200KB，超了从头截）、可选的 <span class="mono">watch_patterns</span>、以及一个 <span class="mono">notify_on_complete</span> 标志；后台 reader 线程不停把子进程输出泵进缓冲，agent 则用 <span class="mono">wait</span> / <span class="mono">poll</span> / <span class="mono">kill</span> / 读 log 这几个动作去等它、查它、杀它。</p>
+<p>进程<strong>退出</strong>（reader 读到 EOF）或<strong>被 kill</strong> 时，都会走到同一个出口 <span class="mono">_move_to_finished()</span>。它在锁内把 session 从 <span class="mono">_running</span> 弹出、塞进 <span class="mono">_finished</span>，置上完成事件（唤醒所有阻塞在 <span class="mono">wait()</span> 上的调用），再 <span class="mono">_write_checkpoint()</span> 落一次盘。<strong>关键在最后那个 <span class="mono">if</span></strong>：只有当 <span class="mono">notify_on_complete</span> 开着、且<strong>这一次调用确实是第一次</strong>把它移走时，才往 <span class="mono">completion_queue</span> 里塞一条完成通知。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/process_registry.py:1022 · 简化</span></div><pre>    def _move_to_finished(self, session: ProcessSession):
+        with self._lock:
+            was_running = self._running.pop(session.id, None) is not None
+            self._finished[session.id] = session
+        session._completion_event.set()
+        self._write_checkpoint()
+
+        # Only enqueue completion notification on the FIRST move.  Without
+        # this guard, kill_process() and the reader thread can both call
+        # _move_to_finished(), producing duplicate [IMPORTANT: ...] messages.
+        if was_running and session.notify_on_complete:
+            from tools.ansi_strip import strip_ansi
+            output_tail = strip_ansi(session.output_buffer[-2000:]) if session.output_buffer else ""
+            self.completion_queue.put({
+                "type": "completion",
+                "session_id": session.id,
+                "session_key": session.session_key,
+                "command": session.command,
+                "exit_code": session.exit_code,
+                "completion_reason": session.completion_reason,
+                "termination_source": session.termination_source,
+                "output": output_tail,
+            })</pre></div>
+<p>那个「第一次」靠 <span class="mono">was_running = self._running.pop(...) is not None</span> 拿到——这就是<strong>第一道去重闸</strong>。<span class="mono">_move_to_finished()</span> 是<strong>幂等</strong>的：<span class="mono">kill_process()</span> 和 reader 线程可能<strong>同时</strong>发现进程没了、<strong>都来调它一次</strong>，但字典的 <span class="mono">pop</span> 只有一方拿得到非 <span class="mono">None</span>，于是只有那一方 <span class="mono">was_running</span> 为真、只有它入队。没有这道守卫，一次退出就会被报两遍 <span class="mono">[IMPORTANT: ...]</span>。这是生产端（谁来通知）的去重。</p>
+<p>但入队不等于一定送达。<strong>第二道闸在消费端</strong>：CLI 的 drain 与网关 / TUI 的 watcher 取走这条通知前，都会先查 <span class="mono">_completion_consumed</span>——只要 agent 已用阻塞 <span class="mono">wait()</span> 或完整 <span class="mono">read_log()</span> 把输出拿到手，就跳过；CLI 还额外查 <span class="mono">_poll_observed</span>（只读的 <span class="mono">poll()</span> 当场看到了退出、结果已在同一回合内联返回，而网关 / TUI <strong>故意不查</strong>这个，免得一次只读探测压掉它那次自主送达）。命中任一集合，drain 就<strong>跳过</strong>这条通知，避免重复注入一条 <span class="mono">[SYSTEM: ...]</span>。两道闸合起来保证：一次完成<strong>至多报一次</strong>，agent 早已知道就<strong>一次都不报</strong>。</p>
+<p>还有一条路也会汇进 <span class="mono">notify_on_complete</span>：<strong>watch 限流降级</strong>。带 <span class="mono">watch_patterns</span> 的进程，命中通知被严格限速——每 <span class="mono">WATCH_MIN_INTERVAL_SECONDS</span>（15 秒）至多一条，落在冷却窗里的命中会被丢弃并记<strong>一次 strike</strong>。连着 <span class="mono">WATCH_STRIKE_LIMIT</span> = <strong>3</strong> 个 strike 窗口后，这个 session 的 watch 被<strong>永久禁用</strong>（<span class="mono">_watch_disabled = True</span>），同时<strong>翻转</strong> <span class="mono">notify_on_complete = True</span>——一个本来狂刷中间态的 watcher，就这样自动降级成「进程真正退出时只报一次」，再走回上面那条唯一出口。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/process_registry.py:65</span></div><pre># After WATCH_STRIKE_LIMIT consecutive strike windows, watch_patterns for that
+# session is permanently disabled and the session falls back to notify_on_complete
+# semantics (one notification when the process actually exits).
+WATCH_MIN_INTERVAL_SECONDS = 15   # Minimum spacing between consecutive watch matches
+WATCH_STRIKE_LIMIT = 3            # Strikes in a row → disable watch + promote to notify_on_complete</pre></div>
+<p>现在说<strong>最大的坑</strong>。上面这一整套——两个字典、输出缓冲、完成事件、reader 与 watcher 线程——全都<strong>活在进程内存里</strong>。<span class="mono">_move_to_finished()</span> 里那次 <span class="mono">_write_checkpoint()</span> 会把状态写到 <span class="mono">CHECKPOINT_PATH</span>（<span class="mono">processes.json</span>），但它<strong>仅为网关崩溃恢复</strong>而存在，而且恢复是<strong>尽力而为</strong>的：网关重启后只会重新登记那些 <strong>detached 的 host-PID 进程</strong>，还必须校验检查点里记下的 <span class="mono">host_start_time</span> 与当前 PID 仍匹配（否则 PID 可能已被内核回收给别的进程，贸然认领会误杀陌生进程）。被恢复的 session 一律标 <span class="mono">detached=True</span>——<strong>读不回输出，只能报状态 + kill</strong>。换句话说，检查点恢复的是「还能不能查 / 能不能杀」的<strong>句柄</strong>，不是进程的<strong>完整状态</strong>。</p>
+<p>所以 <span class="mono">background=true</span> 的「持久」几乎全是<strong>进程内幻觉</strong>：进程一重启，内存态全丢，detached 恢复也只是尽力而为的状态 / kill 句柄。要让任务<strong>真的跨重启存活</strong>，得用真正落地的机制——<span class="mono">cron</span> 定时任务，或 <span class="mono">terminal(background=True, notify_on_complete=True)</span> 把进程交给系统托管、完成时回调（正是 ch26 的 E6 那条对策）。把「脱离本轮」误当成「持久化」，就是后台任务凭空消失的根因。</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 430" role="img" aria-label="后台进程生命周期与完成通知去重图。中间竖向主线：running 进程退出或被 kill 后进入 _move_to_finished，在锁内把 session 从 _running 弹出并塞入 _finished、置完成事件、写检查点，只有第一次移走且 notify_on_complete 为真才把通知放进 completion_queue，最后至多送出一次。左侧分支：带 watch_patterns 的进程命中被限流，每 15 秒至多一条，落在冷却窗内记一次 strike，连满 WATCH_STRIKE_LIMIT 三次后禁用 watch 并翻转 notify_on_complete，汇入同一出口。右侧两道去重闸：闸一 was_running 守卫在生产端，kill 与 reader 线程都会调用但只有一方 pop 成功才入队；闸二在消费端，_completion_consumed 与 CLI 专用的 _poll_observed 集合命中时让 drain 跳过该通知，避免重复注入">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">后台进程生命周期 · 完成通知的两道去重闸</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">一条主线 running → _move_to_finished → 通知；watch 限流满 3 次翻转 notify_on_complete，最终经两道闸至多发一次</text>
+  <rect x="265" y="70" width="170" height="64" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="350" y="94" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">running 进程</text>
+  <text x="350" y="112" text-anchor="middle" font-size="9" fill="var(--muted)">_running{} · 输出缓冲 200KB</text>
+  <text x="350" y="127" text-anchor="middle" font-size="9" fill="var(--muted)">reader 线程 · wait / poll / kill / log</text>
+  <line x1="350" y1="134" x2="350" y2="168" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M350,176 L345,167 L355,167 Z" fill="var(--muted)"/>
+  <text x="358" y="158" font-size="9" fill="var(--muted)">退出 / 被 kill</text>
+  <rect x="245" y="176" width="210" height="78" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="350" y="198" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">_move_to_finished()</text>
+  <text x="350" y="216" text-anchor="middle" font-size="9" fill="var(--muted)">锁内 _running.pop → _finished</text>
+  <text x="350" y="231" text-anchor="middle" font-size="9" fill="var(--muted)">set 完成事件 + _write_checkpoint</text>
+  <text x="350" y="248" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">闸① was_running 守卫</text>
+  <line x1="350" y1="254" x2="350" y2="286" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M350,294 L345,285 L355,285 Z" fill="var(--muted)"/>
+  <text x="358" y="276" font-size="9" fill="var(--muted)">首次 + notify_on_complete</text>
+  <rect x="265" y="294" width="170" height="52" rx="10" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="350" y="316" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--purple)">completion_queue</text>
+  <text x="350" y="334" text-anchor="middle" font-size="9" fill="var(--muted)">type: completion 入队</text>
+  <line x1="350" y1="346" x2="350" y2="376" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M350,384 L345,375 L355,375 Z" fill="var(--muted)"/>
+  <rect x="245" y="386" width="210" height="38" rx="9" fill="var(--panel-2)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="350" y="410" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">至多发一次（已知道就一次都不发）</text>
+  <rect x="18" y="176" width="182" height="78" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="109" y="197" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">watch 命中限流</text>
+  <text x="109" y="214" text-anchor="middle" font-size="9" fill="var(--ink)">每 15s 至多 1 条</text>
+  <text x="109" y="229" text-anchor="middle" font-size="9" fill="var(--ink)">落冷却窗 = 1 strike</text>
+  <text x="109" y="245" text-anchor="middle" font-size="9" font-weight="700" fill="var(--ink)">连满 3 次 → 禁 watch + 翻转</text>
+  <line x1="200" y1="208" x2="241" y2="208" stroke="var(--amber)" stroke-width="1.6"/>
+  <path d="M249,208 L240,203 L240,213 Z" fill="var(--amber)"/>
+  <text x="205" y="266" font-size="9" fill="var(--muted)">notify_on_complete=True · 同一出口</text>
+  <rect x="470" y="176" width="192" height="78" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="478" y="196" font-size="10" font-weight="700" fill="var(--red)">闸① 生产端去重</text>
+  <text x="478" y="213" font-size="9" fill="var(--ink)">kill 与 reader 线程都会调</text>
+  <text x="478" y="228" font-size="9" fill="var(--ink)">pop 只有一方拿到非 None</text>
+  <text x="478" y="243" font-size="9" fill="var(--ink)">只有它入队，否则报两遍</text>
+  <line x1="470" y1="208" x2="457" y2="208" stroke="var(--red)" stroke-width="1.3" stroke-dasharray="3 3"/>
+  <rect x="470" y="294" width="192" height="92" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="478" y="314" font-size="10" font-weight="700" fill="var(--red)">闸② 消费端去重</text>
+  <text x="478" y="331" font-size="9" fill="var(--ink)">_completion_consumed（已 wait/log）</text>
+  <text x="478" y="346" font-size="9" fill="var(--ink)">_poll_observed（CLI 只读 poll）</text>
+  <text x="478" y="361" font-size="9" fill="var(--ink)">命中 → drain 跳过该通知</text>
+  <text x="478" y="376" font-size="9" fill="var(--ink)">免重复注入 [SYSTEM: ...]</text>
+  <line x1="470" y1="340" x2="437" y2="362" stroke="var(--red)" stroke-width="1.3" stroke-dasharray="3 3"/>
+</svg>
+<div class="fig-cap"><b>生命周期 + 通知去重</b>：进程退出 / 被 kill → <span class="mono">_move_to_finished()</span> 锁内移表、置事件、写检查点；<strong>闸①</strong> <span class="mono">was_running</span> 让重复调用只入队一次，<strong>闸②</strong>消费端 <span class="mono">_completion_consumed</span> / <span class="mono">_poll_observed</span> 让已 wait / poll 过的通知被 drain 跳过——<strong>至多发一次</strong>。watch 限流满 <span class="mono">WATCH_STRIKE_LIMIT</span>=3 会禁 watch 并翻转 <span class="mono">notify_on_complete</span>，汇入同一出口。</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="后台任务持久性三档对比。第一档进程内 background：delegate_task 后台或终端后台，_running 与 _finished 字典、输出缓冲、完成事件、reader 与 watcher 线程全在进程内存里，重启即全部丢失。第二档 detached：状态写在 processes.json 检查点，仅供网关崩溃恢复，重启后只重新登记 host-PID 仍存活且 start_time 匹配的进程，且只能报状态加 kill、读不回输出，是尽力而为而非持久态。第三档 cron：用 cron 定时任务或 terminal 后台加 notify_on_complete，把进程交给调度器与系统托管、完成回调，才是真正跨重启持久。底部主线：durability 几乎全是进程内幻觉，要跨重启用 cron 或终端后台，别押一个活在内存里的 future，呼应 ch26 的 E6">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">durability 三档 · 哪些状态能熬过一次重启</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">进程内 background（全在内存）/ detached（host-PID 尽力恢复）/ cron（真跨重启持久）</text>
+  <rect x="20" y="70" width="200" height="214" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="20" y="70" width="200" height="44" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="120" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">进程内 background</text>
+  <text x="120" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">delegate_task(bg) / 终端后台</text>
+  <text x="32" y="143" font-size="9.5" fill="var(--muted)">✗ _running / _finished 字典</text>
+  <text x="32" y="169" font-size="9.5" fill="var(--muted)">✗ 输出缓冲 + 完成事件</text>
+  <text x="32" y="195" font-size="9.5" fill="var(--muted)">✗ reader / watcher 线程</text>
+  <rect x="38" y="246" width="164" height="28" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="120" y="264" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">重启 = 内存态全丢</text>
+  <rect x="240" y="70" width="200" height="214" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="240" y="70" width="200" height="44" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="340" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--amber)">detached（host-PID）</text>
+  <text x="340" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">processes.json · 仅网关恢复</text>
+  <text x="252" y="143" font-size="9.5" fill="var(--ink)">✓ host-PID + start_time 校验</text>
+  <text x="252" y="169" font-size="9.5" fill="var(--ink)">✓ 报状态 + kill · detached</text>
+  <text x="252" y="195" font-size="9.5" fill="var(--muted)">✗ 输出读不回</text>
+  <rect x="258" y="246" width="164" height="28" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="340" y="264" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--amber)">尽力而为 · 非持久态</text>
+  <rect x="460" y="70" width="200" height="214" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="460" y="70" width="200" height="44" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="560" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">cron（真持久）</text>
+  <text x="560" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">cron / terminal 后台</text>
+  <text x="472" y="143" font-size="9.5" fill="var(--ink)">✓ cron 定时任务（ch21）</text>
+  <text x="472" y="169" font-size="9.5" fill="var(--ink)">✓ terminal(background,notify)</text>
+  <text x="472" y="195" font-size="9.5" fill="var(--ink)">✓ 交系统托管 · 完成回调</text>
+  <rect x="478" y="246" width="164" height="28" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="560" y="264" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">真 · 跨重启持久</text>
+  <rect x="20" y="304" width="640" height="44" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="340" y="324" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">durability 几乎全是进程内幻觉——跨重启请用 cron 或 terminal 后台</text>
+  <text x="340" y="340" text-anchor="middle" font-size="9" fill="var(--muted)">别押一个活在内存里的 future（呼应 ch26 · E6）</text>
+</svg>
+<div class="fig-cap"><b>durability 三档</b>：<strong>进程内 background</strong>（字典 / 缓冲 / 线程全在内存，重启即丢）、<strong>detached</strong>（<span class="mono">processes.json</span> 仅网关崩溃恢复，只认 host-PID、只能报状态 + kill，尽力而为）、<strong>cron</strong>（交调度器 / 系统托管，真跨重启持久）。要持久别押内存里的 future——呼应 ch26 · E6。</div>
+</div>
+
+<p>停讲完、看讲完，剩最后一套：一次「存」怎么做到要么<strong>整体生效</strong>、要么<strong>完全没发生</strong>——以及这份原子保证，怎么会因为一个<strong>临时文件放错目录</strong>就整盘崩掉。</p>
+
+<h3>🔬 28.3 · 原子文件编辑：同目录 temp + rename，写后再读回校验</h3>
+<p>三套机制的最后一套是<strong>落盘</strong>。Hermes 的文件能力收在四个工具里——<span class="mono">read_file</span> / <span class="mono">write_file</span> / <span class="mono">patch</span>（替换）/ <span class="mono">search</span>，全部由 <span class="mono">tools/file_operations.py</span> 的 shell 后端实现。其中<strong>会改盘的两个</strong>（write 与 patch）都不直接覆盖目标文件，而是统一走一个私有方法 <span class="mono">_atomic_write()</span>：<strong>先在目标的同一个目录里建一个临时文件、把新内容写进去、再用一次 rename 把它原子地换到目标位置</strong>。</p>
+<p><span class="mono">_atomic_write()</span> 的实现是一段全引号转义的 shell 脚本：用 <span class="mono">mktemp -p "$d"</span> 把临时文件落在<strong>目标自己的目录</strong> <span class="mono">d = dirname(path)</span>（不是 <span class="mono">/tmp</span>），内容经 <strong>stdin</strong> 流入（绕开 ARG_MAX），<span class="mono">cat &gt; "$tmp"</span> 写好草稿后，再 <span class="mono">mv -f "$tmp" "$t"</span> 一步换上。三个细节值得记：① 它<strong>不是</strong> <span class="mono">os.replace()</span> 这类 Python 调用，而是落到真实的 shell <span class="mono">mv</span>（语义即同一文件系统内的原子 rename）；② 一个 <span class="mono">trap 'rm -f "$tmp"' EXIT</span> 保证<strong>任何失败路径</strong>（cat 失败、mv 失败、被信号打断）都会清掉临时文件，绝不在用户数据旁边留下半个 <span class="mono">.hermes-tmp</span> 残渣；③ 写之前还会 <span class="mono">stat</span> + <span class="mono">chmod</span> 尽力把目标原有权限复制到临时文件上，避免原子换上后<strong>悄悄放宽或收紧</strong>权限。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/file_operations.py:937 · 简化</span></div><pre>    def _atomic_write(self, path: str, content: str) -&gt; "ExecuteResult":
+        q_path = self._escape_shell_arg(path)
+        parent = os.path.dirname(path) or "."
+        q_parent = self._escape_shell_arg(parent)
+        tmpl = self._escape_shell_arg(".hermes-tmp.XXXXXX")
+        script = (
+            "set -e; "
+            f"d={q_parent}; t={q_path}; "
+            'tmp="$(mktemp -p "$d" ' + tmpl + ' 2&gt;/dev/null '
+            '|| mktemp "$d/.hermes-tmp.$$.XXXXXX" 2&gt;/dev/null '
+            '|| { tmp="$d/.hermes-tmp.$$"; : &gt; "$tmp" &amp;&amp; echo "$tmp"; })"; '
+            "trap 'rm -f \"$tmp\"' EXIT; "
+            'cat &gt; "$tmp"; '
+            'mv -f "$tmp" "$t"; '
+            "trap - EXIT"
+        )
+        return self._exec(script, stdin_data=content)</pre></div>
+<p><strong>核心坑就在这里：整套原子性，全挂在「临时文件与目标同目录」这一个不起眼的前提上。</strong>rename 只有在<strong>同一个文件系统内</strong>才是原子的——内核只是把一个目录项从旧 inode 改指向新 inode，一步到位。一旦临时文件落在<strong>别的文件系统</strong>（比如把草稿写到 <span class="mono">/tmp</span> 再 mv 回项目目录），<span class="mono">mv</span> 没法做真 rename，只能<strong>降级成 copy 到目标 + unlink 源</strong>两步；要是在 copy 中途崩溃 / 断电，目标就只写了一半，留下一个<strong>撕裂的损坏文件</strong>——恰恰是原子写本想消灭的失败。所以 <span class="mono">mktemp -p "$d"</span> 里那个 <span class="mono">-p "$d"</span> 是 <strong>load-bearing</strong> 的，不是随手的选择。</p>
+<p><span class="mono">patch</span>（替换）在 <span class="mono">_atomic_write</span> 之上又加了一道<strong>写后校验</strong>。它先把文件读进来、剥掉可能的 UTF-8 BOM，用<strong>模糊匹配</strong>定位 <span class="mono">old_string</span>——除非 <span class="mono">replace_all=True</span>，否则要求匹配<strong>唯一</strong>，命中多处或零处都直接报错；替换后按文件<strong>原有的行尾</strong>（LF / CRLF）规整再写回（写出去时把 BOM 补回，往返保留标记）。落盘之后，它<strong>再把文件读回来、逐字节和打算写入的内容比对</strong>：对不上就报「<span class="mono">The patch did not persist</span>」、要求重读重试。这道校验专抓<strong>静默落盘失败</strong>——后端 FS 怪癖、截断的管道，<strong>以及和另一个任务的并发改动</strong>：若在 patch 写盘到 re-read 之间，别的编辑动了同一个文件，re-read 出来的字节就和本次的 <span class="mono">new_content</span> 不一致，<strong>校验失败</strong>，patch 不会假报成功。</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/file_operations.py:1534</span></div><pre>        # Post-write verification — re-read the file and confirm the bytes we
+        # intended to write actually landed. Catches silent persistence
+        # failures (backend FS oddities, race with another task, truncated
+        # pipe, etc.) that would otherwise return success-with-diff while the
+        # file is unchanged on disk.
+        verify_cmd = f"cat {self._escape_shell_arg(path)} 2&gt;/dev/null"
+        verify_result = self._exec(verify_cmd)
+        if verify_result.exit_code != 0:
+            return PatchResult(error=f"Post-write verification failed: could not re-read {path}")</pre></div>
+<p>四个工具周围还有一圈防护：<strong>路径安全 deny-list</strong> 在 write / patch 前拦掉敏感文件——<span class="mono">~/.ssh/{id_rsa,authorized_keys,config}</span>、各 profile 与顶层的 <span class="mono">.env</span>、<span class="mono">.git-credentials</span>、<span class="mono">/etc/{passwd,shadow,sudoers}</span> 以及 <span class="mono">~/.aws</span>、<span class="mono">/etc/systemd</span> 等前缀，免得一次误写泄露凭证或改坏系统。<span class="mono">read_file</span> 默认<strong>分页</strong>（offset / limit，默认 500 行、上限 2000），并带<strong>二进制探测</strong>——非打印字符超过 30% 判为二进制、不返回正文，图片类扩展名则转 base64 走视觉通道。<span class="mono">search</span> 是<strong>行级</strong>的（<span class="mono">output_mode="content"</span> 给出命中行 + 可选上下文），内容查找与文件名查找分开。这些都不改变那条主线：<strong>每一次写盘，都先把「完整的新文件」准备好，再用一次原子动作让它整体生效——读者永远看不到中间态。</strong></p>
+
+<div class="figure">
+<svg viewBox="0 0 680 466" role="img" aria-label="安全文件编辑管线图。竖向主线自上而下：目标文件 t 所在的同一目录 d 等于 dirname(path)，先用 mktemp -p 在该目录里建一个隐藏 temp 文件 .hermes-tmp.XXXXXX，把新内容 cat 写进 temp 草稿，patch 路径随后再把文件读回并逐字节与打算写入的内容比对校验，校验通过才用 mv -f 把 temp 原子 rename 换到目标位置，读者于是要么看到旧文件、要么看到完整的新文件，永不读到撕裂的中间态。右侧失败分支：校验失败或写入异常时 trap 会 rm -f 删掉 temp，原文件保持不动完成回滚。左侧注记：temp 与目标同目录即同一文件系统，mv 才是真 rename。">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">安全编辑管线 · 同目录 temp → 写 → 校验 → 原子 rename</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">草稿写进同目录 temp，校验通过再 mv -f 原子换上；任一步失败则回滚，原文件不动</text>
+  <rect x="130" y="64" width="200" height="44" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="230" y="85" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">① 目标文件 t</text>
+  <text x="230" y="101" text-anchor="middle" font-size="9" fill="var(--muted)">同目录 d = dirname(path)</text>
+  <line x1="230" y1="110" x2="230" y2="124" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,132 L225,123 L235,123 Z" fill="var(--muted)"/>
+  <rect x="130" y="132" width="200" height="50" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="230" y="153" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">② mktemp -p "$d"</text>
+  <text x="230" y="170" text-anchor="middle" font-size="9" fill="var(--muted)">同目录建隐藏 temp · .hermes-tmp.XXXXXX</text>
+  <line x1="230" y1="184" x2="230" y2="198" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,206 L225,197 L235,197 Z" fill="var(--muted)"/>
+  <text x="14" y="150" font-size="9.5" font-weight="700" fill="var(--accent-ink)">同目录 = 同 FS</text>
+  <text x="14" y="165" font-size="9" fill="var(--muted)">mv 才是真 rename</text>
+  <text x="14" y="178" font-size="9" fill="var(--muted)">（详见下图 ⑬）</text>
+  <line x1="120" y1="156" x2="128" y2="156" stroke="var(--accent)" stroke-width="1.4"/>
+  <rect x="130" y="206" width="200" height="44" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="230" y="227" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">③ cat &gt; "$tmp" 写草稿</text>
+  <text x="230" y="243" text-anchor="middle" font-size="9" fill="var(--muted)">内容走 stdin · 无 ARG_MAX 限制</text>
+  <line x1="230" y1="252" x2="230" y2="266" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,274 L225,265 L235,265 Z" fill="var(--muted)"/>
+  <rect x="130" y="274" width="200" height="58" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="230" y="295" text-anchor="middle" font-size="12" font-weight="700" fill="var(--amber)">④ 读回验证字节</text>
+  <text x="230" y="311" text-anchor="middle" font-size="9" fill="var(--ink)">patch：re-read 比对打算写入的内容</text>
+  <text x="230" y="325" text-anchor="middle" font-size="9" fill="var(--ink)">捕获静默落盘失败 / 并发改动</text>
+  <line x1="230" y1="332" x2="230" y2="346" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,354 L225,345 L235,345 Z" fill="var(--muted)"/>
+  <text x="238" y="345" font-size="9" fill="var(--muted)">验证通过</text>
+  <rect x="458" y="274" width="206" height="58" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="466" y="294" font-size="10" font-weight="700" fill="var(--red)">失败分支 · 异常 / 校验不过</text>
+  <text x="466" y="311" font-size="9" fill="var(--ink)">trap 'rm -f "$tmp"' 删掉 temp</text>
+  <text x="466" y="326" font-size="9" fill="var(--ink)">原文件保持不动（回滚）</text>
+  <line x1="330" y1="303" x2="450" y2="303" stroke="var(--red)" stroke-width="1.3" stroke-dasharray="3 3"/>
+  <path d="M458,303 L449,298 L449,308 Z" fill="var(--red)"/>
+  <rect x="130" y="354" width="200" height="50" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="230" y="375" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">⑤ mv -f "$tmp" "$t"</text>
+  <text x="230" y="391" text-anchor="middle" font-size="9" fill="var(--muted)">原子 rename · 一步换上目标</text>
+  <line x1="230" y1="406" x2="230" y2="420" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,428 L225,419 L235,419 Z" fill="var(--muted)"/>
+  <rect x="130" y="428" width="200" height="34" rx="9" fill="var(--panel-2)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="230" y="449" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">⑥ 读者：旧 或 完整新（永不撕裂）</text>
+</svg>
+<div class="fig-cap"><b>安全编辑管线</b>：write / patch 走 <span class="mono">_atomic_write</span>——<span class="mono">mktemp -p "$d"</span> 在<strong>同目录</strong>建 temp → <span class="mono">cat</span> 写草稿 →（patch 还会<strong>读回逐字节校验</strong>）→ <span class="mono">mv -f</span> 原子 rename 换上；任一步失败，<span class="mono">trap</span> 删 temp、<strong>原文件不动</strong>。读者要么见旧、要么见完整新，<strong>永不撕裂</strong>。</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="跨文件系统 rename 破坏原子性的对比图。左列同一文件系统：temp 与目标同目录，rename 是单步原子操作，内核只切换目录项指向新 inode，读者要么看到旧 inode 要么看到新 inode，断电或崩溃后原文件完好，结论是原子且永不撕裂。右列跨文件系统：temp 落在别的文件系统比如 /tmp，mv 无法做真 rename 只能退化为先 copy 到目标再 unlink 源的两步操作，一旦在 copy 中途崩溃目标就只写了一半，留下撕裂的半个文件，结论是非原子且可能损坏。底部结论条：所以 temp 必须用 mktemp -p 落在目标自己的目录，保证与目标同一文件系统、让 mv 成为真正的原子 rename。">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">跨 FS rename 破原子性 · 为什么 temp 必须与目标同目录</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">同 FS = 一步原子指针切换；跨 FS = mv 降级为 copy + unlink 两步，中途崩溃留半个文件</text>
+  <rect x="20" y="70" width="300" height="206" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="20" y="70" width="300" height="44" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="170" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">同 FS · 真原子 rename</text>
+  <text x="170" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">temp 与目标同目录（mktemp -p "$d"）</text>
+  <text x="34" y="140" font-size="9.5" fill="var(--ink)">① rename() = 单步切换目录项</text>
+  <text x="34" y="164" font-size="9.5" fill="var(--ink)">② 指向新 inode，旧 inode 释放</text>
+  <text x="34" y="188" font-size="9.5" fill="var(--ink)">③ 读者：要么旧、要么新 inode</text>
+  <text x="34" y="212" font-size="9.5" fill="var(--ink)">④ 断电 / 崩溃：原文件完好</text>
+  <rect x="38" y="234" width="264" height="30" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="170" y="253" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">✓ 原子 · 永不读到撕裂中间态</text>
+  <rect x="360" y="70" width="300" height="206" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="360" y="70" width="300" height="44" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="510" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">跨 FS · mv 降级 copy+unlink</text>
+  <text x="510" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">temp 落在别的文件系统（如 /tmp）</text>
+  <text x="374" y="140" font-size="9.5" fill="var(--ink)">① rename 跨设备失败 → mv 兜底</text>
+  <text x="374" y="164" font-size="9.5" fill="var(--ink)">② 退化为 copy 到目标 + unlink 源</text>
+  <text x="374" y="188" font-size="9.5" fill="var(--ink)">③ copy 中途崩溃：目标只写一半</text>
+  <text x="374" y="212" font-size="9.5" fill="var(--ink)">④ 留下撕裂 / 半个损坏文件</text>
+  <rect x="378" y="234" width="264" height="30" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="510" y="253" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">✗ 非原子 · 可能读到损坏文件</text>
+  <rect x="20" y="296" width="640" height="48" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="340" y="317" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">结论：temp 必须 mktemp -p 落在目标自己的目录 → 同一 FS、让 mv 成为真原子 rename</text>
+  <text x="340" y="334" text-anchor="middle" font-size="9" fill="var(--muted)">temp 的位置是 load-bearing 的——跨目录省事，却把原子保证悄悄换成了「可能半写」</text>
+</svg>
+<div class="fig-cap"><b>跨 FS rename 破原子性</b>：<strong>同目录 = 同文件系统</strong>，<span class="mono">mv</span> 是一步原子 rename（切换目录项指向新 inode），崩溃也只见旧或完整新；<strong>跨文件系统</strong> <span class="mono">mv</span> 降级为 <span class="mono">copy + unlink</span> 两步，中途崩溃留半个文件。所以 temp 必须 <span class="mono">mktemp -p "$d"</span> 落在<strong>目标自己的目录</strong>——位置是 load-bearing 的。</div>
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 设计取舍 · 异步世界里的正确性边界</div>
+  本章三套机制——<strong>中断传播</strong>、<strong>后台进程生命周期</strong>、<strong>原子文件编辑</strong>——表面分管「停 / 看 / 存」三件互不相干的事，底层却守着同一条线：<strong>在一个异步、连续运行、随时可能被打断或重启的世界里，把「看起来完成」和「真的完成」死死焊在一起。</strong>
+  <p style="margin:.5rem 0 0"><strong>三者各自守的边界：</strong>① 中断是一份<strong>协作式契约</strong>——置标志、在循环边界收下、对子代理显式扇出，谁都不许从外部硬杀线程，于是「停」既<strong>及时</strong>又<strong>不撕裂</strong>正在执行的工具；② 后台进程给出<strong>诚实的状态</strong>——完成至多报一次（生产端 <span class="mono">was_running</span> + 消费端 <span class="mono">_completion_consumed</span> 两道闸），且<strong>不把进程内幻觉谎称为持久</strong>；③ 落盘给出<strong>原子保证</strong>——同目录 temp + rename + 写后校验，读者要么见旧、要么见完整新。</p>
+  <p style="margin:.5rem 0 0"><strong>呼应全书两条主线：</strong>这正是<strong>韧性</strong>的地基——失败有界、可回滚（<span class="mono">trap</span> 删 temp）、可恢复（detached / cron）、可纠错（re-read 校验）；也守着<strong>窄腰</strong>：核心只暴露 <span class="mono">/stop</span>、查状态、原子写这几个最小原语，真正的复杂度全下沉到循环边界、进程注册表与一段 shell 脚本里。三处「看起来完成 ≠ 真的完成」的缝，正是<strong>「自主、连续运行」可靠性的地基</strong>。</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 本课要点</div>
+  <ul>
+    <li><strong>中断是协作式、不是抢占式</strong>：<span class="mono">/stop</span> 只置一面 <span class="mono">_interrupt_requested</span> 标志，主循环在<strong>迭代边界</strong>轮询收下；Python 杀不了线程，流式回调 / 非流式后台检查 / retry 退避（每 <strong>200ms</strong>）都靠<strong>自愿轮询</strong>。中断对<strong>子代理是显式手工扇出</strong>——遍历 <span class="mono">_active_children</span> 逐个 <span class="mono">child.interrupt()</span>，漏登记或异步 detach 就<strong>静默断链</strong>。</li>
+    <li><strong>后台 durability 多是进程内幻觉</strong>：<span class="mono">_running</span> / <span class="mono">_finished</span> 字典、输出缓冲、reader / watcher 线程全在内存，重启即丢；detached 恢复只认 host-PID + <span class="mono">start_time</span> 校验、只能报状态 + kill。要<strong>真跨重启</strong>用 <span class="mono">cron</span> 或 <span class="mono">terminal(background, notify_on_complete)</span>。</li>
+    <li><strong>完成通知至多报一次</strong>：生产端 <span class="mono">was_running</span> 守卫（<span class="mono">pop</span> 只有一方拿到非 <span class="mono">None</span>）+ 消费端 <span class="mono">_completion_consumed</span> / <span class="mono">_poll_observed</span> 两道去重闸；watch 命中限流连满 <span class="mono">WATCH_STRIKE_LIMIT</span>=3 会禁 watch 并翻转 <span class="mono">notify_on_complete</span>，汇入同一出口。</li>
+    <li><strong>原子写靠同目录 temp + rename</strong>：<span class="mono">_atomic_write</span> 用 <span class="mono">mktemp -p "$d"</span> 在<strong>目标同目录</strong>建 temp、<span class="mono">cat</span> 写、<span class="mono">mv -f</span> 原子换上、<span class="mono">trap</span> 失败清理；<strong>跨文件系统 rename 非原子</strong>（降级 copy + unlink，半写损坏），所以 temp 位置 load-bearing。</li>
+    <li><strong>patch 写后再读回校验</strong>：模糊匹配要求<strong>唯一</strong>、保 BOM / CRLF、只报<strong>新增</strong> lint 错；写盘后 re-read 逐字节比对，<strong>并发编辑</strong>会让校验失败、报「did not persist」而非假成功。外加路径 deny-list、读分页、二进制 / 图片拦截、search 行级。</li>
+    <li><strong>共同理念</strong>：三套机制守的都是<strong>异步世界里的正确性边界</strong>——停得及时不撕裂、状态诚实不重复、落盘原子不半写；是<strong>「自主、连续运行」可靠性的地基</strong>，也是韧性与窄腰的又一次落地。</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. 为什么一个 tool 调用进行到一半时，按下 /stop 不会立刻把它停下？</div>
+  <ol class="opts">
+    <li>中断是协作式（cooperative）而非抢占式（preemptive）——/stop 只置一面标志，主循环只在两轮迭代之间的边界才把它收下；Python 无法从外部硬杀线程，正在跑的工具得自己把控制权交回来</li>
+    <li>必须连按两次 /stop 才会生效</li>
+    <li>模型故意忽略了这次 stop 指令</li>
+    <li>网络太慢，stop 信号还在路上没到</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：A</strong>。Hermes 的中断是协作式而非抢占式：按下 /stop 只是把 _interrupt_requested 置真，真正被「收下」发生在主工具循环的边界——每进入新一轮先 poll 一次标志，命中才 break。这个检查在两轮迭代之间，而不在一次 API 调用、或一个工具执行的正中间。Python 没法从外部硬杀一个线程，所以一段不去自查标志的代码（纯 CPU 的紧循环、不配合的第三方调用）会一路跑到自己结束或撞上超时，循环要等它把控制权交回来，才能在下一个边界真正停下。（流式逐 token 回调、非流式的 httpx 后台检查、每 200ms 一次的退避轮询是额外的自查点，但都仍是「自愿轮询那面标志」。）</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. 一个 background=true 的后台进程在 Hermes 进程重启后消失，根因是什么？</div>
+  <ol class="opts">
+    <li>磁盘写满了，进程被迫退出</li>
+    <li>日志没刷新，其实进程还在跑</li>
+    <li>被系统的 OOM killer 杀掉了</li>
+    <li>后台的「持久」几乎全是进程内幻觉——background=true 的 delegate_task 脱离了当前回合，却仍是进程本地的（活在内存里的一个 future），进程一死它就没了；真要熬过重启得靠 cronjob 或后台终端任务</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：D</strong>。后台的「持久」几乎全是进程内幻觉：一个 background=true 的 delegate_task 虽然脱离了当前回合，却仍是进程本地的——它只是活在内存里的一个 future，进程一死它就跟着没了。真正能熬过重启的持久，得靠 cronjob（落到磁盘的调度）或后台终端任务，而不是一个内存里的对象。磁盘满、OOM、日志未刷新都不是这里的根因——根因是 durability 的边界就钉在进程这一层。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>举一个你会用 cronjob 而非 background=true 来跑的后台任务场景（比如每天清理、必须熬过重启的长期监控），并说明为什么——呼应这一章的「进程内幻觉」。</li>
   </ul>
 </div>
 </div>

@@ -925,8 +925,74 @@ QUIZZES = {
              "en": "Name a pitfall you'd most likely hit building your own agent. Write out its 'symptom → root cause (which A–G flaw) → countermeasure,' and say which Hermes design line it maps to (sacred cache / self-evolution / narrow waist / cross-cutting safety)."},
         ],
     },
-    "27-model-credentials-routing.html": {"mcq": [], "open": []},
-    "28-runtime-resilience.html": {"mcq": [], "open": []},
+    "27-model-credentials-routing.html": {
+        "mcq": [
+            {
+                "q": {"zh": "凭证池为什么绝不重试一个刚被确认耗尽 / 失效（EXHAUSTED / DEAD）的 key？",
+                      "en": "Why does the credential pool never retry a key it just confirmed is exhausted/dead (EXHAUSTED/DEAD)?"},
+                "opts": [
+                    {"zh": "为了省内存——池里 key 越少轮换越快", "en": "To save memory — fewer keys in the pool means faster rotation"},
+                    {"zh": "重试一个已确认空的 bucket 必然再失败、白费一次往返——DEAD 无条件排除，EXHAUSTED 也只在 reset_at 或分档 TTL（429 给 1 小时、401 给 5 分钟）到点后才回到候选", "en": "Retrying a bucket already confirmed empty is bound to fail again and waste a round-trip — DEAD is excluded unconditionally, and EXHAUSTED only rejoins the candidates after reset_at or the bucketed TTL (429 gets 1 hour, 401 gets 5 minutes) elapses"},
+                    {"zh": "key 限流后会自己悄悄复活，随手再戳一下就能用", "en": "A rate-limited key quietly revives on its own, so just poke it again and it works"},
+                    {"zh": "由模型随机决定这把 key 要不要重试", "en": "The model randomly decides whether to retry the key"},
+                ],
+                "answer": 1,
+                "why": {"zh": "这撞的是凭证池的铁律——绝不反复试探一个已确认空的 bucket。失败时 mark_exhausted_and_rotate() 给闯祸的那把 key 盖一个到期戳、立刻重选下一把，而不是删掉它、也不是每隔几秒再戳一下问「好了没」。DEAD（401 token_revoked / invalid_grant 这类永久失效）在 select() 里直接 continue 排除，只有用户重新登录写回新 token 才复活；EXHAUSTED 只有等 last_error_reset_at 或分档 TTL（429=1 小时、401=5 分钟）到点才清回 OK。在那之前重试，撞的还是同一堵明知锁着的墙，必然再失败、白白浪费一次往返。",
+                        "en": "This hits the credential pool's iron rule — never re-probe a bucket you have already confirmed is empty. On failure, mark_exhausted_and_rotate() stamps an expiry on the offending key and immediately re-selects the next one, instead of deleting it or poking it every few seconds to ask 'ready yet?'. DEAD (permanent failures like 401 token_revoked / invalid_grant) is skipped with a plain continue in select() and revives only when the user re-authenticates and writes fresh tokens back; EXHAUSTED clears back to OK only after last_error_reset_at or the bucketed TTL (429=1 hour, 401=5 minutes) elapses. Retrying before then slams into the same wall you know is locked — it is bound to fail again and waste a round-trip."},
+            },
+            {
+                "q": {"zh": "副 LLM 路由 _resolve_auto 的第一优先级（第 ① 步）是什么？",
+                      "en": "What is the first priority (Step 1) of the auxiliary-LLM router _resolve_auto?"},
+                "opts": [
+                    {"zh": "硬编码 discovery 链的头一个：openrouter", "en": "The head of the hardcoded discovery chain: openrouter"},
+                    {"zh": "当前会话运行期的主 provider + 主 model——由 set_runtime_main() 同步进来的那一份，而不是 config.yaml 里可能已经陈旧的默认值", "en": "The current session's runtime main provider + main model — the copy synced in by set_runtime_main(), not the possibly-stale default in config.yaml"},
+                    {"zh": "全网最便宜的那个模型", "en": "The cheapest model available anywhere"},
+                    {"zh": "从所有可用模型里随机挑一个", "en": "A random pick from all available models"},
+                ],
+                "answer": 1,
+                "why": {"zh": "_resolve_auto 的第 ① 步就是「先用你当前的主 provider + 主 model」，关键是用运行期的那一份：每轮开头 set_runtime_main() 把 CLI / 网关临时切到的 provider、model、base_url、key 同步进来，副任务于是跟主对话用同一个模型、同一把已验证可用的 key，行为可预期，不会偷偷掉到某个便宜的默认模型。openrouter 只是第 ③ 步硬编码 discovery 链的兜底头部，只有当主 provider 不可用、且用户配置的 fallback 也没命中时才轮到它。",
+                        "en": "Step 1 of _resolve_auto is 'use your current main provider + main model first,' and the key is to use the runtime copy: at the start of each turn set_runtime_main() syncs in the provider, model, base_url and key that the CLI/gateway temporarily switched to, so the auxiliary task runs on the same model and the same already-validated key as the main conversation — predictable, never silently dropping to some cheap default. openrouter is merely the fallback head of the Step 3 hardcoded discovery chain, reached only when the main provider is unavailable and the user-configured fallback also misses."},
+            },
+        ],
+        "open": [
+            {"zh": "举一个你会给某个副任务（上下文压缩 / 起标题 / 视觉识图）单独「钉死」provider + model 的场景，说明你想避免的具体失败（比如视觉被静默落到只有文本的便宜模型上、每次看图都 404），以及它对应哪条设计线。",
+             "en": "Give a scenario where you would individually 'pin' the provider + model for one auxiliary task (context compression / title generation / vision), explain the concrete failure you want to avoid (e.g. vision silently dropping to a text-only cheap model that 404s on every image), and say which design line it maps to."},
+        ],
+    },
+    "28-runtime-resilience.html": {
+        "mcq": [
+            {
+                "q": {"zh": "为什么一个 tool 调用进行到一半时，按下 /stop 不会立刻把它停下？",
+                      "en": "Why doesn't pressing /stop halt a tool call instantly when it is already half-way through?"},
+                "opts": [
+                    {"zh": "网络太慢，stop 信号还在路上没到", "en": "The network is slow and the stop signal is still in transit"},
+                    {"zh": "中断是协作式（cooperative）而非抢占式（preemptive）——/stop 只置一面标志，主循环只在两轮迭代之间的边界才把它收下；Python 无法从外部硬杀线程，正在跑的工具得自己把控制权交回来", "en": "Interruption is cooperative, not preemptive — /stop only sets a flag, and the main loop picks it up only at the boundary between two iterations; Python can't kill a thread from outside, so the running tool has to hand control back itself"},
+                    {"zh": "模型故意忽略了这次 stop 指令", "en": "The model deliberately ignored the stop command"},
+                    {"zh": "必须连按两次 /stop 才会生效", "en": "You have to press /stop twice for it to take effect"},
+                ],
+                "answer": 1,
+                "why": {"zh": "Hermes 的中断是协作式而非抢占式：按下 /stop 只是把 _interrupt_requested 置真，真正被「收下」发生在主工具循环的边界——每进入新一轮先 poll 一次标志，命中才 break。这个检查在两轮迭代之间，而不在一次 API 调用、或一个工具执行的正中间。Python 没法从外部硬杀一个线程，所以一段不去自查标志的代码（纯 CPU 的紧循环、不配合的第三方调用）会一路跑到自己结束或撞上超时，循环要等它把控制权交回来，才能在下一个边界真正停下。（流式逐 token 回调、非流式的 httpx 后台检查、每 200ms 一次的退避轮询是额外的自查点，但都仍是「自愿轮询那面标志」。）",
+                        "en": "Hermes's interruption is cooperative, not preemptive: pressing /stop just sets _interrupt_requested to true, and it is actually 'taken' at the boundary of the main tool loop — each new iteration polls the flag first and breaks only on a hit. That check sits between two iterations, not in the middle of an API call or a tool execution. Python can't forcibly kill a thread from outside, so a stretch of code that doesn't poll the flag (a tight CPU loop, an uncooperative third-party call) runs to its own end or hits its timeout; the loop can only stop at the next boundary once that code hands control back. (The streaming per-token callback, the non-streaming httpx background check, and the 200ms backoff poll are extra self-check points, but all are still 'voluntarily polling the flag.')"},
+            },
+            {
+                "q": {"zh": "一个 background=true 的后台进程在 Hermes 进程重启后消失，根因是什么？",
+                      "en": "A background=true task vanishes after the Hermes process restarts — what's the root cause?"},
+                "opts": [
+                    {"zh": "磁盘写满了，进程被迫退出", "en": "The disk filled up and the process was forced to exit"},
+                    {"zh": "后台的「持久」几乎全是进程内幻觉——background=true 的 delegate_task 脱离了当前回合，却仍是进程本地的（活在内存里的一个 future），进程一死它就没了；真要熬过重启得靠 cronjob 或后台终端任务", "en": "Background 'durability' is almost entirely an in-process illusion — a background=true delegate_task leaves the current turn but is still process-local (a future living in memory), so it dies with the process; surviving a restart needs cronjob or a background terminal task"},
+                    {"zh": "被系统的 OOM killer 杀掉了", "en": "It was killed by the system's OOM killer"},
+                    {"zh": "日志没刷新，其实进程还在跑", "en": "The log just wasn't flushed — the process is actually still running"},
+                ],
+                "answer": 1,
+                "why": {"zh": "后台的「持久」几乎全是进程内幻觉：一个 background=true 的 delegate_task 虽然脱离了当前回合，却仍是进程本地的——它只是活在内存里的一个 future，进程一死它就跟着没了。真正能熬过重启的持久，得靠 cronjob（落到磁盘的调度）或后台终端任务，而不是一个内存里的对象。磁盘满、OOM、日志未刷新都不是这里的根因——根因是 durability 的边界就钉在进程这一层。",
+                        "en": "Background 'durability' is almost entirely an in-process illusion: a background=true delegate_task leaves the current turn but is still process-local — just a future living in memory, so it dies the moment the process does. Durability that truly survives a restart must come from cronjob (a disk-backed schedule) or a background terminal task, not an in-memory object. Disk-full, OOM, and unflushed logs are not the cause here — the cause is that the durability boundary sits at the process itself."},
+            },
+        ],
+        "open": [
+            {"zh": "举一个你会用 cronjob 而非 background=true 来跑的后台任务场景（比如每天清理、必须熬过重启的长期监控），并说明为什么——呼应这一章的「进程内幻觉」。",
+             "en": "Give a scenario where you'd run a background task with cronjob rather than background=true (e.g. a daily cleanup, or long-running monitoring that must survive restarts), and explain why — echoing this chapter's 'in-process illusion.'"},
+        ],
+    },
 }
 
 

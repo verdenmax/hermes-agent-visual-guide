@@ -390,6 +390,8 @@ details[open] > summary { list-style: none; }
   <li>Security & threat model</li>
   <li>Design principles synthesis</li>
   <li>Pitfalls of building an agent</li>
+  <li>Model · credentials · routing</li>
+  <li>Runtime resilience: interrupt · background · files</li>
 </ol></div>
 <section class="lesson-print">
 <h1>What is Hermes</h1>
@@ -1782,6 +1784,68 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
   <text x="668" y="206" text-anchor="end" font-size="11.5" font-weight="700" fill="var(--red)">turn cost ↑↑</text>
 </svg>
 <div class="fig-cap"><b>The two faces of caching</b>: when the prefix is byte-identical, the long fixed prefix bills at the <b>cache-read price</b> (~1/10 of full), collapsing the whole conversation to roughly a quarter of the cost; but change <b>a single byte</b> mid-session and the cache from that point is <b>lost and recomputed at full price</b> — the root reason why "per-conversation prompt caching is sacred."</div>
+</div>
+
+<p>But these 4 breakpoints can't be applied <strong>blindly</strong>. <span class="mono">_apply_cache_marker</span> attaches the marker to the target message's <strong>last content block</strong> — and if that block happens to be a <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span> block, the marker <strong>breaks signature validation</strong>. So when converting to Anthropic format, <span class="mono">anthropic_adapter</span> <strong>strips</strong> <span class="mono">cache_control</span> back off those blocks (the comment is blunt: <span class="inline">cache markers interfere with signature validation</span>) and keeps a marker-bearing system prompt as <strong>content blocks</strong> rather than a plain string:</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 388" role="img" aria-label="Placement of Anthropic's 4 cache_control breakpoints and thinking-signature safety">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">system_and_3 · 4 cache_control breakpoints + thinking-signature safety</text>
+  <text x="20" y="52" font-size="11.5" font-weight="700" fill="var(--muted)">① 4 breakpoints on the deepcopy: system prefix + last 3 non-system messages (same TTL)</text>
+
+  <rect x="24" y="72" width="150" height="58" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="99" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="99" y="121" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">system prefix</text>
+  <circle cx="99" cy="72" r="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="99" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--accent-ink)">1</text>
+
+  <rect x="182" y="72" width="208" height="58" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="286" y="99" text-anchor="middle" font-size="11" fill="var(--muted)">… middle history (no breakpoint) …</text>
+  <text x="286" y="118" text-anchor="middle" font-size="10" fill="var(--faint)">whole block hits the prefix cache · not recomputed</text>
+
+  <rect x="398" y="72" width="84" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="440" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="440" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-3</text>
+  <circle cx="440" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="440" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">2</text>
+
+  <rect x="488" y="72" width="84" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="530" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="530" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-2</text>
+  <circle cx="530" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="530" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">3</text>
+
+  <rect x="578" y="72" width="84" height="58" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="620" y="103" text-anchor="middle" font-size="22">🔖</text>
+  <text x="620" y="121" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">msg-1</text>
+  <circle cx="620" cy="72" r="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="620" y="76" text-anchor="middle" font-size="12" font-weight="800" fill="var(--blue)">4</text>
+
+  <rect x="24" y="148" width="340" height="40" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="40" y="173" font-size="11" fill="var(--accent-ink)">deepcopy: marker only on the copy; original api_messages untouched</text>
+  <rect x="374" y="148" width="288" height="40" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="390" y="173" font-size="11" fill="var(--blue)">all 4 share one TTL: ephemeral, 5m (default) or 1h</text>
+
+  <rect x="24" y="202" width="638" height="176" rx="12" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="42" y="230" font-size="24">⚠️</text>
+  <text x="74" y="228" font-size="12.5" font-weight="700" fill="var(--red)">Key trap: strip cache_control off thinking / redacted_thinking blocks</text>
+
+  <rect x="42" y="246" width="276" height="92" rx="9" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="58" y="268" font-size="10.5" font-weight="700" fill="var(--ink)">assistant message, last block = thinking</text>
+  <text x="58" y="292" font-size="10.5" fill="var(--muted)">if the marker lands on the thinking block</text>
+  <text x="58" y="316" font-size="10.5" font-weight="700" fill="var(--red)">✗ breaks Anthropic signature validation</text>
+
+  <text x="358" y="292" text-anchor="middle" font-size="22">✂️</text>
+  <text x="358" y="316" text-anchor="middle" font-size="10" fill="var(--muted)">pop after inject</text>
+
+  <rect x="398" y="246" width="252" height="92" rx="9" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="414" y="268" font-size="10.5" font-weight="700" fill="var(--ink)">anthropic_adapter, on conversion</text>
+  <text x="414" y="292" font-size="10.5" fill="var(--accent-ink)">b.pop("cache_control", None)</text>
+  <text x="414" y="316" font-size="10.5" font-weight="700" fill="var(--accent-ink)">✅ only signature remains — validates</text>
+
+  <text x="42" y="362" font-size="10.5" fill="var(--muted)">Also: a marker-bearing system prompt stays as content blocks (a list), not a plain string, so cache_control survives.</text>
+</svg>
+<div class="fig-cap"><b>4 breakpoints + signature safety</b>: <span class="mono">system_and_3</span> places 4 <span class="mono">cache_control</span> breakpoints on the system prefix and the last 3 non-system messages (same TTL, on a deepcopy); but the marker must be <b>stripped</b> from <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span> blocks, or it breaks signature validation.</div>
 </div>
 
 <h2>The last gate guarding the prefix: scan before injection</h2>
@@ -7863,6 +7927,992 @@ for m in _PROVIDER_MODELS["huggingface"]:
   <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
   <ul>
     <li>Name a pitfall you'd most likely hit building your own agent. Write out its 'symptom → root cause (which A–G flaw) → countermeasure,' and say which Hermes design line it maps to (sacred cache / self-evolution / narrow waist / cross-cutting safety).</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Model · credentials · routing</h1>
+
+<p class="lead">A model isn't an endpoint — it's a resource pool that needs <strong>scheduling</strong>: multiple API keys to rotate and trip, side tasks routed to different models, and each model's context window that must be <strong>computed</strong> before deciding when to compress.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · an energy dispatch center</div>
+  Picture the model layer as a <strong>power-grid dispatch center</strong>: you don't hold one generator, you hold <strong>a fleet of power plants</strong> — each plant is an API key, a provider. Their states differ: some are <strong>tripped at full load</strong> and cooling down before they come back (a rate-limited key); some have <strong>burned out for good</strong> and will never supply power again (a revoked credential).
+  <p style="margin:.6rem 0 0">The dispatcher has to get three things right at once. First, <strong>never keep poking a plant you've already confirmed is dead</strong> — hammering a key whose quota is provably zero only wastes round-trips and can earn a harsher penalty. Second, <strong>match the unit to the load</strong>: the main kitchen's big stove (the primary conversation) gets the main units, while the back-of-house chores (titling, compression, search — the side-LLM work) need only a <strong>cheap little unit</strong>. Third, you must know each plant's <strong>rated capacity</strong> (how large the context window is) before you schedule, or you won't know when to shift the load off it (trigger compression). This chapter is about how Hermes turns those three into <strong>stateful scheduling</strong> instead of treating the model as a stateless socket you call on demand.</p>
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · three hidden complexities of the model layer</div>
+  "Call a model" sounds like the simplest step there is, yet the moment you want it to be <strong>reliable</strong>, three normally-invisible layers of complexity surface —
+  <p style="margin:.6rem 0 0"><strong>① A credential isn't one key, it's a stateful pool.</strong> For a single provider you may be holding several keys; they have to rotate, trip into cooldown when rate-limited, retire permanently when dead, and remember at all times "which one works right now." That state machine lives in <span class="mono">agent/credential_pool.py</span>, and its cardinal sin is <strong>re-probing a key you've already confirmed is out of quota</strong> — the breaker should fire only on the hard evidence of <span class="mono">remaining=0</span>.</p>
+  <p><strong>② "Calling the model" isn't just the main conversation — there's a crowd of side-LLM tasks.</strong> Compression, session search, web extraction, vision, title generation… each is its own <strong>independent model call</strong>, each with its own <strong>resolution chain and fallback order</strong>, and each can pin its <strong>own provider and model</strong> under <span class="mono">auxiliary.&lt;task&gt;</span> in <span class="mono">config.yaml</span>. The shared entry point is <span class="mono">agent/auxiliary_client.py</span>.</p>
+  <p><strong>③ "How big is the context" isn't a constant — it's resolved in layers.</strong> For one model name the window size may come from a known table, <span class="mono">models.dev</span>, a runtime probe, or a fallback default — you must <strong>compute</strong> that number first before compression knows at what percentage to fire. Get it wrong and you either compress too early and waste the cache, or overrun the window and error out.</p>
+  <p>The three are independent, yet they share one throughline: <strong>treat the model as a stateful resource to schedule, not a stateless endpoint</strong>.</p>
+</div>
+
+<p>Spread those three mechanisms onto one diagram — three columns for the <strong>credential pool</strong>, <strong>side-LLM routing</strong>, and the <strong>context window</strong>, each with a one-liner of "what it manages + its biggest pit," and the shared throughline holding them up along the bottom:</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 338" role="img" aria-label="Overview of three model-layer mechanisms: credential pool, side-LLM routing, and context window in three columns, each listing what it manages and its biggest pit, with a shared bottom throughline that treats the model as a stateful resource to schedule">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Three model-layer mechanisms · three columns, one shared throughline</text>
+  <g>
+    <rect x="14" y="42" width="208" height="216" rx="12" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/>
+    <text x="30" y="78" font-size="24">🔑</text>
+    <text x="64" y="68" font-size="13" font-weight="700" fill="var(--accent-ink)">① Credentials</text>
+    <text x="64" y="86" font-size="9.5" fill="var(--muted)">the stateful pool</text>
+    <line x1="22" y1="98" x2="214" y2="98" stroke="var(--line)"/>
+    <text x="24" y="120" font-size="10" font-weight="700" fill="var(--accent-ink)">▸ Manages</text>
+    <text x="24" y="139" font-size="10.5" fill="var(--ink)">many keys per provider</text>
+    <text x="24" y="156" font-size="10.5" fill="var(--ink)">rotate · trip · cool down</text>
+    <rect x="22" y="170" width="192" height="76" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="34" y="190" font-size="10" font-weight="700" fill="var(--accent-ink)">▸ Biggest pit</text>
+    <text x="34" y="210" font-size="10" fill="var(--ink)">never re-poke a dead bucket</text>
+    <text x="34" y="228" font-size="10" fill="var(--muted)">(remaining=0 = real trip)</text>
+  </g>
+  <g>
+    <rect x="236" y="42" width="208" height="216" rx="12" fill="var(--panel)" stroke="var(--blue)" stroke-width="1.5"/>
+    <text x="252" y="78" font-size="24">🔀</text>
+    <text x="286" y="68" font-size="13" font-weight="700" fill="var(--blue)">② Side-LLM routing</text>
+    <text x="286" y="86" font-size="9.5" fill="var(--muted)">auxiliary tasks</text>
+    <line x1="244" y1="98" x2="436" y2="98" stroke="var(--line)"/>
+    <text x="246" y="120" font-size="10" font-weight="700" fill="var(--blue)">▸ Manages</text>
+    <text x="246" y="139" font-size="10.5" fill="var(--ink)">compress / search / vision</text>
+    <text x="246" y="156" font-size="10.5" fill="var(--ink)">each task, its own chain</text>
+    <rect x="244" y="170" width="192" height="76" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="256" y="190" font-size="10" font-weight="700" fill="var(--blue)">▸ Biggest pit</text>
+    <text x="256" y="210" font-size="10" fill="var(--ink)">don't pile all on main model</text>
+    <text x="256" y="228" font-size="10" fill="var(--muted)">pin provider/model per task</text>
+  </g>
+  <g>
+    <rect x="458" y="42" width="208" height="216" rx="12" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
+    <text x="474" y="78" font-size="24">📏</text>
+    <text x="508" y="68" font-size="13" font-weight="700" fill="var(--purple)">③ Context window</text>
+    <text x="508" y="86" font-size="9.5" fill="var(--muted)">context-length</text>
+    <line x1="466" y1="98" x2="658" y2="98" stroke="var(--line)"/>
+    <text x="468" y="120" font-size="10" font-weight="700" fill="var(--purple)">▸ Manages</text>
+    <text x="468" y="139" font-size="10.5" fill="var(--ink)">resolve the window size</text>
+    <text x="468" y="156" font-size="10.5" fill="var(--ink)">table → models.dev → probe</text>
+    <rect x="466" y="170" width="192" height="76" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+    <text x="478" y="190" font-size="10" font-weight="700" fill="var(--purple)">▸ Biggest pit</text>
+    <text x="478" y="210" font-size="10" fill="var(--ink)">compute it before compressing</text>
+    <text x="478" y="228" font-size="10" fill="var(--muted)">a constant mistimes it</text>
+  </g>
+  <line x1="118" y1="258" x2="118" y2="278" stroke="var(--muted)" stroke-width="1.3"/>
+  <line x1="340" y1="258" x2="340" y2="278" stroke="var(--muted)" stroke-width="1.3"/>
+  <line x1="562" y1="258" x2="562" y2="278" stroke="var(--muted)" stroke-width="1.3"/>
+  <rect x="14" y="278" width="652" height="46" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <rect x="28" y="290" width="104" height="20" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="80" y="304" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">Common thread</text>
+  <text x="144" y="305" font-size="12" font-weight="700" fill="var(--ink)">Treat the model as a stateful resource to schedule, not a stateless endpoint</text>
+</svg>
+<div class="fig-cap"><b>Three model-layer mechanisms</b>: credentials rotate and trip, side tasks route, the window is computed first — all three turn "calling the model" from a one-shot action into stateful scheduling.</div>
+</div>
+
+<h3>🔬 27.1 · Credentials: from one key to a stateful resource pool</h3>
+<p>For a single provider you often hold more than one key — a free tier stacked on a paid one, several accounts taking turns. Hermes gathers them into a <strong>persistent credential pool</strong> (<span class="mono">agent/credential_pool.py</span>): each key is a <span class="mono">PooledCredential</span> in the pool, carrying its own status — <span class="mono">OK</span> (usable, in rotation), <span class="mono">EXHAUSTED</span> (cooling down, out for now), <span class="mono">DEAD</span> (excluded for good, never coming back). Every time <span class="mono">select()</span> grabs a key it first clears any <strong>cooled-down</strong> <span class="mono">EXHAUSTED</span> entries back to <span class="mono">OK</span> (<span class="mono">clear_expired</span>), then picks one from the available set by strategy (<span class="mono">random</span> / <span class="mono">least_used</span> / <span class="mono">round_robin</span>).</p>
+<p>The iron rule this machine cares about most: <strong>never re-probe a bucket you have already confirmed is empty</strong>. A rate-limited key is not deleted from the pool, nor poked every few seconds to ask "ready yet?" — it gets an <strong>expiry timestamp stamped on it</strong> and is then <strong>skipped</strong>: <span class="mono">DEAD</span> is excluded unconditionally (<span class="mono">select()</span> just <span class="mono">continue</span>s past it), <span class="mono">EXHAUSTED</span> rejoins the candidates only after <span class="mono">last_error_reset_at</span> or the TTL elapses. When a failure hits, <span class="mono">mark_exhausted_and_rotate()</span> stamps the offending key and <strong>immediately re-selects</strong> the next one, so the main request never waits.</p>
+<p>The cooldown length is bucketed by the HTTP status that tripped it (<span class="mono">_exhausted_ttl</span>): <strong>429 rate-limit gets 1 hour</strong>, <strong>401 auth failure gets only 5 minutes</strong> (so single-key setups recover fast), other failures default to 1 hour. But that is only the <strong>fallback default</strong>: whenever the provider hands back a <span class="mono">reset_at</span>, or the error text says "retry after …" / "resets in 2 hr 13 min", Hermes <strong>parses the real recovery moment and overrides the default</strong>, refusing to slam early into a wall it knows is still locked. There is a nastier failure too: a 401 whose reason is <span class="mono">token_revoked</span> / <span class="mono">invalid_grant</span> — a <strong>permanent OAuth death</strong> — should not take the 1-hour cooldown (or it would come back every hour, fail, and cool down again); instead it is marked <span class="mono">DEAD</span> outright, clearing only when the user <strong>re-authenticates and writes fresh tokens back</strong>.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/credential_pool.py:108</span></div><pre># Cooldown before retrying an exhausted credential.
+# Transient 401 auth failures cool down briefly so single-key setups can recover.
+# 429 (rate-limited), 402 (billing/quota), and other failures cool down after 1 hour.
+# Provider-supplied reset_at timestamps override these defaults.
+EXHAUSTED_TTL_401_SECONDS = 5 * 60           # 5 minutes
+EXHAUSTED_TTL_429_SECONDS = 60 * 60          # 1 hour
+EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/credential_pool.py:250</span></div><pre>def _exhausted_ttl(error_code: Optional[int]) -&gt; int:
+    &quot;&quot;&quot;Return cooldown seconds based on the HTTP status that caused exhaustion.&quot;&quot;&quot;
+    if error_code == 401:
+        return EXHAUSTED_TTL_401_SECONDS
+    if error_code == 429:
+        return EXHAUSTED_TTL_429_SECONDS
+    return EXHAUSTED_TTL_DEFAULT_SECONDS</pre></div>
+
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="Credential-pool state machine: three states OK, EXHAUSTED, DEAD and their transitions — a failure stamps an expiry and enters EXHAUSTED, reset_at or TTL elapsing clears it back to OK, a permanent 401 auth failure goes straight to DEAD and is excluded for good, and only re-authentication that writes tokens back returns it to OK">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Credential-pool state machine · three states per key, select() picks only from OK</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">EXHAUSTED leaves briefly and auto-returns on expiry; DEAD is excluded for good, not via TTL</text>
+  <rect x="44" y="72" width="180" height="94" rx="14" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="134" y="110" text-anchor="middle" font-size="18" font-weight="700" fill="var(--accent-ink)">OK</text>
+  <text x="134" y="130" text-anchor="middle" font-size="9.5" fill="var(--muted)">STATUS_OK</text>
+  <text x="134" y="150" text-anchor="middle" font-size="10.5" fill="var(--ink)">usable, in rotation</text>
+  <rect x="456" y="72" width="180" height="94" rx="14" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="546" y="106" text-anchor="middle" font-size="14" font-weight="700" fill="var(--amber)">EXHAUSTED</text>
+  <text x="546" y="125" text-anchor="middle" font-size="9" fill="var(--muted)">STATUS_EXHAUSTED</text>
+  <text x="546" y="145" text-anchor="middle" font-size="10.5" fill="var(--ink)">cooling down, out briefly</text>
+  <rect x="44" y="244" width="180" height="94" rx="14" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="134" y="280" text-anchor="middle" font-size="16" font-weight="700" fill="var(--red)">DEAD</text>
+  <text x="134" y="299" text-anchor="middle" font-size="9" fill="var(--muted)">STATUS_DEAD</text>
+  <text x="134" y="319" text-anchor="middle" font-size="10.5" fill="var(--ink)">excluded for good</text>
+  <line x1="224" y1="104" x2="447" y2="104" stroke="var(--amber)" stroke-width="2"/>
+  <path d="M456,104 L447,99 L447,109 Z" fill="var(--amber)"/>
+  <text x="335" y="95" text-anchor="middle" font-size="10" fill="var(--amber)">rate-limit / auth failure → stamp expiry</text>
+  <line x1="447" y1="138" x2="233" y2="138" stroke="var(--accent)" stroke-width="2"/>
+  <path d="M224,138 L233,133 L233,143 Z" fill="var(--accent)"/>
+  <text x="335" y="153" text-anchor="middle" font-size="10" fill="var(--accent-ink)">reset_at / TTL elapsed → clear to OK</text>
+  <line x1="158" y1="166" x2="158" y2="240" stroke="var(--red)" stroke-width="2"/>
+  <path d="M158,244 L153,235 L163,235 Z" fill="var(--red)"/>
+  <line x1="190" y1="240" x2="190" y2="170" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <path d="M190,166 L185,175 L195,175 Z" fill="var(--muted)"/>
+  <rect x="266" y="250" width="370" height="88" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="282" y="276" font-size="10.5" fill="var(--red)">↓ 401 terminal-auth → DEAD (excluded for good)</text>
+  <text x="298" y="296" font-size="9.5" fill="var(--muted)">token_revoked · invalid_grant · token_invalidated…</text>
+  <text x="282" y="322" font-size="10.5" fill="var(--accent-ink)">↑ only a re-auth token write-back (sync) returns it to OK</text>
+</svg>
+<div class="fig-cap"><b>Credential-pool state machine</b>: a failure stamps an expiry on the key and enters <span class="mono">EXHAUSTED</span>, returning to <span class="mono">OK</span> only at <span class="mono">reset_at</span> / TTL; a permanent 401 auth failure (<span class="mono">token_revoked…</span>) is marked <span class="mono">DEAD</span> outright and revives only on a re-auth token write-back — never re-poke a bucket you have confirmed is empty.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 348" role="img" aria-label="Cooldown-length decision: bucketed by the HTTP status that tripped it — 401 gets 5 minutes, 429 gets 1 hour, others default to 1 hour; a provider's reset_at or retry-after text overrides these defaults">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Cooldown length · bucketed by HTTP status, provider text can override</text>
+  <rect x="260" y="44" width="160" height="46" rx="10" fill="var(--panel-2)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="340" y="66" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">HTTP failure status</text>
+  <text x="340" y="82" text-anchor="middle" font-size="9" fill="var(--muted)">status_code</text>
+  <line x1="340" y1="90" x2="340" y2="103" stroke="var(--muted)" stroke-width="1.6"/>
+  <path d="M340,107 L335,98 L345,98 Z" fill="var(--muted)"/>
+  <rect x="236" y="107" width="208" height="44" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="340" y="134" text-anchor="middle" font-size="11.5" fill="var(--blue)">_exhausted_ttl(error_code)</text>
+  <line x1="318" y1="151" x2="146" y2="192" stroke="var(--amber)" stroke-width="1.6"/>
+  <path d="M132,196 L127,187 L137,187 Z" fill="var(--amber)"/>
+  <text x="200" y="176" text-anchor="middle" font-size="10" font-weight="700" fill="var(--amber)">== 401</text>
+  <line x1="340" y1="151" x2="340" y2="192" stroke="var(--amber)" stroke-width="1.6"/>
+  <path d="M340,196 L335,187 L345,187 Z" fill="var(--amber)"/>
+  <text x="356" y="176" text-anchor="middle" font-size="10" font-weight="700" fill="var(--amber)">== 429</text>
+  <line x1="362" y1="151" x2="534" y2="192" stroke="var(--amber)" stroke-width="1.6"/>
+  <path d="M548,196 L543,187 L553,187 Z" fill="var(--amber)"/>
+  <text x="480" y="176" text-anchor="middle" font-size="10" font-weight="700" fill="var(--amber)">else</text>
+  <rect x="44" y="198" width="176" height="92" rx="10" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="132" y="224" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--amber)">401 · auth failure</text>
+  <text x="132" y="248" text-anchor="middle" font-size="9" fill="var(--muted)">EXHAUSTED_TTL_401_SECONDS</text>
+  <text x="132" y="274" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">5 min (300s)</text>
+  <rect x="252" y="198" width="176" height="92" rx="10" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="340" y="224" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--amber)">429 · rate limit</text>
+  <text x="340" y="248" text-anchor="middle" font-size="9" fill="var(--muted)">EXHAUSTED_TTL_429_SECONDS</text>
+  <text x="340" y="274" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">1 hour (3600s)</text>
+  <rect x="460" y="198" width="176" height="92" rx="10" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="548" y="224" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--amber)">402 / other failures</text>
+  <text x="548" y="248" text-anchor="middle" font-size="9" fill="var(--muted)">EXHAUSTED_TTL_DEFAULT_SECONDS</text>
+  <text x="548" y="274" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">1 hour (3600s)</text>
+  <rect x="44" y="300" width="592" height="36" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="340" y="323" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">⚡ a provider's reset_at or "retry after / resets in N hr" overrides these defaults</text>
+</svg>
+<div class="fig-cap"><b>Cooldown decision</b>: <span class="mono">_exhausted_ttl</span> buckets by the status that tripped it — 401 gets 5 minutes, 429 and others get 1 hour; but whenever the provider supplies a <span class="mono">reset_at</span> / "retry after" in the response or error text, the real recovery moment overrides the default.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 372" role="img" aria-label="Three rotation strategies compared: one pool of 5 keys — random picks any key, least_used picks the one with the smallest request count, round_robin takes the head and moves it to the tail — each strategy selects a different next key">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Rotation strategies · one pool of 5 keys, three pickers choose a different "next"</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">select() clears expired cooldowns, then picks from the available set by strategy</text>
+  <text x="28" y="90" font-size="12" font-weight="700" fill="var(--blue)">random</text>
+  <text x="28" y="107" font-size="9" fill="var(--muted)">random.choice(available)</text>
+  <rect x="236" y="70" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="269" y="97" text-anchor="middle" font-size="11" fill="var(--ink)">k1</text>
+  <rect x="314" y="70" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="347" y="97" text-anchor="middle" font-size="11" fill="var(--ink)">k2</text>
+  <rect x="392" y="70" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="425" y="97" text-anchor="middle" font-size="11" fill="var(--ink)">k3</text>
+  <rect x="470" y="70" width="66" height="44" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2.5"/>
+  <text x="503" y="97" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue)">k4</text>
+  <rect x="548" y="70" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="581" y="97" text-anchor="middle" font-size="11" fill="var(--ink)">k5</text>
+  <text x="503" y="130" text-anchor="middle" font-size="9.5" fill="var(--blue)">🎲 random hit</text>
+  <text x="28" y="202" font-size="12" font-weight="700" fill="var(--purple)">least_used</text>
+  <text x="28" y="219" font-size="9" fill="var(--muted)">min(request_count)</text>
+  <rect x="236" y="182" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="269" y="209" text-anchor="middle" font-size="11" fill="var(--ink)">k1</text>
+  <rect x="314" y="182" width="66" height="44" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2.5"/>
+  <text x="347" y="209" text-anchor="middle" font-size="11" font-weight="700" fill="var(--purple)">k2</text>
+  <rect x="392" y="182" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="425" y="209" text-anchor="middle" font-size="11" fill="var(--ink)">k3</text>
+  <rect x="470" y="182" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="503" y="209" text-anchor="middle" font-size="11" fill="var(--ink)">k4</text>
+  <rect x="548" y="182" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="581" y="209" text-anchor="middle" font-size="11" fill="var(--ink)">k5</text>
+  <text x="269" y="240" text-anchor="middle" font-size="9.5" fill="var(--muted)">req 7</text>
+  <text x="347" y="240" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--purple)">req 3</text>
+  <text x="425" y="240" text-anchor="middle" font-size="9.5" fill="var(--muted)">req 9</text>
+  <text x="503" y="240" text-anchor="middle" font-size="9.5" fill="var(--muted)">req 5</text>
+  <text x="581" y="240" text-anchor="middle" font-size="9.5" fill="var(--muted)">req 8</text>
+  <text x="347" y="258" text-anchor="middle" font-size="9.5" fill="var(--purple)">↑ fewest used</text>
+  <text x="28" y="314" font-size="12" font-weight="700" fill="var(--accent-ink)">round_robin</text>
+  <text x="28" y="331" font-size="9" fill="var(--muted)">head → move to tail</text>
+  <rect x="236" y="294" width="66" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="269" y="321" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">k1</text>
+  <rect x="314" y="294" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="347" y="321" text-anchor="middle" font-size="11" fill="var(--ink)">k2</text>
+  <rect x="392" y="294" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="425" y="321" text-anchor="middle" font-size="11" fill="var(--ink)">k3</text>
+  <rect x="470" y="294" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="503" y="321" text-anchor="middle" font-size="11" fill="var(--ink)">k4</text>
+  <rect x="548" y="294" width="66" height="44" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="581" y="321" text-anchor="middle" font-size="11" fill="var(--ink)">k5</text>
+  <path d="M269,294 C269,278 600,278 600,290" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <path d="M600,294 L595,285 L605,285 Z" fill="var(--accent)"/>
+  <text x="470" y="274" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">→ move to tail</text>
+  <text x="269" y="356" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">↑ take head</text>
+</svg>
+<div class="fig-cap"><b>Three rotation strategies</b>: from one pool of 5 keys, <span class="mono">random</span> hits any key, <span class="mono">least_used</span> picks the smallest request count, <span class="mono">round_robin</span> takes the head and moves it to the tail — each strategy's "next" is a different key.</div>
+</div>
+
+<h3>🔬 27.2 · Side-LLM routing: every side task runs its own resolution chain</h3>
+<p>Beyond the main conversation, Hermes runs a whole batch of <strong>side-LLM tasks</strong> — context compression, vision, web extraction, title generation, skill maintenance (curator)… each one is an <strong>independent model call</strong>, all funneled through one entry point: <span class="mono">_resolve_auto()</span> in <span class="mono">agent/auxiliary_client.py</span>. Its job is not "grab any model that works" but to route each side task to the "most appropriate provider + model" along a <strong>three-stage resolution chain</strong>.</p>
+<p><strong>① First, your current main provider + main model.</strong> The key is it uses the <strong>runtime</strong> copy, not the possibly-stale default in <span class="mono">config.yaml</span>: at the top of every turn <span class="mono">set_runtime_main()</span> syncs in the provider, model, <span class="mono">base_url</span>, and key that the CLI / gateway temporarily switched to, so side tasks ride the <strong>same model and the same already-verified key</strong> as the main conversation — predictable, never silently dropping to some cheap default model. A biting example: if you used <span class="mono">hermes model</span> to switch providers just for this session, then without this runtime sync side tasks would still fire against the old provider from <span class="mono">config.yaml</span> — hitting the wrong endpoint, or an account you no longer want to use. <strong>② When the main provider is unavailable</strong>, it checks that task's own <span class="mono">auxiliary.&lt;task&gt;.fallback_chain</span> first, then the main agent's top-level fallback policy. <strong>③ Only if nothing hits</strong> does it walk the hardcoded discovery chain: <span class="mono">openrouter → nous → local/custom → api-key</span>.</p>
+<p>Three real pitfalls to keep in mind. First, <strong>per-task pinning is real</strong>: every side task can <strong>pin its own</strong> <span class="mono">provider</span> and <span class="mono">model</span> under <span class="mono">auxiliary.&lt;task&gt;</span> — compression pins one, vision another, title generation a third, all independent. Second, <strong>a 402 / credit error marks the provider unhealthy and hides it for a while</strong>: on a payment or credit-exhaustion hit, <span class="mono">_mark_provider_unhealthy()</span> stamps an expiry on it, hidden for <span class="mono">_AUX_UNHEALTHY_TTL_SECONDS = 600</span> (10 minutes) by default; during that window both Step ① and Step ③ <strong>skip</strong> it, so no side call wastes a doomed 402 round-trip first — it auto-recovers at expiry, no manual intervention after a top-up. Third, <strong>the generic fallback chain may silently pick a cheaper / different model</strong> — it only guarantees "something that works," not "the same as your main model"; to avoid that, <strong>pin the task explicitly</strong>. A concrete case: if a vision task silently lands on a text-only cheap model, every image call 404s — exactly why <span class="mono">vision</span> deserves its own pin.</p>
+<p>One deliberate trade-off too: the discovery chain <strong>deliberately excludes Codex</strong>. The ChatGPT-account Codex endpoint only accepts a shifting, undocumented allow-list of model IDs, so falling back with a guessed model fails more often than not — Codex is used only when your <strong>main provider itself is</strong> <span class="mono">openai-codex</span>, or when a caller explicitly passes a model. (Aside: <span class="mono">session_search</span> no longer uses a side LLM as of PR #27590 — the tool returns DB content directly — so it is not in the matrix below.)</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/auxiliary_client.py:3322 · abridged</span></div><pre>def _resolve_auto(main_runtime=None, task=None):        # abridged
+    # ... normalize runtime (set_runtime_main records base_url / key)
+    # ── Step 1: main provider + main model → use them directly ──
+    main_provider = str(runtime_provider or _read_main_provider() or "")
+    main_model = str(runtime_model or _read_main_model() or "")
+    if (main_provider and main_model
+            and main_provider not in {"auto", ""}):
+        main_chain_label = _normalize_chain_label(main_provider)
+        if main_chain_label and _is_provider_unhealthy(main_chain_label):
+            _log_skip_unhealthy(main_chain_label)        # just 402'd -&gt; skip
+        else:
+            client, resolved = resolve_provider_client(main_provider, main_model, ...)
+            if client is not None:
+                return client, resolved or main_model    # (1) main provider+model
+
+    # ── Step 2: user-configured fallback policy ──
+    if task:
+        fb_client, fb_model, _ = _try_configured_fallback_chain(task, ...)  # auxiliary.&lt;task&gt;.fallback_chain
+        if fb_client is not None:
+            return fb_client, fb_model
+    fb_client, fb_model, _ = _try_main_fallback_chain(task, ...)            # top-level fallback
+    if fb_client is not None:
+        return fb_client, fb_model                       # (2) configured fallback
+
+    # ── Step 3: aggregator / fallback chain ──
+    for label, try_fn in _get_provider_chain():          # openrouter → nous → local/custom → api-key
+        if _is_provider_unhealthy(label):
+            _log_skip_unhealthy(label)                   # 402/credit -&gt; hidden 10 min, skip
+            continue
+        client, model = try_fn()
+        if client is not None:
+            return client, model                         # (3) discovery chain
+    return None, None</pre></div>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/auxiliary_client.py:2325 · abridged</span></div><pre>def _get_provider_chain() -&gt; List[tuple]:
+    &quot;&quot;&quot;Return the ordered provider detection chain.  ... (abridged)
+
+    NOTE: ``openai-codex`` is deliberately NOT in this chain.  The
+    ChatGPT-account Codex endpoint only accepts a shifting, undocumented
+    allow-list of model IDs, so falling back to it with a guessed model
+    fails more often than not.  Codex is used only when the user's main
+    provider *is* openai-codex (see Step 1 of ``_resolve_auto``) or when
+    a caller explicitly requests it with a model.&quot;&quot;&quot;
+    return [
+        ("openrouter", _try_openrouter),
+        ("nous", _try_nous),
+        ("local/custom", _try_custom_endpoint),
+        ("api-key", _resolve_api_key_provider),
+    ]</pre></div>
+
+<div class="figure">
+<svg viewBox="0 0 680 436" role="img" aria-label="Side-LLM routing decision tree: a side-task request tries stage one main provider plus main model, stage two per-task fallback_chain and top-level fallback, stage three the hardcoded discovery chain openrouter to nous to local/custom to api-key, returning the chosen provider and model on the first hit; an unhealthy provider (402 or out of credit) is stamped and hidden 10 minutes and skipped">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Side-LLM routing decision tree · three stages, first hit returns</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">each side task runs it once; an unhealthy provider is skipped outright</text>
+  <rect x="44" y="58" width="280" height="32" rx="10" fill="var(--panel-2)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="184" y="79" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">side task (compression / vision / title…)</text>
+  <line x1="184" y1="90" x2="184" y2="104" stroke="var(--muted)" stroke-width="1.6"/>
+  <path d="M184,108 L179,99 L189,99 Z" fill="var(--muted)"/>
+  <rect x="44" y="110" width="280" height="76" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="60" y="135" font-size="12.5" font-weight="700" fill="var(--accent-ink)">① main provider + main model</text>
+  <text x="60" y="155" font-size="9.5" fill="var(--muted)">set_runtime_main() syncs runtime base_url / key</text>
+  <text x="60" y="173" font-size="9.5" fill="var(--ink)">a hit reuses the main chat model, predictable</text>
+  <line x1="184" y1="186" x2="184" y2="200" stroke="var(--muted)" stroke-width="1.6"/>
+  <path d="M184,204 L179,195 L189,195 Z" fill="var(--muted)"/>
+  <text x="200" y="199" font-size="9" fill="var(--red)">miss / main just 402'd, hidden</text>
+  <rect x="44" y="204" width="280" height="72" rx="12" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="60" y="228" font-size="12.5" font-weight="700" fill="var(--blue)">② configured fallback policy</text>
+  <text x="60" y="248" font-size="9" fill="var(--muted)">auxiliary.&lt;task&gt;.fallback_chain (per task)</text>
+  <text x="60" y="265" font-size="9" fill="var(--muted)">→ main agent top-level fallback</text>
+  <line x1="184" y1="276" x2="184" y2="288" stroke="var(--muted)" stroke-width="1.6"/>
+  <path d="M184,292 L179,283 L189,283 Z" fill="var(--muted)"/>
+  <text x="200" y="289" font-size="9" fill="var(--muted)">miss</text>
+  <rect x="44" y="292" width="592" height="128" rx="12" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="60" y="316" font-size="12.5" font-weight="700" fill="var(--purple)">③ discovery chain · hardcoded default (no Codex)</text>
+  <rect x="64" y="328" width="116" height="40" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="122" y="349" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">openrouter</text>
+  <text x="122" y="362" text-anchor="middle" font-size="9" fill="var(--muted)">aggregator</text>
+  <text x="190" y="352" text-anchor="middle" font-size="12" fill="var(--purple)">→</text>
+  <rect x="200" y="328" width="116" height="40" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="258" y="349" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">nous</text>
+  <text x="258" y="362" text-anchor="middle" font-size="9" fill="var(--muted)">Nous</text>
+  <text x="326" y="352" text-anchor="middle" font-size="12" fill="var(--purple)">→</text>
+  <rect x="336" y="328" width="116" height="40" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="394" y="349" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">local/custom</text>
+  <text x="394" y="362" text-anchor="middle" font-size="9" fill="var(--muted)">local / self-host</text>
+  <text x="462" y="352" text-anchor="middle" font-size="12" fill="var(--purple)">→</text>
+  <rect x="472" y="328" width="116" height="40" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="530" y="349" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">api-key</text>
+  <text x="530" y="362" text-anchor="middle" font-size="9" fill="var(--muted)">direct key</text>
+  <rect x="52" y="376" width="536" height="34" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="64" y="397" font-size="9.5" fill="var(--red)">✗ an unhealthy provider (just 402'd / out of credit) → stamped, hidden 10 min, skip to next</text>
+  <rect x="430" y="120" width="210" height="120" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="535" y="164" text-anchor="middle" font-size="15" font-weight="700" fill="var(--accent-ink)">✓ chosen</text>
+  <text x="535" y="189" text-anchor="middle" font-size="11.5" fill="var(--ink)">provider + model</text>
+  <text x="535" y="212" text-anchor="middle" font-size="9" fill="var(--muted)">this side task fires the call</text>
+  <line x1="324" y1="148" x2="427" y2="160" stroke="var(--accent)" stroke-width="1.8"/>
+  <path d="M430,161 L421,158 L423,168 Z" fill="var(--accent)"/>
+  <text x="372" y="142" text-anchor="middle" font-size="9" fill="var(--accent-ink)">hit ✓</text>
+  <line x1="324" y1="240" x2="427" y2="214" stroke="var(--accent)" stroke-width="1.8"/>
+  <path d="M430,213 L421,212 L424,222 Z" fill="var(--accent)"/>
+  <text x="372" y="244" text-anchor="middle" font-size="9" fill="var(--accent-ink)">hit ✓</text>
+  <line x1="600" y1="292" x2="574" y2="244" stroke="var(--accent)" stroke-width="1.8"/>
+  <path d="M572,240 L569,250 L578,247 Z" fill="var(--accent)"/>
+  <text x="606" y="280" text-anchor="middle" font-size="9" fill="var(--accent-ink)">hit ✓</text>
+</svg>
+<div class="fig-cap"><b>Routing decision tree</b>: a side-task request resolves in order — ① main provider+model → ② per-task <span class="mono">fallback_chain</span> and top-level fallback → ③ hardcoded discovery chain (<span class="mono">openrouter→nous→local/custom→api-key</span>) — returning on the first hit; an unhealthy provider (402 / credit) is hidden 10 min and skipped, so no side call wastes a doomed request.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 352" role="img" aria-label="Side-LLM per-task routing matrix: rows are side tasks compression, vision, web_extract, title_generation, curator, each of which can pin its own provider and model under the auxiliary task block in config.yaml, so different tasks point at different models; unset means auto, with a shared fallback of openrouter google gemini-3-flash-preview">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">per-task routing matrix · each side task pins its own provider + model</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">pinned under auxiliary.&lt;task&gt; in config.yaml; unset = auto (= main chat model)</text>
+  <rect x="40" y="60" width="600" height="34" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="52" y="82" font-size="11" font-weight="700" fill="var(--accent-ink)">side task</text>
+  <text x="172" y="82" font-size="10" font-weight="700" fill="var(--accent-ink)">provider · pinnable</text>
+  <text x="322" y="82" font-size="10" font-weight="700" fill="var(--accent-ink)">model · pinnable</text>
+  <text x="532" y="82" font-size="10" font-weight="700" fill="var(--accent-ink)">typical use</text>
+  <rect x="40" y="94" width="600" height="40" fill="var(--panel)"/>
+  <rect x="40" y="134" width="600" height="40" fill="var(--panel-2)"/>
+  <rect x="40" y="174" width="600" height="40" fill="var(--panel)"/>
+  <rect x="40" y="214" width="600" height="40" fill="var(--panel-2)"/>
+  <rect x="40" y="254" width="600" height="40" fill="var(--panel)"/>
+  <text x="52" y="119" font-size="10.5" font-weight="700" fill="var(--ink)">compression</text>
+  <text x="172" y="119" font-size="10" fill="var(--accent-ink)">openrouter</text>
+  <text x="322" y="119" font-size="9.5" fill="var(--accent-ink)">google/gemini-3-flash-preview</text>
+  <text x="532" y="119" font-size="9" fill="var(--muted)">compress context</text>
+  <text x="52" y="159" font-size="10.5" font-weight="700" fill="var(--ink)">vision</text>
+  <text x="172" y="159" font-size="10" fill="var(--accent-ink)">openrouter</text>
+  <text x="322" y="159" font-size="9.5" fill="var(--accent-ink)">google/gemini-2.5-flash</text>
+  <text x="532" y="159" font-size="9" fill="var(--muted)">image / multimodal</text>
+  <text x="52" y="199" font-size="10.5" font-weight="700" fill="var(--ink)">web_extract</text>
+  <text x="172" y="199" font-size="10" fill="var(--accent-ink)">nous</text>
+  <text x="322" y="199" font-size="9.5" fill="var(--muted)">(provider default)</text>
+  <text x="532" y="199" font-size="9" fill="var(--muted)">web summary</text>
+  <text x="52" y="239" font-size="10.5" font-weight="700" fill="var(--ink)">title_generation</text>
+  <text x="172" y="239" font-size="10" fill="var(--accent-ink)">openrouter</text>
+  <text x="322" y="239" font-size="9.5" fill="var(--accent-ink)">google/gemini-3-flash-preview</text>
+  <text x="532" y="239" font-size="9" fill="var(--muted)">session titles</text>
+  <text x="52" y="279" font-size="10.5" font-weight="700" fill="var(--ink)">curator</text>
+  <text x="172" y="279" font-size="10" fill="var(--muted)">auto</text>
+  <text x="322" y="279" font-size="9.5" fill="var(--muted)">(= main chat model)</text>
+  <text x="532" y="279" font-size="9" fill="var(--muted)">skill-usage review</text>
+  <line x1="160" y1="60" x2="160" y2="294" stroke="var(--line)" stroke-width="1"/>
+  <line x1="310" y1="60" x2="310" y2="294" stroke="var(--line)" stroke-width="1"/>
+  <line x1="520" y1="60" x2="520" y2="294" stroke="var(--line)" stroke-width="1"/>
+  <rect x="40" y="304" width="600" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="340" y="325" text-anchor="middle" font-size="9.5" fill="var(--blue)">▸ illustrative: any unpinned task runs the _resolve_auto 3-stage chain, shared fallback openrouter:google/gemini-3-flash-preview</text>
+</svg>
+<div class="fig-cap"><b>Per-task routing matrix</b>: every side task can be pinned independently via <span class="mono">auxiliary.&lt;task&gt;.provider</span> / <span class="mono">.model</span>, so different tasks point at different models (values shown are illustrative); unpinned means <span class="mono">auto</span>, with a shared fallback of <span class="mono">openrouter:google/gemini-3-flash-preview</span>.</div>
+</div>
+
+<h3>🔬 27.3 · Context window: resolve in layers first, then compute the compression threshold</h3>
+<p>Compression never fires off a hardcoded "compress at X%" — first you have to <strong>know how large this model's window actually is</strong>. And "how large" is contested for one model name: the user may have overridden it in <span class="mono">config.yaml</span>, last probe's value is cached on disk, the provider's <span class="mono">/models</span> endpoint can report it, <span class="mono">models.dev</span> has it registered, a local server can be queried, and failing all that there's a hardcoded default guessed by model family. <span class="mono">get_model_context_length()</span> in <span class="mono">agent/model_metadata.py</span> arranges these sources into a <strong>layered resolution chain</strong>, top-down, returning on the first hit.</p>
+<p>The order (excerpted from its docstring's resolution order): <strong>⓪ explicit config override</strong> (<span class="mono">model.context_length</span> or a custom provider's per-model setting — the user knows their endpoint best) → <strong>① persistent cache</strong> (a previously-probed value on disk) → <strong>①b AWS Bedrock static table</strong> → <strong>② custom-endpoint /models metadata</strong> → <strong>③ local server query</strong> → <strong>④ Anthropic /v1/models</strong> (API-key only, not OAuth) → <strong>⑤ provider-aware probes</strong> (Copilot, Nous live, Codex OAuth, GMI, Ollama, <span class="mono">models.dev</span>) → <strong>⑥ OpenRouter live metadata</strong> (with a Kimi 32k guard) → <strong>⑦ hardcoded defaults</strong> (by model family, longest-key-first) → <strong>⑧ local server last resort</strong> → <strong>⑨ default 256K</strong>.</p>
+<p>The sharpest pit here is <strong>"the cache may be stale, and for some providers it must be actively bypassed."</strong> The cache is an optimization — probe once, reuse for a long time; but a few providers either change their window or had a wrong value persisted, and trusting the cache blindly miscomputes the window: <strong>LM Studio</strong>'s loaded context is <strong>transient</strong> (the user can reload the model with a different <span class="mono">context_length</span> at any time), so it <strong>skips the persistent cache entirely</strong>; <strong>Nous</strong> URLs bypass the cache at this step and always defer to the portal <span class="mono">/v1/models</span>; <strong>Codex</strong> OAuth caps at 272K for every slug, so any cached value ≥ 400K is a dirty leftover from the old resolution path and is dropped and re-probed; a <strong>Kimi</strong>-family cache ≤ 32768 is an OpenRouter underreport, and <strong>MiniMax-M3</strong> ≤ 204800 / <strong>Grok-4.3</strong> ≤ 256000 are pre-catalog values persisted before the new entry existed — all three are dropped and fall back to the hardcoded default (they're actually 1M). In one line: <strong>a cache hit ≠ trustworthy; edge providers must be re-verified.</strong></p>
+<p>Once the window is resolved, <span class="mono">_compute_threshold_tokens()</span> in <span class="mono">agent/context_compressor.py</span> computes the <strong>trigger threshold</strong>. It isn't a plain "window × 50%" — it's three steps: ① base = <strong>effective input budget × <span class="mono">threshold_percent</span></strong> (default <strong>0.50</strong>); ② floor it at <strong><span class="mono">MINIMUM_CONTEXT_LENGTH</span> = 64K</strong> so large-context models don't compress prematurely at 50%; ③ but that floor degenerates on a <strong>small window</strong>: for a 64K local model, <span class="mono">max(0.5×64000, 64000) == 64000</span> makes the threshold equal the <strong>entire window</strong>, so auto-compression can never fire — the provider rejects the request before usage reaches 100%. So when the floor ≥ the window, it triggers at <strong><span class="mono">_MIN_CTX_TRIGGER_RATIO</span> = 85%</strong> instead. One more layer: the provider <strong>reserves <span class="mono">max_tokens</span> of output space</strong> out of the same window, so the usable <strong>input</strong> budget is <span class="mono">context_length − max_tokens</span> — both the percentage and the degenerate-window check run on this "effective input budget," or a large <span class="mono">max_tokens</span> (e.g. 65536 on a custom provider) lets the session hit a provider 400 before compaction fires.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/context_compressor.py:742 · abridged</span></div><pre>def _compute_threshold_tokens(
+    context_length: int, threshold_percent: float, max_tokens: int | None = None,
+) -&gt; int:
+    &quot;&quot;&quot;Compute the compaction trigger threshold in tokens.
+
+    The base value is ``effective_input_budget * threshold_percent``, floored
+    at ``MINIMUM_CONTEXT_LENGTH`` so large-context models don't compress
+    prematurely at 50%. ...(docstring abridged: #14690 degenerate window / #43547 max_tokens)
+    &quot;&quot;&quot;
+    effective_window = context_length - (max_tokens or 0)   # drop output reservation
+    if effective_window &lt;= 0:
+        effective_window = context_length
+    pct_value = int(effective_window * threshold_percent)   # default 0.50
+    floored = max(pct_value, MINIMUM_CONTEXT_LENGTH)        # 64_000 floor
+    # If flooring pushed the threshold to/over the effective window it can
+    # never be reached. Trigger at 85% of the effective input budget so a
+    # minimum-context model rides most of its budget before compacting
+    # instead of wasting half.
+    if effective_window &gt; 0 and floored &gt;= effective_window:
+        return max(1, min(int(effective_window * ContextCompressor._MIN_CTX_TRIGGER_RATIO),
+                          effective_window - 1))
+    return floored</pre></div>
+
+<div class="figure">
+<svg viewBox="0 0 680 446" role="img" aria-label="Layered context-window resolution waterfall: top-down through config override, persistent cache, provider probes (Bedrock, custom endpoint, local, Anthropic, Codex, Nous, OpenRouter, models.dev), and the hardcoded default falling back to 256K, returning on the first hit; the right side notes that some providers must bypass a stale cache, including LM Studio, Nous, Codex, Kimi, MiniMax, and Grok">
+  <text x="20" y="24" font-size="13.5" font-weight="700" fill="var(--ink)">Layered context-window resolution · top-down, return on first hit</text>
+  <text x="20" y="44" font-size="10.5" fill="var(--muted)">get_model_context_length(): one model name, the window may come from any layer</text>
+  <line x1="30" y1="79" x2="30" y2="384" stroke="var(--accent)" stroke-width="1.6"/>
+  <path d="M30,392 L25,382 L35,382 Z" fill="var(--accent)"/>
+  <text x="38" y="74" font-size="9" font-weight="700" fill="var(--accent-ink)">✓ hit → return</text>
+  <rect x="58" y="60" width="320" height="38" rx="9" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="70" y="80" font-size="12" font-weight="700" fill="var(--purple)">⓪ config override (top priority)</text>
+  <text x="70" y="93" font-size="9" fill="var(--muted)">model.context_length · custom provider per-model</text>
+  <line x1="58" y1="79" x2="34" y2="79" stroke="var(--accent)" stroke-width="1.4"/>
+  <path d="M30,79 L39,74 L39,84 Z" fill="var(--accent)"/>
+  <line x1="218" y1="98" x2="218" y2="109" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M218,112 L213,103 L223,103 Z" fill="var(--muted)"/>
+  <text x="228" y="109" font-size="9" fill="var(--red)">miss</text>
+  <rect x="58" y="112" width="320" height="38" rx="9" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="70" y="132" font-size="12" font-weight="700" fill="var(--purple)">① persistent cache (probed, on disk)</text>
+  <text x="70" y="145" font-size="9" fill="var(--muted)">Nous URLs bypass here, deferring to portal /v1/models</text>
+  <line x1="58" y1="131" x2="34" y2="131" stroke="var(--accent)" stroke-width="1.4"/>
+  <path d="M30,131 L39,126 L39,136 Z" fill="var(--accent)"/>
+  <line x1="218" y1="150" x2="218" y2="161" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M218,164 L213,155 L223,155 Z" fill="var(--muted)"/>
+  <text x="228" y="161" font-size="9" fill="var(--red)">miss</text>
+  <rect x="58" y="164" width="320" height="142" rx="9" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="70" y="183" font-size="11.5" font-weight="700" fill="var(--purple)">②–⑥ provider probes (in order)</text>
+  <rect x="66" y="194" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="100" y="213" text-anchor="middle" font-size="9" fill="var(--ink)">Bedrock</text>
+  <rect x="142" y="194" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="176" y="213" text-anchor="middle" font-size="9" fill="var(--ink)">custom</text>
+  <rect x="218" y="194" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="252" y="213" text-anchor="middle" font-size="9" fill="var(--ink)">local</text>
+  <rect x="294" y="194" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="328" y="213" text-anchor="middle" font-size="9" fill="var(--ink)">Anthropic</text>
+  <rect x="66" y="230" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="100" y="249" text-anchor="middle" font-size="9" fill="var(--ink)">Codex</text>
+  <rect x="142" y="230" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="176" y="249" text-anchor="middle" font-size="9" fill="var(--ink)">Nous</text>
+  <rect x="218" y="230" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="252" y="249" text-anchor="middle" font-size="9" fill="var(--ink)">OpenRouter</text>
+  <rect x="294" y="230" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="328" y="249" text-anchor="middle" font-size="9" fill="var(--ink)">models.dev</text>
+  <text x="70" y="280" font-size="9" fill="var(--muted)">a successful probe is cached (except LM Studio / Nous)</text>
+  <text x="70" y="296" font-size="9" fill="var(--muted)">⑥ OpenRouter carries a Kimi 32k guard so an underreport can't win</text>
+  <line x1="58" y1="235" x2="34" y2="235" stroke="var(--accent)" stroke-width="1.4"/>
+  <path d="M30,235 L39,230 L39,240 Z" fill="var(--accent)"/>
+  <line x1="218" y1="306" x2="218" y2="317" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M218,320 L213,311 L223,311 Z" fill="var(--muted)"/>
+  <text x="228" y="317" font-size="9" fill="var(--red)">miss</text>
+  <rect x="58" y="320" width="320" height="42" rx="9" fill="var(--panel-2)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="70" y="340" font-size="12" font-weight="700" fill="var(--purple)">⑦–⑨ hardcoded defaults → 256K fallback</text>
+  <text x="70" y="354" font-size="9" fill="var(--muted)">by family, longest-key-first; else DEFAULT_FALLBACK_CONTEXT</text>
+  <line x1="58" y1="341" x2="34" y2="341" stroke="var(--accent)" stroke-width="1.4"/>
+  <path d="M30,341 L39,336 L39,346 Z" fill="var(--accent)"/>
+  <rect x="406" y="112" width="250" height="96" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="418" y="132" font-size="10" font-weight="700" fill="var(--ink)">⚠ edge providers must bypass a stale cache</text>
+  <text x="418" y="151" font-size="9" fill="var(--muted)">a cache hit ≠ trustworthy: window shifts</text>
+  <text x="418" y="170" font-size="9.5" fill="var(--ink)">LM Studio · Nous · Codex</text>
+  <text x="418" y="188" font-size="9.5" fill="var(--ink)">Kimi · MiniMax · Grok</text>
+  <text x="418" y="202" font-size="9" fill="var(--amber)">→ drop the stale value, re-probe</text>
+  <line x1="406" y1="140" x2="382" y2="133" stroke="var(--amber)" stroke-width="1.4"/>
+  <path d="M378,132 L388,130 L385,139 Z" fill="var(--amber)"/>
+  <rect x="24" y="384" width="632" height="42" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="44" y="404" font-size="11" font-weight="700" fill="var(--accent-ink)">✓ return on first hit: the resolved window value</text>
+  <text x="44" y="419" font-size="9.5" fill="var(--ink)">→ handed to _compute_threshold_tokens() to compute the trigger (not a fixed percentage)</text>
+</svg>
+<div class="fig-cap"><b>Resolution waterfall</b>: <span class="mono">get_model_context_length()</span> goes top-down through config override → persistent cache → provider probes (Bedrock / custom / local / Anthropic / Codex / Nous / OpenRouter / models.dev) → hardcoded default falling back to 256K, <strong>returning on the first hit</strong>; the real pit is on the right — <strong>LM Studio / Nous / Codex / Kimi / MiniMax / Grok</strong> must actively bypass a stale cache, or the window is miscomputed.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 372" role="img" aria-label="Window-to-threshold schematic: the top row is a large 256K window where the effective input budget equals the window minus the max_tokens reservation and the trigger sits at 50% of that budget with a 64K floor; the bottom row is a small 64K window where 50% of the budget is raised by the floor to the whole window and never fires, so it degenerates to triggering at 85%; the bottom notes that a miscomputed window compresses too early and wastes the cache or too late and is rejected by the provider">
+  <text x="20" y="24" font-size="13.5" font-weight="700" fill="var(--ink)">Window → compression threshold · effective input budget × percent, 64K floor</text>
+  <text x="20" y="44" font-size="10.5" fill="var(--muted)">threshold = max(budget × 0.50, 64K); if floor ≥ window it degenerates to 85% (schematic, not to scale)</text>
+  <text x="20" y="74" font-size="11.5" font-weight="700" fill="var(--purple)">Large window (resolved window = 256K)</text>
+  <rect x="40" y="84" width="600" height="34" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="40" y="84" width="258" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <rect x="556" y="84" width="84" height="34" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="160" y="105" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">used tokens (growing →)</text>
+  <text x="598" y="100" text-anchor="middle" font-size="9" fill="var(--amber)">max_tokens</text>
+  <text x="598" y="111" text-anchor="middle" font-size="9" fill="var(--amber)">reserve (output)</text>
+  <line x1="298" y1="76" x2="298" y2="126" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="298" y="139" text-anchor="middle" font-size="9" fill="var(--red)">trigger = 50% × budget (≥ 64K floor)</text>
+  <text x="420" y="79" font-size="9" fill="var(--muted)">effective input budget = window − max_tokens</text>
+  <text x="335" y="105" font-size="11" fill="var(--red)">→ cross it, compress</text>
+  <text x="20" y="172" font-size="11.5" font-weight="700" fill="var(--purple)">Small window (resolved window = 64K, local model)</text>
+  <rect x="40" y="182" width="320" height="34" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="40" y="182" width="247" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <rect x="330" y="182" width="30" height="34" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="150" y="203" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">used tokens (growing →)</text>
+  <line x1="287" y1="174" x2="287" y2="224" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="287" y="237" text-anchor="middle" font-size="9" fill="var(--red)">floor ≥ window → degenerate → trigger at 85%</text>
+  <text x="372" y="195" font-size="9" fill="var(--muted)">50%×64K = 32K, but floor 64K = whole window</text>
+  <text x="372" y="208" font-size="9" fill="var(--muted)">→ never fires, so use 85% (_MIN_CTX_TRIGGER_RATIO)</text>
+  <rect x="20" y="296" width="640" height="60" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="34" y="316" font-size="10" font-weight="700" fill="var(--red)">⚠ two costs of a miscomputed window</text>
+  <text x="34" y="334" font-size="9.5" fill="var(--ink)">too large → threshold too high → compresses too late, hits a provider 400 first (max_tokens not subtracted)</text>
+  <text x="34" y="350" font-size="9.5" fill="var(--ink)">too small / floor degeneracy unhandled → compresses too early, wastes a prefix still in cache</text>
+</svg>
+<div class="fig-cap"><b>Window → threshold</b>: the trigger = <span class="mono">max(effective input budget × 0.50, 64K)</span>; a large window lands mid-bar, a small one degenerates via the floor to <strong>85%</strong>. The <span class="mono">max_tokens</span> reserve must be subtracted from the window, or compressing <strong>too late</strong> hits a provider 400; leaving the floor degeneracy unhandled compresses <strong>too early</strong> and wastes the cache.</div>
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · treat the "model" as a stateful resource to schedule</div>
+  This chapter's three mechanisms — the <strong>credential pool</strong>, <strong>side-LLM routing</strong>, and <strong>context-length resolution</strong> — each manage a different patch on the surface, yet share one idea underneath: <strong>a model is not a stateless endpoint, it's a stateful resource that needs scheduling.</strong>
+  <p style="margin:.5rem 0 0"><strong>The "state" each one carries:</strong> ① the credential pool maintains <span class="mono">OK / EXHAUSTED / DEAD</span> status and an expiry stamp per key, tripping only on a <strong>confirmed-empty bucket</strong> and never re-probing; ② side-LLM routing maintains a resolution chain and an <span class="mono">unhealthy</span> hide-window per side task, turning "call a model" into routable, pinnable, trippable scheduling; ③ context-length turns "how big is the window" from a constant into a <strong>runtime fact resolved in layers</strong>, then derives the compression threshold from it.</p>
+  <p style="margin:.5rem 0 0"><strong>Echoing the book's two throughlines:</strong> this is <strong>resilience / evolvability</strong> in action — state externalized, failure bounded, wrong values correctable (actively bypassing a stale cache); and side-task routing also guards the <strong>narrow waist</strong>: the core needn't embed multi-provider, multi-model selection logic into the main loop, but hands it to an independent resolver scheduled by config, so the core only has to "get a usable client."</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>The credential pool is a state machine</strong>: each key moves through <span class="mono">OK → EXHAUSTED → DEAD</span> — 429 rate-limit cools down <strong>1 hour</strong>, 401 auth failure <strong>5 minutes</strong>, a <span class="mono">token_revoked</span>-class permanent failure goes straight to <span class="mono">DEAD</span>; the iron rule is <strong>never re-probe a bucket you've confirmed is empty</strong>, trip only on the hard evidence of <span class="mono">remaining=0</span>.</li>
+    <li><strong>Side-LLM three-stage routing</strong>: ① main provider+model (runtime-synced) → ② per-task <span class="mono">fallback_chain</span> and top-level fallback → ③ hardcoded discovery chain; every side task can be <strong>pinned per-task</strong> under <span class="mono">auxiliary.&lt;task&gt;</span>, and a provider that 402s is marked <span class="mono">unhealthy</span> and hidden <strong>10 minutes</strong>.</li>
+    <li><strong>Resolve the window first, compute the threshold second</strong>: <span class="mono">get_model_context_length()</span> runs a <strong>layered chain</strong> — config → persistent cache → provider probes (Bedrock / custom / local / Anthropic / Codex / Nous / OpenRouter / models.dev) → hardcoded default (256K fallback), returning on first hit; the compression threshold derives from this, <strong>not a fixed percentage</strong>.</li>
+    <li><strong>A cache hit ≠ trustworthy</strong>: edge providers like LM Studio / Nous / Codex / Kimi / MiniMax / Grok must <strong>actively bypass a stale cache</strong>, or the window is miscomputed — compress too early (waste the cache) or too late (overrun and get a provider 400).</li>
+    <li><strong>The threshold in three steps</strong>: base = effective input budget (<span class="mono">window − max_tokens</span>) × <strong>0.50</strong>, floored at <strong>64K</strong> (<span class="mono">MINIMUM_CONTEXT_LENGTH</span>); when the floor ≥ window (a small model degenerates) it triggers at <strong>85%</strong> (<span class="mono">_MIN_CTX_TRIGGER_RATIO</span>) instead, so compaction can still fire.</li>
+    <li><strong>The shared idea</strong>: all three treat the model as a <strong>stateful resource to schedule</strong> — rotate / trip, route / pin, resolve / compute-threshold — not a stateless socket you call on demand; one more landing of agent resilience and the narrow waist.</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Why does the credential pool never retry a key it just confirmed is exhausted/dead (EXHAUSTED/DEAD)?</div>
+  <ol class="opts">
+    <li>To save memory — fewer keys in the pool means faster rotation</li>
+    <li>The model randomly decides whether to retry the key</li>
+    <li>Retrying a bucket already confirmed empty is bound to fail again and waste a round-trip — DEAD is excluded unconditionally, and EXHAUSTED only rejoins the candidates after reset_at or the bucketed TTL (429 gets 1 hour, 401 gets 5 minutes) elapses</li>
+    <li>A rate-limited key quietly revives on its own, so just poke it again and it works</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: C</strong>. This hits the credential pool's iron rule — never re-probe a bucket you have already confirmed is empty. On failure, mark_exhausted_and_rotate() stamps an expiry on the offending key and immediately re-selects the next one, instead of deleting it or poking it every few seconds to ask 'ready yet?'. DEAD (permanent failures like 401 token_revoked / invalid_grant) is skipped with a plain continue in select() and revives only when the user re-authenticates and writes fresh tokens back; EXHAUSTED clears back to OK only after last_error_reset_at or the bucketed TTL (429=1 hour, 401=5 minutes) elapses. Retrying before then slams into the same wall you know is locked — it is bound to fail again and waste a round-trip.</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. What is the first priority (Step 1) of the auxiliary-LLM router _resolve_auto?</div>
+  <ol class="opts">
+    <li>A random pick from all available models</li>
+    <li>The current session's runtime main provider + main model — the copy synced in by set_runtime_main(), not the possibly-stale default in config.yaml</li>
+    <li>The head of the hardcoded discovery chain: openrouter</li>
+    <li>The cheapest model available anywhere</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: B</strong>. Step 1 of _resolve_auto is 'use your current main provider + main model first,' and the key is to use the runtime copy: at the start of each turn set_runtime_main() syncs in the provider, model, base_url and key that the CLI/gateway temporarily switched to, so the auxiliary task runs on the same model and the same already-validated key as the main conversation — predictable, never silently dropping to some cheap default. openrouter is merely the fallback head of the Step 3 hardcoded discovery chain, reached only when the main provider is unavailable and the user-configured fallback also misses.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Give a scenario where you would individually 'pin' the provider + model for one auxiliary task (context compression / title generation / vision), explain the concrete failure you want to avoid (e.g. vision silently dropping to a text-only cheap model that 404s on every image), and say which design line it maps to.</li>
+  </ul>
+</div>
+</div>
+</section>
+<section class="lesson-print">
+<h1>Runtime resilience: interrupt · background · files</h1>
+
+<p class="lead">An agent that has run dozens of turns, still has background processes open, and is mid-edit on a file — how does it <strong>stop safely, reliably know when background work finishes, and persist atomically</strong>? This chapter opens up the three runtime mechanisms most prone to correctness bugs.</p>
+
+<div class="card analogy">
+  <div class="tag">🔌 Analogy · in-flight emergency procedures</div>
+  An emergency stop is never <strong>instantaneous</strong>. After the pilot pulls back, the aircraft only recovers at the <strong>next stable point</strong> — which is exactly what a <strong>cooperative interrupt</strong> is: the signal is honored at a boundary, not the instant it is raised.
+  <p style="margin:.6rem 0 0">The same restraint returns twice more in this chapter. That background engine is either <strong>really still turning</strong> or it stopped long ago — the instruments must report that <strong>truthfully</strong>, and must <strong>not raise the same alarm twice</strong> (notification de-duplication). To change the flight plan you don't scribble over the live copy: you draft it, <strong>verify it, then swap it in atomically</strong> (write a temp file, then rename). Three runtime traps, one quiet throughline: a <strong>stop</strong>, a <strong>look</strong>, and a <strong>save</strong> each have a moment where "looks done" and "is done" can silently diverge.</p>
+</div>
+
+<div class="card macro">
+  <div class="tag">🌍 Macro · three runtime correctness traps</div>
+  The runtime — the layer that actually <strong>stops, watches, and persists</strong> — hides three places where the intuitive model is wrong:
+  <p style="margin:.6rem 0 0"><strong>① An interrupt is cooperative, not preemptive.</strong> Pressing <span class="mono">/stop</span> only <strong>sets a flag</strong>; the main loop honors it at its <strong>boundary</strong> (between iterations), and propagation to subagents is <strong>hand-wired</strong> — the parent walks an <span class="mono">_active_children</span> registry and calls <span class="mono">child.interrupt()</span> on each. Miss the registration (or deliberately detach, as async delegation does) and a child <strong>never hears</strong> the stop.</p>
+  <p><strong>② Background "durability" is mostly an in-process illusion.</strong> A <span class="mono">background=true</span> <span class="mono">delegate_task</span> is detached from the turn but still <strong>process-local</strong> — it dies with the process. Durability that survives a <strong>restart</strong> needs <span class="mono">cronjob</span> or a backgrounded terminal job, not a future living in memory.</p>
+  <p><strong>③ On-disk atomicity hangs on one unremarkable rename.</strong> A half-written config or session file is corruption; the fix is to write a temp file and <strong>atomically rename</strong> it into place, so a reader only ever sees either the old file or the whole new one — <strong>never a torn middle</strong>.</p>
+  <p>Three independent traps, one throughline: at every runtime edge, <strong>"looks finished" is not "is finished"</strong> — and that seam is where the bug lives.</p>
+</div>
+
+<p>Of the three, we start with the subtlest: how a "stop" actually travels through a running agent — and why it so often <strong>fails to reach a subagent</strong>.</p>
+
+<h3>🔬 28.1 · Interrupt propagation: a cooperative stop, an explicit subagent fan-out</h3>
+<p>When a user presses <span class="mono">/stop</span> (or the gateway receives a stop command), the call is <span class="mono">AIAgent.interrupt()</span>. It does two things: it sets <span class="mono">agent._interrupt_requested = True</span> and records the new message that triggered it, then calls <span class="mono">_set_interrupt(True, execution-thread-id)</span> to stamp a <strong>thread-scoped</strong> interrupt signal on <strong>this agent's own execution thread</strong>, so a tool already running there (say a terminal command hung on network I/O) can bail the next time it self-checks. The signal is <strong>targeted by thread</strong>: other agents running in the same gateway process are left untouched.</p>
+<p>But setting the flag is <strong>not</strong> where the interrupt is "honored" — that happens at the <strong>main tool-loop boundary</strong>. Each time the <span class="mono">while</span> loop in <span class="mono">agent/conversation_loop.py</span> begins a new iteration it polls <span class="mono">agent._interrupt_requested</span>; on a hit it sets <span class="mono">interrupted</span>, records <span class="mono">_turn_exit_reason = "interrupted_by_user"</span>, prints a "Breaking out of tool loop" line, and <span class="mono">break</span>s. The check sits <strong>between iterations</strong> — never in the middle of a single API call or a tool execution.</p>
+<p>So a Hermes interrupt is <strong>cooperative, not preemptive</strong>. Python can't hard-kill a thread from the outside, so nothing instantly halts code that is already running — everything relies on each site <strong>voluntarily polling that flag</strong>. Beyond the loop boundary a few in-iteration check points exist: the streaming delta callback inspects <span class="mono">_interrupt_requested</span> and cuts the stream short; a non-streaming API call runs a background checker that <strong>force-closes the httpx client</strong> so a blocked request raises and returns at once; and the failure-retry backoff sleep <strong>polls every 200ms</strong> (<span class="mono">time.sleep(0.2)</span>) and abandons the retry the moment a stop arrives. But any stretch of code that <strong>doesn't</strong> check the flag — a tight CPU loop, an uncooperative third-party call — runs to its own end or its own timeout, and the loop can only truly stop at the next boundary once control returns.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">agent/conversation_loop.py:589</span></div><pre>    while (api_call_count &lt; agent.max_iterations and agent.iteration_budget.remaining &gt; 0) or agent._budget_grace_call:
+        # Reset per-turn checkpoint dedup so each iteration can take one snapshot
+        agent._checkpoint_mgr.new_turn()
+
+        # Check for interrupt request (e.g., user sent new message)
+        if agent._interrupt_requested:
+            interrupted = True
+            _turn_exit_reason = "interrupted_by_user"
+            if not agent.quiet_mode:
+                agent._safe_print("\n⚡ Breaking out of tool loop due to interrupt...")
+            break</pre></div>
+<p>The second trap, and the easier one to hit: propagation to subagents is <strong>explicit hand-wiring</strong>, not free. At the end of <span class="mono">interrupt()</span> the agent walks <span class="mono">self._active_children</span> — its <strong>registry of live subagents</strong> — and calls <span class="mono">child.interrupt(message)</span> on each; that child in turn walks its own <span class="mono">_active_children</span>, so the interrupt <strong>fans out recursively</strong> to grandchildren and beyond. But the chain only holds because <strong>every spawned child registers itself in the parent's <span class="mono">_active_children</span></strong> (see the "Register child for interrupt propagation" step in <span class="mono">delegate_tool.py</span>) and unregisters when it finishes. Let a delegation path <strong>forget to register, or deliberately detach</strong>, and the parent's <span class="mono">/stop</span> <strong>silently never reaches</strong> that child — it keeps running in its own streaming / tool loop.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">run_agent.py:2433</span></div><pre>        # Propagate interrupt to any running child agents (subagent delegation)
+        with self._active_children_lock:
+            children_copy = list(self._active_children)
+        for child in children_copy:
+            try:
+                child.interrupt(message)
+            except Exception as e:
+                logger.debug("Failed to propagate interrupt to child agent: %s", e)</pre></div>
+<p>Async / background delegation detaches on purpose: a <span class="mono">background=true</span> batch <strong>removes</strong> its children from the parent's <span class="mono">_active_children</span> (their lifecycle now belongs to the async registry, not this turn) and registers a separate <span class="mono">interrupt_fn</span> to cancel them instead. That's by design, not a bug — but it shows precisely why "the interrupt will propagate on its own" is a dangerous assumption: <strong>the fan-out is a hand-maintained invariant, not a language feature</strong>. Any new delegation path has to decide, explicitly, who carries the stop down to the children.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 432" role="img" aria-label="Interrupt fan-out: the central agent.interrupt() sets _interrupt_requested to True and propagates along four paths — main loop boundary polling, subagents needing an explicit child.interrupt(), the streaming callback checking the flag per token, and retry backoff polling every 200ms; the subagent path is marked red to stress that propagation is explicit and breaks if a child is unregistered or detached">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Interrupt fan-out · one flag, four cooperative paths</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">interrupt() sets the flag and stamps this thread; each site polls it voluntarily — only subagents need an explicit fan-out</text>
+  <rect x="240" y="58" width="200" height="62" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="340" y="84" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent-ink)">agent.interrupt()</text>
+  <text x="340" y="104" text-anchor="middle" font-size="9.5" fill="var(--muted)">_interrupt_requested = True</text>
+  <line x1="340" y1="120" x2="92" y2="224" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M92,232 L87,223 L97,223 Z" fill="var(--muted)"/>
+  <line x1="340" y1="120" x2="257" y2="224" stroke="var(--red)" stroke-width="1.8"/>
+  <path d="M257,232 L252,223 L262,223 Z" fill="var(--red)"/>
+  <line x1="340" y1="120" x2="422" y2="224" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M422,232 L417,223 L427,223 Z" fill="var(--muted)"/>
+  <line x1="340" y1="120" x2="587" y2="224" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M587,232 L582,223 L592,223 Z" fill="var(--muted)"/>
+  <rect x="16" y="232" width="152" height="120" rx="10" fill="var(--panel)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="92" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">Main loop boundary</text>
+  <text x="92" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">loop boundary</text>
+  <line x1="26" y1="281" x2="158" y2="281" stroke="var(--line)"/>
+  <text x="26" y="301" font-size="9.5" fill="var(--ink)">polls the flag each turn</text>
+  <text x="26" y="318" font-size="9.5" fill="var(--ink)">hit, then break the loop</text>
+  <text x="26" y="341" font-size="9" fill="var(--muted)">conversation_loop.py:594</text>
+  <rect x="181" y="232" width="152" height="120" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="257" y="257" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">Subagents · explicit</text>
+  <text x="257" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">_active_children fan-out</text>
+  <line x1="191" y1="281" x2="323" y2="281" stroke="var(--line)"/>
+  <text x="191" y="301" font-size="9.5" fill="var(--ink)">walk registry, each:</text>
+  <text x="191" y="318" font-size="9.5" fill="var(--ink)">child.interrupt()</text>
+  <text x="191" y="341" font-size="9" font-weight="700" fill="var(--red)">⚠ unregistered / detached = lost</text>
+  <rect x="346" y="232" width="152" height="120" rx="10" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="422" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="var(--purple)">Streaming callback</text>
+  <text x="422" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">streaming delta</text>
+  <line x1="356" y1="281" x2="488" y2="281" stroke="var(--line)"/>
+  <text x="356" y="301" font-size="9.5" fill="var(--ink)">checks flag per token</text>
+  <text x="356" y="318" font-size="9.5" fill="var(--ink)">force-close httpx, cut</text>
+  <text x="356" y="341" font-size="9" fill="var(--muted)">force-close client</text>
+  <rect x="511" y="232" width="152" height="120" rx="10" fill="var(--panel)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="587" y="257" text-anchor="middle" font-size="12" font-weight="700" fill="var(--amber)">Retry backoff poll</text>
+  <text x="587" y="273" text-anchor="middle" font-size="9" fill="var(--muted)">backoff sleep</text>
+  <line x1="521" y1="281" x2="653" y2="281" stroke="var(--line)"/>
+  <text x="521" y="301" font-size="9.5" fill="var(--ink)">polls every 200ms</text>
+  <text x="521" y="318" font-size="9.5" fill="var(--ink)">time.sleep(0.2)</text>
+  <text x="521" y="341" font-size="9" fill="var(--muted)">stop = abandon retry</text>
+  <rect x="16" y="372" width="648" height="48" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="340" y="392" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">Cooperative: no thread is hard-killed</text>
+  <text x="340" y="410" text-anchor="middle" font-size="9.5" fill="var(--ink)">all four paths rely on voluntary polling — code that never checks runs to its own end before it stops</text>
+</svg>
+<div class="fig-cap"><b>Interrupt fan-out</b>: after <span class="mono">interrupt()</span> sets the flag and stamps this thread, four paths <strong>poll it voluntarily</strong> — loop boundary, streaming callback, and retry backoff (every <strong>200ms</strong>) all self-check; only <strong>subagents</strong> require the parent to walk <span class="mono">_active_children</span> and call <span class="mono">child.interrupt()</span> explicitly, so an unregistered / detached child breaks the chain.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 356" role="img" aria-label="Cooperative versus preemptive interrupt timing: the top lane is Hermes cooperative, where /stop arrives mid tool execution, sets the flag, then waits pending until the next loop boundary before it truly breaks; the bottom lane is a preemptive contrast (which Hermes does not do), stopping instantly at the same moment, drawn dashed">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">cooperative vs preemptive · same instant, different stop point</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">the stop arrives mid tool execution — cooperative waits for the loop boundary, preemptive kills the thread on the spot</text>
+  <text x="20" y="92" font-size="11" font-weight="700" fill="var(--accent-ink)">Hermes · cooperative</text>
+  <line x1="140" y1="120" x2="660" y2="120" stroke="var(--line)"/>
+  <rect x="140" y="104" width="160" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="220" y="124" text-anchor="middle" font-size="9.5" fill="var(--blue)">tool executing</text>
+  <rect x="300" y="104" width="170" height="32" rx="6" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="385" y="124" text-anchor="middle" font-size="9" fill="var(--amber)">pending · flag is set</text>
+  <line x1="300" y1="74" x2="300" y2="178" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="300" y="68" text-anchor="middle" font-size="9.5" fill="var(--red)">⚡ /stop arrives (mid-execution)</text>
+  <line x1="470" y1="92" x2="470" y2="150" stroke="var(--accent)" stroke-width="1.8"/>
+  <text x="470" y="86" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">↧ loop boundary</text>
+  <rect x="478" y="104" width="158" height="32" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="557" y="124" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">✓ truly break</text>
+  <text x="140" y="158" font-size="9" fill="var(--muted)">honored between iterations — the running tool first reaches a check point or the boundary, then returns control</text>
+  <line x1="300" y1="178" x2="300" y2="236" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <text x="20" y="258" font-size="11" font-weight="700" fill="var(--muted)">preemptive · contrast (Hermes does not do this)</text>
+  <line x1="140" y1="286" x2="660" y2="286" stroke="var(--line)" stroke-dasharray="4 3"/>
+  <rect x="140" y="270" width="160" height="32" rx="6" fill="var(--panel-2)" stroke="var(--muted)" stroke-dasharray="4 3"/>
+  <text x="220" y="290" text-anchor="middle" font-size="9.5" fill="var(--muted)">executing</text>
+  <line x1="300" y1="240" x2="300" y2="322" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="300" y="234" text-anchor="middle" font-size="9.5" fill="var(--red)">⚡ /stop arrives</text>
+  <rect x="304" y="270" width="158" height="32" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="383" y="290" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">✗ halted on the spot</text>
+  <text x="140" y="326" font-size="9" fill="var(--muted)">preemption would kill the thread at once — but Python can't, so Hermes only polls cooperatively</text>
+</svg>
+<div class="fig-cap"><b>Cooperative vs preemptive</b>: the same <span class="mono">/stop</span> arrives mid tool execution — Hermes <strong>cooperatively</strong> holds it pending until the next loop boundary, then <span class="mono">break</span>s; a preemptive stop (contrast) would kill the thread on the spot, which Python can't do, so everything relies on polling the flag.</div>
+</div>
+
+<p>With the stop covered, on to the second trap: where a <span class="mono">background=true</span> process actually <strong>lives</strong>, how its "I'm done" fires <strong>exactly once</strong>, and why it almost never <strong>survives a restart</strong>.</p>
+
+<h3>🔬 28.2 · Background-process lifecycle: in-memory registry, de-duplicated notification, best-effort recovery</h3>
+<p>When an agent launches a <span class="mono">terminal(background=True)</span>, the process isn't handed straight to the OS and forgotten — it's registered in the <span class="mono">ProcessRegistry</span>, an <strong>in-process</strong> table whose core is two dicts: <span class="mono">_running</span> (live) and <span class="mono">_finished</span> (exited, kept for a 30-minute TTL). Each <span class="mono">ProcessSession</span> carries a <strong>rolling output buffer</strong> (capped at <span class="mono">MAX_OUTPUT_CHARS</span> = 200KB, trimmed from the front), optional <span class="mono">watch_patterns</span>, and a <span class="mono">notify_on_complete</span> flag; a background reader thread keeps pumping the child's output into the buffer, while the agent uses <span class="mono">wait</span> / <span class="mono">poll</span> / <span class="mono">kill</span> / read-log to wait on it, query it, or kill it.</p>
+<p>When the process <strong>exits</strong> (the reader hits EOF) or is <strong>killed</strong>, both paths reach the same exit, <span class="mono">_move_to_finished()</span>. Under the lock it pops the session out of <span class="mono">_running</span>, drops it into <span class="mono">_finished</span>, sets the completion event (waking every call blocked on <span class="mono">wait()</span>), then <span class="mono">_write_checkpoint()</span> persists once. <strong>The crux is that final <span class="mono">if</span></strong>: only when <span class="mono">notify_on_complete</span> is on <strong>and this call is genuinely the first</strong> to move it does it push one completion notification onto <span class="mono">completion_queue</span>.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/process_registry.py:1022 · abridged</span></div><pre>    def _move_to_finished(self, session: ProcessSession):
+        with self._lock:
+            was_running = self._running.pop(session.id, None) is not None
+            self._finished[session.id] = session
+        session._completion_event.set()
+        self._write_checkpoint()
+
+        # Only enqueue completion notification on the FIRST move.  Without
+        # this guard, kill_process() and the reader thread can both call
+        # _move_to_finished(), producing duplicate [IMPORTANT: ...] messages.
+        if was_running and session.notify_on_complete:
+            from tools.ansi_strip import strip_ansi
+            output_tail = strip_ansi(session.output_buffer[-2000:]) if session.output_buffer else ""
+            self.completion_queue.put({
+                "type": "completion",
+                "session_id": session.id,
+                "session_key": session.session_key,
+                "command": session.command,
+                "exit_code": session.exit_code,
+                "completion_reason": session.completion_reason,
+                "termination_source": session.termination_source,
+                "output": output_tail,
+            })</pre></div>
+<p>That "first" is captured by <span class="mono">was_running = self._running.pop(...) is not None</span> — the <strong>first de-dup gate</strong>. <span class="mono">_move_to_finished()</span> is <strong>idempotent</strong>: <span class="mono">kill_process()</span> and the reader thread may notice the process is gone <strong>at the same time</strong> and <strong>both call it</strong>, but the dict <span class="mono">pop</span> only hands one of them a non-<span class="mono">None</span>, so only that caller has <span class="mono">was_running</span> true and only it enqueues. Without the guard a single exit gets reported twice as <span class="mono">[IMPORTANT: ...]</span>. This is producer-side (who notifies) de-duplication.</p>
+<p>But enqueued is not delivered. <strong>The second gate is on the consumer side</strong>: before taking the notification, the CLI drain and the gateway / TUI watcher both check <span class="mono">_completion_consumed</span> — if the agent already grabbed the output via a blocking <span class="mono">wait()</span> or a full <span class="mono">read_log()</span>, skip it; the CLI additionally checks <span class="mono">_poll_observed</span> (a read-only <span class="mono">poll()</span> saw the exit and the result is returned inline this turn, whereas the gateway / TUI <strong>deliberately do not</strong> consult it, so a read-only probe can't suppress their autonomous delivery turn). A hit in either set makes the drain <strong>skip</strong> the completion, avoiding a duplicate <span class="mono">[SYSTEM: ...]</span> injection. Together the two gates guarantee a completion fires <strong>at most once</strong>, and <strong>not at all</strong> if the agent already knows.</p>
+<p>One more path also feeds <span class="mono">notify_on_complete</span>: <strong>watch rate-limit demotion</strong>. For a process with <span class="mono">watch_patterns</span>, match notifications are hard-throttled — at most one per <span class="mono">WATCH_MIN_INTERVAL_SECONDS</span> (15s); a match arriving inside the cooldown is dropped and counts as <strong>one strike</strong>. After <span class="mono">WATCH_STRIKE_LIMIT</span> = <strong>3</strong> consecutive strike windows the session's watch is <strong>permanently disabled</strong> (<span class="mono">_watch_disabled = True</span>) and <span class="mono">notify_on_complete = True</span> is <strong>flipped on</strong> — a watcher that was spamming mid-process state quietly demotes to "report once when the process actually exits," routing back through that single exit.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/process_registry.py:65</span></div><pre># After WATCH_STRIKE_LIMIT consecutive strike windows, watch_patterns for that
+# session is permanently disabled and the session falls back to notify_on_complete
+# semantics (one notification when the process actually exits).
+WATCH_MIN_INTERVAL_SECONDS = 15   # Minimum spacing between consecutive watch matches
+WATCH_STRIKE_LIMIT = 3            # Strikes in a row → disable watch + promote to notify_on_complete</pre></div>
+<p>Now the <strong>biggest trap</strong>. Everything above — the two dicts, the output buffer, the completion event, the reader and watcher threads — <strong>lives in process memory</strong>. The <span class="mono">_write_checkpoint()</span> inside <span class="mono">_move_to_finished()</span> writes state to <span class="mono">CHECKPOINT_PATH</span> (<span class="mono">processes.json</span>), but it exists <strong>only for gateway crash recovery</strong>, and that recovery is <strong>best-effort</strong>: after a gateway restart it re-registers only the <strong>detached host-PID processes</strong>, and only after re-validating that the <span class="mono">host_start_time</span> recorded in the checkpoint still matches the live PID (or the kernel may have recycled that number onto an unrelated process, and adopting it would kill a stranger). Recovered sessions are all flagged <span class="mono">detached=True</span> — <strong>output can't be read back, only status + kill</strong>. The checkpoint restores a <strong>handle</strong> ("can I still query / kill it?"), not the process's <strong>full state</strong>.</p>
+<p>So a <span class="mono">background=true</span> process's "durability" is mostly an <strong>in-process illusion</strong>: a restart wipes the in-memory state, and detached recovery is only a best-effort status / kill handle. To make work <strong>truly survive a restart</strong>, use a mechanism that actually lands — a <span class="mono">cron</span> job, or <span class="mono">terminal(background=True, notify_on_complete=True)</span> that hands the process to the system and calls back on completion (exactly ch26's E6 fix). Mistaking "detached from this turn" for "made durable" is precisely why background tasks vanish.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 430" role="img" aria-label="Background-process lifecycle and completion-notification de-duplication. Center vertical spine: a running process, on exit or kill, enters _move_to_finished, which under the lock pops the session out of _running and into _finished, sets the completion event, and writes the checkpoint; only the first move with notify_on_complete true puts a notification onto completion_queue, sent at most once. Left branch: a process with watch_patterns is rate-limited to at most one match per 15 seconds, a match inside the cooldown counts as one strike, and after WATCH_STRIKE_LIMIT three strikes watch is disabled and notify_on_complete flipped on, merging into the same exit. Right side two de-dup gates: gate one was_running on the producer side, since kill and the reader thread both call but only one pop succeeds and enqueues; gate two on the consumer side, where the _completion_consumed and CLI-only _poll_observed sets make the drain skip the notification to avoid duplicate injection">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Background lifecycle · two de-dup gates on the completion notice</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">one spine running → _move_to_finished → notify; 3 watch strikes flip notify_on_complete, two gates send at most once</text>
+  <rect x="265" y="70" width="170" height="64" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="350" y="94" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">running process</text>
+  <text x="350" y="112" text-anchor="middle" font-size="9" fill="var(--muted)">_running{} · 200KB output buffer</text>
+  <text x="350" y="127" text-anchor="middle" font-size="9" fill="var(--muted)">reader thread · wait / poll / kill / log</text>
+  <line x1="350" y1="134" x2="350" y2="168" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M350,176 L345,167 L355,167 Z" fill="var(--muted)"/>
+  <text x="358" y="158" font-size="9" fill="var(--muted)">exit / killed</text>
+  <rect x="245" y="176" width="210" height="78" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="350" y="198" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">_move_to_finished()</text>
+  <text x="350" y="216" text-anchor="middle" font-size="9" fill="var(--muted)">under lock _running.pop → _finished</text>
+  <text x="350" y="231" text-anchor="middle" font-size="9" fill="var(--muted)">set event + _write_checkpoint</text>
+  <text x="350" y="248" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">gate ① was_running guard</text>
+  <line x1="350" y1="254" x2="350" y2="286" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M350,294 L345,285 L355,285 Z" fill="var(--muted)"/>
+  <text x="358" y="276" font-size="9" fill="var(--muted)">first move + notify_on_complete</text>
+  <rect x="265" y="294" width="170" height="52" rx="10" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="350" y="316" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--purple)">completion_queue</text>
+  <text x="350" y="334" text-anchor="middle" font-size="9" fill="var(--muted)">type: completion enqueued</text>
+  <line x1="350" y1="346" x2="350" y2="376" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M350,384 L345,375 L355,375 Z" fill="var(--muted)"/>
+  <rect x="245" y="386" width="210" height="38" rx="9" fill="var(--panel-2)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="350" y="410" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent-ink)">at most once (zero if already known)</text>
+  <rect x="18" y="176" width="182" height="78" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="109" y="197" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">watch rate-limit</text>
+  <text x="109" y="214" text-anchor="middle" font-size="9" fill="var(--ink)">≤ 1 per 15s</text>
+  <text x="109" y="229" text-anchor="middle" font-size="9" fill="var(--ink)">inside cooldown = 1 strike</text>
+  <text x="109" y="245" text-anchor="middle" font-size="9" font-weight="700" fill="var(--ink)">3 strikes → disable + flip</text>
+  <line x1="200" y1="208" x2="241" y2="208" stroke="var(--amber)" stroke-width="1.6"/>
+  <path d="M249,208 L240,203 L240,213 Z" fill="var(--amber)"/>
+  <text x="205" y="266" font-size="9" fill="var(--muted)">notify_on_complete=True · same exit</text>
+  <rect x="470" y="176" width="192" height="78" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="478" y="196" font-size="10" font-weight="700" fill="var(--red)">gate ① producer dedup</text>
+  <text x="478" y="213" font-size="9" fill="var(--ink)">kill + reader both call it</text>
+  <text x="478" y="228" font-size="9" fill="var(--ink)">only one pop gets non-None</text>
+  <text x="478" y="243" font-size="9" fill="var(--ink)">only it enqueues, else twice</text>
+  <line x1="470" y1="208" x2="457" y2="208" stroke="var(--red)" stroke-width="1.3" stroke-dasharray="3 3"/>
+  <rect x="470" y="294" width="192" height="92" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="478" y="314" font-size="10" font-weight="700" fill="var(--red)">gate ② consumer dedup</text>
+  <text x="478" y="331" font-size="9" fill="var(--ink)">_completion_consumed (wait/log)</text>
+  <text x="478" y="346" font-size="9" fill="var(--ink)">_poll_observed (CLI read-only poll)</text>
+  <text x="478" y="361" font-size="9" fill="var(--ink)">hit → drain skips the notice</text>
+  <text x="478" y="376" font-size="9" fill="var(--ink)">no duplicate [SYSTEM: ...]</text>
+  <line x1="470" y1="340" x2="437" y2="362" stroke="var(--red)" stroke-width="1.3" stroke-dasharray="3 3"/>
+</svg>
+<div class="fig-cap"><b>Lifecycle + notification de-dup</b>: exit / kill → <span class="mono">_move_to_finished()</span> moves the table, sets the event, writes the checkpoint; <strong>gate ①</strong> <span class="mono">was_running</span> lets a duplicate call enqueue only once, <strong>gate ②</strong> the consumer's <span class="mono">_completion_consumed</span> / <span class="mono">_poll_observed</span> make the drain skip a notice the agent already saw via wait / poll — <strong>at most once</strong>. A watch hitting <span class="mono">WATCH_STRIKE_LIMIT</span>=3 disables watch and flips <span class="mono">notify_on_complete</span>, merging into the same exit.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="Three tiers of background-task durability. Tier one in-process background: delegate_task background or a terminal background job, where the _running and _finished dicts, output buffer, completion event, and reader and watcher threads all live in process memory and are entirely lost on restart. Tier two detached: state is written to the processes.json checkpoint for gateway crash recovery only; after a restart it re-registers only host-PID processes that are still alive with a matching start_time, and can only report status and kill, not read output back, making it best-effort rather than durable state. Tier three cron: a cron job or terminal background with notify_on_complete hands the process to the scheduler and the system with a completion callback, which is truly durable across restarts. Bottom throughline: durability is mostly an in-process illusion; for cross-restart work use cron or a terminal background job, not a future living in memory, echoing ch26 E6">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">durability tiers · what survives a restart</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">in-process background (all in memory) / detached (host-PID best-effort) / cron (truly durable)</text>
+  <rect x="20" y="70" width="200" height="214" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="20" y="70" width="200" height="44" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="120" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">in-process background</text>
+  <text x="120" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">delegate_task(bg) / terminal bg</text>
+  <text x="32" y="143" font-size="9.5" fill="var(--muted)">✗ _running / _finished dicts</text>
+  <text x="32" y="169" font-size="9.5" fill="var(--muted)">✗ output buffer + event</text>
+  <text x="32" y="195" font-size="9.5" fill="var(--muted)">✗ reader / watcher threads</text>
+  <rect x="38" y="246" width="164" height="28" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="120" y="264" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">restart = all in-memory lost</text>
+  <rect x="240" y="70" width="200" height="214" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="240" y="70" width="200" height="44" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5"/>
+  <text x="340" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--amber)">detached (host-PID)</text>
+  <text x="340" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">processes.json · gateway-only</text>
+  <text x="252" y="143" font-size="9.5" fill="var(--ink)">✓ host-PID + start_time match</text>
+  <text x="252" y="169" font-size="9.5" fill="var(--ink)">✓ status + kill · detached</text>
+  <text x="252" y="195" font-size="9.5" fill="var(--muted)">✗ output not readable back</text>
+  <rect x="258" y="246" width="164" height="28" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="340" y="264" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--amber)">best-effort · not durable</text>
+  <rect x="460" y="70" width="200" height="214" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="460" y="70" width="200" height="44" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="560" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">cron (durable)</text>
+  <text x="560" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">cron / terminal bg</text>
+  <text x="472" y="143" font-size="9.5" fill="var(--ink)">✓ cron job (ch21)</text>
+  <text x="472" y="169" font-size="9.5" fill="var(--ink)">✓ terminal(background,notify)</text>
+  <text x="472" y="195" font-size="9.5" fill="var(--ink)">✓ handed to the system</text>
+  <rect x="478" y="246" width="164" height="28" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="560" y="264" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">true cross-restart durable</text>
+  <rect x="20" y="304" width="640" height="44" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="340" y="324" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">durability is mostly an in-process illusion — for cross-restart use cron or a terminal bg job</text>
+  <text x="340" y="340" text-anchor="middle" font-size="9" fill="var(--muted)">don't bet on a future living in memory (echoes ch26 · E6)</text>
+</svg>
+<div class="fig-cap"><b>Durability tiers</b>: <strong>in-process background</strong> (dicts / buffer / threads all in memory, lost on restart), <strong>detached</strong> (<span class="mono">processes.json</span> for gateway crash recovery only, host-PID only, status + kill only, best-effort), <strong>cron</strong> (handed to the scheduler / system, truly durable across restarts). For durability don't bet on a future in memory — echoing ch26 · E6.</div>
+</div>
+
+<p>Stop covered, look covered — one mechanism is left: how a "save" lands either <strong>whole</strong> or <strong>not at all</strong>, and how that atomic guarantee collapses the moment a <strong>temp file is put in the wrong directory</strong>.</p>
+
+<h3>🔬 28.3 · Atomic file edits: a same-directory temp + rename, verified by a post-write re-read</h3>
+<p>The last of the three mechanisms is <strong>landing bytes</strong>. Hermes' file capability is four tools — <span class="mono">read_file</span> / <span class="mono">write_file</span> / <span class="mono">patch</span> (replace) / <span class="mono">search</span>, all implemented by the shell backend in <span class="mono">tools/file_operations.py</span>. The <strong>two that mutate disk</strong> (write and patch) never overwrite the target in place; they both funnel through one private method, <span class="mono">_atomic_write()</span>: <strong>create a temp file in the target's own directory, write the new content into it, then rename it atomically over the target in one step</strong>.</p>
+<p><span class="mono">_atomic_write()</span> is one fully-quoted shell script: <span class="mono">mktemp -p "$d"</span> lands the temp in the <strong>target's own directory</strong> <span class="mono">d = dirname(path)</span> (not <span class="mono">/tmp</span>), the content streams in over <strong>stdin</strong> (sidestepping ARG_MAX), and after <span class="mono">cat &gt; "$tmp"</span> writes the draft, <span class="mono">mv -f "$tmp" "$t"</span> swaps it in one step. Three details to keep: ① it is <strong>not</strong> a Python call like <span class="mono">os.replace()</span> — it lands on a real shell <span class="mono">mv</span> (semantically a same-filesystem atomic rename); ② a <span class="mono">trap 'rm -f "$tmp"' EXIT</span> guarantees <strong>every failure path</strong> (cat fails, mv fails, a signal) cleans the temp up, never leaving half a <span class="mono">.hermes-tmp</span> turd beside the user's data; ③ before writing it does a best-effort <span class="mono">stat</span> + <span class="mono">chmod</span> to copy the target's existing mode onto the temp, so the atomic swap doesn't silently <strong>widen or narrow</strong> permissions.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/file_operations.py:937 · abridged</span></div><pre>    def _atomic_write(self, path: str, content: str) -&gt; "ExecuteResult":
+        q_path = self._escape_shell_arg(path)
+        parent = os.path.dirname(path) or "."
+        q_parent = self._escape_shell_arg(parent)
+        tmpl = self._escape_shell_arg(".hermes-tmp.XXXXXX")
+        script = (
+            "set -e; "
+            f"d={q_parent}; t={q_path}; "
+            'tmp="$(mktemp -p "$d" ' + tmpl + ' 2&gt;/dev/null '
+            '|| mktemp "$d/.hermes-tmp.$$.XXXXXX" 2&gt;/dev/null '
+            '|| { tmp="$d/.hermes-tmp.$$"; : &gt; "$tmp" &amp;&amp; echo "$tmp"; })"; '
+            "trap 'rm -f \"$tmp\"' EXIT; "
+            'cat &gt; "$tmp"; '
+            'mv -f "$tmp" "$t"; '
+            "trap - EXIT"
+        )
+        return self._exec(script, stdin_data=content)</pre></div>
+<p><strong>The core trap is right here: the whole atomicity hangs on one unremarkable premise — the temp file shares the target's directory.</strong> A rename is only atomic <strong>within the same filesystem</strong> — the kernel just repoints one directory entry from the old inode to the new one, in a single step. The moment the temp lands on <strong>a different filesystem</strong> (say you draft into <span class="mono">/tmp</span> and then mv back into the project dir), <span class="mono">mv</span> can't do a true rename — it <strong>degrades to copy-into-target + unlink-source</strong>, two steps; and if a crash / power loss hits mid-copy, the target is only half-written, leaving a <strong>torn, corrupt file</strong> — exactly the failure atomic writes set out to kill. So the <span class="mono">-p "$d"</span> in <span class="mono">mktemp -p "$d"</span> is <strong>load-bearing</strong>, not a casual choice.</p>
+<p><span class="mono">patch</span> (replace) adds a <strong>post-write verification</strong> on top of <span class="mono">_atomic_write</span>. It reads the file in, strips any UTF-8 BOM, locates <span class="mono">old_string</span> by <strong>fuzzy matching</strong> — and unless <span class="mono">replace_all=True</span> it requires the match to be <strong>unique</strong>, erroring out on multiple or zero hits; after substituting it normalizes to the file's <strong>existing line ending</strong> (LF / CRLF) before writing back (the BOM is restored on the way out, so the round-trip preserves the marker). Once it lands, it <strong>re-reads the file and compares it byte-for-byte against what it meant to write</strong>: a mismatch errors with "<span class="mono">The patch did not persist</span>" and asks for a re-read + retry. This verification is aimed at <strong>silent persistence failures</strong> — backend FS oddities, a truncated pipe, <strong>and a concurrent edit by another task</strong>: if something else touches the same file between patch's write and the re-read, the bytes read back won't equal this turn's <span class="mono">new_content</span>, the <strong>check fails</strong>, and patch won't falsely report success.</p>
+<div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">tools/file_operations.py:1534</span></div><pre>        # Post-write verification — re-read the file and confirm the bytes we
+        # intended to write actually landed. Catches silent persistence
+        # failures (backend FS oddities, race with another task, truncated
+        # pipe, etc.) that would otherwise return success-with-diff while the
+        # file is unchanged on disk.
+        verify_cmd = f"cat {self._escape_shell_arg(path)} 2&gt;/dev/null"
+        verify_result = self._exec(verify_cmd)
+        if verify_result.exit_code != 0:
+            return PatchResult(error=f"Post-write verification failed: could not re-read {path}")</pre></div>
+<p>A ring of guards surrounds the four tools: a <strong>path-security deny-list</strong> blocks writes to sensitive files before write / patch — <span class="mono">~/.ssh/{id_rsa,authorized_keys,config}</span>, the per-profile and top-level <span class="mono">.env</span>, <span class="mono">.git-credentials</span>, <span class="mono">/etc/{passwd,shadow,sudoers}</span>, plus prefixes like <span class="mono">~/.aws</span> and <span class="mono">/etc/systemd</span> — so one stray write can't leak credentials or break the system. <span class="mono">read_file</span> is <strong>paginated</strong> by default (offset / limit, 500 lines default, 2000 cap) and carries <strong>binary detection</strong> — over 30% non-printable chars is judged binary and its body isn't returned, while image extensions are base64'd onto the vision channel. <span class="mono">search</span> is <strong>line-level</strong> (<span class="mono">output_mode="content"</span> yields matching lines + optional context), with content search and filename search kept separate. None of this changes the throughline: <strong>every write first stages a "whole new file," then makes it take effect in one atomic act — readers never see an in-between state.</strong></p>
+
+<div class="figure">
+<svg viewBox="0 0 680 466" role="img" aria-label="Safe file-edit pipeline. Vertical spine top to bottom: target file t lives in the same directory d equals dirname(path); mktemp -p first creates a hidden temp .hermes-tmp.XXXXXX in that directory, cat writes the new content into the temp draft, the patch path then re-reads the file and compares it byte-for-byte against the intended content, and only on a passing verify does mv -f atomically rename the temp over the target, so readers see either the old file or the whole new file, never a torn in-between state. Right failure branch: on a verify miss or a write error, trap runs rm -f to drop the temp and the original file is left untouched, a rollback. Left annotation: temp sharing the target directory means the same filesystem, so mv is a true rename.">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Safe edit pipeline · same-dir temp → write → verify → atomic rename</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">draft into a same-dir temp, verify, then mv -f atomically; on any failure roll back, original untouched</text>
+  <rect x="130" y="64" width="200" height="44" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="230" y="85" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">① target file t</text>
+  <text x="230" y="101" text-anchor="middle" font-size="9" fill="var(--muted)">same dir d = dirname(path)</text>
+  <line x1="230" y1="110" x2="230" y2="124" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,132 L225,123 L235,123 Z" fill="var(--muted)"/>
+  <rect x="130" y="132" width="200" height="50" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="230" y="153" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">② mktemp -p "$d"</text>
+  <text x="230" y="170" text-anchor="middle" font-size="9" fill="var(--muted)">same-dir hidden temp · .hermes-tmp.XXXXXX</text>
+  <line x1="230" y1="184" x2="230" y2="198" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,206 L225,197 L235,197 Z" fill="var(--muted)"/>
+  <text x="14" y="150" font-size="9.5" font-weight="700" fill="var(--accent-ink)">same dir = same FS</text>
+  <text x="14" y="165" font-size="9" fill="var(--muted)">mv is a true rename</text>
+  <text x="14" y="178" font-size="9" fill="var(--muted)">(see fig ⑬ below)</text>
+  <line x1="120" y1="156" x2="128" y2="156" stroke="var(--accent)" stroke-width="1.4"/>
+  <rect x="130" y="206" width="200" height="44" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="230" y="227" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--blue)">③ cat &gt; "$tmp" write draft</text>
+  <text x="230" y="243" text-anchor="middle" font-size="9" fill="var(--muted)">content via stdin · no ARG_MAX limit</text>
+  <line x1="230" y1="252" x2="230" y2="266" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,274 L225,265 L235,265 Z" fill="var(--muted)"/>
+  <rect x="130" y="274" width="200" height="58" rx="10" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="230" y="295" text-anchor="middle" font-size="12" font-weight="700" fill="var(--amber)">④ re-read &amp; verify bytes</text>
+  <text x="230" y="311" text-anchor="middle" font-size="9" fill="var(--ink)">patch: re-read vs the intended content</text>
+  <text x="230" y="325" text-anchor="middle" font-size="9" fill="var(--ink)">catches silent persist fail / concurrent edit</text>
+  <line x1="230" y1="332" x2="230" y2="346" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,354 L225,345 L235,345 Z" fill="var(--muted)"/>
+  <text x="238" y="345" font-size="9" fill="var(--muted)">verified</text>
+  <rect x="458" y="274" width="206" height="58" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="466" y="294" font-size="10" font-weight="700" fill="var(--red)">fail branch · error / verify miss</text>
+  <text x="466" y="311" font-size="9" fill="var(--ink)">trap 'rm -f "$tmp"' drops temp</text>
+  <text x="466" y="326" font-size="9" fill="var(--ink)">original left untouched (rollback)</text>
+  <line x1="330" y1="303" x2="450" y2="303" stroke="var(--red)" stroke-width="1.3" stroke-dasharray="3 3"/>
+  <path d="M458,303 L449,298 L449,308 Z" fill="var(--red)"/>
+  <rect x="130" y="354" width="200" height="50" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="230" y="375" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">⑤ mv -f "$tmp" "$t"</text>
+  <text x="230" y="391" text-anchor="middle" font-size="9" fill="var(--muted)">atomic rename · one-step swap</text>
+  <line x1="230" y1="406" x2="230" y2="420" stroke="var(--muted)" stroke-width="1.4"/>
+  <path d="M230,428 L225,419 L235,419 Z" fill="var(--muted)"/>
+  <rect x="130" y="428" width="200" height="34" rx="9" fill="var(--panel-2)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="230" y="449" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">⑥ readers: old or whole-new (never torn)</text>
+</svg>
+<div class="fig-cap"><b>Safe edit pipeline</b>: write / patch go through <span class="mono">_atomic_write</span> — <span class="mono">mktemp -p "$d"</span> makes a temp in the <strong>same dir</strong> → <span class="mono">cat</span> writes the draft → (patch also <strong>re-reads and verifies byte-for-byte</strong>) → <span class="mono">mv -f</span> renames it in atomically; any step fails and <span class="mono">trap</span> drops the temp, <strong>original untouched</strong>. Readers see either the old or the whole new file, <strong>never torn</strong>.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 360" role="img" aria-label="Cross-filesystem rename breaks atomicity, a comparison. Left column same filesystem: the temp shares the target directory, rename is a single atomic step, the kernel just repoints the directory entry to the new inode, readers see either the old inode or the new inode, and after a power loss or crash the original file is intact, so it is atomic and never torn. Right column cross filesystem: the temp lands on another filesystem such as /tmp, mv cannot do a true rename and degrades to first copying into the target then unlinking the source, two steps, and if a crash hits mid-copy the target is only half-written, leaving a torn half file, so it is non-atomic and may be corrupt. Bottom takeaway bar: therefore the temp must use mktemp -p into the target's own directory to guarantee the same filesystem and let mv be a true atomic rename.">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Cross-FS rename breaks atomicity · why temp must share the target dir</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">same FS = one-step atomic pointer swap; cross FS = mv degrades to copy + unlink, a crash mid-way leaves half a file</text>
+  <rect x="20" y="70" width="300" height="206" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="20" y="70" width="300" height="44" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="170" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent-ink)">same FS · true atomic rename</text>
+  <text x="170" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">temp shares target dir (mktemp -p "$d")</text>
+  <text x="34" y="140" font-size="9.5" fill="var(--ink)">① rename() = single-step entry swap</text>
+  <text x="34" y="164" font-size="9.5" fill="var(--ink)">② repoints to new inode, old freed</text>
+  <text x="34" y="188" font-size="9.5" fill="var(--ink)">③ readers: old or new inode, never both</text>
+  <text x="34" y="212" font-size="9.5" fill="var(--ink)">④ power loss / crash: original intact</text>
+  <rect x="38" y="234" width="264" height="30" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="170" y="253" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">✓ atomic · never a torn read</text>
+  <rect x="360" y="70" width="300" height="206" rx="10" fill="var(--panel)" stroke="var(--line)"/>
+  <rect x="360" y="70" width="300" height="44" rx="10" fill="var(--red-soft)" stroke="var(--red)" stroke-width="1.5"/>
+  <text x="510" y="92" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">cross FS · mv degrades to copy+unlink</text>
+  <text x="510" y="107" text-anchor="middle" font-size="9" fill="var(--muted)">temp on another FS (e.g. /tmp)</text>
+  <text x="374" y="140" font-size="9.5" fill="var(--ink)">① cross-device rename fails → mv fallback</text>
+  <text x="374" y="164" font-size="9.5" fill="var(--ink)">② degrades to copy-in + unlink-source</text>
+  <text x="374" y="188" font-size="9.5" fill="var(--ink)">③ crash mid-copy: target half-written</text>
+  <text x="374" y="212" font-size="9.5" fill="var(--ink)">④ leaves a torn / half-corrupt file</text>
+  <rect x="378" y="234" width="264" height="30" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="510" y="253" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--red)">✗ non-atomic · may read a corrupt file</text>
+  <rect x="20" y="296" width="640" height="48" rx="10" fill="var(--panel-2)" stroke="var(--accent)"/>
+  <text x="340" y="317" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">Takeaway: temp must mktemp -p into the target's own dir → same FS, mv becomes a true atomic rename</text>
+  <text x="340" y="334" text-anchor="middle" font-size="9" fill="var(--muted)">the temp's location is load-bearing — a cross-dir shortcut trades the atomic guarantee for a maybe-half-written file</text>
+</svg>
+<div class="fig-cap"><b>Cross-FS rename breaks atomicity</b>: <strong>same dir = same filesystem</strong>, so <span class="mono">mv</span> is a one-step atomic rename (repoint the directory entry to the new inode) and a crash shows only old or whole-new; <strong>across filesystems</strong> <span class="mono">mv</span> degrades to <span class="mono">copy + unlink</span>, two steps, a mid-copy crash leaving half a file. So the temp must <span class="mono">mktemp -p "$d"</span> into the <strong>target's own dir</strong> — the location is load-bearing.</div>
+</div>
+
+<div class="card design">
+  <div class="tag">🎯 Design trade-off · correctness boundaries in an async world</div>
+  This chapter's three mechanisms — <strong>interrupt propagation</strong>, <strong>background-process lifecycle</strong>, and <strong>atomic file edits</strong> — manage three seemingly unrelated jobs on the surface ("stop / look / save"), yet guard one line underneath: <strong>in an async, continuously-running world that may be interrupted or restarted at any moment, weld "looks done" and "is actually done" tightly together.</strong>
+  <p style="margin:.5rem 0 0"><strong>The boundary each one guards:</strong> ① interrupt is a <strong>cooperative contract</strong> — set a flag, take it at a loop boundary, fan out to subagents explicitly, and never hard-kill a thread from outside, so a "stop" is both <strong>timely</strong> and <strong>doesn't tear</strong> a tool mid-execution; ② background processes give an <strong>honest status</strong> — a completion fires at most once (producer-side <span class="mono">was_running</span> + consumer-side <span class="mono">_completion_consumed</span>, two gates), and an <strong>in-process illusion is never passed off as durable</strong>; ③ landing bytes gives an <strong>atomic guarantee</strong> — same-dir temp + rename + post-write verify, so readers see either the old or the whole new file.</p>
+  <p style="margin:.5rem 0 0"><strong>Echoing the book's two throughlines:</strong> this is the bedrock of <strong>resilience</strong> — failure bounded, rollbackable (<span class="mono">trap</span> drops the temp), recoverable (detached / cron), correctable (the re-read verify); and it guards the <strong>narrow waist</strong>: the core exposes only a few minimal primitives — <span class="mono">/stop</span>, query status, atomic write — and sinks the real complexity into the loop boundary, the process registry, and one shell script. Those three seams where "looks done" and "is done" quietly diverge are exactly <strong>the bedrock of reliable autonomous, continuous operation</strong>.</p>
+</div>
+
+<div class="card key">
+  <div class="tag">📌 Key points</div>
+  <ul>
+    <li><strong>Interrupt is cooperative, not preemptive</strong>: <span class="mono">/stop</span> only sets an <span class="mono">_interrupt_requested</span> flag; the main loop takes it at an <strong>iteration boundary</strong>. Python can't kill a thread, so the streaming callback / the non-streaming background check / the retry backoff (every <strong>200ms</strong>) all rely on <strong>voluntary polling</strong>. Interrupt fans out to <strong>subagents by explicit hand-wiring</strong> — walk <span class="mono">_active_children</span> calling <span class="mono">child.interrupt()</span>; a missed registration or an async detach is a <strong>silent broken link</strong>.</li>
+    <li><strong>Background durability is mostly an in-process illusion</strong>: the <span class="mono">_running</span> / <span class="mono">_finished</span> dicts, output buffer, and reader / watcher threads all live in memory and are lost on restart; detached recovery only takes host-PID processes with a matching <span class="mono">start_time</span>, and offers status + kill only. For <strong>true cross-restart</strong> work use <span class="mono">cron</span> or <span class="mono">terminal(background, notify_on_complete)</span>.</li>
+    <li><strong>A completion fires at most once</strong>: the producer-side <span class="mono">was_running</span> guard (only one caller's <span class="mono">pop</span> gets non-<span class="mono">None</span>) plus the consumer-side <span class="mono">_completion_consumed</span> / <span class="mono">_poll_observed</span> dedup gates; a watch hitting <span class="mono">WATCH_STRIKE_LIMIT</span>=3 disables watch and flips <span class="mono">notify_on_complete</span>, merging into the same exit.</li>
+    <li><strong>Atomic writes ride a same-dir temp + rename</strong>: <span class="mono">_atomic_write</span> uses <span class="mono">mktemp -p "$d"</span> to make a temp in the <strong>target's own dir</strong>, <span class="mono">cat</span> writes, <span class="mono">mv -f</span> swaps it in atomically, <span class="mono">trap</span> cleans up on failure; a <strong>cross-filesystem rename is not atomic</strong> (degrades to copy + unlink, half-write corruption), so the temp's location is load-bearing.</li>
+    <li><strong>patch verifies with a post-write re-read</strong>: fuzzy match must be <strong>unique</strong>, BOM / CRLF preserved, only <strong>newly-introduced</strong> lint surfaced; after landing it re-reads and compares byte-for-byte, so a <strong>concurrent edit</strong> fails the check and reports "did not persist" instead of a false success. Plus the path deny-list, read pagination, binary / image interception, and line-level search.</li>
+    <li><strong>The shared idea</strong>: all three guard <strong>correctness boundaries in an async world</strong> — stop timely without tearing, state honest without duplicates, land bytes atomically without half-writes; the <strong>bedrock of reliable autonomous, continuous operation</strong>, and one more landing of resilience and the narrow waist.</li>
+  </ul>
+</div>
+
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Why doesn't pressing /stop halt a tool call instantly when it is already half-way through?</div>
+  <ol class="opts">
+    <li>Interruption is cooperative, not preemptive — /stop only sets a flag, and the main loop picks it up only at the boundary between two iterations; Python can't kill a thread from outside, so the running tool has to hand control back itself</li>
+    <li>You have to press /stop twice for it to take effect</li>
+    <li>The model deliberately ignored the stop command</li>
+    <li>The network is slow and the stop signal is still in transit</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. Hermes's interruption is cooperative, not preemptive: pressing /stop just sets _interrupt_requested to true, and it is actually 'taken' at the boundary of the main tool loop — each new iteration polls the flag first and breaks only on a hit. That check sits between two iterations, not in the middle of an API call or a tool execution. Python can't forcibly kill a thread from outside, so a stretch of code that doesn't poll the flag (a tight CPU loop, an uncooperative third-party call) runs to its own end or hits its timeout; the loop can only stop at the next boundary once that code hands control back. (The streaming per-token callback, the non-streaming httpx background check, and the 200ms backoff poll are extra self-check points, but all are still 'voluntarily polling the flag.')</div></div></div>
+  </details>
+</div>
+<div class="quiz">
+  <div class="qn">2. A background=true task vanishes after the Hermes process restarts — what's the root cause?</div>
+  <ol class="opts">
+    <li>The disk filled up and the process was forced to exit</li>
+    <li>The log just wasn't flushed — the process is actually still running</li>
+    <li>It was killed by the system's OOM killer</li>
+    <li>Background 'durability' is almost entirely an in-process illusion — a background=true delegate_task leaves the current turn but is still process-local (a future living in memory), so it dies with the process; surviving a restart needs cronjob or a background terminal task</li>
+  </ol>
+  <details class="accordion" open>
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. Background 'durability' is almost entirely an in-process illusion: a background=true delegate_task leaves the current turn but is still process-local — just a future living in memory, so it dies the moment the process does. Durability that truly survives a restart must come from cronjob (a disk-backed schedule) or a background terminal task, not an in-memory object. Disk-full, OOM, and unflushed logs are not the cause here — the cause is that the durability boundary sits at the process itself.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Give a scenario where you'd run a background task with cronjob rather than background=true (e.g. a daily cleanup, or long-running monitoring that must survive restarts), and explain why — echoing this chapter's 'in-process illusion.'</li>
   </ul>
 </div>
 </div>

@@ -756,7 +756,41 @@ WATCH_STRIKE_LIMIT = 3            # Strikes in a row → disable watch + promote
     <li><strong>共同理念</strong>：三套机制守的都是<strong>异步世界里的正确性边界</strong>——停得及时不撕裂、状态诚实不重复、落盘原子不半写；是<strong>「自主、连续运行」可靠性的地基</strong>，也是韧性与窄腰的又一次落地。</li>
   </ul>
 </div>
+<div class="selftest">
+<h2>🧪 自测 · 想一想为什么这么设计</h2>
+<div class="quiz">
+  <div class="qn">1. 为什么一个 tool 调用进行到一半时，按下 /stop 不会立刻把它停下？</div>
+  <ol class="opts">
+    <li>中断是协作式（cooperative）而非抢占式（preemptive）——/stop 只置一面标志，主循环只在两轮迭代之间的边界才把它收下；Python 无法从外部硬杀线程，正在跑的工具得自己把控制权交回来</li>
+    <li>必须连按两次 /stop 才会生效</li>
+    <li>模型故意忽略了这次 stop 指令</li>
+    <li>网络太慢，stop 信号还在路上没到</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：A</strong>。Hermes 的中断是协作式而非抢占式：按下 /stop 只是把 _interrupt_requested 置真，真正被「收下」发生在主工具循环的边界——每进入新一轮先 poll 一次标志，命中才 break。这个检查在两轮迭代之间，而不在一次 API 调用、或一个工具执行的正中间。Python 没法从外部硬杀一个线程，所以一段不去自查标志的代码（纯 CPU 的紧循环、不配合的第三方调用）会一路跑到自己结束或撞上超时，循环要等它把控制权交回来，才能在下一个边界真正停下。（流式逐 token 回调、非流式的 httpx 后台检查、每 200ms 一次的退避轮询是额外的自查点，但都仍是「自愿轮询那面标志」。）</div></div></div>
+  </details>
 </div>
+<div class="quiz">
+  <div class="qn">2. 一个 background=true 的后台进程在 Hermes 进程重启后消失，根因是什么？</div>
+  <ol class="opts">
+    <li>磁盘写满了，进程被迫退出</li>
+    <li>日志没刷新，其实进程还在跑</li>
+    <li>被系统的 OOM killer 杀掉了</li>
+    <li>后台的「持久」几乎全是进程内幻觉——background=true 的 delegate_task 脱离了当前回合，却仍是进程本地的（活在内存里的一个 future），进程一死它就没了；真要熬过重启得靠 cronjob 或后台终端任务</li>
+  </ol>
+  <details class="accordion">
+    <summary>看答案与解析 <span class="hint">点击展开</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>答案：D</strong>。后台的「持久」几乎全是进程内幻觉：一个 background=true 的 delegate_task 虽然脱离了当前回合，却仍是进程本地的——它只是活在内存里的一个 future，进程一死它就跟着没了。真正能熬过重启的持久，得靠 cronjob（落到磁盘的调度）或后台终端任务，而不是一个内存里的对象。磁盘满、OOM、日志未刷新都不是这里的根因——根因是 durability 的边界就钉在进程这一层。</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 发散思考（没有标准答案，动手或动脑想想）</div>
+  <ul>
+    <li>举一个你会用 cronjob 而非 background=true 来跑的后台任务场景（比如每天清理、必须熬过重启的长期监控），并说明为什么——呼应这一章的「进程内幻觉」。</li>
+  </ul>
+</div>
+</div></div>
   <div class="lang-en">
 <p class="lead">An agent that has run dozens of turns, still has background processes open, and is mid-edit on a file — how does it <strong>stop safely, reliably know when background work finishes, and persist atomically</strong>? This chapter opens up the three runtime mechanisms most prone to correctness bugs.</p>
 
@@ -1143,7 +1177,41 @@ WATCH_STRIKE_LIMIT = 3            # Strikes in a row → disable watch + promote
     <li><strong>The shared idea</strong>: all three guard <strong>correctness boundaries in an async world</strong> — stop timely without tearing, state honest without duplicates, land bytes atomically without half-writes; the <strong>bedrock of reliable autonomous, continuous operation</strong>, and one more landing of resilience and the narrow waist.</li>
   </ul>
 </div>
+<div class="selftest">
+<h2>🧪 Self-test - think about the design</h2>
+<div class="quiz">
+  <div class="qn">1. Why doesn't pressing /stop halt a tool call instantly when it is already half-way through?</div>
+  <ol class="opts">
+    <li>Interruption is cooperative, not preemptive — /stop only sets a flag, and the main loop picks it up only at the boundary between two iterations; Python can't kill a thread from outside, so the running tool has to hand control back itself</li>
+    <li>You have to press /stop twice for it to take effect</li>
+    <li>The model deliberately ignored the stop command</li>
+    <li>The network is slow and the stop signal is still in transit</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: A</strong>. Hermes's interruption is cooperative, not preemptive: pressing /stop just sets _interrupt_requested to true, and it is actually 'taken' at the boundary of the main tool loop — each new iteration polls the flag first and breaks only on a hit. That check sits between two iterations, not in the middle of an API call or a tool execution. Python can't forcibly kill a thread from outside, so a stretch of code that doesn't poll the flag (a tight CPU loop, an uncooperative third-party call) runs to its own end or hits its timeout; the loop can only stop at the next boundary once that code hands control back. (The streaming per-token callback, the non-streaming httpx background check, and the 200ms backoff poll are extra self-check points, but all are still 'voluntarily polling the flag.')</div></div></div>
+  </details>
 </div>
+<div class="quiz">
+  <div class="qn">2. A background=true task vanishes after the Hermes process restarts — what's the root cause?</div>
+  <ol class="opts">
+    <li>The disk filled up and the process was forced to exit</li>
+    <li>The log just wasn't flushed — the process is actually still running</li>
+    <li>It was killed by the system's OOM killer</li>
+    <li>Background 'durability' is almost entirely an in-process illusion — a background=true delegate_task leaves the current turn but is still process-local (a future living in memory), so it dies with the process; surviving a restart needs cronjob or a background terminal task</li>
+  </ol>
+  <details class="accordion">
+    <summary>Show answer &amp; explanation <span class="hint">click to expand</span></summary>
+    <div class="acc-body"><div class="qa"><div class="a"><strong>Answer: D</strong>. Background 'durability' is almost entirely an in-process illusion: a background=true delegate_task leaves the current turn but is still process-local — just a future living in memory, so it dies the moment the process does. Durability that truly survives a restart must come from cronjob (a disk-backed schedule) or a background terminal task, not an in-memory object. Disk-full, OOM, and unflushed logs are not the cause here — the cause is that the durability boundary sits at the process itself.</div></div></div>
+  </details>
+</div>
+<div class="card spark">
+  <div class="tag">💭 Open questions (no single right answer - just think or try)</div>
+  <ul>
+    <li>Give a scenario where you'd run a background task with cronjob rather than background=true (e.g. a daily cleanup, or long-running monitoring that must survive restarts), and explain why — echoing this chapter's 'in-process illusion.'</li>
+  </ul>
+</div>
+</div></div>
   <div class="footnav"><a class="prev" href="27-model-credentials-routing.html"><div class="dir"><span class="lang-zh">← 上一课</span><span class="lang-en">← Prev</span></div><div class="ttl"><span class="lang-zh">模型·凭证·路由层</span><span class="lang-en">Model · credentials · routing</span></div></a><a class="next" href="../index.html"><div class="dir"><span class="lang-zh">完成 →</span><span class="lang-en">Done →</span></div><div class="ttl"><span class="lang-zh">返回目录</span><span class="lang-en">Back to index</span></div></a></div>
 </div>
 <script>
