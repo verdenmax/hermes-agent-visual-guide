@@ -1062,7 +1062,7 @@ def detect_dangerous_command(command: str) -&gt; tuple:  # :657 → 61 条，命
 <div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ 反例 · change-detector（别这么写）</span></div><pre># 快照测试：锁死一个会变的具体值
 assert "gemini-2.5-pro" in _PROVIDER_MODELS["gemini"]   # 模型一改名就红
 assert DEFAULT_CONFIG["_config_version"] == 21           # config 一升版就红
-assert len(_PROVIDER_MODELS["huggingface"]) == 8         # 加一个 provider 就红
+assert len(_PROVIDER_MODELS["huggingface"]) == 8         # 加一个模型就红
 # 没有任何行为覆盖，只是逼着每次例行更新都去「修测试」</pre></div>
 <div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ 正例 · AGENTS.md:1349 · 锁不变量</span></div><pre># 不变量：断言两份数据之间该有的关系（随系统演化恒真）
 assert "gemini" in _PROVIDER_MODELS
@@ -2321,7 +2321,7 @@ def detect_dangerous_command(command: str) -&gt; tuple:  # :657 → 61 patterns,
 <div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ wrong · change-detector (don't write this)</span></div><pre># Snapshot test: freezes a specific value that's meant to change
 assert "gemini-2.5-pro" in _PROVIDER_MODELS["gemini"]   # reddens on any rename
 assert DEFAULT_CONFIG["_config_version"] == 21           # reddens on any bump
-assert len(_PROVIDER_MODELS["huggingface"]) == 8         # reddens on any new provider
+assert len(_PROVIDER_MODELS["huggingface"]) == 8         # reddens on any new model
 # No behavioral coverage — just forces "fix the test" on every routine update</pre></div>
 <div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ right · AGENTS.md:1349 · lock the invariant</span></div><pre># Invariant: assert the relationship two pieces of data must hold (stays true as the system evolves)
 assert "gemini" in _PROVIDER_MODELS

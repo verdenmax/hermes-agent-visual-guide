@@ -246,7 +246,7 @@ LESSON_06 = {
 
   <text x="18" y="400" font-size="9.5" fill="var(--muted)">读这张图：易变的 timestamp 压在 volatile 最末；5m 默认 marker 只有 {&quot;type&quot;:&quot;ephemeral&quot;}，没有 ttl 键才是默认。</text>
 </svg>
-<div class="fig-cap"><b>一条真实 system prompt 走一遍</b>：stable（<span class="mono">DEFAULT_AGENT_IDENTITY</span> ≈6800 tok）→ context（AGENTS.md ≈1200 tok）→ volatile（真实 <span class="mono">timestamp</span> 块 ≈900 tok）用 <span class="mono">&quot;\n\n&quot;.join</span> 拼成 <span class="mono">_cached_system_prompt</span>，每会话只建一次；打 marker 时 <b>5m 默认只有 <span class="mono">{&quot;type&quot;:&quot;ephemeral&quot;}</span></b>、唯独 1h 才加 <span class="mono">&quot;ttl&quot;:&quot;1h&quot;</span>；第 2 轮 8900 tok 前缀按缓存读取价计费，输入成本 <b>↓~75%</b>。</div>
+<div class="fig-cap"><b>一条真实 system prompt 走一遍</b>：stable 层（<span class="mono">DEFAULT_AGENT_IDENTITY</span> 起头，≈6800 tok）→ context（AGENTS.md ≈1200 tok）→ volatile 层（<span class="mono">timestamp</span> 起头，≈900 tok）用 <span class="mono">&quot;\n\n&quot;.join</span> 拼成 <span class="mono">_cached_system_prompt</span>，每会话只建一次；打 marker 时 <b>5m 默认只有 <span class="mono">{&quot;type&quot;:&quot;ephemeral&quot;}</span></b>、唯独 1h 才加 <span class="mono">&quot;ttl&quot;:&quot;1h&quot;</span>；第 2 轮 8900 tok 前缀按缓存读取价计费，输入成本 <b>↓~75%</b>。</div>
 </div>
 
 <h2>守住前缀的最后一道闸：注入前扫描</h2>
@@ -573,7 +573,7 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
 
   <text x="18" y="400" font-size="9.5" fill="var(--muted)">Read this: the volatile timestamp sits last; the 5m default marker is just {&quot;type&quot;:&quot;ephemeral&quot;} - no ttl key.</text>
 </svg>
-<div class="fig-cap"><b>One real system prompt, end to end</b>: stable (<span class="mono">DEFAULT_AGENT_IDENTITY</span> ~6800 tok) + context (AGENTS.md ~1200 tok) + volatile (real <span class="mono">timestamp</span> block ~900 tok) are joined by <span class="mono">&quot;\n\n&quot;.join</span> into <span class="mono">_cached_system_prompt</span>, built once per session; the <b>5m default marker is only <span class="mono">{&quot;type&quot;:&quot;ephemeral&quot;}</span></b>, and only 1h adds <span class="mono">&quot;ttl&quot;:&quot;1h&quot;</span>; on turn 2 the 8900-tok prefix bills at cache-read price, cutting input cost <b>~75%</b>.</div>
+<div class="fig-cap"><b>One real system prompt, end to end</b>: stable tier (led by <span class="mono">DEFAULT_AGENT_IDENTITY</span>, ~6800 tok) + context (AGENTS.md ~1200 tok) + volatile tier (led by <span class="mono">timestamp</span>, ~900 tok) are joined by <span class="mono">&quot;\n\n&quot;.join</span> into <span class="mono">_cached_system_prompt</span>, built once per session; the <b>5m default marker is only <span class="mono">{&quot;type&quot;:&quot;ephemeral&quot;}</span></b>, and only 1h adds <span class="mono">&quot;ttl&quot;:&quot;1h&quot;</span>; on turn 2 the 8900-tok prefix bills at cache-read price, cutting input cost <b>~75%</b>.</div>
 </div>
 
 <h2>The last gate guarding the prefix: scan before injection</h2>

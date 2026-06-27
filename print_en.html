@@ -1994,7 +1994,7 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
 
   <text x="18" y="400" font-size="9.5" fill="var(--muted)">Read this: the volatile timestamp sits last; the 5m default marker is just {&quot;type&quot;:&quot;ephemeral&quot;} - no ttl key.</text>
 </svg>
-<div class="fig-cap"><b>One real system prompt, end to end</b>: stable (<span class="mono">DEFAULT_AGENT_IDENTITY</span> ~6800 tok) + context (AGENTS.md ~1200 tok) + volatile (real <span class="mono">timestamp</span> block ~900 tok) are joined by <span class="mono">&quot;\n\n&quot;.join</span> into <span class="mono">_cached_system_prompt</span>, built once per session; the <b>5m default marker is only <span class="mono">{&quot;type&quot;:&quot;ephemeral&quot;}</span></b>, and only 1h adds <span class="mono">&quot;ttl&quot;:&quot;1h&quot;</span>; on turn 2 the 8900-tok prefix bills at cache-read price, cutting input cost <b>~75%</b>.</div>
+<div class="fig-cap"><b>One real system prompt, end to end</b>: stable tier (led by <span class="mono">DEFAULT_AGENT_IDENTITY</span>, ~6800 tok) + context (AGENTS.md ~1200 tok) + volatile tier (led by <span class="mono">timestamp</span>, ~900 tok) are joined by <span class="mono">&quot;\n\n&quot;.join</span> into <span class="mono">_cached_system_prompt</span>, built once per session; the <b>5m default marker is only <span class="mono">{&quot;type&quot;:&quot;ephemeral&quot;}</span></b>, and only 1h adds <span class="mono">&quot;ttl&quot;:&quot;1h&quot;</span>; on turn 2 the 8900-tok prefix bills at cache-read price, cutting input cost <b>~75%</b>.</div>
 </div>
 
 <h2>The last gate guarding the prefix: scan before injection</h2>
@@ -3769,7 +3769,7 @@ merges all of that into a single calling shape with no mode parameter,
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 462" role="img" aria-label="session_search with query deployment plan runs end to end: writes are indexed immediately by the messages_fts_insert trigger that uses new.id as rowid into FTS5; the retrieval SQL uses snippet messages_fts 0 three greater-than signs three less-than signs ellipsis 40 plus messages_fts MATCH question mark then ORDER BY rank over BM25; CJK falls back to trigram, and when a term has fewer than 3 characters trigram returns 0 so it falls back to LIKE substring; get_anchored_view with bookend equal to 3 returns three slices bookend_start the first three messages, window plus or minus 5 centered on the anchor, and bookend_end the last three; the matched text is appended as a tool message with zero LLM and no cache break; three calling modes have no mode parameter and are inferred from args DISCOVERY SCROLL BROWSE, the tool is service-gated and WAL writes retry up to 15 times within 0.150 seconds">
+<svg viewBox="0 0 680 462" role="img" aria-label="session_search with query deployment plan runs end to end: writes are indexed immediately by the messages_fts_insert trigger that uses new.id as rowid into FTS5; the retrieval SQL uses snippet messages_fts 0 three greater-than signs three less-than signs ellipsis 40 plus messages_fts MATCH question mark then ORDER BY rank over BM25; CJK falls back to trigram, and when a term has fewer than 3 characters trigram returns 0 so it falls back to LIKE substring; get_anchored_view with bookend equal to 3 returns three slices bookend_start the first three messages, window plus or minus 5 centered on the anchor, and bookend_end the last three; the matched text is appended as a tool message with zero LLM and no cache break; four calling modes have no mode parameter and are inferred from args DISCOVERY SCROLL READ BROWSE, the tool is service-gated and WAL writes retry up to 15 times within 0.150 seconds">
   <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">session_search(query='deployment plan') end to end · index → SQL → bookend=3 → tool msg</text>
   <text x="20" y="46" font-size="10.5" fill="var(--muted)">index on write, retrieval SQL, CJK fallback, anchored window, zero-LLM append; real shape at each step</text>
   <text x="606" y="34" text-anchor="middle" font-size="22">🔍</text>
@@ -3819,12 +3819,12 @@ merges all of that into a single calling shape with no mode parameter,
   <text x="20" y="404" font-size="9" fill="var(--accent-ink)">fragments rejoin the sequence with tool role</text>
   <text x="20" y="422" font-size="9" font-weight="700" fill="var(--accent-ink)">zero LLM · no cache break</text>
   <rect x="342" y="364" width="328" height="72" rx="8" fill="var(--panel)" stroke="var(--line)"/>
-  <text x="352" y="384" font-size="9.5" font-weight="700" fill="var(--ink)">6 · three modes (no mode param, inferred from args)</text>
-  <text x="352" y="404" font-size="9" fill="var(--ink)">DISCOVERY(query) · SCROLL(session_id+id) · BROWSE()</text>
+  <text x="352" y="384" font-size="9.5" font-weight="700" fill="var(--ink)">6 · four modes (no mode param, inferred from args)</text>
+  <text x="352" y="404" font-size="9" fill="var(--ink)">DISCOVERY(query) · SCROLL(id+aid) · READ(id) · BROWSE()</text>
   <text x="352" y="422" font-size="9" fill="var(--ink)">service-gated check_fn · WAL retry 15x / 0.150s</text>
   <text x="20" y="452" font-size="9" fill="var(--muted)">Read this figure: writes are indexed by the trigger, one query takes real SQL for snippet and bookends, the hit is appended as a tool message — all zero-LLM and cache-safe.</text>
 </svg>
-<div class="fig-cap"><b>One query runs the real shape of cross-session search</b>: writes are indexed immediately by the <span class="mono">messages_fts_insert</span> trigger with <span class="mono">rowid=new.id</span> into FTS5. Retrieval uses real SQL: <span class="mono">snippet(messages_fts, 0, '&gt;&gt;&gt;', '&lt;&lt;&lt;', '...', 40)</span> + <span class="mono">messages_fts MATCH ?</span> + <span class="mono">ORDER BY rank</span> (BM25), wrapping the match in <span class="mono">&gt;&gt;&gt;…&lt;&lt;&lt;</span> over a 40-token window; CJK falls back to <span class="mono">trigram</span> (a term under 3 chars makes trigram return 0 → fall back to LIKE). <span class="mono">get_anchored_view(bookend=3)</span> returns three slices: <span class="mono">bookend_start</span> (first 3) + <span class="mono">window ±5</span> (anchor centered) + <span class="mono">bookend_end</span> (last 3). The hit is <b>appended as a tool message</b> — zero LLM, no cache break; the three modes <span class="mono">DISCOVERY/SCROLL/BROWSE</span> carry no mode parameter, inferred from args, and are service-gated.</div>
+<div class="fig-cap"><b>One query runs the real shape of cross-session search</b>: writes are indexed immediately by the <span class="mono">messages_fts_insert</span> trigger with <span class="mono">rowid=new.id</span> into FTS5. Retrieval uses real SQL: <span class="mono">snippet(messages_fts, 0, '&gt;&gt;&gt;', '&lt;&lt;&lt;', '...', 40)</span> + <span class="mono">messages_fts MATCH ?</span> + <span class="mono">ORDER BY rank</span> (BM25), wrapping the match in <span class="mono">&gt;&gt;&gt;…&lt;&lt;&lt;</span> over a 40-token window; CJK falls back to <span class="mono">trigram</span> (a term under 3 chars makes trigram return 0 → fall back to LIKE). <span class="mono">get_anchored_view(bookend=3)</span> returns three slices: <span class="mono">bookend_start</span> (first 3) + <span class="mono">window ±5</span> (anchor centered) + <span class="mono">bookend_end</span> (last 3). The hit is <b>appended as a tool message</b> — zero LLM, no cache break; the four modes <span class="mono">DISCOVERY/SCROLL/READ/BROWSE</span> carry no mode parameter, inferred from args, and are service-gated.</div>
 </div>
 
 <div class="card collab">
@@ -4742,7 +4742,7 @@ agent._cached_system_prompt = new_system_prompt      <span class="cm"># write ba
   <text x="592" y="188" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">~600</text>
   <text x="592" y="204" text-anchor="middle" font-size="9" fill="var(--accent-ink)">tok (after)</text>
   <text x="592" y="234" text-anchor="middle" font-size="10" font-weight="700" fill="var(--purple)">~ -93%</text>
-  <text x="592" y="252" text-anchor="middle" font-size="9" fill="var(--muted)">target ~0.20 ratio</text>
+  <text x="592" y="252" text-anchor="middle" font-size="9" fill="var(--muted)">this run ~0.07 < target 0.20</text>
 
   <rect x="20" y="276" width="640" height="116" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="32" y="294" font-size="10" font-weight="700" fill="var(--blue)">6. The cache's only exception - conversation_compression.py:515-517</text>
@@ -6600,7 +6600,7 @@ agent = AIAgent(
   <text x="496" y="233" font-size="10" font-weight="700" fill="var(--amber)">→ takes MIN 120s</text>
 
   <rect x="14" y="262" width="652" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
-  <text x="22" y="279" class="mono" font-size="9" fill="var(--muted)">cron/jobs.py:498  return max(MIN_GRACE, min(grace, MAX_GRACE))   # MIN 120 · MAX 7200</text>
+  <text x="22" y="279" class="mono" font-size="9" fill="var(--muted)">cron/jobs.py:500  return max(MIN_GRACE, min(grace, MAX_GRACE))   # MIN 120 · MAX 7200</text>
 
   <text x="16" y="306" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ catchup check · when tick wakes, Δ since the due instant</text>
   <rect x="14" y="312" width="324" height="46" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
@@ -7445,7 +7445,7 @@ agent = AIAgent(
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 524" role="img" aria-label="Real data flow of one obfuscated command r-backslash-m -rf /home/alice/* being restored to rm -rf ~/* and then blocked by the HARDLINE regex: (1) the attack input hides escaped backslashes and empty quotes to dodge the regex; (2) _normalize_command_for_detection runs six normalization steps (strip_ansi removes ANSI escapes, strip null bytes, NFKC normalize, re.sub strips backslashes turning r-backslash-m into rm, strip empty quotes, _rewrite_resolved_user_home folds /home/alice/ into ~/) restoring rm -rf ~/*; (3) it matches the HARDLINE regex recursive delete of home directory; (4) _hardline_block_result hard-blocks with BLOCKED hardline, refused even with --yolo /yolo approvals.mode=off; (5) contrast: if we instead asked the model whether it is dangerous, it might answer this is a safe cleanup script and allow it, whereas the regex matches deterministically and wording tricks are useless.">
+<svg viewBox="0 0 680 524" role="img" aria-label="Real data flow of one obfuscated command r-backslash-m -rf /home/alice/* being restored to rm -rf ~/* and then blocked by the HARDLINE regex: (1) the attack input hides escaped backslashes and empty quotes to dodge the regex; (2) _normalize_command_for_detection runs multi-step normalization (strip_ansi removes ANSI escapes, strip null bytes, NFKC normalize, re.sub strips backslashes turning r-backslash-m into rm, strip empty quotes, _rewrite_resolved_user_home folds /home/alice/ into ~/) restoring rm -rf ~/*; (3) it matches the HARDLINE regex recursive delete of home directory; (4) _hardline_block_result hard-blocks with BLOCKED hardline, refused even with --yolo /yolo approvals.mode=off; (5) contrast: if we instead asked the model whether it is dangerous, it might answer this is a safe cleanup script and allow it, whereas the regex matches deterministically and wording tricks are useless.">
   <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">Obfuscated command → deterministic normalization → HARDLINE block</text>
   <text x="20" y="42" font-size="10" fill="var(--muted)">how a delete-home command hidden behind escapes and empty quotes is restored and blocked by the first gate</text>
   <text x="652" y="32" text-anchor="middle" font-size="22">🛡</text>
@@ -7482,7 +7482,7 @@ agent = AIAgent(
   <text x="54" y="488" font-size="10" font-weight="700" fill="var(--red)">⑤ Contrast · if we instead asked the model is this dangerous</text>
   <text x="54" y="505" font-size="9" fill="var(--muted)">it might answer this is a safe cleanup script and allow it — the regex matches deterministically, wording tricks are useless</text>
 </svg>
-<div class="fig-cap"><b>An obfuscated command's deterministic defeat</b>: a <span class="mono">r\m -rf /home/alice/*</span> (using <span class="mono">\</span> escapes and empty quotes to split tokens and dodge the regex) is first restored by <span class="mono">_normalize_command_for_detection</span>'s six steps to <span class="mono">rm -rf ~/*</span> (crucially <span class="mono">re.sub(r'\\([^\n])', r'\1')</span> strips the backslash and <span class="mono">_rewrite_resolved_user_home</span> folds <span class="mono">/home/alice/</span> back to <span class="mono">~/</span>), then matches the HARDLINE regex <span class="mono">"recursive delete of home directory"</span> and is hard-blocked — <b>refused even with <span class="mono">--yolo</span></b>. Contrast: had we let the model judge "dangerous?", a single "safe cleanup script" would fool it. <b>A deterministic regex beats wording obfuscation.</b></div>
+<div class="fig-cap"><b>An obfuscated command's deterministic defeat</b>: a <span class="mono">r\m -rf /home/alice/*</span> (using <span class="mono">\</span> escapes and empty quotes to split tokens and dodge the regex) is first restored by <span class="mono">_normalize_command_for_detection</span>'s normalization steps to <span class="mono">rm -rf ~/*</span> (crucially <span class="mono">re.sub(r'\\([^\n])', r'\1')</span> strips the backslash and <span class="mono">_rewrite_resolved_user_home</span> folds <span class="mono">/home/alice/</span> back to <span class="mono">~/</span>), then matches the HARDLINE regex <span class="mono">"recursive delete of home directory"</span> and is hard-blocked — <b>refused even with <span class="mono">--yolo</span></b>. Contrast: had we let the model judge "dangerous?", a single "safe cleanup script" would fool it. <b>A deterministic regex beats wording obfuscation.</b></div>
 </div>
 
 <h2>Layer two: subagent least-privilege</h2>
@@ -8992,7 +8992,7 @@ def detect_dangerous_command(command: str) -&gt; tuple:  # :657 → 61 patterns,
 <div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">❌ wrong · change-detector (don't write this)</span></div><pre># Snapshot test: freezes a specific value that's meant to change
 assert "gemini-2.5-pro" in _PROVIDER_MODELS["gemini"]   # reddens on any rename
 assert DEFAULT_CONFIG["_config_version"] == 21           # reddens on any bump
-assert len(_PROVIDER_MODELS["huggingface"]) == 8         # reddens on any new provider
+assert len(_PROVIDER_MODELS["huggingface"]) == 8         # reddens on any new model
 # No behavioral coverage — just forces "fix the test" on every routine update</pre></div>
 <div class="codefile"><div class="cf-head"><span class="dot"></span><span class="path">✅ right · AGENTS.md:1349 · lock the invariant</span></div><pre># Invariant: assert the relationship two pieces of data must hold (stays true as the system evolves)
 assert "gemini" in _PROVIDER_MODELS
