@@ -232,11 +232,11 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
     main_model = str(runtime_model or _read_main_model() or "")
     if (main_provider and main_model
             and main_provider not in {"auto", ""}):
-        main_chain_label = _normalize_chain_label(resolved_provider)
+        main_chain_label = _normalize_chain_label(main_provider)
         if main_chain_label and _is_provider_unhealthy(main_chain_label):
             _log_skip_unhealthy(main_chain_label)        # just 402'd -&gt; skip
         else:
-            client, resolved = resolve_provider_client(resolved_provider, main_model, ...)
+            client, resolved = resolve_provider_client(main_provider, main_model, ...)
             if client is not None:
                 return client, resolved or main_model    # (1) main provider+model
 
@@ -608,11 +608,11 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
     main_model = str(runtime_model or _read_main_model() or "")
     if (main_provider and main_model
             and main_provider not in {"auto", ""}):
-        main_chain_label = _normalize_chain_label(resolved_provider)
+        main_chain_label = _normalize_chain_label(main_provider)
         if main_chain_label and _is_provider_unhealthy(main_chain_label):
             _log_skip_unhealthy(main_chain_label)        # just 402'd -&gt; skip
         else:
-            client, resolved = resolve_provider_client(resolved_provider, main_model, ...)
+            client, resolved = resolve_provider_client(main_provider, main_model, ...)
             if client is not None:
                 return client, resolved or main_model    # (1) main provider+model
 
