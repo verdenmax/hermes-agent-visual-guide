@@ -925,6 +925,8 @@ QUIZZES = {
              "en": "Name a pitfall you'd most likely hit building your own agent. Write out its 'symptom → root cause (which A–G flaw) → countermeasure,' and say which Hermes design line it maps to (sacred cache / self-evolution / narrow waist / cross-cutting safety)."},
         ],
     },
+    "27-model-credentials-routing.html": {"mcq": [], "open": []},
+    "28-runtime-resilience.html": {"mcq": [], "open": []},
 }
 
 

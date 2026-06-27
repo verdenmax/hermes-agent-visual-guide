@@ -12,6 +12,7 @@ import part5
 import part6
 import part7
 import part8
+import part9
 
 CONTENT = {
     "01-what-is-hermes.html": part1.LESSON_01,
@@ -40,4 +41,6 @@ CONTENT = {
     "24-security.html": part7.LESSON_24,
     "25-design-principles.html": part7.LESSON_25,
     "26-pitfalls-building-an-agent.html": part8.LESSON_26,
+    "27-model-credentials-routing.html": part9.LESSON_27,
+    "28-runtime-resilience.html": part9.LESSON_28,
 }
