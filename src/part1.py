@@ -1796,6 +1796,95 @@ LESSON_05 = {
 <div class="fig-cap"><b>这台同步循环就是发动机</b>：后面几乎每章的机制都<b>挂在它身上</b>——工具分派（8）是循环体里「有 tool_calls 就执行」那一步；委派子代理（13）是某个工具在循环内点火、启动一台<b>自带独立循环</b>的小发动机；上下文压缩（15）是调模型前的 preflight；轨迹记录（22）落盘的正是每圈往 messages 追加的消息。读懂这一圈，就拿到了读后面所有章节的<b>骨架</b>。</div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 466" role="img" aria-label="对话生命周期逐帧实例：一条真实消息 北京今天天气怎么样 跑两圈。左侧 messages 列表从 2 条逐格增长到 5 条——system、user、圈1 append 的 assistant tool_calls call_abc123 get_weather city 北京、圈1 append 的 tool 结果 北京 晴 26 度、圈2 append 的 assistant final_response 北京今天晴 26 度。右侧计数器演进：初始 api_call_count 0、budget max 90 used 0 remaining 90；圈1 闸门 0 小于 90 且 90 大于 0 通过、_interrupt_requested False、api_call_count 变 1、consume 后 used 1 remaining 89；圈1 模型有 tool_calls append assistant；圈1 执行 _execute_tool_calls 经 make_tool_result_message 生成 tool 消息 len 4；圈2 api_call_count 变 2、consume 后 used 2 remaining 88、无 tool_calls 收尾 append final、打印 Conversation completed after 2 OpenAI-compatible API call(s) 后 break。底部三种退出本例只走无 tool_calls 收尾这一条，达 max_iterations 90 与 consume 返 False 预算耗尽两条未触发。锚点 conversation_loop.py 589 601 610 4051 4079 4509 4513。">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">对话生命周期逐帧 · 一条消息「北京今天天气怎么样？」跑两圈</text>
+  <text x="20" y="44" font-size="10.5" fill="var(--muted)">左 messages[] 逐格增长 · 右 api_call_count 与 IterationBudget 计数演进</text>
+  <text x="652" y="32" text-anchor="middle" font-size="22">🎞️</text>
+
+  <rect x="10" y="56" width="330" height="344" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="22" y="74" font-size="10" font-weight="700" fill="var(--ink)">messages[] · len 2 → 5（只增不改）</text>
+
+  <rect x="18" y="84" width="314" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="26" y="99" font-size="9" font-weight="700" fill="var(--ink)">[0] system</text>
+  <text x="26" y="110" font-size="9" fill="var(--muted)">固定前缀（字节稳定才能缓存命中）</text>
+  <text x="332" y="99" text-anchor="end" font-size="8.5" fill="var(--blue)">初始</text>
+
+  <rect x="18" y="120" width="314" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="26" y="135" font-size="9" font-weight="700" fill="var(--ink)">[1] user</text>
+  <text x="26" y="146" font-size="9" fill="var(--purple)">content=&quot;北京今天天气怎么样？&quot;</text>
+  <text x="332" y="135" text-anchor="end" font-size="8.5" fill="var(--blue)">初始</text>
+
+  <rect x="18" y="156" width="314" height="60" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="170" font-size="9" font-weight="700" fill="var(--accent-ink)">[2] assistant · tool_calls=[{</text>
+  <text x="26" y="182" font-size="9" fill="var(--accent-ink)">  id:&quot;call_abc123&quot;, function:{</text>
+  <text x="26" y="194" font-size="9" fill="var(--accent-ink)">  name:&quot;get_weather&quot;,</text>
+  <text x="26" y="206" font-size="9" fill="var(--accent-ink)">  arguments:'{&quot;city&quot;:&quot;北京&quot;}'}}]</text>
+  <text x="332" y="170" text-anchor="end" font-size="8.5" fill="var(--accent)">圈1③</text>
+
+  <rect x="18" y="220" width="314" height="46" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="234" font-size="9" font-weight="700" fill="var(--accent-ink)">[3] tool · name=&quot;get_weather&quot;</text>
+  <text x="26" y="246" font-size="9" fill="var(--accent-ink)">  content=&quot;北京 晴 26°C&quot;,</text>
+  <text x="26" y="258" font-size="9" fill="var(--accent-ink)">  tool_call_id=&quot;call_abc123&quot;</text>
+  <text x="332" y="234" text-anchor="end" font-size="8.5" fill="var(--accent)">圈1④</text>
+
+  <rect x="18" y="270" width="314" height="42" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="26" y="284" font-size="9" font-weight="700" fill="var(--purple)">[4] assistant · 无 tool_calls → 收尾</text>
+  <text x="26" y="296" font-size="9" fill="var(--purple)">  content=&quot;北京今天晴，26°C&quot;</text>
+  <text x="332" y="284" text-anchor="end" font-size="8.5" fill="var(--purple)">圈2⑤</text>
+
+  <text x="22" y="332" font-size="9" fill="var(--muted)">每圈把新消息 append 回同一个列表：①初始 2 条</text>
+  <text x="22" y="346" font-size="9" fill="var(--muted)">→ ③+assistant → ④+tool → ⑤+final，旧消息从不重写</text>
+  <text x="22" y="372" font-size="9" fill="var(--muted)">锚点 conversation_loop.py:4051 / 4079 / 4509</text>
+
+  <rect x="346" y="56" width="324" height="344" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="358" y="74" font-size="10" font-weight="700" fill="var(--ink)">计数器演进 · api_call_count · IterationBudget</text>
+
+  <rect x="354" y="84" width="308" height="40" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="362" y="99" font-size="9" font-weight="700" fill="var(--ink)">① 初始 · 进入 while 之前</text>
+  <text x="362" y="113" font-size="9" fill="var(--muted)">api_call_count=0 · budget max=90 used=0 remaining=90</text>
+  <text x="654" y="99" text-anchor="end" font-size="8.5" fill="var(--muted)">:589</text>
+
+  <rect x="354" y="128" width="308" height="62" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="362" y="142" font-size="9" font-weight="700" fill="var(--ink)">② 圈1 闸门通过 → consume()</text>
+  <text x="362" y="154" font-size="9" fill="var(--ink)">0 &lt; 90 且 90 &gt; 0 ✅ · _interrupt_requested=False</text>
+  <text x="362" y="166" font-size="9" fill="var(--ink)">api_call_count → 1</text>
+  <text x="362" y="178" font-size="9" fill="var(--ink)">consume() → used=1, remaining=89</text>
+  <text x="654" y="142" text-anchor="end" font-size="8.5" fill="var(--muted)">:601 · :610</text>
+
+  <rect x="354" y="194" width="308" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="362" y="209" font-size="9" font-weight="700" fill="var(--accent-ink)">③ 圈1 模型 → 有 tool_calls</text>
+  <text x="362" y="223" font-size="9" fill="var(--accent-ink)">append assistant → messages[2]（见左 r2）</text>
+  <text x="654" y="209" text-anchor="end" font-size="8.5" fill="var(--muted)">:4051</text>
+
+  <rect x="354" y="238" width="308" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="362" y="253" font-size="9" font-weight="700" fill="var(--accent-ink)">④ 圈1 执行 _execute_tool_calls</text>
+  <text x="362" y="267" font-size="9" fill="var(--accent-ink)">make_tool_result_message → tool 消息 · len=4</text>
+  <text x="654" y="253" text-anchor="end" font-size="8.5" fill="var(--muted)">:4079 · 337</text>
+
+  <rect x="354" y="282" width="308" height="74" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="362" y="296" font-size="9" font-weight="700" fill="var(--purple)">⑤ 圈2 → 无 tool_calls → 收尾</text>
+  <text x="362" y="308" font-size="9" fill="var(--purple)">api_call_count → 2 · consume() → used=2, remaining=88</text>
+  <text x="362" y="320" font-size="9" fill="var(--purple)">final_response=&quot;北京今天晴，26°C&quot; → append</text>
+  <text x="362" y="332" font-size="9" fill="var(--purple)">🎉 Conversation completed after 2</text>
+  <text x="362" y="344" font-size="9" fill="var(--purple)">   OpenAI-compatible API call(s) → break</text>
+  <text x="654" y="296" text-anchor="end" font-size="8.5" fill="var(--muted)">:4509 · :4513</text>
+
+  <text x="358" y="374" font-size="9" fill="var(--muted)">两圈共 2 次 consume：used 0→1→2，remaining 90→89→88</text>
+  <text x="358" y="390" font-size="9" fill="var(--muted)">parent 预算上限 90（subagent 各自 50）· agent_init.py:165</text>
+
+  <rect x="10" y="406" width="660" height="52" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="423" font-size="9.5" font-weight="700" fill="var(--ink)">⑥ 主循环三种退出 · 本例只命中第 1 条</text>
+  <circle cx="24" cy="440" r="4" fill="var(--accent)"/>
+  <text x="34" y="444" font-size="9" fill="var(--accent-ink)">✅ 无 tool_calls 收尾（本例）:4509-4514</text>
+  <circle cx="282" cy="440" r="4" fill="var(--muted)"/>
+  <text x="292" y="444" font-size="9" fill="var(--muted)">○ 达 max_iterations 90 — 未触发</text>
+  <circle cx="492" cy="440" r="4" fill="var(--muted)"/>
+  <text x="502" y="444" font-size="9" fill="var(--muted)">○ consume() 返 False 预算耗尽 — 未触发</text>
+</svg>
+<div class="fig-cap"><b>一条消息跑两圈（快照胶卷）</b>：拿真实输入 <span class="mono">「北京今天天气怎么样？」</span> 走一遍——左边 <span class="mono">messages[]</span> 从 <b>2 条逐格 append 到 5 条</b>（system/user → assistant <span class="mono">tool_calls</span> → tool 结果 → final），右边计数器同步演进：<span class="mono">api_call_count 0→1→2</span>、<span class="mono">IterationBudget used 0→1→2 / remaining 90→89→88</span>。第 2 圈模型<b>不再给 tool_calls</b>，于是 <span class="mono">append final → 🎉 → break</span>（<span class="mono">conversation_loop.py:4509-4514</span>）；另两条退出（撞 <span class="mono">max_iterations</span> 90 / <span class="mono">consume()</span> 返 False）本例都没触发。</div>
+</div>
+
 <h2>迭代预算：防止失控长循环</h2>
 <p>第 5 步每调一次模型，就先 <span class="mono">consume()</span> 一格预算。这把"门闩"由 <span class="mono">IterationBudget</span> 把守（<span class="mono">agent/iteration_budget.py</span>），<strong>线程安全</strong>，parent 默认上限 <strong>90</strong>、每个 subagent 独立默认 <strong>50</strong>。它的两个核心方法短得能背下来：</p>
 
@@ -2040,6 +2129,95 @@ From the moment you hit enter to the moment Hermes hands back a final answer, wh
   <text x="340" y="187" text-anchor="middle" font-size="10" fill="var(--accent-ink)">⚙ the engine of the whole system</text>
 </svg>
 <div class="fig-cap"><b>This synchronous loop is the engine</b>: nearly every later mechanism <b>hangs off it</b> — tool dispatch (8) is the "if tool_calls, execute" step in the body; subagent delegation (13) is a tool that, from inside the loop, fires up a small engine with its <b>own independent loop</b>; context compression (15) is a preflight before the model call; trajectory recording (22) persists exactly the messages each turn appends to messages. Read this one loop and you hold the <b>skeleton</b> for every chapter that follows.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 466" role="img" aria-label="Conversation lifecycle film-strip worked example: one real message what is the weather in Beijing today runs two loop turns. Left messages list grows cell by cell from 2 to 5 entries: system, user, the assistant tool_calls call_abc123 get_weather city Beijing appended in turn 1, the tool result Beijing clear 26 degrees appended in turn 1, and the assistant final_response Beijing is clear today 26 degrees appended in turn 2. Right counters evolve: initial api_call_count 0, budget max 90 used 0 remaining 90; turn 1 gate 0 less than 90 and 90 greater than 0 passes, _interrupt_requested False, api_call_count becomes 1, after consume used 1 remaining 89; turn 1 model has tool_calls and appends assistant; turn 1 executes _execute_tool_calls via make_tool_result_message producing the tool message len 4; turn 2 api_call_count becomes 2, after consume used 2 remaining 88, no tool_calls so it finishes by appending final, prints Conversation completed after 2 OpenAI-compatible API call(s) then break. Bottom three exits: this example only takes the no tool_calls finish path; hitting max_iterations 90 and consume returning False budget exhausted are not triggered. Anchors conversation_loop.py 589 601 610 4051 4079 4509 4513.">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">Conversation lifecycle film-strip · one message runs two turns</text>
+  <text x="20" y="44" font-size="10.5" fill="var(--muted)">Left: messages[] grows cell by cell · Right: api_call_count and IterationBudget evolve</text>
+  <text x="652" y="32" text-anchor="middle" font-size="22">🎞️</text>
+
+  <rect x="10" y="56" width="330" height="344" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="22" y="74" font-size="10" font-weight="700" fill="var(--ink)">messages[] · len 2 → 5 (append-only)</text>
+
+  <rect x="18" y="84" width="314" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="26" y="99" font-size="9" font-weight="700" fill="var(--ink)">[0] system</text>
+  <text x="26" y="110" font-size="9" fill="var(--muted)">stable prefix (byte-stable for cache hits)</text>
+  <text x="332" y="99" text-anchor="end" font-size="8.5" fill="var(--blue)">initial</text>
+
+  <rect x="18" y="120" width="314" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="26" y="135" font-size="9" font-weight="700" fill="var(--ink)">[1] user</text>
+  <text x="26" y="146" font-size="9" fill="var(--purple)">content=&quot;What is the weather in Beijing today?&quot;</text>
+  <text x="332" y="135" text-anchor="end" font-size="8.5" fill="var(--blue)">initial</text>
+
+  <rect x="18" y="156" width="314" height="60" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="170" font-size="9" font-weight="700" fill="var(--accent-ink)">[2] assistant · tool_calls=[{</text>
+  <text x="26" y="182" font-size="9" fill="var(--accent-ink)">  id:&quot;call_abc123&quot;, function:{</text>
+  <text x="26" y="194" font-size="9" fill="var(--accent-ink)">  name:&quot;get_weather&quot;,</text>
+  <text x="26" y="206" font-size="9" fill="var(--accent-ink)">  arguments:'{&quot;city&quot;:&quot;Beijing&quot;}'}}]</text>
+  <text x="332" y="170" text-anchor="end" font-size="8.5" fill="var(--accent)">turn1③</text>
+
+  <rect x="18" y="220" width="314" height="46" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="234" font-size="9" font-weight="700" fill="var(--accent-ink)">[3] tool · name=&quot;get_weather&quot;</text>
+  <text x="26" y="246" font-size="9" fill="var(--accent-ink)">  content=&quot;Beijing clear 26°C&quot;,</text>
+  <text x="26" y="258" font-size="9" fill="var(--accent-ink)">  tool_call_id=&quot;call_abc123&quot;</text>
+  <text x="332" y="234" text-anchor="end" font-size="8.5" fill="var(--accent)">turn1④</text>
+
+  <rect x="18" y="270" width="314" height="42" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="26" y="284" font-size="9" font-weight="700" fill="var(--purple)">[4] assistant · no tool_calls → finish</text>
+  <text x="26" y="296" font-size="9" fill="var(--purple)">  content=&quot;Beijing is clear today, 26°C&quot;</text>
+  <text x="332" y="284" text-anchor="end" font-size="8.5" fill="var(--purple)">turn2⑤</text>
+
+  <text x="22" y="332" font-size="9" fill="var(--muted)">each turn appends new messages onto the same list:</text>
+  <text x="22" y="346" font-size="9" fill="var(--muted)">①init 2 → ③+assistant → ④+tool → ⑤+final, never rewritten</text>
+  <text x="22" y="372" font-size="9" fill="var(--muted)">anchors conversation_loop.py:4051 / 4079 / 4509</text>
+
+  <rect x="346" y="56" width="324" height="344" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="358" y="74" font-size="10" font-weight="700" fill="var(--ink)">Counters evolve · api_call_count · IterationBudget</text>
+
+  <rect x="354" y="84" width="308" height="40" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="362" y="99" font-size="9" font-weight="700" fill="var(--ink)">① initial · before the while loop</text>
+  <text x="362" y="113" font-size="9" fill="var(--muted)">api_call_count=0 · budget max=90 used=0 remaining=90</text>
+  <text x="654" y="99" text-anchor="end" font-size="8.5" fill="var(--muted)">:589</text>
+
+  <rect x="354" y="128" width="308" height="62" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="362" y="142" font-size="9" font-weight="700" fill="var(--ink)">② turn 1 gate passes → consume()</text>
+  <text x="362" y="154" font-size="9" fill="var(--ink)">0 &lt; 90 and 90 &gt; 0 ✅ · _interrupt_requested=False</text>
+  <text x="362" y="166" font-size="9" fill="var(--ink)">api_call_count → 1</text>
+  <text x="362" y="178" font-size="9" fill="var(--ink)">consume() → used=1, remaining=89</text>
+  <text x="654" y="142" text-anchor="end" font-size="8.5" fill="var(--muted)">:601 · :610</text>
+
+  <rect x="354" y="194" width="308" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="362" y="209" font-size="9" font-weight="700" fill="var(--accent-ink)">③ turn 1 model → has tool_calls</text>
+  <text x="362" y="223" font-size="9" fill="var(--accent-ink)">append assistant → messages[2] (see left r2)</text>
+  <text x="654" y="209" text-anchor="end" font-size="8.5" fill="var(--muted)">:4051</text>
+
+  <rect x="354" y="238" width="308" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="362" y="253" font-size="9" font-weight="700" fill="var(--accent-ink)">④ turn 1 runs _execute_tool_calls</text>
+  <text x="362" y="267" font-size="9" fill="var(--accent-ink)">make_tool_result_message → tool message · len=4</text>
+  <text x="654" y="253" text-anchor="end" font-size="8.5" fill="var(--muted)">:4079 · 337</text>
+
+  <rect x="354" y="282" width="308" height="74" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="362" y="296" font-size="9" font-weight="700" fill="var(--purple)">⑤ turn 2 → no tool_calls → finish</text>
+  <text x="362" y="308" font-size="9" fill="var(--purple)">api_call_count → 2 · consume() → used=2, remaining=88</text>
+  <text x="362" y="320" font-size="9" fill="var(--purple)">final_response=&quot;Beijing is clear today, 26°C&quot; → append</text>
+  <text x="362" y="332" font-size="9" fill="var(--purple)">🎉 Conversation completed after 2</text>
+  <text x="362" y="344" font-size="9" fill="var(--purple)">   OpenAI-compatible API call(s) → break</text>
+  <text x="654" y="296" text-anchor="end" font-size="8.5" fill="var(--muted)">:4509 · :4513</text>
+
+  <text x="358" y="374" font-size="9" fill="var(--muted)">2 consume() calls total: used 0→1→2, remaining 90→89→88</text>
+  <text x="358" y="390" font-size="9" fill="var(--muted)">parent cap 90 (each subagent 50) · agent_init.py:165</text>
+
+  <rect x="10" y="406" width="660" height="52" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="423" font-size="9.5" font-weight="700" fill="var(--ink)">⑥ three loop exits · this example hits only #1</text>
+  <circle cx="24" cy="440" r="4" fill="var(--accent)"/>
+  <text x="34" y="444" font-size="9" fill="var(--accent-ink)">✅ no tool_calls finish (this example) :4509-4514</text>
+  <circle cx="312" cy="440" r="4" fill="var(--muted)"/>
+  <text x="322" y="444" font-size="9" fill="var(--muted)">○ reach max_iterations 90 — not hit</text>
+  <circle cx="520" cy="440" r="4" fill="var(--muted)"/>
+  <text x="530" y="444" font-size="9" fill="var(--muted)">○ consume() returns False — not hit</text>
+</svg>
+<div class="fig-cap"><b>One message, two turns (snapshot film-strip)</b>: take the real input <span class="mono">&quot;What is the weather in Beijing today?&quot;</span> and walk it through — on the left <span class="mono">messages[]</span> grows <b>from 2 entries to 5 by appending</b> (system/user → assistant <span class="mono">tool_calls</span> → tool result → final), while the counters evolve in lockstep: <span class="mono">api_call_count 0→1→2</span>, <span class="mono">IterationBudget used 0→1→2 / remaining 90→89→88</span>. On turn 2 the model returns <b>no tool_calls</b>, so it <span class="mono">appends final → 🎉 → break</span> (<span class="mono">conversation_loop.py:4509-4514</span>); the other two exits (hitting <span class="mono">max_iterations</span> 90 / <span class="mono">consume()</span> returning False) are never triggered here.</div>
 </div>
 
 <h2>Iteration budget: stopping runaway loops</h2>

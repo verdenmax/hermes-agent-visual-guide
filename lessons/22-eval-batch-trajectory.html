@@ -577,6 +577,72 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 <p>锁不变量换来的是什么?是<strong>能跟着系统一起演化</strong>的测试。「gemini 目录里至少有一个模型」「每个模型都有对应的上下文长度」这类断言,锁的是两份数据之间<strong>必须成立的关系</strong>,数据怎么更新都不破。这恰好和「窄腰」哲学互为表里:核心的契约越稳、越少,系统就越<strong>好测</strong>;反过来,正因为腰部的不变量被牢牢锁住,边缘才敢放心地快速扩张新平台、新模型、新 provider(参见讲工具集与约束的那几章)。所以评测在这里不是给代码拍快照,而是<strong>守护整个系统在持续迭代中的正确性</strong>——它和窄腰一道,让「核心稳、边缘野蛮生长」这件事在工程上可持续。</p>
 <p>再往深一层看,评测的本职其实是<strong>量化误差累积</strong>(约束 F)。agent 在多轮自主里,一个小判断失误会顺着后续步骤滚成雪球;不变量测试守住的,正是「这些必须成立的关系别在迭代里悄悄被破坏」。把它和轨迹的质量门槛并排看会更清楚:质量门槛挡住低质数据流进训练、免得把误差<strong>固化进下一代模型</strong>;不变量测试挡住回归在一次次提交中慢慢累积。一个在数据入口把关、一个在代码演化时把关,前后两道闸,都是在跟<strong>误差累积</strong>这条 LLM 固有约束较劲——这也是本章三件事(批量、轨迹、评测)其实围着同一个根在转的原因。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 452" role="img" aria-label="一条真实对话转成一条 ShareGPT 训练样本:用户 prompt 统计当前目录有多少 py 文件,跑两个 API 调用;convert_to_trajectory_format 产出 conversations 数组,依次是 from system 带 tools 标签、from human 原始 prompt、from gpt 带 think 推理块和 tool_call 调用 terminal、from tool 带 tool_response 返回 7;外层 batch_runner 落盘记录含 tool_stats terminal count 1 success 1 failure 0、metadata batch_num 0、api_calls 2;底部质检闸 has_any_reasoning 为真就追加进 jsonl,全程空 think 则 continue 丢弃但仍标记完成">
+  <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="26" y="30" font-size="11" fill="var(--ink)">输入对话:user prompt <tspan class="mono" font-weight="700" fill="var(--blue)">"统计当前目录有多少 .py 文件"</tspan> · 跑 2 个 API 调用 → 转 ShareGPT 样本</text>
+
+  <rect x="14" y="48" width="400" height="300" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="22" y="64" font-size="9.5" font-weight="700" fill="var(--purple)">conversations[] · ShareGPT {from, value}(不是 OpenAI role/content)</text>
+
+  <rect x="22" y="70" width="384" height="42" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="30" y="86" class="mono" font-size="9" fill="var(--accent-ink)">{"from":"system",</text>
+  <text x="30" y="103" class="mono" font-size="9" fill="var(--ink)"> "value":"…&lt;tools&gt; 工具签名 &lt;/tools&gt;…"}</text>
+
+  <rect x="22" y="116" width="384" height="38" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="30" y="131" class="mono" font-size="9" fill="var(--blue)">{"from":"human",</text>
+  <text x="30" y="148" class="mono" font-size="9" fill="var(--ink)"> "value":"统计当前目录有多少 .py 文件"}</text>
+
+  <rect x="22" y="158" width="384" height="100" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="30" y="174" class="mono" font-size="9" fill="var(--purple)">{"from":"gpt", "value":</text>
+  <text x="30" y="190" class="mono" font-size="9" fill="var(--ink)"> &lt;think&gt;先 ls 列出再 wc 计数&lt;/think&gt;</text>
+  <text x="30" y="206" class="mono" font-size="9" fill="var(--ink)"> &lt;tool_call&gt;</text>
+  <text x="30" y="222" class="mono" font-size="9" fill="var(--ink)"> {"name": "terminal", "arguments":</text>
+  <text x="30" y="238" class="mono" font-size="9" fill="var(--ink)"> {"command": "ls *.py | wc -l"}}</text>
+  <text x="30" y="254" class="mono" font-size="9" fill="var(--ink)"> &lt;/tool_call&gt;}</text>
+
+  <rect x="22" y="262" width="384" height="78" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="30" y="278" class="mono" font-size="9" fill="var(--muted)">{"from":"tool", "value":</text>
+  <text x="30" y="294" class="mono" font-size="9" fill="var(--ink)"> &lt;tool_response&gt;</text>
+  <text x="30" y="310" class="mono" font-size="9" fill="var(--ink)"> {"tool_call_id":"…","name":"terminal",</text>
+  <text x="30" y="326" class="mono" font-size="9" fill="var(--ink)"> "content":"7"} &lt;/tool_response&gt;}</text>
+
+  <rect x="426" y="48" width="240" height="300" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="434" y="64" font-size="9.5" font-weight="700" fill="var(--accent-ink)">外层落盘记录 · batch_runner</text>
+
+  <rect x="434" y="70" width="224" height="74" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="442" y="86" font-size="9" font-weight="700" fill="var(--accent-ink)">tool_stats(_extract_tool_stats)</text>
+  <text x="442" y="103" class="mono" font-size="9" fill="var(--ink)">{"terminal":{</text>
+  <text x="442" y="119" class="mono" font-size="9" fill="var(--ink)"> "count":1,"success":1,</text>
+  <text x="442" y="135" class="mono" font-size="9" fill="var(--ink)"> "failure":0}}</text>
+
+  <rect x="434" y="152" width="224" height="64" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="442" y="168" font-size="9" font-weight="700" fill="var(--muted)">metadata</text>
+  <text x="442" y="185" class="mono" font-size="9" fill="var(--ink)">{"batch_num":0,</text>
+  <text x="442" y="201" class="mono" font-size="9" fill="var(--ink)"> "model":"…"}</text>
+
+  <rect x="434" y="224" width="224" height="34" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="442" y="245" class="mono" font-size="9.5" fill="var(--blue)">"api_calls": 2</text>
+
+  <rect x="434" y="266" width="224" height="34" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="442" y="287" class="mono" font-size="9" fill="var(--muted)">"completed":true · "partial":false</text>
+
+  <text x="450" y="330" font-size="9" fill="var(--muted)">model 只是每条样本的字段,</text>
+  <text x="450" y="343" font-size="9" fill="var(--muted)">不按模型拆文件</text>
+
+  <text x="16" y="368" font-size="9.5" font-weight="700" fill="var(--muted)">⑥ 质检闸 · _extract_reasoning_stats → has_any_reasoning</text>
+  <rect x="14" y="374" width="400" height="44" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="394" font-size="10.5" fill="var(--accent-ink)"><tspan class="mono">has_any_reasoning=True</tspan>(有 &lt;think&gt; 内容)</text>
+  <text x="26" y="411" font-size="10" font-weight="700" fill="var(--accent-ink)">→ 追加进 batch_&lt;N&gt;.jsonl(增量落盘)</text>
+  <rect x="426" y="374" width="240" height="44" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="438" y="394" font-size="10" fill="var(--red)">全程空 &lt;think&gt; → <tspan class="mono">=False</tspan></text>
+  <text x="438" y="411" font-size="10" font-weight="700" fill="var(--red)">→ continue 丢弃(仍标记完成)</text>
+
+  <text x="16" y="440" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图:一条对话被改写成 {from,value} 的 ShareGPT 帧序列 —— 这是训练样本格式,不是推理时的 OpenAI role。</text>
+</svg>
+<div class="fig-cap"><b>一条对话 → 一条 ShareGPT 样本</b>:<span class="mono">convert_to_trajectory_format</span> 把内部 messages 改写成 <span class="mono">conversations[]</span>——<span class="mono">{from:"system"}</span> 带 <span class="mono">&lt;tools&gt;</span>、<span class="mono">{from:"human"}</span> 原始 prompt、<span class="mono">{from:"gpt"}</span> 带 <span class="mono">&lt;think&gt;</span>+<span class="mono">&lt;tool_call&gt;</span>、<span class="mono">{from:"tool"}</span> 带 <span class="mono">&lt;tool_response&gt;</span>。外层 <span class="mono">batch_runner</span> 落盘记录附 <span class="mono">tool_stats={"terminal":{count:1,success:1,failure:0}}</span>、<span class="mono">metadata.batch_num=0</span>、<span class="mono">api_calls=2</span>;质检闸只在 <b>有 <span class="mono">&lt;think&gt;</span> 推理</b>时写盘,空推理 <span class="mono">continue</span> 丢弃。注意是 <b><span class="mono">{from,value}</span> 而非 OpenAI role/content</b>。</div>
+</div>
+
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">一批 prompt 切分,丢给多个 <span class="mono">_process_batch_worker</span> 并行</span></div>
   <div class="step"><span class="num">2</span><span class="sc">每个 worker 独立跑 AIAgent(第 7 章核心循环),产出 trajectory</span></div>
@@ -855,6 +921,72 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 </div>
 <p>What does locking invariants buy? Tests that can <strong>evolve along with the system</strong>. Assertions like "the gemini catalog has at least one model" or "every model has a context length" lock the <strong>relation that must hold</strong> between two pieces of data, unbroken however the data updates. This mirrors the "narrow waist" philosophy: the more stable and minimal the core's contracts, the more <strong>testable</strong> the system; conversely, precisely because the waist's invariants are locked down, the edges dare to expand fast — new platforms, models, providers (see the chapters on toolsets and constraints). So eval here isn't snapshotting the code but <strong>guarding the whole system's correctness across continuous iteration</strong> — together with the narrow waist, it's what makes "stable core, wild edges" sustainable as engineering.</p>
 <p>One layer deeper: eval's real job is to <strong>quantify error accumulation</strong> (constraint F). In an agent's multi-turn autonomy, one small misjudgment snowballs down the subsequent steps; what invariant tests guard is precisely "don't let these must-hold relations quietly break across iterations." Put it beside the trajectory's quality gate and it's clearer: the quality gate stops low-quality data from flowing into training, lest the error get <strong>baked into the next model</strong>; invariant tests stop regressions from slowly piling up commit by commit. One gatekeeps at the data inlet, the other at code evolution — two gates, front and back, both fighting the inherent LLM constraint of <strong>error accumulation</strong> — which is why this chapter's three things (batch, trajectory, eval) really orbit the same root.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 452" role="img" aria-label="One real conversation becomes one ShareGPT training sample: user prompt count the py files in this dir, two API calls; convert_to_trajectory_format produces a conversations array, in order from system with tools tag, from human raw prompt, from gpt with think reasoning block and tool_call invoking terminal, from tool with tool_response returning 7; the outer batch_runner record holds tool_stats terminal count 1 success 1 failure 0, metadata batch_num 0, api_calls 2; bottom quality gate has_any_reasoning true appends to jsonl, all-empty think means continue and discard but still marked done">
+  <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="26" y="30" font-size="11" fill="var(--ink)">Input conversation: user prompt <tspan class="mono" font-weight="700" fill="var(--blue)">"count the .py files in this dir"</tspan> · 2 API calls → ShareGPT sample</text>
+
+  <rect x="14" y="48" width="400" height="300" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="22" y="64" font-size="9.5" font-weight="700" fill="var(--purple)">conversations[] · ShareGPT {from, value} (not OpenAI role/content)</text>
+
+  <rect x="22" y="70" width="384" height="42" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="30" y="86" class="mono" font-size="9" fill="var(--accent-ink)">{"from":"system",</text>
+  <text x="30" y="103" class="mono" font-size="9" fill="var(--ink)"> "value":"…&lt;tools&gt; tool signatures &lt;/tools&gt;…"}</text>
+
+  <rect x="22" y="116" width="384" height="38" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="30" y="131" class="mono" font-size="9" fill="var(--blue)">{"from":"human",</text>
+  <text x="30" y="148" class="mono" font-size="9" fill="var(--ink)"> "value":"count the .py files in this dir"}</text>
+
+  <rect x="22" y="158" width="384" height="100" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="30" y="174" class="mono" font-size="9" fill="var(--purple)">{"from":"gpt", "value":</text>
+  <text x="30" y="190" class="mono" font-size="9" fill="var(--ink)"> &lt;think&gt;ls then wc to count&lt;/think&gt;</text>
+  <text x="30" y="206" class="mono" font-size="9" fill="var(--ink)"> &lt;tool_call&gt;</text>
+  <text x="30" y="222" class="mono" font-size="9" fill="var(--ink)"> {"name": "terminal", "arguments":</text>
+  <text x="30" y="238" class="mono" font-size="9" fill="var(--ink)"> {"command": "ls *.py | wc -l"}}</text>
+  <text x="30" y="254" class="mono" font-size="9" fill="var(--ink)"> &lt;/tool_call&gt;}</text>
+
+  <rect x="22" y="262" width="384" height="78" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="30" y="278" class="mono" font-size="9" fill="var(--muted)">{"from":"tool", "value":</text>
+  <text x="30" y="294" class="mono" font-size="9" fill="var(--ink)"> &lt;tool_response&gt;</text>
+  <text x="30" y="310" class="mono" font-size="9" fill="var(--ink)"> {"tool_call_id":"…","name":"terminal",</text>
+  <text x="30" y="326" class="mono" font-size="9" fill="var(--ink)"> "content":"7"} &lt;/tool_response&gt;}</text>
+
+  <rect x="426" y="48" width="240" height="300" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="434" y="64" font-size="9.5" font-weight="700" fill="var(--accent-ink)">Outer record · batch_runner</text>
+
+  <rect x="434" y="70" width="224" height="74" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="442" y="86" font-size="9" font-weight="700" fill="var(--accent-ink)">tool_stats(_extract_tool_stats)</text>
+  <text x="442" y="103" class="mono" font-size="9" fill="var(--ink)">{"terminal":{</text>
+  <text x="442" y="119" class="mono" font-size="9" fill="var(--ink)"> "count":1,"success":1,</text>
+  <text x="442" y="135" class="mono" font-size="9" fill="var(--ink)"> "failure":0}}</text>
+
+  <rect x="434" y="152" width="224" height="64" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="442" y="168" font-size="9" font-weight="700" fill="var(--muted)">metadata</text>
+  <text x="442" y="185" class="mono" font-size="9" fill="var(--ink)">{"batch_num":0,</text>
+  <text x="442" y="201" class="mono" font-size="9" fill="var(--ink)"> "model":"…"}</text>
+
+  <rect x="434" y="224" width="224" height="34" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="442" y="245" class="mono" font-size="9.5" fill="var(--blue)">"api_calls": 2</text>
+
+  <rect x="434" y="266" width="224" height="34" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="442" y="287" class="mono" font-size="9" fill="var(--muted)">"completed":true · "partial":false</text>
+
+  <text x="450" y="330" font-size="9" fill="var(--muted)">model is just a per-sample field,</text>
+  <text x="450" y="343" font-size="9" fill="var(--muted)">never a per-model file split</text>
+
+  <text x="16" y="368" font-size="9.5" font-weight="700" fill="var(--muted)">⑥ Quality gate · _extract_reasoning_stats → has_any_reasoning</text>
+  <rect x="14" y="374" width="400" height="44" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="394" font-size="10.5" fill="var(--accent-ink)"><tspan class="mono">has_any_reasoning=True</tspan> (has &lt;think&gt; content)</text>
+  <text x="26" y="411" font-size="10" font-weight="700" fill="var(--accent-ink)">→ append to batch_&lt;N&gt;.jsonl (incremental)</text>
+  <rect x="426" y="374" width="240" height="44" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="438" y="394" font-size="10" fill="var(--red)">all-empty &lt;think&gt; → <tspan class="mono">=False</tspan></text>
+  <text x="438" y="411" font-size="10" font-weight="700" fill="var(--red)">→ continue, discard (still done)</text>
+
+  <text x="16" y="440" font-size="10.5" font-weight="700" fill="var(--muted)">Read this: one conversation is rewritten into a {from,value} ShareGPT frame sequence — a training format, not the inference-time OpenAI role.</text>
+</svg>
+<div class="fig-cap"><b>One conversation → one ShareGPT sample</b>: <span class="mono">convert_to_trajectory_format</span> rewrites internal messages into <span class="mono">conversations[]</span> — <span class="mono">{from:"system"}</span> with <span class="mono">&lt;tools&gt;</span>, <span class="mono">{from:"human"}</span> raw prompt, <span class="mono">{from:"gpt"}</span> with <span class="mono">&lt;think&gt;</span>+<span class="mono">&lt;tool_call&gt;</span>, <span class="mono">{from:"tool"}</span> with <span class="mono">&lt;tool_response&gt;</span>. The outer <span class="mono">batch_runner</span> record attaches <span class="mono">tool_stats={"terminal":{count:1,success:1,failure:0}}</span>, <span class="mono">metadata.batch_num=0</span>, <span class="mono">api_calls=2</span>; the gate writes only when <b>a <span class="mono">&lt;think&gt;</span></b> exists, else <span class="mono">continue</span> discards. Note it is <b><span class="mono">{from,value}</span>, not OpenAI role/content</b>.</div>
+</div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">a batch of prompts is split and handed to several <span class="mono">_process_batch_worker</span> in parallel</span></div>

@@ -150,6 +150,75 @@ or updated?"</span>.  Writes go straight to the memory + skill stores.
 <div class="fig-cap"><b>自我进化闭环</b>：四章咬合成一个顺时针回路——① 学习 nudge 把可复用解法抽成技能（第 9 章 · 本章入口）→ ② Curator 后台养护，把陈旧技能标 stale 再归档（<b>永不删</b>，第 10 章）→ ③ 记忆声明性沉淀「你是谁、偏好什么」（第 11 章）→ ④ 跨会话 FTS5 搜索召回旧技能与旧会话（第 12 章）→ 回到 ①。四环各司其职，Hermes 才<b>越用越懂你</b>，而全程不动那条神圣的缓存前缀。</div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 472" role="img" aria-label="一句抱怨走完学习闭环：frustration 被识别为 FIRST-CLASS 技能信号；nudge 计数 _iters_since_skill 累到 _skill_nudge_interval 即 10，置 _should_review_skills=True 但不往主对话注入任何文字；响应交付后 fork 后台 review 守护线程，传 list(messages) 快照；按 Preference order 四档选最早可行的动作 PATCH 已加载技能、UPDATE 已有伞、ADD 支持文件、CREATE 类级新伞且禁用 fix-X 或 PR 号命名；落盘经 is_background_review 标 mark_agent_created 交 curator 治理；反例区里 command not found 与 browser tools do not work 被 review prompt 明令丢弃">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">一句抱怨走完学习闭环 · nudge 第10次 → fork review → 选档 → 标产权</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">输入 this is too verbose, just give me the answer，沿处理路径看每步真实数据</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🧠</text>
+  <rect x="10" y="62" width="206" height="104" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="20" y="82" font-size="10" font-weight="700" fill="var(--blue)">① 输入信号 · frustration</text>
+  <rect x="19" y="90" width="188" height="40" rx="5" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="27" y="106" font-size="9" fill="var(--code-ink)">this is too verbose,</text>
+  <text x="27" y="122" font-size="9" fill="var(--code-ink)">just give me the answer</text>
+  <text x="20" y="148" font-size="9" font-weight="700" fill="var(--purple)">FIRST-CLASS skill signal</text>
+  <text x="20" y="162" font-size="9" fill="var(--muted)">background_review.py:180-186</text>
+  <line x1="216" y1="114" x2="236" y2="114" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M242,114 L234,110 L234,118 Z" fill="var(--line)"/>
+  <rect x="238" y="62" width="206" height="104" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="248" y="82" font-size="10" font-weight="700" fill="var(--ink)">② nudge 计数命中阈值</text>
+  <text x="248" y="102" font-size="9" fill="var(--ink)">_iters_since_skill = 10</text>
+  <text x="248" y="118" font-size="9" fill="var(--ink)">&gt;= _skill_nudge_interval (10)</text>
+  <text x="248" y="136" font-size="9" font-weight="700" fill="var(--accent-ink)">_should_review_skills = True</text>
+  <text x="248" y="156" font-size="9" font-weight="700" fill="var(--amber)">✗ 不往主对话注入任何文字</text>
+  <line x1="444" y1="114" x2="464" y2="114" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M470,114 L462,110 L462,118 Z" fill="var(--line)"/>
+  <rect x="466" y="62" width="204" height="104" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="476" y="82" font-size="10" font-weight="700" fill="var(--accent-ink)">③ 响应后 fork · daemon</text>
+  <text x="476" y="100" font-size="9" fill="var(--accent-ink)">_spawn_background_review(</text>
+  <text x="476" y="114" font-size="9" fill="var(--accent-ink)">  messages_snapshot=</text>
+  <text x="476" y="127" font-size="9" fill="var(--accent-ink)">    list(messages),</text>
+  <text x="476" y="140" font-size="9" fill="var(--accent-ink)">  review_skills=True)</text>
+  <text x="476" y="158" font-size="9" fill="var(--muted)">turn_finalizer.py:433-456</text>
+  <text x="20" y="190" font-size="11" font-weight="700" fill="var(--ink)">④ Preference order · 选最早可行的一档（命中信号后必选其一）</text>
+  <rect x="10" y="200" width="158" height="84" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="220" font-size="9.5" font-weight="700" fill="var(--blue)">1 · PATCH</text>
+  <text x="18" y="238" font-size="9" fill="var(--blue)">更新当前已加载技能</text>
+  <text x="18" y="254" font-size="9" fill="var(--blue)">/skill-name 读过的那个</text>
+  <text x="18" y="276" font-size="9" fill="var(--muted)">:195-231</text>
+  <path d="M177,242 L169,238 L169,246 Z" fill="var(--line)"/>
+  <rect x="178" y="200" width="158" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="186" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">2 · UPDATE</text>
+  <text x="186" y="238" font-size="9" fill="var(--ink)">已有类级伞技能</text>
+  <text x="186" y="254" font-size="9" fill="var(--ink)">加子节 / 坑 / 触发器</text>
+  <path d="M345,242 L337,238 L337,246 Z" fill="var(--line)"/>
+  <rect x="346" y="200" width="158" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="354" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">3 · ADD 支持文件</text>
+  <text x="354" y="238" font-size="9" fill="var(--ink)">references/ 或 scripts/</text>
+  <text x="354" y="254" font-size="9" fill="var(--ink)">伞下加文件 + 挂指针</text>
+  <path d="M513,242 L505,238 L505,246 Z" fill="var(--line)"/>
+  <rect x="514" y="200" width="156" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="522" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">4 · CREATE 新伞</text>
+  <text x="522" y="238" font-size="9" fill="var(--ink)">命名必须类级</text>
+  <text x="522" y="256" font-size="9" font-weight="700" fill="var(--red)">禁 fix-X / PR号 / 报错串</text>
+  <rect x="10" y="300" width="404" height="58" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="20" y="320" font-size="10" font-weight="700" fill="var(--purple)">⑤ provenance · 落盘标产权</text>
+  <text x="20" y="338" font-size="9" fill="var(--purple)">is_background_review() → mark_agent_created(name)</text>
+  <text x="20" y="352" font-size="9" fill="var(--muted)">skill_manager_tool.py:1080-1084</text>
+  <line x1="414" y1="329" x2="424" y2="329" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M430,329 L422,325 L422,333 Z" fill="var(--line)"/>
+  <rect x="426" y="300" width="244" height="58" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="436" y="320" font-size="10" font-weight="700" fill="var(--accent-ink)">→ 交 curator 治理（第10章）</text>
+  <text x="436" y="338" font-size="9" fill="var(--accent-ink)">created_by:agent → 可 stale / 归档</text>
+  <text x="436" y="352" font-size="9" fill="var(--accent-ink)">手写技能永不触碰</text>
+  <rect x="10" y="372" width="660" height="92" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="24" y="392" font-size="10" font-weight="700" fill="var(--red)">⑥ 反例区 · review prompt 明令「不要捕获」(background_review.py:249-258)</text>
+  <text x="24" y="414" font-size="9" fill="var(--red)">✗ command not found · 缺二进制 · 未配凭证 —— 环境性失败，用户可修，非持久规则</text>
+  <text x="24" y="434" font-size="9" fill="var(--red)">✗ browser tools do not work —— 对工具的负面断言会硬化成数月的自我设限</text>
+  <text x="24" y="454" font-size="9" fill="var(--muted)">读这张图：先认 frustration 为一级信号，选最早可行档，且坚决不学环境坑与「工具坏了」</text>
+</svg>
+<div class="fig-cap"><b>一个真实抱怨走完学习闭环</b>：用户说 <span class="mono">this is too verbose, just give me the answer</span>——background_review 的 prompt 把这类 frustration 列为 <b>FIRST-CLASS skill signal</b>。nudge 计数 <span class="mono">_iters_since_skill</span> 累到 <span class="mono">_skill_nudge_interval=10</span> 就置 <span class="mono">_should_review_skills=True</span>，<b>但不往主对话注入一个字</b>；响应交付后才 fork 后台 review（传 <span class="mono">list(messages)</span> 快照）。它按 <b>Preference order</b> 四档选最早可行的动作——优先 PATCH 已加载技能，最后才 CREATE 类级新伞（且禁 <span class="mono">fix-X</span>/PR号命名）；落盘经 <span class="mono">is_background_review()</span> 标 <span class="mono">mark_agent_created</span> 交 curator 治理。<b>反例区</b>钉死：<span class="mono">command not found</span> 与 <span class="mono">browser tools do not work</span> 被明令丢弃——学错教训会硬化成数月的自我设限。</div>
+</div>
+
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「学习而不破缓存」</div>
   <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
@@ -324,6 +393,75 @@ or updated?"</span>.  Writes go straight to the memory + skill stores.
   <text x="125" y="229" text-anchor="middle" font-size="10" fill="var(--blue)">FTS5 finds old skills / sessions · ch.12</text>
 </svg>
 <div class="fig-cap"><b>The self-evolution loop</b>: four chapters mesh into one clockwise circuit — ① a learning nudge distills a reusable approach into a skill (ch.9, the entry point) → ② the curator gardens, marking unused skills stale then archiving (<b>never deleting</b>, ch.10) → ③ memory declaratively settles "who you are and what you prefer" (ch.11) → ④ cross-session FTS5 search recalls old skills and sessions (ch.12) → back to ①. With each link doing its job, Hermes genuinely <b>gets to know you the more you use it</b> — all without touching the sacred cache prefix.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 472" role="img" aria-label="One complaint runs the full learning loop: frustration is recognized as a FIRST-CLASS skill signal; the nudge counter _iters_since_skill reaches _skill_nudge_interval which is 10 and sets _should_review_skills=True without injecting any text into the main conversation; after the response is delivered a background review daemon is forked with a list(messages) snapshot; it picks the earliest fitting rung of the Preference order PATCH a loaded skill, UPDATE an existing umbrella, ADD a support file, CREATE a class-level umbrella with fix-X or PR-number names forbidden; the write is marked mark_agent_created via is_background_review and handed to the curator; the do-not-capture zone forbids command not found and browser tools do not work">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">One complaint runs the learning loop · nudge #10 → fork review → pick rung → mark</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">Input this is too verbose, just give me the answer; real data at each step</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🧠</text>
+  <rect x="10" y="62" width="206" height="104" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="20" y="82" font-size="10" font-weight="700" fill="var(--blue)">1 · Input signal · frustration</text>
+  <rect x="19" y="90" width="188" height="40" rx="5" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="27" y="106" font-size="9" fill="var(--code-ink)">this is too verbose,</text>
+  <text x="27" y="122" font-size="9" fill="var(--code-ink)">just give me the answer</text>
+  <text x="20" y="148" font-size="9" font-weight="700" fill="var(--purple)">FIRST-CLASS skill signal</text>
+  <text x="20" y="162" font-size="9" fill="var(--muted)">background_review.py:180-186</text>
+  <line x1="216" y1="114" x2="236" y2="114" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M242,114 L234,110 L234,118 Z" fill="var(--line)"/>
+  <rect x="238" y="62" width="206" height="104" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="248" y="82" font-size="10" font-weight="700" fill="var(--ink)">2 · nudge counter hits threshold</text>
+  <text x="248" y="102" font-size="9" fill="var(--ink)">_iters_since_skill = 10</text>
+  <text x="248" y="118" font-size="9" fill="var(--ink)">&gt;= _skill_nudge_interval (10)</text>
+  <text x="248" y="136" font-size="9" font-weight="700" fill="var(--accent-ink)">_should_review_skills = True</text>
+  <text x="248" y="156" font-size="9" font-weight="700" fill="var(--amber)">✗ no text into the main chat</text>
+  <line x1="444" y1="114" x2="464" y2="114" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M470,114 L462,110 L462,118 Z" fill="var(--line)"/>
+  <rect x="466" y="62" width="204" height="104" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="476" y="82" font-size="10" font-weight="700" fill="var(--accent-ink)">3 · fork after response · daemon</text>
+  <text x="476" y="100" font-size="9" fill="var(--accent-ink)">_spawn_background_review(</text>
+  <text x="476" y="114" font-size="9" fill="var(--accent-ink)">  messages_snapshot=</text>
+  <text x="476" y="127" font-size="9" fill="var(--accent-ink)">    list(messages),</text>
+  <text x="476" y="140" font-size="9" fill="var(--accent-ink)">  review_skills=True)</text>
+  <text x="476" y="158" font-size="9" fill="var(--muted)">turn_finalizer.py:433-456</text>
+  <text x="20" y="190" font-size="11" font-weight="700" fill="var(--ink)">4 · Preference order · pick the earliest fitting rung (one must fire)</text>
+  <rect x="10" y="200" width="158" height="84" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="220" font-size="9.5" font-weight="700" fill="var(--blue)">1 · PATCH</text>
+  <text x="18" y="238" font-size="9" fill="var(--blue)">a currently-loaded skill</text>
+  <text x="18" y="254" font-size="9" fill="var(--blue)">the /skill-name you read</text>
+  <text x="18" y="276" font-size="9" fill="var(--muted)">:195-231</text>
+  <path d="M177,242 L169,238 L169,246 Z" fill="var(--line)"/>
+  <rect x="178" y="200" width="158" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="186" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">2 · UPDATE</text>
+  <text x="186" y="238" font-size="9" fill="var(--ink)">an existing umbrella</text>
+  <text x="186" y="254" font-size="9" fill="var(--ink)">add subsection / pitfall</text>
+  <path d="M345,242 L337,238 L337,246 Z" fill="var(--line)"/>
+  <rect x="346" y="200" width="158" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="354" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">3 · ADD support file</text>
+  <text x="354" y="238" font-size="9" fill="var(--ink)">references/ or scripts/</text>
+  <text x="354" y="254" font-size="9" fill="var(--ink)">under the umbrella</text>
+  <path d="M513,242 L505,238 L505,246 Z" fill="var(--line)"/>
+  <rect x="514" y="200" width="156" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="522" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">4 · CREATE umbrella</text>
+  <text x="522" y="238" font-size="9" fill="var(--ink)">name must be class-level</text>
+  <text x="522" y="256" font-size="9" font-weight="700" fill="var(--red)">no fix-X / PR# / err-string</text>
+  <rect x="10" y="300" width="404" height="58" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="20" y="320" font-size="10" font-weight="700" fill="var(--purple)">5 · provenance · mark on write</text>
+  <text x="20" y="338" font-size="9" fill="var(--purple)">is_background_review() → mark_agent_created(name)</text>
+  <text x="20" y="352" font-size="9" fill="var(--muted)">skill_manager_tool.py:1080-1084</text>
+  <line x1="414" y1="329" x2="424" y2="329" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M430,329 L422,325 L422,333 Z" fill="var(--line)"/>
+  <rect x="426" y="300" width="244" height="58" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="436" y="320" font-size="10" font-weight="700" fill="var(--accent-ink)">→ handed to curator (ch.10)</text>
+  <text x="436" y="338" font-size="9" fill="var(--accent-ink)">created_by:agent → stale / archive</text>
+  <text x="436" y="352" font-size="9" fill="var(--accent-ink)">hand-made skills never touched</text>
+  <rect x="10" y="372" width="660" height="92" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="24" y="392" font-size="10" font-weight="700" fill="var(--red)">6 · Do-not-capture zone · the review prompt forbids it (background_review.py:249-258)</text>
+  <text x="24" y="414" font-size="9" fill="var(--red)">✗ command not found · missing binary · unconfigured creds —— user-fixable, not durable rules</text>
+  <text x="24" y="434" font-size="9" fill="var(--red)">✗ browser tools do not work —— negative tool claims harden into months of self-imposed refusals</text>
+  <text x="24" y="454" font-size="9" fill="var(--muted)">Read this figure: treat frustration as first-class, pick the earliest rung, never learn env pitfalls or tool-broken claims</text>
+</svg>
+<div class="fig-cap"><b>A real complaint runs the full learning loop</b>: the user says <span class="mono">this is too verbose, just give me the answer</span> — background_review's prompt lists such frustration as a <b>FIRST-CLASS skill signal</b>. The nudge counter <span class="mono">_iters_since_skill</span> reaches <span class="mono">_skill_nudge_interval=10</span> and sets <span class="mono">_should_review_skills=True</span>, <b>but injects not one byte</b> into the main chat; only after the response ships does it fork the background review (with a <span class="mono">list(messages)</span> snapshot). It picks the earliest fitting <b>Preference order</b> rung — PATCH a loaded skill first, CREATE a class-level umbrella last (and never <span class="mono">fix-X</span>/PR-number names); the write is tagged <span class="mono">mark_agent_created</span> via <span class="mono">is_background_review()</span> for the curator. The <b>do-not-capture zone</b> is hard: <span class="mono">command not found</span> and <span class="mono">browser tools do not work</span> are dropped — learning the wrong lesson hardens into months of self-imposed refusals.</div>
 </div>
 
 <div class="card collab">
@@ -543,6 +681,66 @@ review_agent._skill_nudge_interval = 0     <span class="cm"># curator 绝不能�
 <p>为什么维护<strong>必须</strong> fork 独立 session、而不能在主对话里顺手跑？这是第 6 章「缓存神圣」的硬约束：主对话每轮复用一段缓存前缀，任何中途改 system prompt、换 toolset、重载记忆的动作都会<strong>击穿缓存</strong>，让用户为整段历史重新付全价。curator 的合并 pass 可能要 50–100 次工具调用、读写一堆技能文件——若这些发生在主 session 上下文里，缓存代价是灾难性的。<span class="mono">platform="curator"</span> 给它一条<strong>完全独立的缓存命名空间</strong>，<span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> 让它不拖入主对话的上下文与记忆，于是这位「园丁」在<strong>另一间办公室</strong>干活，主对话的缓存前缀<strong>一个字节都不动</strong>。</p>
 <p>触发方式也刻意<strong>不是 cron daemon</strong>，而是 <strong>inactivity 门控</strong>：只有当 agent 空闲、且距上次运行超过 <span class="mono">interval_hours</span>（默认 7 天）时，<span class="mono">maybe_run_curator</span> 才在某次后台 tick 里顺势跑一遍；调用点还会用 <span class="mono">min_idle_hours</span>（默认 2 小时）再卡一道——你正连珠炮地用 agent 时，它绝不插队。为什么这么保守？因为维护是<strong>低优先级的家务</strong>，必须让位给真实交互，绝不能在你正用某个技能时把它判成陈旧、或在繁忙时段抢辅助模型配额。「空闲才维护、忙时全让路」正是后台运维系统该有的礼貌。而首次安装时的「播种并推迟一整个 interval」，也是同一种克制——宁可晚一点开始治理，也不愿在用户刚升级、还没攒下任何使用数据时就贸然出手。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 450" role="img" aria-label="技能 pdf-form-filler 的逐日 cutoff 演算：真实 .usage.json 含 created_by agent、use_count 4、last_activity_at 2026-03-20、state active、pinned false；anchor 回退链取 last_activity 再退 created_at 再退 now；把 now=2026-06-27 代入算出 stale_cutoff=2026-05-28 与 archive_cutoff=2026-03-29；T0 anchor 06-10 大于 stale 故保持 active 零 LLM，T1 anchor 04-15 小于等于 stale 且仍 active 故 set_state STALE，T2 调用一次刷新 use_count 4 到 5 且 last_activity 变 now 于是回 active，T3 anchor 03-20 小于等于 archive 故 archive_skill 进 .archive 可 restore 绝不删除；豁免区 pinned 直接 continue，PROTECTED_BUILTIN_SKILLS 含 plan 任何路径不可碰">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">pdf-form-filler 逐档演算 · now=2026-06-27 代入 30/90 天 cutoff</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">active → stale → 复活 → archived，全凭 anchor 与 cutoff 的确定性比较</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🌿</text>
+  <rect x="10" y="62" width="250" height="114" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="82" font-size="10" font-weight="700" fill="var(--ink)">pdf-form-filler · .usage.json</text>
+  <rect x="18" y="90" width="234" height="66" rx="5" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="26" y="106" font-size="9" fill="var(--code-ink)">{ &quot;created_by&quot;: &quot;agent&quot;,</text>
+  <text x="26" y="120" font-size="9" fill="var(--code-ink)">  &quot;use_count&quot;: 4,</text>
+  <text x="26" y="134" font-size="9" fill="var(--code-ink)">  &quot;last_activity_at&quot;: &quot;2026-03-20&quot;,</text>
+  <text x="26" y="148" font-size="9" fill="var(--code-ink)">  &quot;state&quot;: &quot;active&quot;, &quot;pinned&quot;: false }</text>
+  <text x="20" y="171" font-size="9" fill="var(--muted)">skill_usage.py:462-471</text>
+  <rect x="272" y="62" width="398" height="114" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="282" y="82" font-size="10" font-weight="700" fill="var(--blue)">巡查门控 + cutoff 代入 now=2026-06-27</text>
+  <text x="282" y="100" font-size="9" fill="var(--blue)">anchor 回退链: last_activity → created_at → now</text>
+  <text x="282" y="116" font-size="9" fill="var(--blue)">stale_cutoff = now - 30d = 2026-05-28</text>
+  <text x="282" y="132" font-size="9" fill="var(--blue)">archive_cutoff = now - 90d = 2026-03-29</text>
+  <text x="282" y="150" font-size="9" fill="var(--muted)">门控: 空闲 + 距上次 &gt; interval_hours(168h) + min_idle_hours(2h)</text>
+  <text x="282" y="167" font-size="9" fill="var(--muted)">curator.py:292-328 · config.py:2092-2118</text>
+  <rect x="10" y="192" width="162" height="140" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="18" y="212" font-size="9.5" font-weight="700" fill="var(--accent-ink)">T0 · 留 active</text>
+  <text x="18" y="230" font-size="9" fill="var(--accent-ink)">anchor 2026-06-10</text>
+  <text x="18" y="246" font-size="9" fill="var(--accent-ink)">&gt; stale_cutoff 05-28</text>
+  <text x="18" y="262" font-size="9" fill="var(--accent-ink)">三分支全不命中</text>
+  <text x="18" y="290" font-size="9.5" font-weight="700" fill="var(--accent-ink)">→ 保持 ACTIVE</text>
+  <text x="18" y="308" font-size="9" fill="var(--muted)">零 LLM · 纯确定性</text>
+  <path d="M177,262 L169,258 L169,266 Z" fill="var(--line)"/>
+  <rect x="178" y="192" width="162" height="140" rx="8" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="186" y="212" font-size="9.5" font-weight="700" fill="var(--amber)">T1 · 标 stale</text>
+  <text x="186" y="230" font-size="9" fill="var(--amber)">anchor 2026-04-15</text>
+  <text x="186" y="246" font-size="9" fill="var(--amber)">≤ stale, &gt; archive</text>
+  <text x="186" y="262" font-size="9" fill="var(--amber)">current = ACTIVE</text>
+  <text x="186" y="290" font-size="9.5" font-weight="700" fill="var(--amber)">→ set_state(STALE)</text>
+  <text x="186" y="308" font-size="9" fill="var(--muted)">marked_stale += 1</text>
+  <path d="M345,262 L337,258 L337,266 Z" fill="var(--line)"/>
+  <rect x="346" y="192" width="162" height="140" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="354" y="212" font-size="9.5" font-weight="700" fill="var(--accent-ink)">T2 · 复活</text>
+  <text x="354" y="230" font-size="9" fill="var(--accent-ink)">/pdf-form-filler 调用</text>
+  <text x="354" y="246" font-size="9" fill="var(--accent-ink)">use_count 4 → 5</text>
+  <text x="354" y="262" font-size="9" fill="var(--accent-ink)">anchor=now &gt; stale &amp; STALE</text>
+  <text x="354" y="290" font-size="9.5" font-weight="700" fill="var(--accent-ink)">→ 回 ACTIVE</text>
+  <text x="354" y="308" font-size="9" fill="var(--muted)">reactivated += 1</text>
+  <path d="M513,262 L505,258 L505,266 Z" fill="var(--line)"/>
+  <rect x="514" y="192" width="156" height="140" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="522" y="212" font-size="9.5" font-weight="700" fill="var(--red)">T3 · 归档</text>
+  <text x="522" y="230" font-size="9" fill="var(--red)">anchor 2026-03-20</text>
+  <text x="522" y="246" font-size="9" fill="var(--red)">≤ archive_cutoff 03-29</text>
+  <text x="522" y="262" font-size="9" fill="var(--red)">current ≠ ARCHIVED</text>
+  <text x="522" y="290" font-size="9.5" font-weight="700" fill="var(--red)">→ archive_skill</text>
+  <text x="522" y="308" font-size="9" fill="var(--muted)">.archive/ · 可 restore</text>
+  <rect x="10" y="348" width="660" height="92" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="368" font-size="10" font-weight="700" fill="var(--ink)">豁免与保护 · 任何自动转换前先放行</text>
+  <text x="24" y="388" font-size="9" fill="var(--purple)">✓ pinned:true → continue，豁免 stale / archive 一切自动转换</text>
+  <text x="24" y="408" font-size="9" fill="var(--purple)">✓ PROTECTED_BUILTIN_SKILLS = {&quot;plan&quot;} —— 任何路径不可碰 (skill_usage.py:66-68)</text>
+  <text x="24" y="430" font-size="9" fill="var(--muted)">读这张图：把 30/90 天 cutoff 代入真实 now，逐档算出 pdf-form-filler 去向；归档是最重处置，绝不删除</text>
+</svg>
+<div class="fig-cap"><b>把 30/90 天 cutoff 代入真实日期，逐档演算一个技能的去向</b>：<span class="mono">pdf-form-filler</span> 的真实 <span class="mono">.usage.json</span>（<span class="mono">use_count:4</span>、<span class="mono">last_activity_at:&quot;2026-03-20&quot;</span>）取 <b>anchor 回退链</b> <span class="mono">last_activity → created_at → now</span>。以 <span class="mono">now=2026-06-27</span> 算出 <span class="mono">stale_cutoff=2026-05-28</span>、<span class="mono">archive_cutoff=2026-03-29</span>，再走 curator 的三分支：<b>T0</b> anchor 晚于 stale → 保持 active（零 LLM）；<b>T1</b> 越 30 天且仍 active → <span class="mono">set_state(STALE)</span>；<b>T2</b> 调用一次刷新 <span class="mono">use_count 4→5</span>、anchor 变 now → 复活 active；<b>T3</b> anchor 越 90 天 → <span class="mono">archive_skill</span> 进 <span class="mono">.archive/</span>（可 restore，<b>绝不删除</b>）。<b>豁免</b>：<span class="mono">pinned</span> 直接 continue；<span class="mono">PROTECTED_BUILTIN_SKILLS={&quot;plan&quot;}</span> 任何路径不可碰。</div>
+</div>
+
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「自我维护而不破坏」</div>
   <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
@@ -758,6 +956,66 @@ review_agent._skill_nudge_interval = 0     <span class="cm"># the curator must n
 <p>Why <strong>must</strong> maintenance fork a separate session instead of running inline in the main conversation? It's the hard constraint of ch.6's "cache is sacred": the main conversation reuses a cached prefix every turn, and any mid-stream change to the system prompt, toolset, or memory <strong>shatters the cache</strong>, making the user re-pay full price for the whole history. The curator's consolidation pass may take 50–100 tool calls and read/write many skill files — if these happened inside the main session's context, the cache cost is catastrophic. <span class="mono">platform="curator"</span> gives it a <strong>fully separate cache namespace</strong>; <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> keep it from dragging in the main conversation's context and memory, so the "gardener" works in <strong>a separate office</strong> and the main cache prefix isn't touched by <strong>a single byte</strong>.</p>
 <p>The trigger is deliberately <strong>not a cron daemon</strong> but an <strong>inactivity gate</strong>: only when the agent is idle and more than <span class="mono">interval_hours</span> (7 days by default) have passed since the last run does <span class="mono">maybe_run_curator</span> piggyback on some background tick; the call site adds a second gate via <span class="mono">min_idle_hours</span> (2 hours by default) — while you're firing off requests it never cuts the line. Why so conservative? Because maintenance is <strong>low-priority housekeeping</strong> that must yield to real interaction; it must never judge a skill stale while you're using it, nor grab auxiliary-model quota during busy hours. "Maintain only when idle, always yield when busy" is exactly the courtesy a background ops system owes. And the first-install "seed and defer a full interval" is the same restraint — better to start governing a little late than to act rashly right after the user upgrades, before any usage data has accrued.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 450" role="img" aria-label="Day-by-day cutoff arithmetic for the skill pdf-form-filler: the real .usage.json has created_by agent, use_count 4, last_activity_at 2026-03-20, state active, pinned false; the anchor falls back from last_activity to created_at to now; plugging now=2026-06-27 yields stale_cutoff=2026-05-28 and archive_cutoff=2026-03-29; T0 anchor 06-10 is later than stale so it stays active with zero LLM, T1 anchor 04-15 is at or before stale and still active so set_state STALE, T2 one call refreshes use_count 4 to 5 and last_activity to now so it returns to active, T3 anchor 03-20 is at or before archive so archive_skill moves it to .archive which is restorable and never deleted; exemptions are pinned which simply continues and PROTECTED_BUILTIN_SKILLS containing plan which is untouchable on every path">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">pdf-form-filler rung by rung · now=2026-06-27 into the 30/90-day cutoffs</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">active → stale → revive → archived, purely by comparing anchor to cutoff</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🌿</text>
+  <rect x="10" y="62" width="250" height="114" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="82" font-size="10" font-weight="700" fill="var(--ink)">pdf-form-filler · .usage.json</text>
+  <rect x="18" y="90" width="234" height="66" rx="5" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="26" y="106" font-size="9" fill="var(--code-ink)">{ &quot;created_by&quot;: &quot;agent&quot;,</text>
+  <text x="26" y="120" font-size="9" fill="var(--code-ink)">  &quot;use_count&quot;: 4,</text>
+  <text x="26" y="134" font-size="9" fill="var(--code-ink)">  &quot;last_activity_at&quot;: &quot;2026-03-20&quot;,</text>
+  <text x="26" y="148" font-size="9" fill="var(--code-ink)">  &quot;state&quot;: &quot;active&quot;, &quot;pinned&quot;: false }</text>
+  <text x="20" y="171" font-size="9" fill="var(--muted)">skill_usage.py:462-471</text>
+  <rect x="272" y="62" width="398" height="114" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="282" y="82" font-size="10" font-weight="700" fill="var(--blue)">Sweep gate + cutoffs with now=2026-06-27</text>
+  <text x="282" y="100" font-size="9" fill="var(--blue)">anchor fallback: last_activity → created_at → now</text>
+  <text x="282" y="116" font-size="9" fill="var(--blue)">stale_cutoff = now - 30d = 2026-05-28</text>
+  <text x="282" y="132" font-size="9" fill="var(--blue)">archive_cutoff = now - 90d = 2026-03-29</text>
+  <text x="282" y="150" font-size="9" fill="var(--muted)">gate: idle + since last &gt; interval_hours(168h) + min_idle_hours(2h)</text>
+  <text x="282" y="167" font-size="9" fill="var(--muted)">curator.py:292-328 · config.py:2092-2118</text>
+  <rect x="10" y="192" width="162" height="140" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="18" y="212" font-size="9.5" font-weight="700" fill="var(--accent-ink)">T0 · stays active</text>
+  <text x="18" y="230" font-size="9" fill="var(--accent-ink)">anchor 2026-06-10</text>
+  <text x="18" y="246" font-size="9" fill="var(--accent-ink)">&gt; stale_cutoff 05-28</text>
+  <text x="18" y="262" font-size="9" fill="var(--accent-ink)">no branch fires</text>
+  <text x="18" y="290" font-size="9.5" font-weight="700" fill="var(--accent-ink)">→ stays ACTIVE</text>
+  <text x="18" y="308" font-size="9" fill="var(--muted)">zero LLM · deterministic</text>
+  <path d="M177,262 L169,258 L169,266 Z" fill="var(--line)"/>
+  <rect x="178" y="192" width="162" height="140" rx="8" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="2"/>
+  <text x="186" y="212" font-size="9.5" font-weight="700" fill="var(--amber)">T1 · marks stale</text>
+  <text x="186" y="230" font-size="9" fill="var(--amber)">anchor 2026-04-15</text>
+  <text x="186" y="246" font-size="9" fill="var(--amber)">≤ stale, &gt; archive</text>
+  <text x="186" y="262" font-size="9" fill="var(--amber)">current = ACTIVE</text>
+  <text x="186" y="290" font-size="9.5" font-weight="700" fill="var(--amber)">→ set_state(STALE)</text>
+  <text x="186" y="308" font-size="9" fill="var(--muted)">marked_stale += 1</text>
+  <path d="M345,262 L337,258 L337,266 Z" fill="var(--line)"/>
+  <rect x="346" y="192" width="162" height="140" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="354" y="212" font-size="9.5" font-weight="700" fill="var(--accent-ink)">T2 · revives</text>
+  <text x="354" y="230" font-size="9" fill="var(--accent-ink)">/pdf-form-filler call</text>
+  <text x="354" y="246" font-size="9" fill="var(--accent-ink)">use_count 4 → 5</text>
+  <text x="354" y="262" font-size="9" fill="var(--accent-ink)">anchor=now &gt; stale &amp; STALE</text>
+  <text x="354" y="290" font-size="9.5" font-weight="700" fill="var(--accent-ink)">→ back to ACTIVE</text>
+  <text x="354" y="308" font-size="9" fill="var(--muted)">reactivated += 1</text>
+  <path d="M513,262 L505,258 L505,266 Z" fill="var(--line)"/>
+  <rect x="514" y="192" width="156" height="140" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="522" y="212" font-size="9.5" font-weight="700" fill="var(--red)">T3 · archives</text>
+  <text x="522" y="230" font-size="9" fill="var(--red)">anchor 2026-03-20</text>
+  <text x="522" y="246" font-size="9" fill="var(--red)">≤ archive_cutoff 03-29</text>
+  <text x="522" y="262" font-size="9" fill="var(--red)">current ≠ ARCHIVED</text>
+  <text x="522" y="290" font-size="9.5" font-weight="700" fill="var(--red)">→ archive_skill</text>
+  <text x="522" y="308" font-size="9" fill="var(--muted)">.archive/ · restorable</text>
+  <rect x="10" y="348" width="660" height="92" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="368" font-size="10" font-weight="700" fill="var(--ink)">Exemptions and protection · cleared before any auto-transition</text>
+  <text x="24" y="388" font-size="9" fill="var(--purple)">✓ pinned:true → continue, exempt from every stale / archive transition</text>
+  <text x="24" y="408" font-size="9" fill="var(--purple)">✓ PROTECTED_BUILTIN_SKILLS = {&quot;plan&quot;} —— untouchable on every path (skill_usage.py:66-68)</text>
+  <text x="24" y="430" font-size="9" fill="var(--muted)">Read this figure: plug 30/90-day cutoffs into a real now, derive each fate; archive is the heaviest action, never delete</text>
+</svg>
+<div class="fig-cap"><b>Plug the 30/90-day cutoffs into a real date and derive a skill's fate rung by rung</b>: <span class="mono">pdf-form-filler</span>'s real <span class="mono">.usage.json</span> (<span class="mono">use_count:4</span>, <span class="mono">last_activity_at:&quot;2026-03-20&quot;</span>) takes the <b>anchor fallback</b> <span class="mono">last_activity → created_at → now</span>. With <span class="mono">now=2026-06-27</span> this yields <span class="mono">stale_cutoff=2026-05-28</span> and <span class="mono">archive_cutoff=2026-03-29</span>, then runs curator's three branches: <b>T0</b> anchor later than stale → stays active (zero LLM); <b>T1</b> past 30 days and still active → <span class="mono">set_state(STALE)</span>; <b>T2</b> one call refreshes <span class="mono">use_count 4→5</span>, anchor becomes now → revives to active; <b>T3</b> anchor past 90 days → <span class="mono">archive_skill</span> into <span class="mono">.archive/</span> (restorable, <b>never deleted</b>). <b>Exemptions</b>: <span class="mono">pinned</span> just continues; <span class="mono">PROTECTED_BUILTIN_SKILLS={&quot;plan&quot;}</span> is untouchable on every path.</div>
+</div>
+
 <div class="card collab">
   <div class="tag">🧩 Collaboration · how the parts mesh for "self-maintaining yet never destructive"</div>
   <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
@@ -961,6 +1219,63 @@ should_review_memory = <span class="kw">False</span>
   <div class="step"><span class="num">5</span><span class="sc">两条注入路径都<strong>绕开「中途改 system prompt」</strong> → 缓存全程不破</span></div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 462" role="img" aria-label="一条记忆 MEMORY.md 部署目标从 fly deploy 改为 Railway 走完读写分离：会话开始 load_from_disk 读 MEMORY.md cap 2200 与 USER.md cap 1375 拍成 _system_prompt_snapshot；经 format_for_system_prompt 冻结进 volatile 层整会话不变，docstring 写明 NOT the live state，于是前缀缓存命中；第5轮写入改 MEMORY.md 磁盘变但 snapshot 不变；第8轮取回时 api_msg=msg.copy()，仅当 idx 等于 current_turn_user_idx 才把 fenced 内容接到 content，原始 messages 永不被改；注入的真实 fence 是 memory-context 标签包裹 System note 提示这是 recalled memory context 而非 new user input；底部不变量对照表说明读写分离如何守住缓存神圣">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">一条记忆走完冻结 → 写入 → 取回 · 含真实 &lt;memory-context&gt; fence</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">MEMORY.md: 部署目标 fly deploy → Railway，看读写分离守住缓存</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">💾</text>
+  <rect x="10" y="62" width="162" height="106" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">① 会话开始 load_from_disk</text>
+  <text x="18" y="100" font-size="9" fill="var(--blue)">MEMORY.md (cap 2200)</text>
+  <text x="18" y="115" font-size="9" fill="var(--blue)">USER.md (cap 1375)</text>
+  <text x="18" y="132" font-size="9" fill="var(--blue)">→ _system_prompt_snapshot</text>
+  <text x="18" y="156" font-size="9" fill="var(--muted)">memory_tool.py:152-166</text>
+  <path d="M177,115 L169,111 L169,119 Z" fill="var(--line)"/>
+  <rect x="178" y="62" width="162" height="106" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="186" y="82" font-size="9.5" font-weight="700" fill="var(--accent-ink)">② 冻结进 volatile 层</text>
+  <text x="186" y="100" font-size="9" fill="var(--accent-ink)">format_for_system_prompt</text>
+  <text x="186" y="115" font-size="9" fill="var(--accent-ink)">snapshot 整会话不变 🔒</text>
+  <text x="186" y="130" font-size="9" fill="var(--accent-ink)">docstring: NOT the live state</text>
+  <text x="186" y="145" font-size="9" font-weight="700" fill="var(--accent-ink)">→ 前缀缓存命中</text>
+  <text x="186" y="162" font-size="9" fill="var(--muted)">memory_tool.py:567-578</text>
+  <path d="M345,115 L337,111 L337,119 Z" fill="var(--line)"/>
+  <rect x="346" y="62" width="162" height="106" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="354" y="82" font-size="9.5" font-weight="700" fill="var(--ink)">③ 第5轮写入 MEMORY.md</text>
+  <text x="354" y="100" font-size="9" fill="var(--ink)">fly deploy → Railway</text>
+  <text x="354" y="116" font-size="9" font-weight="700" fill="var(--accent-ink)">磁盘变 ✓</text>
+  <text x="354" y="132" font-size="9" font-weight="700" fill="var(--blue)">snapshot 不变 🔒</text>
+  <text x="354" y="148" font-size="9" fill="var(--muted)">缓存前缀不破</text>
+  <path d="M513,115 L505,111 L505,119 Z" fill="var(--line)"/>
+  <rect x="514" y="62" width="156" height="106" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="522" y="82" font-size="9.5" font-weight="700" fill="var(--purple)">④ 第8轮取回</text>
+  <text x="522" y="100" font-size="9" fill="var(--purple)">api_msg = msg.copy()</text>
+  <text x="522" y="115" font-size="9" fill="var(--purple)">if idx==current_turn_user_idx</text>
+  <text x="522" y="130" font-size="9" fill="var(--purple)">content + fenced 注入</text>
+  <text x="522" y="146" font-size="9" font-weight="700" fill="var(--purple)">原 messages 永不改</text>
+  <text x="522" y="162" font-size="9" fill="var(--muted)">conversation_loop:740-758</text>
+  <text x="20" y="183" font-size="10" font-weight="700" fill="var(--ink)">⑤ 注入当前轮 user 副本的真实 fence (memory_manager.py:297-311)</text>
+  <rect x="10" y="190" width="660" height="118" rx="8" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="28" y="210" font-size="9" fill="var(--code-ink)">&lt;memory-context&gt;</text>
+  <text x="28" y="226" font-size="9" fill="var(--code-ink)">[System note: The following is recalled memory</text>
+  <text x="28" y="240" font-size="9" fill="var(--code-ink)">context, NOT new user input. Treat as</text>
+  <text x="28" y="254" font-size="9" fill="var(--code-ink)">authoritative reference data ...]</text>
+  <text x="28" y="276" font-size="9" font-weight="700" fill="var(--accent)">{clean} → Deploy: fly.io → Railway; use `railway up`, not `fly deploy`</text>
+  <text x="28" y="296" font-size="9" fill="var(--code-ink)">&lt;/memory-context&gt;</text>
+  <rect x="10" y="320" width="660" height="132" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="340" font-size="10" font-weight="700" fill="var(--ink)">⑥ 不变量对照表 · 读写分离守住「缓存神圣」</text>
+  <circle cx="28" cy="357" r="4" fill="var(--accent)"/>
+  <text x="40" y="361" font-size="9" fill="var(--ink)">MEMORY.md 磁盘 —— 第5轮写入即变，但只落盘</text>
+  <circle cx="28" cy="379" r="4" fill="var(--blue)"/>
+  <text x="40" y="383" font-size="9" fill="var(--ink)">_system_prompt_snapshot —— 整会话冻结不变 → 前缀缓存命中</text>
+  <circle cx="28" cy="401" r="4" fill="var(--purple)"/>
+  <text x="40" y="405" font-size="9" fill="var(--ink)">原始 messages[idx] —— 永不被 mutate，不漏进会话持久化</text>
+  <circle cx="28" cy="423" r="4" fill="var(--purple)"/>
+  <text x="40" y="427" font-size="9" fill="var(--ink)">api_msg = msg.copy() —— 仅 API 调用时贴 fence，调用后即弃</text>
+  <text x="24" y="446" font-size="9" fill="var(--muted)">读这张图：记忆又外置又不破缓存——写改磁盘、读贴副本，冻结快照与原始 messages 全程不动。</text>
+</svg>
+<div class="fig-cap"><b>一条真实记忆走完「读写分离」</b>：会话开始 <span class="mono">load_from_disk</span> 读 <span class="mono">MEMORY.md</span>（cap 2200）/<span class="mono">USER.md</span>（cap 1375），<span class="mono">format_for_system_prompt</span> 把它<b>冻结</b>成 <span class="mono">_system_prompt_snapshot</span> 进 volatile 层——docstring 钉死它返回的是 <span class="mono">NOT the live state</span>，于是整会话<b>前缀缓存命中</b>。第 5 轮把「<span class="mono">fly deploy → Railway</span>」写进 <span class="mono">MEMORY.md</span>：磁盘变了，<b>snapshot 不变</b>。第 8 轮取回走 <span class="mono">api_msg = msg.copy()</span>，仅当 <span class="mono">idx==current_turn_user_idx</span> 才把 fenced 内容接到 <span class="mono">content</span> 后面，<b>原始 messages 永不被改</b>。注入的正是那段逐字 fence：<span class="mono">&lt;memory-context&gt;</span> + <span class="mono">[System note: ... NOT new user input ...]</span> + <span class="mono">{clean}</span> + <span class="mono">&lt;/memory-context&gt;</span>。</div>
+</div>
+
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「记忆而不破缓存」</div>
   <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
@@ -1161,6 +1476,63 @@ should_review_memory = <span class="kw">False</span>
   <div class="step"><span class="num">5</span><span class="sc">both injection paths <strong>bypass "changing the system prompt mid-session"</strong> → the cache never breaks</span></div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 462" role="img" aria-label="One memory MEMORY.md with deploy target moving from fly deploy to Railway runs the full read-write separation: at session start load_from_disk reads MEMORY.md cap 2200 and USER.md cap 1375 into _system_prompt_snapshot; format_for_system_prompt freezes it into the volatile tier unchanged all session, the docstring says NOT the live state, so the prefix cache hits; a turn-5 write changes MEMORY.md on disk but the snapshot does not change; at turn-8 recall api_msg=msg.copy() and only when idx equals current_turn_user_idx is the fenced content appended to content, the original messages are never mutated; the injected real fence is the memory-context tag wrapping a System note that flags recalled memory context not new user input; the bottom invariant table shows how read-write separation keeps the cache sacred">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">One memory runs freeze → write → recall · with the real &lt;memory-context&gt; fence</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">MEMORY.md: deploy target fly deploy → Railway, watch read-write separation hold the cache</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">💾</text>
+  <rect x="10" y="62" width="162" height="106" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">1 · session start load_from_disk</text>
+  <text x="18" y="100" font-size="9" fill="var(--blue)">MEMORY.md (cap 2200)</text>
+  <text x="18" y="115" font-size="9" fill="var(--blue)">USER.md (cap 1375)</text>
+  <text x="18" y="132" font-size="9" fill="var(--blue)">→ _system_prompt_snapshot</text>
+  <text x="18" y="156" font-size="9" fill="var(--muted)">memory_tool.py:152-166</text>
+  <path d="M177,115 L169,111 L169,119 Z" fill="var(--line)"/>
+  <rect x="178" y="62" width="162" height="106" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="186" y="82" font-size="9.5" font-weight="700" fill="var(--accent-ink)">2 · freeze into volatile tier</text>
+  <text x="186" y="100" font-size="9" fill="var(--accent-ink)">format_for_system_prompt</text>
+  <text x="186" y="115" font-size="9" fill="var(--accent-ink)">snapshot stable all session 🔒</text>
+  <text x="186" y="130" font-size="9" fill="var(--accent-ink)">docstring: NOT the live state</text>
+  <text x="186" y="145" font-size="9" font-weight="700" fill="var(--accent-ink)">→ prefix cache hits</text>
+  <text x="186" y="162" font-size="9" fill="var(--muted)">memory_tool.py:567-578</text>
+  <path d="M345,115 L337,111 L337,119 Z" fill="var(--line)"/>
+  <rect x="346" y="62" width="162" height="106" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="354" y="82" font-size="9.5" font-weight="700" fill="var(--ink)">3 · turn-5 write MEMORY.md</text>
+  <text x="354" y="100" font-size="9" fill="var(--ink)">fly deploy → Railway</text>
+  <text x="354" y="116" font-size="9" font-weight="700" fill="var(--accent-ink)">disk changes ✓</text>
+  <text x="354" y="132" font-size="9" font-weight="700" fill="var(--blue)">snapshot unchanged 🔒</text>
+  <text x="354" y="148" font-size="9" fill="var(--muted)">prefix not broken</text>
+  <path d="M513,115 L505,111 L505,119 Z" fill="var(--line)"/>
+  <rect x="514" y="62" width="156" height="106" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="522" y="82" font-size="9.5" font-weight="700" fill="var(--purple)">4 · turn-8 recall</text>
+  <text x="522" y="100" font-size="9" fill="var(--purple)">api_msg = msg.copy()</text>
+  <text x="522" y="115" font-size="9" fill="var(--purple)">if idx==current_turn_user_idx</text>
+  <text x="522" y="130" font-size="9" fill="var(--purple)">content + fenced inject</text>
+  <text x="522" y="146" font-size="9" font-weight="700" fill="var(--purple)">messages never mutated</text>
+  <text x="522" y="162" font-size="9" fill="var(--muted)">conversation_loop:740-758</text>
+  <text x="20" y="183" font-size="10" font-weight="700" fill="var(--ink)">5 · the real fence injected into this turn's user copy (memory_manager.py:297-311)</text>
+  <rect x="10" y="190" width="660" height="118" rx="8" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="28" y="210" font-size="9" fill="var(--code-ink)">&lt;memory-context&gt;</text>
+  <text x="28" y="226" font-size="9" fill="var(--code-ink)">[System note: The following is recalled memory</text>
+  <text x="28" y="240" font-size="9" fill="var(--code-ink)">context, NOT new user input. Treat as</text>
+  <text x="28" y="254" font-size="9" fill="var(--code-ink)">authoritative reference data ...]</text>
+  <text x="28" y="276" font-size="9" font-weight="700" fill="var(--accent)">{clean} → Deploy: fly.io → Railway; use `railway up`, not `fly deploy`</text>
+  <text x="28" y="296" font-size="9" fill="var(--code-ink)">&lt;/memory-context&gt;</text>
+  <rect x="10" y="320" width="660" height="132" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="340" font-size="10" font-weight="700" fill="var(--ink)">6 · Invariant table · read-write separation keeps the cache sacred</text>
+  <circle cx="28" cy="357" r="4" fill="var(--accent)"/>
+  <text x="40" y="361" font-size="9" fill="var(--ink)">MEMORY.md disk —— changes on the turn-5 write, but disk-only</text>
+  <circle cx="28" cy="379" r="4" fill="var(--blue)"/>
+  <text x="40" y="383" font-size="9" fill="var(--ink)">_system_prompt_snapshot —— frozen all session → prefix cache hits</text>
+  <circle cx="28" cy="401" r="4" fill="var(--purple)"/>
+  <text x="40" y="405" font-size="9" fill="var(--ink)">original messages[idx] —— never mutated, never leaks into persistence</text>
+  <circle cx="28" cy="423" r="4" fill="var(--purple)"/>
+  <text x="40" y="427" font-size="9" fill="var(--ink)">api_msg = msg.copy() —— fence pasted at API-call time only, discarded after</text>
+  <text x="24" y="446" font-size="9" fill="var(--muted)">Read this figure: memory is both external and cache-safe — writes hit disk, reads paste a copy, snapshot and original messages stay put.</text>
+</svg>
+<div class="fig-cap"><b>One real memory runs the "read-write separation"</b>: at session start <span class="mono">load_from_disk</span> reads <span class="mono">MEMORY.md</span> (cap 2200)/<span class="mono">USER.md</span> (cap 1375), and <span class="mono">format_for_system_prompt</span> <b>freezes</b> it into <span class="mono">_system_prompt_snapshot</span> in the volatile tier — the docstring nails that it returns <span class="mono">NOT the live state</span>, so the <b>prefix cache hits</b> all session. Turn 5 writes "<span class="mono">fly deploy → Railway</span>" into <span class="mono">MEMORY.md</span>: disk changes, the <b>snapshot does not</b>. Turn 8 recalls via <span class="mono">api_msg = msg.copy()</span>, appending the fenced content to <span class="mono">content</span> only when <span class="mono">idx==current_turn_user_idx</span>, and the <b>original messages are never mutated</b>. What gets injected is that verbatim fence: <span class="mono">&lt;memory-context&gt;</span> + <span class="mono">[System note: ... NOT new user input ...]</span> + <span class="mono">{clean}</span> + <span class="mono">&lt;/memory-context&gt;</span>.</div>
+</div>
+
 <div class="card collab">
   <div class="tag">🧩 Collaboration · how the parts mesh for "remember without breaking the cache"</div>
   <div class="collab-sub">① Component roster (★ this chapter's core; the rest is cross-chapter teamwork)</div>
@@ -1325,6 +1697,65 @@ merges all of that into a single calling shape with no mode parameter,
   <div class="step"><span class="num">3</span><span class="sc"><strong>锚点窗口</strong>：命中后取 ±N 条上下文 + 会话首尾书签（按需取回，不加载整段）</span></div>
   <div class="step"><span class="num">4</span><span class="sc"><strong>原文 append</strong>：结果作为 tool 消息追加到对话末尾——零 LLM 总结，原文交给 agent 自读</span></div>
   <div class="step"><span class="num">5</span><span class="sc">不改 system prompt / 不改历史轮次 → 缓存前缀逐字节不变，召回<strong>不破缓存</strong></span></div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 462" role="img" aria-label="session_search 以 query deployment plan 走一遍：写入即索引由 messages_fts_insert 触发器把 new.id 当 rowid 同步进 FTS5；检索 SQL 用 snippet messages_fts 0 三个大于号 三个小于号 省略号 40 加上 messages_fts MATCH 问号再 ORDER BY rank 走 BM25；中文走 trigram 兜底，每词不足 3 个汉字时 trigram 返 0 故退回 LIKE 子串；get_anchored_view bookend 等于 3 返回三片 bookend_start 取会话前三条、window 正负 5 以锚点居中、bookend_end 取会话末三条；命中原文 append 为 tool 消息，零 LLM 不破缓存；三种调用模式无 mode 参数按 args 推断 DISCOVERY SCROLL BROWSE，service-gated 且 WAL 写重试 15 次上限 0.150 秒">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">session_search(query='deployment plan') 走一遍 · 索引 → SQL → bookend=3 → tool 消息</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">写入即索引、检索 SQL、CJK 兜底、锚定窗口、零 LLM append，看每步真实形状</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🔍</text>
+  <rect x="10" y="62" width="210" height="108" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="82" font-size="9.5" font-weight="700" fill="var(--ink)">① 写入即索引 · 触发器</text>
+  <text x="20" y="100" font-size="9" fill="var(--ink)">messages_fts_insert</text>
+  <text x="20" y="114" font-size="9" fill="var(--ink)">AFTER INSERT ON messages</text>
+  <text x="20" y="128" font-size="9" fill="var(--ink)">INSERT INTO messages_fts(rowid, ...)</text>
+  <text x="20" y="142" font-size="9" font-weight="700" fill="var(--accent-ink)">VALUES (new.id, ...)</text>
+  <text x="20" y="162" font-size="9" fill="var(--muted)">hermes_state.py:616-621</text>
+  <line x1="220" y1="116" x2="240" y2="116" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M246,116 L238,112 L238,120 Z" fill="var(--line)"/>
+  <rect x="230" y="62" width="210" height="108" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="240" y="82" font-size="9.5" font-weight="700" fill="var(--accent-ink)">② 检索 SQL · DISCOVERY</text>
+  <text x="240" y="100" font-size="9" fill="var(--accent-ink)">snippet(messages_fts, 0,</text>
+  <text x="240" y="114" font-size="9" fill="var(--accent-ink)">  '&gt;&gt;&gt;', '&lt;&lt;&lt;', '...', 40)</text>
+  <text x="240" y="128" font-size="9" fill="var(--accent-ink)">WHERE messages_fts MATCH ?</text>
+  <text x="240" y="142" font-size="9" font-weight="700" fill="var(--accent-ink)">ORDER BY rank   (BM25)</text>
+  <text x="240" y="162" font-size="9" fill="var(--muted)">hermes_state.py:3532/3535/3566</text>
+  <line x1="440" y1="116" x2="460" y2="116" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M466,116 L458,112 L458,120 Z" fill="var(--line)"/>
+  <rect x="450" y="62" width="220" height="108" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="460" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">③ CJK 兜底 · trigram</text>
+  <text x="460" y="100" font-size="9" fill="var(--blue)">messages_fts_trigram</text>
+  <text x="460" y="114" font-size="9" fill="var(--blue)">tokenize='trigram'</text>
+  <text x="460" y="128" font-size="9" fill="var(--blue)">每词 &lt;3 汉字 → trigram 返 0</text>
+  <text x="460" y="142" font-size="9" font-weight="700" fill="var(--blue)">→ 退回 LIKE 子串</text>
+  <text x="460" y="162" font-size="9" fill="var(--muted)">hermes_state.py:641-643</text>
+  <rect x="10" y="186" width="660" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="206" font-size="9.5" font-weight="700" fill="var(--ink)">snippet 输出 · 命中处用 &gt;&gt;&gt; &lt;&lt;&lt; 包裹，窗口 40 token</text>
+  <text x="24" y="230" font-size="9" fill="var(--accent-ink)">... finalize the Q3 &gt;&gt;&gt;deployment plan&lt;&lt;&lt; before the rollout ...</text>
+  <text x="20" y="262" font-size="10" font-weight="700" fill="var(--ink)">④ get_anchored_view(bookend=3) 返回三片 (hermes_state.py:2875-2895)</text>
+  <rect x="10" y="272" width="200" height="80" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="292" font-size="9.5" font-weight="700" fill="var(--blue)">bookend_start [3]</text>
+  <text x="18" y="310" font-size="9" fill="var(--blue)">会话前 3 条</text>
+  <text x="18" y="326" font-size="9" fill="var(--blue)">user / assistant</text>
+  <rect x="222" y="272" width="236" height="80" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="230" y="292" font-size="9.5" font-weight="700" fill="var(--accent-ink)">window ±5 · 锚点居中</text>
+  <text x="230" y="310" font-size="9" fill="var(--accent-ink)">messages_before / messages_after</text>
+  <text x="230" y="326" font-size="9" fill="var(--accent-ink)">anchor 命中行始终保留</text>
+  <rect x="470" y="272" width="200" height="80" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="478" y="292" font-size="9.5" font-weight="700" fill="var(--blue)">bookend_end [3]</text>
+  <text x="478" y="310" font-size="9" fill="var(--blue)">会话末 3 条</text>
+  <text x="478" y="326" font-size="9" fill="var(--blue)">user / assistant</text>
+  <rect x="10" y="364" width="324" height="72" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="20" y="384" font-size="9.5" font-weight="700" fill="var(--accent-ink)">⑤ 命中原文 append 为 tool 消息</text>
+  <text x="20" y="404" font-size="9" fill="var(--accent-ink)">片段以 tool 角色接回消息序列</text>
+  <text x="20" y="422" font-size="9" font-weight="700" fill="var(--accent-ink)">零 LLM · 不破缓存</text>
+  <rect x="342" y="364" width="328" height="72" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="352" y="384" font-size="9.5" font-weight="700" fill="var(--ink)">⑥ 三模式（无 mode 参数，按 args 推断）</text>
+  <text x="352" y="404" font-size="9" fill="var(--ink)">DISCOVERY(query) · SCROLL(session_id+id) · BROWSE()</text>
+  <text x="352" y="422" font-size="9" fill="var(--ink)">service-gated check_fn · WAL retry 15 次 / 0.150s</text>
+  <text x="20" y="452" font-size="9" fill="var(--muted)">读这张图：写入即被触发器索引，一条 query 经真实 SQL 拿 snippet 与 bookend，命中原文 append 为 tool 消息——全程零 LLM、不破缓存。</text>
+</svg>
+<div class="fig-cap"><b>一条 query 走完跨会话搜索的真实形状</b>：写入即被 <span class="mono">messages_fts_insert</span> 触发器以 <span class="mono">rowid=new.id</span> 同步进 FTS5。检索走真实 SQL：<span class="mono">snippet(messages_fts, 0, '&gt;&gt;&gt;', '&lt;&lt;&lt;', '...', 40)</span> + <span class="mono">messages_fts MATCH ?</span> + <span class="mono">ORDER BY rank</span>（BM25），命中处用 <span class="mono">&gt;&gt;&gt;…&lt;&lt;&lt;</span> 包裹、窗口 40 token；中文走 <span class="mono">trigram</span> 兜底（每词不足 3 汉字 trigram 返 0 → 退回 LIKE）。<span class="mono">get_anchored_view(bookend=3)</span> 返回三片：<span class="mono">bookend_start</span>（会话前 3 条）+ <span class="mono">window ±5</span>（锚点居中）+ <span class="mono">bookend_end</span>（末 3 条）。命中原文 <b>append 为 tool 消息</b>——零 LLM、不破缓存；三模式 <span class="mono">DISCOVERY/SCROLL/BROWSE</span> 无 mode 参数、按 args 推断，且 service-gated。</div>
 </div>
 
 <div class="card collab">
@@ -1527,6 +1958,65 @@ merges all of that into a single calling shape with no mode parameter,
   <div class="step"><span class="num">3</span><span class="sc"><strong>Anchored window</strong>: take ±N context messages + session bookends (on-demand, not loading the whole thing)</span></div>
   <div class="step"><span class="num">4</span><span class="sc"><strong>Append verbatim</strong>: results appended as a tool message at the conversation tail — zero LLM summary, originals handed to the agent to read</span></div>
   <div class="step"><span class="num">5</span><span class="sc">no change to system prompt / prior turns → the cache prefix stays byte-identical, recall <strong>doesn't break the cache</strong></span></div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 462" role="img" aria-label="session_search with query deployment plan runs end to end: writes are indexed immediately by the messages_fts_insert trigger that uses new.id as rowid into FTS5; the retrieval SQL uses snippet messages_fts 0 three greater-than signs three less-than signs ellipsis 40 plus messages_fts MATCH question mark then ORDER BY rank over BM25; CJK falls back to trigram, and when a term has fewer than 3 characters trigram returns 0 so it falls back to LIKE substring; get_anchored_view with bookend equal to 3 returns three slices bookend_start the first three messages, window plus or minus 5 centered on the anchor, and bookend_end the last three; the matched text is appended as a tool message with zero LLM and no cache break; three calling modes have no mode parameter and are inferred from args DISCOVERY SCROLL BROWSE, the tool is service-gated and WAL writes retry up to 15 times within 0.150 seconds">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">session_search(query='deployment plan') end to end · index → SQL → bookend=3 → tool msg</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">index on write, retrieval SQL, CJK fallback, anchored window, zero-LLM append; real shape at each step</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🔍</text>
+  <rect x="10" y="62" width="210" height="108" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="82" font-size="9.5" font-weight="700" fill="var(--ink)">1 · index on write · trigger</text>
+  <text x="20" y="100" font-size="9" fill="var(--ink)">messages_fts_insert</text>
+  <text x="20" y="114" font-size="9" fill="var(--ink)">AFTER INSERT ON messages</text>
+  <text x="20" y="128" font-size="9" fill="var(--ink)">INSERT INTO messages_fts(rowid, ...)</text>
+  <text x="20" y="142" font-size="9" font-weight="700" fill="var(--accent-ink)">VALUES (new.id, ...)</text>
+  <text x="20" y="162" font-size="9" fill="var(--muted)">hermes_state.py:616-621</text>
+  <line x1="220" y1="116" x2="240" y2="116" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M246,116 L238,112 L238,120 Z" fill="var(--line)"/>
+  <rect x="230" y="62" width="210" height="108" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="240" y="82" font-size="9.5" font-weight="700" fill="var(--accent-ink)">2 · retrieval SQL · DISCOVERY</text>
+  <text x="240" y="100" font-size="9" fill="var(--accent-ink)">snippet(messages_fts, 0,</text>
+  <text x="240" y="114" font-size="9" fill="var(--accent-ink)">  '&gt;&gt;&gt;', '&lt;&lt;&lt;', '...', 40)</text>
+  <text x="240" y="128" font-size="9" fill="var(--accent-ink)">WHERE messages_fts MATCH ?</text>
+  <text x="240" y="142" font-size="9" font-weight="700" fill="var(--accent-ink)">ORDER BY rank   (BM25)</text>
+  <text x="240" y="162" font-size="9" fill="var(--muted)">hermes_state.py:3532/3535/3566</text>
+  <line x1="440" y1="116" x2="460" y2="116" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M466,116 L458,112 L458,120 Z" fill="var(--line)"/>
+  <rect x="450" y="62" width="220" height="108" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="460" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">3 · CJK fallback · trigram</text>
+  <text x="460" y="100" font-size="9" fill="var(--blue)">messages_fts_trigram</text>
+  <text x="460" y="114" font-size="9" fill="var(--blue)">tokenize='trigram'</text>
+  <text x="460" y="128" font-size="9" fill="var(--blue)">term &lt;3 chars → trigram returns 0</text>
+  <text x="460" y="142" font-size="9" font-weight="700" fill="var(--blue)">→ fall back to LIKE</text>
+  <text x="460" y="162" font-size="9" fill="var(--muted)">hermes_state.py:641-643</text>
+  <rect x="10" y="186" width="660" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="206" font-size="9.5" font-weight="700" fill="var(--ink)">snippet output · match wrapped in &gt;&gt;&gt; &lt;&lt;&lt;, window 40 tokens</text>
+  <text x="24" y="230" font-size="9" fill="var(--accent-ink)">... finalize the Q3 &gt;&gt;&gt;deployment plan&lt;&lt;&lt; before the rollout ...</text>
+  <text x="20" y="262" font-size="10" font-weight="700" fill="var(--ink)">4 · get_anchored_view(bookend=3) returns three slices (hermes_state.py:2875-2895)</text>
+  <rect x="10" y="272" width="200" height="80" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="292" font-size="9.5" font-weight="700" fill="var(--blue)">bookend_start [3]</text>
+  <text x="18" y="310" font-size="9" fill="var(--blue)">first 3 of the session</text>
+  <text x="18" y="326" font-size="9" fill="var(--blue)">user / assistant</text>
+  <rect x="222" y="272" width="236" height="80" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="230" y="292" font-size="9.5" font-weight="700" fill="var(--accent-ink)">window ±5 · anchor centered</text>
+  <text x="230" y="310" font-size="9" fill="var(--accent-ink)">messages_before / messages_after</text>
+  <text x="230" y="326" font-size="9" fill="var(--accent-ink)">anchor row always kept</text>
+  <rect x="470" y="272" width="200" height="80" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="478" y="292" font-size="9.5" font-weight="700" fill="var(--blue)">bookend_end [3]</text>
+  <text x="478" y="310" font-size="9" fill="var(--blue)">last 3 of the session</text>
+  <text x="478" y="326" font-size="9" fill="var(--blue)">user / assistant</text>
+  <rect x="10" y="364" width="324" height="72" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="20" y="384" font-size="9.5" font-weight="700" fill="var(--accent-ink)">5 · matched text appended as a tool message</text>
+  <text x="20" y="404" font-size="9" fill="var(--accent-ink)">fragments rejoin the sequence with tool role</text>
+  <text x="20" y="422" font-size="9" font-weight="700" fill="var(--accent-ink)">zero LLM · no cache break</text>
+  <rect x="342" y="364" width="328" height="72" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="352" y="384" font-size="9.5" font-weight="700" fill="var(--ink)">6 · three modes (no mode param, inferred from args)</text>
+  <text x="352" y="404" font-size="9" fill="var(--ink)">DISCOVERY(query) · SCROLL(session_id+id) · BROWSE()</text>
+  <text x="352" y="422" font-size="9" fill="var(--ink)">service-gated check_fn · WAL retry 15x / 0.150s</text>
+  <text x="20" y="452" font-size="9" fill="var(--muted)">Read this figure: writes are indexed by the trigger, one query takes real SQL for snippet and bookends, the hit is appended as a tool message — all zero-LLM and cache-safe.</text>
+</svg>
+<div class="fig-cap"><b>One query runs the real shape of cross-session search</b>: writes are indexed immediately by the <span class="mono">messages_fts_insert</span> trigger with <span class="mono">rowid=new.id</span> into FTS5. Retrieval uses real SQL: <span class="mono">snippet(messages_fts, 0, '&gt;&gt;&gt;', '&lt;&lt;&lt;', '...', 40)</span> + <span class="mono">messages_fts MATCH ?</span> + <span class="mono">ORDER BY rank</span> (BM25), wrapping the match in <span class="mono">&gt;&gt;&gt;…&lt;&lt;&lt;</span> over a 40-token window; CJK falls back to <span class="mono">trigram</span> (a term under 3 chars makes trigram return 0 → fall back to LIKE). <span class="mono">get_anchored_view(bookend=3)</span> returns three slices: <span class="mono">bookend_start</span> (first 3) + <span class="mono">window ±5</span> (anchor centered) + <span class="mono">bookend_end</span> (last 3). The hit is <b>appended as a tool message</b> — zero LLM, no cache break; the three modes <span class="mono">DISCOVERY/SCROLL/BROWSE</span> carry no mode parameter, inferred from args, and are service-gated.</div>
 </div>
 
 <div class="card collab">

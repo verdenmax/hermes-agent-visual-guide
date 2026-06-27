@@ -559,6 +559,73 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
   <p style="margin:.5rem 0 0">为什么说这层就是第 24 章纵深防御里的「<strong>注入隔离</strong>」:控制通道和数据通道在网关就被<strong>物理分开</strong>——能解析的命令走代码识别 + 旁路,永不进对话历史;只有真正的对话才进 <span class="mono">_pending_messages</span> 喂给模型。这条「指令绝不当数据」的边界既挡注入(伪造指令进不了控制通道),又顺手护住第 6 章缓存与第 7 章角色交替:因为历史里<strong>永远不会</strong>冒出一条被误当用户文本的 <span class="mono">/stop</span>,缓存前缀和严格交替自然就稳了。</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 400" role="img" aria-label="实例图:一条 /approve 在 agent 阻塞于 threading.Event.wait 时如何穿过两道守卫并 set 那个 Event。① agent 阻塞:_ApprovalEntry.event 等于 threading.Event,entry.event.wait 暂停,asyncio 中断叫不醒线程 Event;② 守卫① 适配器层 base.py,session_key in _active_sessions 为真,cmd 等于 event.get_command 得 approve;③ 旁路判定 commands.py,should_bypass_active_session approve 为真,且 cmd 不属于 stop new reset 集合,故内联派发,禁用 _process_message_background;④ 守卫② runner run.py,/approve 绕过 interrupt,直达 _handle_approve_command;⑤ 解锁 approval.py,resolve_gateway_approval 把 entry.result 设为 choice 并 entry.event.set,① 的 wait 返回 agent 续跑;⑥ 反事实红框:若当普通消息排进 _pending_messages,agent 永远阻塞,/approve 进不来形成死锁。">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:/approve 穿两道守卫 → set 那个 Event</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">agent 阻塞在 threading.Event.wait(),asyncio 中断叫不醒它</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🔓</text>
+
+  <rect x="10" y="56" width="150" height="216" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="20" y="75" font-size="10" font-weight="700" fill="var(--amber)">① agent 阻塞中</text>
+  <text x="20" y="89" font-size="9" fill="var(--muted)">approval.py:690-700</text>
+  <text x="20" y="110" font-size="9" font-family="monospace" fill="var(--ink)">_ApprovalEntry.event</text>
+  <text x="20" y="124" font-size="9" font-family="monospace" fill="var(--ink)">  = threading.Event()</text>
+  <text x="20" y="146" font-size="9" font-family="monospace" fill="var(--ink)">entry.event.wait()</text>
+  <text x="78" y="172" text-anchor="middle" font-size="22">⏸️</text>
+  <text x="20" y="198" font-size="9" fill="var(--muted)">线程 Event,</text>
+  <text x="20" y="212" font-size="9" fill="var(--muted)">asyncio 中断</text>
+  <text x="20" y="226" font-size="9" fill="var(--muted)">叫不醒它</text>
+  <text x="20" y="252" font-size="9" font-weight="700" fill="var(--accent-ink)">⑤ 后:✓ 续跑</text>
+
+  <rect x="186" y="52" width="116" height="26" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.6"/>
+  <text x="244" y="69" text-anchor="middle" font-size="10" font-weight="700" fill="var(--purple)">用户发 /approve</text>
+  <path d="M244,78 L244,90 M240,86 L244,90 L248,86" stroke="var(--purple)" stroke-width="1.6" fill="none"/>
+
+  <rect x="186" y="92" width="232" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="196" y="110" font-size="10" font-weight="700" fill="var(--ink)">② 守卫① 适配器层</text>
+  <text x="196" y="124" font-size="9" fill="var(--muted)">base.py:4262-4298</text>
+  <text x="196" y="142" font-size="9" font-family="monospace" fill="var(--ink)">session_key in _active_sessions → True</text>
+  <text x="196" y="158" font-size="9" font-family="monospace" fill="var(--ink)">cmd = event.get_command() → &quot;approve&quot;</text>
+  <text x="196" y="172" font-size="9" fill="var(--muted)">普通对话会进 _pending_messages 排队</text>
+
+  <path d="M302,184 L302,196 M298,192 L302,196 L306,192" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="186" y="198" width="232" height="86" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="196" y="216" font-size="10" font-weight="700" fill="var(--accent-ink)">③ 旁路判定</text>
+  <text x="196" y="230" font-size="9" fill="var(--muted)">commands.py:379-399</text>
+  <text x="196" y="248" font-size="9" font-family="monospace" fill="var(--purple)">should_bypass_active_session(&quot;approve&quot;)=True</text>
+  <text x="196" y="263" font-size="9" font-family="monospace" fill="var(--ink)">cmd ∉ {stop,new,reset} → 内联派发</text>
+  <text x="196" y="278" font-size="9" fill="var(--red)">✗ 禁用 _process_message_background</text>
+
+  <path d="M418,134 L432,134 M428,130 L432,134 L428,138" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="434" y="92" width="236" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="444" y="110" font-size="10" font-weight="700" fill="var(--ink)">④ 守卫② runner</text>
+  <text x="444" y="124" font-size="9" fill="var(--muted)">run.py:7764-7771</text>
+  <text x="444" y="142" font-size="9" font-family="monospace" fill="var(--ink)">/approve 绕过 interrupt</text>
+  <text x="444" y="158" font-size="9" font-family="monospace" fill="var(--ink)">_handle_approve_command(event)</text>
+  <text x="444" y="172" font-size="9" fill="var(--muted)">中断叫不醒线程 Event → 必须直达</text>
+
+  <path d="M552,176 L552,188 L552,198 M548,194 L552,198 L556,194" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="434" y="198" width="236" height="86" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="444" y="216" font-size="10" font-weight="700" fill="var(--accent-ink)">⑤ 解锁 Event</text>
+  <text x="444" y="230" font-size="9" fill="var(--muted)">approval.py:729-754</text>
+  <text x="444" y="248" font-size="9" font-family="monospace" fill="var(--ink)">resolve_gateway_approval(key, choice)</text>
+  <text x="444" y="263" font-size="9" font-family="monospace" fill="var(--ink)">entry.result = choice</text>
+  <text x="444" y="278" font-size="9" font-family="monospace" fill="var(--accent-ink)">entry.event.set() ✓ → ① wait() 返回</text>
+
+  <path d="M434,241 C360,241 160,250 160,170 L160,150 M156,158 L160,150 L164,158" stroke="var(--accent)" stroke-width="1.6" fill="none" stroke-dasharray="3 3"/>
+
+  <rect x="10" y="294" width="660" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="20" y="312" font-size="10" font-weight="700" fill="var(--red)">⑥ 反事实:若当普通消息排队进 _pending_messages</text>
+  <text x="20" y="329" font-size="9" fill="var(--red)">agent 永远阻塞在 wait();/approve 永远进不来 → 死锁(且兜底会把命令文本丢弃成空响应)。</text>
+
+  <text x="20" y="360" font-size="9.5" fill="var(--muted)">读这张图:审批命令必须同时旁路两道守卫并直达 runner,才能 set 那个线程 Event,把阻塞的 agent 解锁。</text>
+</svg>
+<div class="fig-cap"><b>实例:一条 /approve 的真实解锁链</b>:agent 阻塞在 <span class="mono">_ApprovalEntry.event=threading.Event()</span> 的 <span class="mono">.wait()</span>(asyncio 中断叫不醒线程 Event)。① 阻塞;② <b>守卫①</b>(<span class="mono">base.py:4262</span>)<span class="mono">session_key in _active_sessions</span>→<span class="mono">cmd=&quot;approve&quot;</span>;③ <span class="mono">should_bypass_active_session(&quot;approve&quot;)→True</span> 且 <span class="mono">∉{stop,new,reset}</span>→<b>内联派发</b>(禁 <span class="mono">_process_message_background</span>);④ <b>守卫②</b> runner(<span class="mono">run.py:7764</span>)<span class="mono">/approve</span> 绕过 <span class="mono">interrupt</span>→<span class="mono">_handle_approve_command</span>;⑤ <span class="mono">resolve_gateway_approval</span>→<span class="mono">entry.event.set()</span>→<span class="mono">wait()</span> 返回、agent 续跑;⑥ 反事实:排队即死锁。这正解释了「审批必须同时旁路两道守卫」。</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
@@ -791,6 +858,73 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
   <p style="margin:.5rem 0 0">The anti-pattern: queueing all messages alike — <span class="mono">/approve</span> deadlocks (the agent blocks waiting for approval while the approval waits in the queue for the agent), <span class="mono">/stop</span> is lost, and a mid-run <span class="mono">/model</span> becomes an empty response.</p>
   <p style="margin:.5rem 0 0">Seen together, why are the two guards <strong>each indispensable</strong>: guard one (adapter) only decides "who queues, who bypasses when busy," but a let-through command still needs someone to handle it; guard two (runner) dispatches it by <span class="mono">canonical</span> name to a dedicated handler like <span class="mono">_handle_approve_command</span>, and rejects any command with no handler. Their duties are orthogonal — one decides "<strong>queue or not</strong>," the other "<strong>dispatch to whom</strong>." Drop guard one and <span class="mono">/approve</span> deadlocks in the queue; drop guard two and a bypassed command finds no handler and is discarded as text by the catch-all — an empty response again.</p>
   <p style="margin:.5rem 0 0">Why this layer IS the "<strong>injection isolation</strong>" rung of ch.24's defense-in-depth: control channel and data channel are <strong>physically split</strong> at the gateway — resolvable commands ride code recognition + bypass and never enter conversation history; only genuine conversation enters <span class="mono">_pending_messages</span> to feed the model. This "an instruction is never data" boundary both blocks injection (a forged instruction can't reach the control channel) and incidentally protects ch.6 caching and ch.7 role alternation: because history will <strong>never</strong> sprout a <span class="mono">/stop</span> mistaken for user text, the cached prefix and strict alternation stay stable.</p>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 400" role="img" aria-label="Worked example: how one /approve crosses both guards and sets the Event while the agent is blocked on threading.Event.wait. 1 agent blocked: _ApprovalEntry.event equals threading.Event, entry.event.wait pauses, an asyncio interrupt cannot wake a thread Event; 2 guard one adapter layer base.py, session_key in _active_sessions is True, cmd equals event.get_command giving approve; 3 bypass decision commands.py, should_bypass_active_session approve is True and cmd is not in the stop new reset set so it dispatches inline, forbidding _process_message_background; 4 guard two runner run.py, /approve bypasses interrupt straight to _handle_approve_command; 5 unlock approval.py, resolve_gateway_approval sets entry.result to choice and calls entry.event.set, so step one wait returns and the agent resumes; 6 counterfactual red box: if queued as an ordinary message into _pending_messages the agent stays blocked forever and /approve never arrives, a deadlock.">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">Example: /approve crosses both guards → sets the Event</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">the agent is blocked on threading.Event.wait(); an asyncio interrupt cannot wake it</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🔓</text>
+
+  <rect x="10" y="56" width="150" height="216" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="20" y="75" font-size="10" font-weight="700" fill="var(--amber)">1 agent blocked</text>
+  <text x="20" y="89" font-size="9" fill="var(--muted)">approval.py:690-700</text>
+  <text x="20" y="110" font-size="9" font-family="monospace" fill="var(--ink)">_ApprovalEntry.event</text>
+  <text x="20" y="124" font-size="9" font-family="monospace" fill="var(--ink)">  = threading.Event()</text>
+  <text x="20" y="146" font-size="9" font-family="monospace" fill="var(--ink)">entry.event.wait()</text>
+  <text x="78" y="172" text-anchor="middle" font-size="22">⏸️</text>
+  <text x="20" y="198" font-size="9" fill="var(--muted)">thread Event,</text>
+  <text x="20" y="212" font-size="9" fill="var(--muted)">an asyncio</text>
+  <text x="20" y="226" font-size="9" fill="var(--muted)">interrupt won't wake it</text>
+  <text x="20" y="252" font-size="9" font-weight="700" fill="var(--accent-ink)">after 5: ✓ resumes</text>
+
+  <rect x="186" y="52" width="116" height="26" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.6"/>
+  <text x="244" y="69" text-anchor="middle" font-size="10" font-weight="700" fill="var(--purple)">user sends /approve</text>
+  <path d="M244,78 L244,90 M240,86 L244,90 L248,86" stroke="var(--purple)" stroke-width="1.6" fill="none"/>
+
+  <rect x="186" y="92" width="232" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="196" y="110" font-size="10" font-weight="700" fill="var(--ink)">2 guard 1 · adapter layer</text>
+  <text x="196" y="124" font-size="9" fill="var(--muted)">base.py:4262-4298</text>
+  <text x="196" y="142" font-size="9" font-family="monospace" fill="var(--ink)">session_key in _active_sessions → True</text>
+  <text x="196" y="158" font-size="9" font-family="monospace" fill="var(--ink)">cmd = event.get_command() → &quot;approve&quot;</text>
+  <text x="196" y="172" font-size="9" fill="var(--muted)">ordinary chat would queue in _pending_messages</text>
+
+  <path d="M302,184 L302,196 M298,192 L302,196 L306,192" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="186" y="198" width="232" height="86" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="196" y="216" font-size="10" font-weight="700" fill="var(--accent-ink)">3 bypass decision</text>
+  <text x="196" y="230" font-size="9" fill="var(--muted)">commands.py:379-399</text>
+  <text x="196" y="248" font-size="9" font-family="monospace" fill="var(--purple)">should_bypass_active_session(&quot;approve&quot;)=True</text>
+  <text x="196" y="263" font-size="9" font-family="monospace" fill="var(--ink)">cmd ∉ {stop,new,reset} → inline dispatch</text>
+  <text x="196" y="278" font-size="9" fill="var(--red)">✗ no _process_message_background</text>
+
+  <path d="M418,134 L432,134 M428,130 L432,134 L428,138" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="434" y="92" width="236" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="444" y="110" font-size="10" font-weight="700" fill="var(--ink)">4 guard 2 · runner</text>
+  <text x="444" y="124" font-size="9" fill="var(--muted)">run.py:7764-7771</text>
+  <text x="444" y="142" font-size="9" font-family="monospace" fill="var(--ink)">/approve bypasses interrupt</text>
+  <text x="444" y="158" font-size="9" font-family="monospace" fill="var(--ink)">_handle_approve_command(event)</text>
+  <text x="444" y="172" font-size="9" fill="var(--muted)">interrupt can't wake a thread Event → go direct</text>
+
+  <path d="M552,176 L552,188 L552,198 M548,194 L552,198 L556,194" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="434" y="198" width="236" height="86" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="444" y="216" font-size="10" font-weight="700" fill="var(--accent-ink)">5 unlock the Event</text>
+  <text x="444" y="230" font-size="9" fill="var(--muted)">approval.py:729-754</text>
+  <text x="444" y="248" font-size="9" font-family="monospace" fill="var(--ink)">resolve_gateway_approval(key, choice)</text>
+  <text x="444" y="263" font-size="9" font-family="monospace" fill="var(--ink)">entry.result = choice</text>
+  <text x="444" y="278" font-size="9" font-family="monospace" fill="var(--accent-ink)">entry.event.set() ✓ → 1's wait() returns</text>
+
+  <path d="M434,241 C360,241 160,250 160,170 L160,150 M156,158 L160,150 L164,158" stroke="var(--accent)" stroke-width="1.6" fill="none" stroke-dasharray="3 3"/>
+
+  <rect x="10" y="294" width="660" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="20" y="312" font-size="10" font-weight="700" fill="var(--red)">6 counterfactual: if queued as ordinary text into _pending_messages</text>
+  <text x="20" y="329" font-size="9" fill="var(--red)">the agent stays blocked on wait() forever; /approve never arrives → deadlock (and the safety net discards the text as an empty response).</text>
+
+  <text x="20" y="360" font-size="9.5" fill="var(--muted)">Read this: an approval command must bypass BOTH guards and reach the runner directly to set that thread Event and unblock the agent.</text>
+</svg>
+<div class="fig-cap"><b>Example: one /approve unlock chain</b>: the agent is blocked on <span class="mono">_ApprovalEntry.event=threading.Event()</span>'s <span class="mono">.wait()</span> (an asyncio interrupt can't wake a thread Event). 1 blocked; 2 <b>guard 1</b> (<span class="mono">base.py:4262</span>) <span class="mono">session_key in _active_sessions</span> → <span class="mono">cmd=&quot;approve&quot;</span>; 3 <span class="mono">should_bypass_active_session(&quot;approve&quot;)→True</span> and <span class="mono">∉{stop,new,reset}</span> → <b>inline dispatch</b> (no <span class="mono">_process_message_background</span>); 4 <b>guard 2</b> runner (<span class="mono">run.py:7764</span>) <span class="mono">/approve</span> bypasses <span class="mono">interrupt</span> → <span class="mono">_handle_approve_command</span>; 5 <span class="mono">resolve_gateway_approval</span> → <span class="mono">entry.event.set()</span> → <span class="mono">wait()</span> returns, agent resumes; 6 counterfactual: queueing deadlocks. This is exactly why "approvals must bypass both guards."</div>
 </div>
 
 <div class="card key">

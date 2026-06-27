@@ -592,6 +592,58 @@ terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st
     <li><strong>后台进程</strong>:<span class="mono">background=True, notify_on_complete=True</span> 后台跑,完成时作新 turn(同委派完成队列,第 13 章),不破缓存。</li>
   </ul>
 </div>
+
+<div class="figure">
+<svg viewBox="0 0 680 484" role="img" aria-label="export TAG=v2 在 local docker ssh 三后端的真实包裹与 CWD 回传：统一中间脚本三后端逐字相同，先 source 快照、builtin cd 入会话目录、eval 命令、回写 export -p 快照、pwd -P 写临时文件并 printf 吐出 HERMES_CWD 标记；local 用 bash -c 加 os.setsid；docker 用 docker exec id bash -c；ssh 用 ssh bash -c shlex.quote；CWD 回传分叉本地读临时文件、docker 与 ssh 解析 stdout 标记；下一条 echo TAG 得到 v2。">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">一条命令，三后端真实包裹 · 同脚本逐字相同 + CWD 回传分叉</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">例子：terminal(&quot;export TAG=v2&quot;) 在 local / docker / ssh 三后端怎么跑</text>
+  <text x="628" y="32" font-size="22">🖥️</text>
+
+  <rect x="20" y="50" width="300" height="258" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="30" y="68" font-size="10" font-weight="700" fill="var(--ink)">① 统一中间脚本 · 三后端共享 verbatim</text>
+  <text x="30" y="82" font-size="9" fill="var(--muted)">tools/environments/base.py:418-470（_wrap_command）</text>
+  <text x="30" y="102" font-size="9" font-family="monospace" fill="var(--ink)">source &lt;snap&gt; &gt;/dev/null 2&gt;&amp;1 || true</text>
+  <text x="30" y="120" font-size="9" font-family="monospace" fill="var(--accent-ink)">builtin cd -- 'src' || exit 126</text>
+  <text x="30" y="138" font-size="9" font-family="monospace" fill="var(--purple)">eval 'export TAG=v2'</text>
+  <text x="30" y="156" font-size="9" font-family="monospace" fill="var(--ink)">__hermes_ec=$?</text>
+  <text x="30" y="174" font-size="9" font-family="monospace" fill="var(--ink)">export -p &gt; &lt;snap&gt; 2&gt;/dev/null || true</text>
+  <text x="30" y="192" font-size="9" font-family="monospace" fill="var(--blue)">pwd -P &gt; &lt;cwd_file&gt; 2&gt;/dev/null || true</text>
+  <text x="30" y="210" font-size="9" font-family="monospace" fill="var(--purple)">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</text>
+  <text x="42" y="226" font-size="9" font-family="monospace" fill="var(--purple)">&quot;$(pwd -P)&quot;</text>
+  <text x="30" y="244" font-size="9" font-family="monospace" fill="var(--ink)">exit $__hermes_ec</text>
+  <text x="30" y="266" font-size="8.5" fill="var(--muted)">cd 入会话 cwd → 跑命令 → 回写 env 快照</text>
+  <text x="30" y="280" font-size="8.5" fill="var(--muted)">→ 双通道吐 CWD（临时文件 + stdout 标记）</text>
+  <text x="30" y="298" font-size="8.5" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__（:280）</text>
+
+  <rect x="336" y="50" width="324" height="74" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="348" y="68" font-size="10" font-weight="700" fill="var(--accent-ink)">② local · environments/local.py:634-695</text>
+  <text x="348" y="88" font-size="9" font-family="monospace" fill="var(--ink)">args = [bash, &quot;-c&quot;, wrapped]</text>
+  <text x="348" y="108" font-size="9" font-family="monospace" fill="var(--ink)">preexec_fn = os.setsid  # 独立进程组，可整组中断</text>
+
+  <rect x="336" y="132" width="324" height="74" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="348" y="150" font-size="10" font-weight="700" fill="var(--blue)">③ docker · environments/docker.py:943-964</text>
+  <text x="348" y="170" font-size="9" font-family="monospace" fill="var(--ink)">cmd = [docker, exec, &lt;id&gt;, bash, -c, wrapped]</text>
+  <text x="348" y="190" font-size="9" fill="var(--muted)">同一脚本塞进容器内 bash 跑</text>
+
+  <rect x="336" y="214" width="324" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="348" y="232" font-size="10" font-weight="700" fill="var(--purple)">④ ssh · environments/ssh.py:343-352</text>
+  <text x="348" y="252" font-size="9" font-family="monospace" fill="var(--ink)">ssh … bash -c shlex.quote(wrapped)</text>
+  <text x="348" y="272" font-size="9" fill="var(--muted)">整段脚本 shlex.quote 后过 SSH</text>
+
+  <rect x="20" y="320" width="640" height="74" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="32" y="338" font-size="10" font-weight="700" fill="var(--ink)">⑤ CWD 回传分叉 · base.py:778-812（_extract_cwd_from_output）</text>
+  <text x="32" y="358" font-size="9" fill="var(--blue)">local：读临时文件 _cwd_file（脚本里 pwd -P 已写入）</text>
+  <text x="32" y="378" font-size="9" fill="var(--purple)">docker / ssh：解析 stdout 的 __HERMES_CWD_s1__…__HERMES_CWD_s1__ 标记并剥离</text>
+
+  <rect x="20" y="402" width="640" height="40" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="32" y="420" font-size="10" font-weight="700" fill="var(--accent-ink)">⑥ 下一条命令（env 经快照跨进程延续）</text>
+  <text x="32" y="436" font-size="9" font-family="monospace" fill="var(--ink)">terminal(&quot;echo $TAG&quot;)  →  v2</text>
+
+  <rect x="20" y="452" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="466" text-anchor="middle" font-size="9" fill="var(--muted)">读这张图：同一段包裹脚本三后端逐字相同，只有 spawn 方式（bash -c / docker exec / ssh）和 CWD 回传通道（临时文件 / stdout 标记）不同</text>
+</svg>
+<div class="fig-cap"><b>一条命令，三后端真实包裹</b>：<span class="mono">_wrap_command</span> 生成的中间脚本三后端<b>逐字相同</b>——<span class="mono">source &lt;snap&gt;</span> → <span class="mono">builtin cd -- 'src' || exit 126</span> → <span class="mono">eval 'export TAG=v2'</span> → <span class="mono">export -p &gt; &lt;snap&gt;</span> → <span class="mono">pwd -P &gt; &lt;cwd_file&gt;</span> → <span class="mono">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</span>。差异只在 spawn：local <span class="mono">[bash,-c]+os.setsid</span>、docker <span class="mono">[docker,exec,&lt;id&gt;,bash,-c]</span>、ssh <span class="mono">bash -c shlex.quote</span>；CWD 回传分叉——local 读 <span class="mono">_cwd_file</span>，docker/ssh 解析 stdout 标记。下条 <span class="mono">echo $TAG</span> → <span class="mono">v2</span>。</div>
+</div>
 <div class="selftest">
 <h2>🧪 自测 · 想一想为什么这么设计</h2>
 <div class="quiz">
@@ -848,6 +900,58 @@ terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st
     <li><strong>serverless savings</strong>: backends like modal start on demand and <span class="mono">cleanup()</span> when done, not paying to keep a server running for occasional commands.</li>
     <li><strong>Background processes</strong>: <span class="mono">background=True, notify_on_complete=True</span> runs in the background and surfaces as a new turn on completion (like the delegation completion queue, ch.13), not breaking the cache.</li>
   </ul>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 484" role="img" aria-label="export TAG=v2 wrapped across local docker and ssh backends with CWD return: the unified middle script is byte-identical across backends, sourcing the snapshot, builtin cd into the session dir, eval the command, write back export -p snapshot, pwd -P to a temp file and printf emits the HERMES_CWD marker; local uses bash -c plus os.setsid; docker uses docker exec id bash -c; ssh uses ssh bash -c shlex.quote; CWD return forks where local reads the temp file and docker and ssh parse the stdout marker; the next command echo TAG yields v2.">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">One command, three real wrappers - same script byte-for-byte + CWD return fork</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">Example: how terminal(&quot;export TAG=v2&quot;) runs on local / docker / ssh</text>
+  <text x="628" y="32" font-size="22">🖥️</text>
+
+  <rect x="20" y="50" width="300" height="258" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="30" y="68" font-size="10" font-weight="700" fill="var(--ink)">1. Unified middle script - shared verbatim by all 3</text>
+  <text x="30" y="82" font-size="9" fill="var(--muted)">tools/environments/base.py:418-470 (_wrap_command)</text>
+  <text x="30" y="102" font-size="9" font-family="monospace" fill="var(--ink)">source &lt;snap&gt; &gt;/dev/null 2&gt;&amp;1 || true</text>
+  <text x="30" y="120" font-size="9" font-family="monospace" fill="var(--accent-ink)">builtin cd -- 'src' || exit 126</text>
+  <text x="30" y="138" font-size="9" font-family="monospace" fill="var(--purple)">eval 'export TAG=v2'</text>
+  <text x="30" y="156" font-size="9" font-family="monospace" fill="var(--ink)">__hermes_ec=$?</text>
+  <text x="30" y="174" font-size="9" font-family="monospace" fill="var(--ink)">export -p &gt; &lt;snap&gt; 2&gt;/dev/null || true</text>
+  <text x="30" y="192" font-size="9" font-family="monospace" fill="var(--blue)">pwd -P &gt; &lt;cwd_file&gt; 2&gt;/dev/null || true</text>
+  <text x="30" y="210" font-size="9" font-family="monospace" fill="var(--purple)">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</text>
+  <text x="42" y="226" font-size="9" font-family="monospace" fill="var(--purple)">&quot;$(pwd -P)&quot;</text>
+  <text x="30" y="244" font-size="9" font-family="monospace" fill="var(--ink)">exit $__hermes_ec</text>
+  <text x="30" y="266" font-size="8.5" fill="var(--muted)">cd into session cwd -&gt; run -&gt; write env snapshot</text>
+  <text x="30" y="280" font-size="8.5" fill="var(--muted)">-&gt; emit CWD on two channels (temp file + stdout)</text>
+  <text x="30" y="298" font-size="8.5" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__ (:280)</text>
+
+  <rect x="336" y="50" width="324" height="74" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="348" y="68" font-size="10" font-weight="700" fill="var(--accent-ink)">2. local - environments/local.py:634-695</text>
+  <text x="348" y="88" font-size="9" font-family="monospace" fill="var(--ink)">args = [bash, &quot;-c&quot;, wrapped]</text>
+  <text x="348" y="108" font-size="9" font-family="monospace" fill="var(--ink)">preexec_fn = os.setsid  # own pgid, group-interruptible</text>
+
+  <rect x="336" y="132" width="324" height="74" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="348" y="150" font-size="10" font-weight="700" fill="var(--blue)">3. docker - environments/docker.py:943-964</text>
+  <text x="348" y="170" font-size="9" font-family="monospace" fill="var(--ink)">cmd = [docker, exec, &lt;id&gt;, bash, -c, wrapped]</text>
+  <text x="348" y="190" font-size="9" fill="var(--muted)">same script, run by bash inside the container</text>
+
+  <rect x="336" y="214" width="324" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="348" y="232" font-size="10" font-weight="700" fill="var(--purple)">4. ssh - environments/ssh.py:343-352</text>
+  <text x="348" y="252" font-size="9" font-family="monospace" fill="var(--ink)">ssh … bash -c shlex.quote(wrapped)</text>
+  <text x="348" y="272" font-size="9" fill="var(--muted)">whole script shlex.quote'd, sent over SSH</text>
+
+  <rect x="20" y="320" width="640" height="74" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="32" y="338" font-size="10" font-weight="700" fill="var(--ink)">5. CWD return fork - base.py:778-812 (_extract_cwd_from_output)</text>
+  <text x="32" y="358" font-size="9" fill="var(--blue)">local: reads the temp file _cwd_file (pwd -P already wrote it)</text>
+  <text x="32" y="378" font-size="9" fill="var(--purple)">docker / ssh: parse the stdout __HERMES_CWD_s1__…__HERMES_CWD_s1__ marker and strip it</text>
+
+  <rect x="20" y="402" width="640" height="40" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="32" y="420" font-size="10" font-weight="700" fill="var(--accent-ink)">6. Next command (env carries across via the snapshot)</text>
+  <text x="32" y="436" font-size="9" font-family="monospace" fill="var(--ink)">terminal(&quot;echo $TAG&quot;)  -&gt;  v2</text>
+
+  <rect x="20" y="452" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="466" text-anchor="middle" font-size="9" fill="var(--muted)">Read this: the same wrapper script is byte-identical across backends; only the spawn (bash -c / docker exec / ssh) and the CWD channel (temp file / stdout marker) differ</text>
+</svg>
+<div class="fig-cap"><b>One command, three real wrappers</b>: the middle script from <span class="mono">_wrap_command</span> is <b>byte-identical</b> across backends - <span class="mono">source &lt;snap&gt;</span> -&gt; <span class="mono">builtin cd -- 'src' || exit 126</span> -&gt; <span class="mono">eval 'export TAG=v2'</span> -&gt; <span class="mono">export -p &gt; &lt;snap&gt;</span> -&gt; <span class="mono">pwd -P &gt; &lt;cwd_file&gt;</span> -&gt; <span class="mono">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</span>. Only the spawn differs: local <span class="mono">[bash,-c]+os.setsid</span>, docker <span class="mono">[docker,exec,&lt;id&gt;,bash,-c]</span>, ssh <span class="mono">bash -c shlex.quote</span>; the CWD return forks - local reads <span class="mono">_cwd_file</span>, docker/ssh parse the stdout marker. The next <span class="mono">echo $TAG</span> -&gt; <span class="mono">v2</span>.</div>
 </div>
 <div class="selftest">
 <h2>🧪 Self-test - think about the design</h2>

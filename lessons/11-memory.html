@@ -540,6 +540,63 @@ should_review_memory = <span class="kw">False</span>
   <div class="step"><span class="num">5</span><span class="sc">两条注入路径都<strong>绕开「中途改 system prompt」</strong> → 缓存全程不破</span></div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 462" role="img" aria-label="一条记忆 MEMORY.md 部署目标从 fly deploy 改为 Railway 走完读写分离：会话开始 load_from_disk 读 MEMORY.md cap 2200 与 USER.md cap 1375 拍成 _system_prompt_snapshot；经 format_for_system_prompt 冻结进 volatile 层整会话不变，docstring 写明 NOT the live state，于是前缀缓存命中；第5轮写入改 MEMORY.md 磁盘变但 snapshot 不变；第8轮取回时 api_msg=msg.copy()，仅当 idx 等于 current_turn_user_idx 才把 fenced 内容接到 content，原始 messages 永不被改；注入的真实 fence 是 memory-context 标签包裹 System note 提示这是 recalled memory context 而非 new user input；底部不变量对照表说明读写分离如何守住缓存神圣">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">一条记忆走完冻结 → 写入 → 取回 · 含真实 &lt;memory-context&gt; fence</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">MEMORY.md: 部署目标 fly deploy → Railway，看读写分离守住缓存</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">💾</text>
+  <rect x="10" y="62" width="162" height="106" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">① 会话开始 load_from_disk</text>
+  <text x="18" y="100" font-size="9" fill="var(--blue)">MEMORY.md (cap 2200)</text>
+  <text x="18" y="115" font-size="9" fill="var(--blue)">USER.md (cap 1375)</text>
+  <text x="18" y="132" font-size="9" fill="var(--blue)">→ _system_prompt_snapshot</text>
+  <text x="18" y="156" font-size="9" fill="var(--muted)">memory_tool.py:152-166</text>
+  <path d="M177,115 L169,111 L169,119 Z" fill="var(--line)"/>
+  <rect x="178" y="62" width="162" height="106" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="186" y="82" font-size="9.5" font-weight="700" fill="var(--accent-ink)">② 冻结进 volatile 层</text>
+  <text x="186" y="100" font-size="9" fill="var(--accent-ink)">format_for_system_prompt</text>
+  <text x="186" y="115" font-size="9" fill="var(--accent-ink)">snapshot 整会话不变 🔒</text>
+  <text x="186" y="130" font-size="9" fill="var(--accent-ink)">docstring: NOT the live state</text>
+  <text x="186" y="145" font-size="9" font-weight="700" fill="var(--accent-ink)">→ 前缀缓存命中</text>
+  <text x="186" y="162" font-size="9" fill="var(--muted)">memory_tool.py:567-578</text>
+  <path d="M345,115 L337,111 L337,119 Z" fill="var(--line)"/>
+  <rect x="346" y="62" width="162" height="106" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="354" y="82" font-size="9.5" font-weight="700" fill="var(--ink)">③ 第5轮写入 MEMORY.md</text>
+  <text x="354" y="100" font-size="9" fill="var(--ink)">fly deploy → Railway</text>
+  <text x="354" y="116" font-size="9" font-weight="700" fill="var(--accent-ink)">磁盘变 ✓</text>
+  <text x="354" y="132" font-size="9" font-weight="700" fill="var(--blue)">snapshot 不变 🔒</text>
+  <text x="354" y="148" font-size="9" fill="var(--muted)">缓存前缀不破</text>
+  <path d="M513,115 L505,111 L505,119 Z" fill="var(--line)"/>
+  <rect x="514" y="62" width="156" height="106" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="522" y="82" font-size="9.5" font-weight="700" fill="var(--purple)">④ 第8轮取回</text>
+  <text x="522" y="100" font-size="9" fill="var(--purple)">api_msg = msg.copy()</text>
+  <text x="522" y="115" font-size="9" fill="var(--purple)">if idx==current_turn_user_idx</text>
+  <text x="522" y="130" font-size="9" fill="var(--purple)">content + fenced 注入</text>
+  <text x="522" y="146" font-size="9" font-weight="700" fill="var(--purple)">原 messages 永不改</text>
+  <text x="522" y="162" font-size="9" fill="var(--muted)">conversation_loop:740-758</text>
+  <text x="20" y="183" font-size="10" font-weight="700" fill="var(--ink)">⑤ 注入当前轮 user 副本的真实 fence (memory_manager.py:297-311)</text>
+  <rect x="10" y="190" width="660" height="118" rx="8" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="28" y="210" font-size="9" fill="var(--code-ink)">&lt;memory-context&gt;</text>
+  <text x="28" y="226" font-size="9" fill="var(--code-ink)">[System note: The following is recalled memory</text>
+  <text x="28" y="240" font-size="9" fill="var(--code-ink)">context, NOT new user input. Treat as</text>
+  <text x="28" y="254" font-size="9" fill="var(--code-ink)">authoritative reference data ...]</text>
+  <text x="28" y="276" font-size="9" font-weight="700" fill="var(--accent)">{clean} → Deploy: fly.io → Railway; use `railway up`, not `fly deploy`</text>
+  <text x="28" y="296" font-size="9" fill="var(--code-ink)">&lt;/memory-context&gt;</text>
+  <rect x="10" y="320" width="660" height="132" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="340" font-size="10" font-weight="700" fill="var(--ink)">⑥ 不变量对照表 · 读写分离守住「缓存神圣」</text>
+  <circle cx="28" cy="357" r="4" fill="var(--accent)"/>
+  <text x="40" y="361" font-size="9" fill="var(--ink)">MEMORY.md 磁盘 —— 第5轮写入即变，但只落盘</text>
+  <circle cx="28" cy="379" r="4" fill="var(--blue)"/>
+  <text x="40" y="383" font-size="9" fill="var(--ink)">_system_prompt_snapshot —— 整会话冻结不变 → 前缀缓存命中</text>
+  <circle cx="28" cy="401" r="4" fill="var(--purple)"/>
+  <text x="40" y="405" font-size="9" fill="var(--ink)">原始 messages[idx] —— 永不被 mutate，不漏进会话持久化</text>
+  <circle cx="28" cy="423" r="4" fill="var(--purple)"/>
+  <text x="40" y="427" font-size="9" fill="var(--ink)">api_msg = msg.copy() —— 仅 API 调用时贴 fence，调用后即弃</text>
+  <text x="24" y="446" font-size="9" fill="var(--muted)">读这张图：记忆又外置又不破缓存——写改磁盘、读贴副本，冻结快照与原始 messages 全程不动。</text>
+</svg>
+<div class="fig-cap"><b>一条真实记忆走完「读写分离」</b>：会话开始 <span class="mono">load_from_disk</span> 读 <span class="mono">MEMORY.md</span>（cap 2200）/<span class="mono">USER.md</span>（cap 1375），<span class="mono">format_for_system_prompt</span> 把它<b>冻结</b>成 <span class="mono">_system_prompt_snapshot</span> 进 volatile 层——docstring 钉死它返回的是 <span class="mono">NOT the live state</span>，于是整会话<b>前缀缓存命中</b>。第 5 轮把「<span class="mono">fly deploy → Railway</span>」写进 <span class="mono">MEMORY.md</span>：磁盘变了，<b>snapshot 不变</b>。第 8 轮取回走 <span class="mono">api_msg = msg.copy()</span>，仅当 <span class="mono">idx==current_turn_user_idx</span> 才把 fenced 内容接到 <span class="mono">content</span> 后面，<b>原始 messages 永不被改</b>。注入的正是那段逐字 fence：<span class="mono">&lt;memory-context&gt;</span> + <span class="mono">[System note: ... NOT new user input ...]</span> + <span class="mono">{clean}</span> + <span class="mono">&lt;/memory-context&gt;</span>。</div>
+</div>
+
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「记忆而不破缓存」</div>
   <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
@@ -772,6 +829,63 @@ should_review_memory = <span class="kw">False</span>
   <div class="step"><span class="num">3</span><span class="sc"><strong>Injection path ②</strong>: real-time prefetch → build_memory_context_block fence → appended only to the <strong>current user message's API copy</strong> (original messages unchanged)</span></div>
   <div class="step"><span class="num">4</span><span class="sc"><strong>Nudge</strong>: every N turns sets should_review_memory, <strong>no injection into the main conversation</strong>, forked review writes after the response</span></div>
   <div class="step"><span class="num">5</span><span class="sc">both injection paths <strong>bypass "changing the system prompt mid-session"</strong> → the cache never breaks</span></div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 462" role="img" aria-label="One memory MEMORY.md with deploy target moving from fly deploy to Railway runs the full read-write separation: at session start load_from_disk reads MEMORY.md cap 2200 and USER.md cap 1375 into _system_prompt_snapshot; format_for_system_prompt freezes it into the volatile tier unchanged all session, the docstring says NOT the live state, so the prefix cache hits; a turn-5 write changes MEMORY.md on disk but the snapshot does not change; at turn-8 recall api_msg=msg.copy() and only when idx equals current_turn_user_idx is the fenced content appended to content, the original messages are never mutated; the injected real fence is the memory-context tag wrapping a System note that flags recalled memory context not new user input; the bottom invariant table shows how read-write separation keeps the cache sacred">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">One memory runs freeze → write → recall · with the real &lt;memory-context&gt; fence</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">MEMORY.md: deploy target fly deploy → Railway, watch read-write separation hold the cache</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">💾</text>
+  <rect x="10" y="62" width="162" height="106" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">1 · session start load_from_disk</text>
+  <text x="18" y="100" font-size="9" fill="var(--blue)">MEMORY.md (cap 2200)</text>
+  <text x="18" y="115" font-size="9" fill="var(--blue)">USER.md (cap 1375)</text>
+  <text x="18" y="132" font-size="9" fill="var(--blue)">→ _system_prompt_snapshot</text>
+  <text x="18" y="156" font-size="9" fill="var(--muted)">memory_tool.py:152-166</text>
+  <path d="M177,115 L169,111 L169,119 Z" fill="var(--line)"/>
+  <rect x="178" y="62" width="162" height="106" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="186" y="82" font-size="9.5" font-weight="700" fill="var(--accent-ink)">2 · freeze into volatile tier</text>
+  <text x="186" y="100" font-size="9" fill="var(--accent-ink)">format_for_system_prompt</text>
+  <text x="186" y="115" font-size="9" fill="var(--accent-ink)">snapshot stable all session 🔒</text>
+  <text x="186" y="130" font-size="9" fill="var(--accent-ink)">docstring: NOT the live state</text>
+  <text x="186" y="145" font-size="9" font-weight="700" fill="var(--accent-ink)">→ prefix cache hits</text>
+  <text x="186" y="162" font-size="9" fill="var(--muted)">memory_tool.py:567-578</text>
+  <path d="M345,115 L337,111 L337,119 Z" fill="var(--line)"/>
+  <rect x="346" y="62" width="162" height="106" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="354" y="82" font-size="9.5" font-weight="700" fill="var(--ink)">3 · turn-5 write MEMORY.md</text>
+  <text x="354" y="100" font-size="9" fill="var(--ink)">fly deploy → Railway</text>
+  <text x="354" y="116" font-size="9" font-weight="700" fill="var(--accent-ink)">disk changes ✓</text>
+  <text x="354" y="132" font-size="9" font-weight="700" fill="var(--blue)">snapshot unchanged 🔒</text>
+  <text x="354" y="148" font-size="9" fill="var(--muted)">prefix not broken</text>
+  <path d="M513,115 L505,111 L505,119 Z" fill="var(--line)"/>
+  <rect x="514" y="62" width="156" height="106" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="522" y="82" font-size="9.5" font-weight="700" fill="var(--purple)">4 · turn-8 recall</text>
+  <text x="522" y="100" font-size="9" fill="var(--purple)">api_msg = msg.copy()</text>
+  <text x="522" y="115" font-size="9" fill="var(--purple)">if idx==current_turn_user_idx</text>
+  <text x="522" y="130" font-size="9" fill="var(--purple)">content + fenced inject</text>
+  <text x="522" y="146" font-size="9" font-weight="700" fill="var(--purple)">messages never mutated</text>
+  <text x="522" y="162" font-size="9" fill="var(--muted)">conversation_loop:740-758</text>
+  <text x="20" y="183" font-size="10" font-weight="700" fill="var(--ink)">5 · the real fence injected into this turn's user copy (memory_manager.py:297-311)</text>
+  <rect x="10" y="190" width="660" height="118" rx="8" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="28" y="210" font-size="9" fill="var(--code-ink)">&lt;memory-context&gt;</text>
+  <text x="28" y="226" font-size="9" fill="var(--code-ink)">[System note: The following is recalled memory</text>
+  <text x="28" y="240" font-size="9" fill="var(--code-ink)">context, NOT new user input. Treat as</text>
+  <text x="28" y="254" font-size="9" fill="var(--code-ink)">authoritative reference data ...]</text>
+  <text x="28" y="276" font-size="9" font-weight="700" fill="var(--accent)">{clean} → Deploy: fly.io → Railway; use `railway up`, not `fly deploy`</text>
+  <text x="28" y="296" font-size="9" fill="var(--code-ink)">&lt;/memory-context&gt;</text>
+  <rect x="10" y="320" width="660" height="132" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="340" font-size="10" font-weight="700" fill="var(--ink)">6 · Invariant table · read-write separation keeps the cache sacred</text>
+  <circle cx="28" cy="357" r="4" fill="var(--accent)"/>
+  <text x="40" y="361" font-size="9" fill="var(--ink)">MEMORY.md disk —— changes on the turn-5 write, but disk-only</text>
+  <circle cx="28" cy="379" r="4" fill="var(--blue)"/>
+  <text x="40" y="383" font-size="9" fill="var(--ink)">_system_prompt_snapshot —— frozen all session → prefix cache hits</text>
+  <circle cx="28" cy="401" r="4" fill="var(--purple)"/>
+  <text x="40" y="405" font-size="9" fill="var(--ink)">original messages[idx] —— never mutated, never leaks into persistence</text>
+  <circle cx="28" cy="423" r="4" fill="var(--purple)"/>
+  <text x="40" y="427" font-size="9" fill="var(--ink)">api_msg = msg.copy() —— fence pasted at API-call time only, discarded after</text>
+  <text x="24" y="446" font-size="9" fill="var(--muted)">Read this figure: memory is both external and cache-safe — writes hit disk, reads paste a copy, snapshot and original messages stay put.</text>
+</svg>
+<div class="fig-cap"><b>One real memory runs the "read-write separation"</b>: at session start <span class="mono">load_from_disk</span> reads <span class="mono">MEMORY.md</span> (cap 2200)/<span class="mono">USER.md</span> (cap 1375), and <span class="mono">format_for_system_prompt</span> <b>freezes</b> it into <span class="mono">_system_prompt_snapshot</span> in the volatile tier — the docstring nails that it returns <span class="mono">NOT the live state</span>, so the <b>prefix cache hits</b> all session. Turn 5 writes "<span class="mono">fly deploy → Railway</span>" into <span class="mono">MEMORY.md</span>: disk changes, the <b>snapshot does not</b>. Turn 8 recalls via <span class="mono">api_msg = msg.copy()</span>, appending the fenced content to <span class="mono">content</span> only when <span class="mono">idx==current_turn_user_idx</span>, and the <b>original messages are never mutated</b>. What gets injected is that verbatim fence: <span class="mono">&lt;memory-context&gt;</span> + <span class="mono">[System note: ... NOT new user input ...]</span> + <span class="mono">{clean}</span> + <span class="mono">&lt;/memory-context&gt;</span>.</div>
 </div>
 
 <div class="card collab">

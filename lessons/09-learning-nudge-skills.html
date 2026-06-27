@@ -516,6 +516,75 @@ or updated?"</span>.  Writes go straight to the memory + skill stores.
 <div class="fig-cap"><b>自我进化闭环</b>：四章咬合成一个顺时针回路——① 学习 nudge 把可复用解法抽成技能（第 9 章 · 本章入口）→ ② Curator 后台养护，把陈旧技能标 stale 再归档（<b>永不删</b>，第 10 章）→ ③ 记忆声明性沉淀「你是谁、偏好什么」（第 11 章）→ ④ 跨会话 FTS5 搜索召回旧技能与旧会话（第 12 章）→ 回到 ①。四环各司其职，Hermes 才<b>越用越懂你</b>，而全程不动那条神圣的缓存前缀。</div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 472" role="img" aria-label="一句抱怨走完学习闭环：frustration 被识别为 FIRST-CLASS 技能信号；nudge 计数 _iters_since_skill 累到 _skill_nudge_interval 即 10，置 _should_review_skills=True 但不往主对话注入任何文字；响应交付后 fork 后台 review 守护线程，传 list(messages) 快照；按 Preference order 四档选最早可行的动作 PATCH 已加载技能、UPDATE 已有伞、ADD 支持文件、CREATE 类级新伞且禁用 fix-X 或 PR 号命名；落盘经 is_background_review 标 mark_agent_created 交 curator 治理；反例区里 command not found 与 browser tools do not work 被 review prompt 明令丢弃">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">一句抱怨走完学习闭环 · nudge 第10次 → fork review → 选档 → 标产权</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">输入 this is too verbose, just give me the answer，沿处理路径看每步真实数据</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🧠</text>
+  <rect x="10" y="62" width="206" height="104" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="20" y="82" font-size="10" font-weight="700" fill="var(--blue)">① 输入信号 · frustration</text>
+  <rect x="19" y="90" width="188" height="40" rx="5" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="27" y="106" font-size="9" fill="var(--code-ink)">this is too verbose,</text>
+  <text x="27" y="122" font-size="9" fill="var(--code-ink)">just give me the answer</text>
+  <text x="20" y="148" font-size="9" font-weight="700" fill="var(--purple)">FIRST-CLASS skill signal</text>
+  <text x="20" y="162" font-size="9" fill="var(--muted)">background_review.py:180-186</text>
+  <line x1="216" y1="114" x2="236" y2="114" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M242,114 L234,110 L234,118 Z" fill="var(--line)"/>
+  <rect x="238" y="62" width="206" height="104" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="248" y="82" font-size="10" font-weight="700" fill="var(--ink)">② nudge 计数命中阈值</text>
+  <text x="248" y="102" font-size="9" fill="var(--ink)">_iters_since_skill = 10</text>
+  <text x="248" y="118" font-size="9" fill="var(--ink)">&gt;= _skill_nudge_interval (10)</text>
+  <text x="248" y="136" font-size="9" font-weight="700" fill="var(--accent-ink)">_should_review_skills = True</text>
+  <text x="248" y="156" font-size="9" font-weight="700" fill="var(--amber)">✗ 不往主对话注入任何文字</text>
+  <line x1="444" y1="114" x2="464" y2="114" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M470,114 L462,110 L462,118 Z" fill="var(--line)"/>
+  <rect x="466" y="62" width="204" height="104" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="476" y="82" font-size="10" font-weight="700" fill="var(--accent-ink)">③ 响应后 fork · daemon</text>
+  <text x="476" y="100" font-size="9" fill="var(--accent-ink)">_spawn_background_review(</text>
+  <text x="476" y="114" font-size="9" fill="var(--accent-ink)">  messages_snapshot=</text>
+  <text x="476" y="127" font-size="9" fill="var(--accent-ink)">    list(messages),</text>
+  <text x="476" y="140" font-size="9" fill="var(--accent-ink)">  review_skills=True)</text>
+  <text x="476" y="158" font-size="9" fill="var(--muted)">turn_finalizer.py:433-456</text>
+  <text x="20" y="190" font-size="11" font-weight="700" fill="var(--ink)">④ Preference order · 选最早可行的一档（命中信号后必选其一）</text>
+  <rect x="10" y="200" width="158" height="84" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="220" font-size="9.5" font-weight="700" fill="var(--blue)">1 · PATCH</text>
+  <text x="18" y="238" font-size="9" fill="var(--blue)">更新当前已加载技能</text>
+  <text x="18" y="254" font-size="9" fill="var(--blue)">/skill-name 读过的那个</text>
+  <text x="18" y="276" font-size="9" fill="var(--muted)">:195-231</text>
+  <path d="M177,242 L169,238 L169,246 Z" fill="var(--line)"/>
+  <rect x="178" y="200" width="158" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="186" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">2 · UPDATE</text>
+  <text x="186" y="238" font-size="9" fill="var(--ink)">已有类级伞技能</text>
+  <text x="186" y="254" font-size="9" fill="var(--ink)">加子节 / 坑 / 触发器</text>
+  <path d="M345,242 L337,238 L337,246 Z" fill="var(--line)"/>
+  <rect x="346" y="200" width="158" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="354" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">3 · ADD 支持文件</text>
+  <text x="354" y="238" font-size="9" fill="var(--ink)">references/ 或 scripts/</text>
+  <text x="354" y="254" font-size="9" fill="var(--ink)">伞下加文件 + 挂指针</text>
+  <path d="M513,242 L505,238 L505,246 Z" fill="var(--line)"/>
+  <rect x="514" y="200" width="156" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="522" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">4 · CREATE 新伞</text>
+  <text x="522" y="238" font-size="9" fill="var(--ink)">命名必须类级</text>
+  <text x="522" y="256" font-size="9" font-weight="700" fill="var(--red)">禁 fix-X / PR号 / 报错串</text>
+  <rect x="10" y="300" width="404" height="58" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="20" y="320" font-size="10" font-weight="700" fill="var(--purple)">⑤ provenance · 落盘标产权</text>
+  <text x="20" y="338" font-size="9" fill="var(--purple)">is_background_review() → mark_agent_created(name)</text>
+  <text x="20" y="352" font-size="9" fill="var(--muted)">skill_manager_tool.py:1080-1084</text>
+  <line x1="414" y1="329" x2="424" y2="329" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M430,329 L422,325 L422,333 Z" fill="var(--line)"/>
+  <rect x="426" y="300" width="244" height="58" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="436" y="320" font-size="10" font-weight="700" fill="var(--accent-ink)">→ 交 curator 治理（第10章）</text>
+  <text x="436" y="338" font-size="9" fill="var(--accent-ink)">created_by:agent → 可 stale / 归档</text>
+  <text x="436" y="352" font-size="9" fill="var(--accent-ink)">手写技能永不触碰</text>
+  <rect x="10" y="372" width="660" height="92" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="24" y="392" font-size="10" font-weight="700" fill="var(--red)">⑥ 反例区 · review prompt 明令「不要捕获」(background_review.py:249-258)</text>
+  <text x="24" y="414" font-size="9" fill="var(--red)">✗ command not found · 缺二进制 · 未配凭证 —— 环境性失败，用户可修，非持久规则</text>
+  <text x="24" y="434" font-size="9" fill="var(--red)">✗ browser tools do not work —— 对工具的负面断言会硬化成数月的自我设限</text>
+  <text x="24" y="454" font-size="9" fill="var(--muted)">读这张图：先认 frustration 为一级信号，选最早可行档，且坚决不学环境坑与「工具坏了」</text>
+</svg>
+<div class="fig-cap"><b>一个真实抱怨走完学习闭环</b>：用户说 <span class="mono">this is too verbose, just give me the answer</span>——background_review 的 prompt 把这类 frustration 列为 <b>FIRST-CLASS skill signal</b>。nudge 计数 <span class="mono">_iters_since_skill</span> 累到 <span class="mono">_skill_nudge_interval=10</span> 就置 <span class="mono">_should_review_skills=True</span>，<b>但不往主对话注入一个字</b>；响应交付后才 fork 后台 review（传 <span class="mono">list(messages)</span> 快照）。它按 <b>Preference order</b> 四档选最早可行的动作——优先 PATCH 已加载技能，最后才 CREATE 类级新伞（且禁 <span class="mono">fix-X</span>/PR号命名）；落盘经 <span class="mono">is_background_review()</span> 标 <span class="mono">mark_agent_created</span> 交 curator 治理。<b>反例区</b>钉死：<span class="mono">command not found</span> 与 <span class="mono">browser tools do not work</span> 被明令丢弃——学错教训会硬化成数月的自我设限。</div>
+</div>
+
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「学习而不破缓存」</div>
   <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
@@ -724,6 +793,75 @@ or updated?"</span>.  Writes go straight to the memory + skill stores.
   <text x="125" y="229" text-anchor="middle" font-size="10" fill="var(--blue)">FTS5 finds old skills / sessions · ch.12</text>
 </svg>
 <div class="fig-cap"><b>The self-evolution loop</b>: four chapters mesh into one clockwise circuit — ① a learning nudge distills a reusable approach into a skill (ch.9, the entry point) → ② the curator gardens, marking unused skills stale then archiving (<b>never deleting</b>, ch.10) → ③ memory declaratively settles "who you are and what you prefer" (ch.11) → ④ cross-session FTS5 search recalls old skills and sessions (ch.12) → back to ①. With each link doing its job, Hermes genuinely <b>gets to know you the more you use it</b> — all without touching the sacred cache prefix.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 472" role="img" aria-label="One complaint runs the full learning loop: frustration is recognized as a FIRST-CLASS skill signal; the nudge counter _iters_since_skill reaches _skill_nudge_interval which is 10 and sets _should_review_skills=True without injecting any text into the main conversation; after the response is delivered a background review daemon is forked with a list(messages) snapshot; it picks the earliest fitting rung of the Preference order PATCH a loaded skill, UPDATE an existing umbrella, ADD a support file, CREATE a class-level umbrella with fix-X or PR-number names forbidden; the write is marked mark_agent_created via is_background_review and handed to the curator; the do-not-capture zone forbids command not found and browser tools do not work">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">One complaint runs the learning loop · nudge #10 → fork review → pick rung → mark</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">Input this is too verbose, just give me the answer; real data at each step</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🧠</text>
+  <rect x="10" y="62" width="206" height="104" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="20" y="82" font-size="10" font-weight="700" fill="var(--blue)">1 · Input signal · frustration</text>
+  <rect x="19" y="90" width="188" height="40" rx="5" fill="var(--code-bg)" stroke="var(--code-line)"/>
+  <text x="27" y="106" font-size="9" fill="var(--code-ink)">this is too verbose,</text>
+  <text x="27" y="122" font-size="9" fill="var(--code-ink)">just give me the answer</text>
+  <text x="20" y="148" font-size="9" font-weight="700" fill="var(--purple)">FIRST-CLASS skill signal</text>
+  <text x="20" y="162" font-size="9" fill="var(--muted)">background_review.py:180-186</text>
+  <line x1="216" y1="114" x2="236" y2="114" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M242,114 L234,110 L234,118 Z" fill="var(--line)"/>
+  <rect x="238" y="62" width="206" height="104" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="248" y="82" font-size="10" font-weight="700" fill="var(--ink)">2 · nudge counter hits threshold</text>
+  <text x="248" y="102" font-size="9" fill="var(--ink)">_iters_since_skill = 10</text>
+  <text x="248" y="118" font-size="9" fill="var(--ink)">&gt;= _skill_nudge_interval (10)</text>
+  <text x="248" y="136" font-size="9" font-weight="700" fill="var(--accent-ink)">_should_review_skills = True</text>
+  <text x="248" y="156" font-size="9" font-weight="700" fill="var(--amber)">✗ no text into the main chat</text>
+  <line x1="444" y1="114" x2="464" y2="114" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M470,114 L462,110 L462,118 Z" fill="var(--line)"/>
+  <rect x="466" y="62" width="204" height="104" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="476" y="82" font-size="10" font-weight="700" fill="var(--accent-ink)">3 · fork after response · daemon</text>
+  <text x="476" y="100" font-size="9" fill="var(--accent-ink)">_spawn_background_review(</text>
+  <text x="476" y="114" font-size="9" fill="var(--accent-ink)">  messages_snapshot=</text>
+  <text x="476" y="127" font-size="9" fill="var(--accent-ink)">    list(messages),</text>
+  <text x="476" y="140" font-size="9" fill="var(--accent-ink)">  review_skills=True)</text>
+  <text x="476" y="158" font-size="9" fill="var(--muted)">turn_finalizer.py:433-456</text>
+  <text x="20" y="190" font-size="11" font-weight="700" fill="var(--ink)">4 · Preference order · pick the earliest fitting rung (one must fire)</text>
+  <rect x="10" y="200" width="158" height="84" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="220" font-size="9.5" font-weight="700" fill="var(--blue)">1 · PATCH</text>
+  <text x="18" y="238" font-size="9" fill="var(--blue)">a currently-loaded skill</text>
+  <text x="18" y="254" font-size="9" fill="var(--blue)">the /skill-name you read</text>
+  <text x="18" y="276" font-size="9" fill="var(--muted)">:195-231</text>
+  <path d="M177,242 L169,238 L169,246 Z" fill="var(--line)"/>
+  <rect x="178" y="200" width="158" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="186" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">2 · UPDATE</text>
+  <text x="186" y="238" font-size="9" fill="var(--ink)">an existing umbrella</text>
+  <text x="186" y="254" font-size="9" fill="var(--ink)">add subsection / pitfall</text>
+  <path d="M345,242 L337,238 L337,246 Z" fill="var(--line)"/>
+  <rect x="346" y="200" width="158" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="354" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">3 · ADD support file</text>
+  <text x="354" y="238" font-size="9" fill="var(--ink)">references/ or scripts/</text>
+  <text x="354" y="254" font-size="9" fill="var(--ink)">under the umbrella</text>
+  <path d="M513,242 L505,238 L505,246 Z" fill="var(--line)"/>
+  <rect x="514" y="200" width="156" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="522" y="220" font-size="9.5" font-weight="700" fill="var(--ink)">4 · CREATE umbrella</text>
+  <text x="522" y="238" font-size="9" fill="var(--ink)">name must be class-level</text>
+  <text x="522" y="256" font-size="9" font-weight="700" fill="var(--red)">no fix-X / PR# / err-string</text>
+  <rect x="10" y="300" width="404" height="58" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="20" y="320" font-size="10" font-weight="700" fill="var(--purple)">5 · provenance · mark on write</text>
+  <text x="20" y="338" font-size="9" fill="var(--purple)">is_background_review() → mark_agent_created(name)</text>
+  <text x="20" y="352" font-size="9" fill="var(--muted)">skill_manager_tool.py:1080-1084</text>
+  <line x1="414" y1="329" x2="424" y2="329" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M430,329 L422,325 L422,333 Z" fill="var(--line)"/>
+  <rect x="426" y="300" width="244" height="58" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="436" y="320" font-size="10" font-weight="700" fill="var(--accent-ink)">→ handed to curator (ch.10)</text>
+  <text x="436" y="338" font-size="9" fill="var(--accent-ink)">created_by:agent → stale / archive</text>
+  <text x="436" y="352" font-size="9" fill="var(--accent-ink)">hand-made skills never touched</text>
+  <rect x="10" y="372" width="660" height="92" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="24" y="392" font-size="10" font-weight="700" fill="var(--red)">6 · Do-not-capture zone · the review prompt forbids it (background_review.py:249-258)</text>
+  <text x="24" y="414" font-size="9" fill="var(--red)">✗ command not found · missing binary · unconfigured creds —— user-fixable, not durable rules</text>
+  <text x="24" y="434" font-size="9" fill="var(--red)">✗ browser tools do not work —— negative tool claims harden into months of self-imposed refusals</text>
+  <text x="24" y="454" font-size="9" fill="var(--muted)">Read this figure: treat frustration as first-class, pick the earliest rung, never learn env pitfalls or tool-broken claims</text>
+</svg>
+<div class="fig-cap"><b>A real complaint runs the full learning loop</b>: the user says <span class="mono">this is too verbose, just give me the answer</span> — background_review's prompt lists such frustration as a <b>FIRST-CLASS skill signal</b>. The nudge counter <span class="mono">_iters_since_skill</span> reaches <span class="mono">_skill_nudge_interval=10</span> and sets <span class="mono">_should_review_skills=True</span>, <b>but injects not one byte</b> into the main chat; only after the response ships does it fork the background review (with a <span class="mono">list(messages)</span> snapshot). It picks the earliest fitting <b>Preference order</b> rung — PATCH a loaded skill first, CREATE a class-level umbrella last (and never <span class="mono">fix-X</span>/PR-number names); the write is tagged <span class="mono">mark_agent_created</span> via <span class="mono">is_background_review()</span> for the curator. The <b>do-not-capture zone</b> is hard: <span class="mono">command not found</span> and <span class="mono">browser tools do not work</span> are dropped — learning the wrong lesson hardens into months of self-imposed refusals.</div>
 </div>
 
 <div class="card collab">

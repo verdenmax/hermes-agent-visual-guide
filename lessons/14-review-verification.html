@@ -551,6 +551,59 @@ Verdict: APPROVED or REQUEST_CHANGES.
     <li><strong>谄媚对策靠结构</strong>：核心 prompt 无 anti-sycophancy 指令；靠「独立验证者 + fresh context」的 context 隔离对抗自我背书。</li>
   </ul>
 </div>
+
+<div class="figure">
+<svg viewBox="0 0 680 486" role="img" aria-label="同一份 diff config.py:45 把 == 改成 != 走两条独立路径：自报路径里子代理自报上传成功，你按 self-reports verify yourself 实测得到 HTTP 503 判为 C 幻觉被驳；审查路径里 spec 合规审只拿 diff 判 PASS，PASS 后质量审判 REQUEST_CHANGES 未加回归测试；fail-closed 规则要求 security_concerns 非空或无法解析则 passed 为 false；只有通过后才打 verified 提交前缀。">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">同一份 diff，三个真实判定 · 自报被驳 / PASS / REQUEST_CHANGES</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">例子：config.py:45 把 == 改成 !=，附一句「我做完了」的自报</text>
+  <text x="628" y="32" font-size="22">⚖️</text>
+
+  <rect x="20" y="50" width="640" height="68" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="32" y="68" font-size="10" font-weight="700" fill="var(--ink)">① 共享输入 · 生成者交 diff + 自报</text>
+  <text x="32" y="86" font-size="9" font-family="monospace" fill="var(--red)">- config.py:45    if val == expected:</text>
+  <text x="360" y="86" font-size="9" font-family="monospace" fill="var(--accent-ink)">+ config.py:45    if val != expected:</text>
+  <text x="32" y="106" font-size="9" fill="var(--muted)">附自报：✅ &quot;改完并已上传成功&quot;（一句 SELF-REPORT，未经核验）</text>
+
+  <rect x="20" y="132" width="324" height="170" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="34" y="150" font-size="10" font-weight="700" fill="var(--red)">路径 A · 自报被驳（:2923-2929）</text>
+  <text x="34" y="170" font-size="9" fill="var(--ink)">② 工具描述铁律：Subagent summaries</text>
+  <text x="34" y="184" font-size="9" font-family="monospace" fill="var(--ink)">are SELF-REPORTS, verify it yourself</text>
+  <text x="34" y="204" font-size="9" fill="var(--ink)">自报：✅ 上传成功</text>
+  <text x="34" y="222" font-size="9" fill="var(--ink)">→ 你 fetch URL 实测拿到把手：</text>
+  <rect x="34" y="230" width="120" height="22" rx="5" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="94" y="245" text-anchor="middle" font-size="10" font-weight="700" fill="var(--red)">HTTP 503</text>
+  <text x="34" y="272" font-size="9" fill="var(--muted)">须返可验证把手(URL/ID/路径/HTTP)</text>
+  <text x="34" y="290" font-size="9.5" font-weight="700" fill="var(--red)">判定：C·幻觉（真诚误报）→ 驳回</text>
+
+  <rect x="356" y="132" width="304" height="170" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="370" y="150" font-size="10" font-weight="700" fill="var(--blue)">路径 B · 独立审查（两阶段顺序门）</text>
+  <rect x="368" y="158" width="280" height="60" rx="7" fill="var(--panel)" stroke="var(--blue)"/>
+  <text x="378" y="174" font-size="9" font-weight="700" fill="var(--blue)">③ spec 合规审 · 只拿 diff（:127-130）</text>
+  <text x="378" y="190" font-size="9" fill="var(--ink)">reviewer 无生成者上下文，对照 spec</text>
+  <rect x="378" y="196" width="78" height="18" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="417" y="209" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">PASS (:113)</text>
+  <rect x="368" y="226" width="280" height="66" rx="7" fill="var(--panel)" stroke="var(--amber)"/>
+  <text x="378" y="242" font-size="9" font-weight="700" fill="var(--amber)">④ 质量审 · 仅 PASS 后（:142-145）</text>
+  <text x="378" y="258" font-size="9" fill="var(--ink)">Verdict: APPROVED / REQUEST_CHANGES</text>
+  <rect x="378" y="264" width="200" height="20" rx="5" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="388" y="278" font-size="9.5" font-weight="700" fill="var(--amber)">REQUEST_CHANGES — 未加回归测试</text>
+
+  <rect x="20" y="312" width="640" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="32" y="330" font-size="10" font-weight="700" fill="var(--purple)">⑤ fail-closed · 解析失败 / 有顾虑一律 false（:138-140）</text>
+  <text x="32" y="349" font-size="9" font-family="monospace" fill="var(--ink)">security_concerns non-empty -&gt; passed must be false</text>
+  <text x="360" y="349" font-size="9" font-family="monospace" fill="var(--ink)">Cannot parse diff -&gt; passed must be false</text>
+  <text x="32" y="368" font-size="9" font-family="monospace" fill="var(--purple)">{&quot;passed&quot;: false, &quot;security_concerns&quot;:[…], &quot;logic_errors&quot;:[…], &quot;summary&quot;:&quot;…&quot;}</text>
+  <text x="32" y="382" font-size="9" fill="var(--muted)">只有 security_concerns 与 logic_errors 两列表都空，passed 才为 true</text>
+
+  <rect x="20" y="396" width="640" height="40" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="32" y="414" font-size="10" font-weight="700" fill="var(--accent-ink)">⑥ 全部通过后才打 [verified]（:230-236）</text>
+  <text x="32" y="430" font-size="9" font-family="monospace" fill="var(--ink)">git add -A &amp;&amp; git commit -m &quot;[verified] &lt;description&gt;&quot;</text>
+
+  <rect x="20" y="446" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="460" text-anchor="middle" font-size="9" fill="var(--muted)">读这张图：同一份 diff，自报路径被实测 503 驳回，审查路径 spec→PASS 再质量→REQUEST_CHANGES；无 agent 自证、fail-closed</text>
+</svg>
+<div class="fig-cap"><b>同一份 diff，三个真实判定</b>：生成者把 <span class="mono">config.py:45</span> 的 <span class="mono">==</span> 改成 <span class="mono">!=</span> 并自报「上传成功」。<b>路径 A</b>（自报）按工具铁律「summaries are SELF-REPORTS, verify it yourself」实测 → 拿到 <span class="mono">HTTP 503</span> → 判 <b>C·幻觉</b>驳回；<b>路径 B</b>（独立审查）spec 合规审只拿 diff → <span class="mono">PASS</span>，PASS 后质量审 → <span class="mono">REQUEST_CHANGES</span>（未加回归测试）。整套 <b>fail-closed</b>：<span class="mono">security_concerns</span> 非空或无法解析则 <span class="mono">passed=false</span>，全过才打 <span class="mono">[verified]</span>。</div>
+</div>
 <div class="selftest">
 <h2>🧪 自测 · 想一想为什么这么设计</h2>
 <div class="quiz">
@@ -766,6 +819,59 @@ Verdict: APPROVED or REQUEST_CHANGES.
     <li><strong>Two-stage review</strong>: spec compliance (PASS/gaps) + code quality (APPROVED/REQUEST_CHANGES), "catch before they compound" — the generation-verification gap engineered.</li>
     <li><strong>Sycophancy countered structurally</strong>: the core prompt has no anti-sycophancy instruction; it relies on the "independent verifier + fresh context" isolation to resist self-endorsement.</li>
   </ul>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 486" role="img" aria-label="The same diff config.py:45 changing == to != takes two independent paths: on the self-report path the subagent claims upload succeeded, and following self-reports verify yourself you fetch and measure HTTP 503, judged C hallucination and rejected; on the review path spec compliance takes only the diff and returns PASS, then quality review returns REQUEST_CHANGES for missing regression test; fail-closed rules require passed false when security_concerns is non-empty or the diff cannot be parsed; only after passing is the verified commit prefix applied.">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">One diff, three real verdicts - self-report rejected / PASS / REQUEST_CHANGES</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">Example: config.py:45 changes == to !=, with an "I'm done" self-report</text>
+  <text x="628" y="32" font-size="22">⚖️</text>
+
+  <rect x="20" y="50" width="640" height="68" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="32" y="68" font-size="10" font-weight="700" fill="var(--ink)">1. Shared input - generator submits diff + self-report</text>
+  <text x="32" y="86" font-size="9" font-family="monospace" fill="var(--red)">- config.py:45    if val == expected:</text>
+  <text x="360" y="86" font-size="9" font-family="monospace" fill="var(--accent-ink)">+ config.py:45    if val != expected:</text>
+  <text x="32" y="106" font-size="9" fill="var(--muted)">self-report: ok &quot;changed and uploaded successfully&quot; (a SELF-REPORT, unverified)</text>
+
+  <rect x="20" y="132" width="324" height="170" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="34" y="150" font-size="10" font-weight="700" fill="var(--red)">Path A - self-report rejected (:2923-2929)</text>
+  <text x="34" y="170" font-size="9" fill="var(--ink)">2. Tool-desc rule: Subagent summaries</text>
+  <text x="34" y="184" font-size="9" font-family="monospace" fill="var(--ink)">are SELF-REPORTS, verify it yourself</text>
+  <text x="34" y="204" font-size="9" fill="var(--ink)">claim: ok uploaded successfully</text>
+  <text x="34" y="222" font-size="9" fill="var(--ink)">you fetch the URL and measure a handle:</text>
+  <rect x="34" y="230" width="120" height="22" rx="5" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="94" y="245" text-anchor="middle" font-size="10" font-weight="700" fill="var(--red)">HTTP 503</text>
+  <text x="34" y="272" font-size="9" fill="var(--muted)">demand a handle (URL/ID/path/HTTP status)</text>
+  <text x="34" y="290" font-size="9.5" font-weight="700" fill="var(--red)">verdict: C-hallucination (sincere) - rejected</text>
+
+  <rect x="356" y="132" width="304" height="170" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="370" y="150" font-size="10" font-weight="700" fill="var(--blue)">Path B - independent review (two-stage gate)</text>
+  <rect x="368" y="158" width="280" height="60" rx="7" fill="var(--panel)" stroke="var(--blue)"/>
+  <text x="378" y="174" font-size="9" font-weight="700" fill="var(--blue)">3. Spec compliance - diff only (:127-130)</text>
+  <text x="378" y="190" font-size="9" fill="var(--ink)">reviewer has no generator context, vs spec</text>
+  <rect x="378" y="196" width="78" height="18" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="417" y="209" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">PASS (:113)</text>
+  <rect x="368" y="226" width="280" height="66" rx="7" fill="var(--panel)" stroke="var(--amber)"/>
+  <text x="378" y="242" font-size="9" font-weight="700" fill="var(--amber)">4. Quality - only after PASS (:142-145)</text>
+  <text x="378" y="258" font-size="9" fill="var(--ink)">Verdict: APPROVED / REQUEST_CHANGES</text>
+  <rect x="378" y="264" width="220" height="20" rx="5" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="388" y="278" font-size="9.5" font-weight="700" fill="var(--amber)">REQUEST_CHANGES - no regression test</text>
+
+  <rect x="20" y="312" width="640" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="32" y="330" font-size="10" font-weight="700" fill="var(--purple)">5. Fail-closed - unparseable / any concern is false (:138-140)</text>
+  <text x="32" y="349" font-size="9" font-family="monospace" fill="var(--ink)">security_concerns non-empty -&gt; passed must be false</text>
+  <text x="360" y="349" font-size="9" font-family="monospace" fill="var(--ink)">Cannot parse diff -&gt; passed must be false</text>
+  <text x="32" y="368" font-size="9" font-family="monospace" fill="var(--purple)">{&quot;passed&quot;: false, &quot;security_concerns&quot;:[…], &quot;logic_errors&quot;:[…], &quot;summary&quot;:&quot;…&quot;}</text>
+  <text x="32" y="382" font-size="9" fill="var(--muted)">passed is true only when both security_concerns and logic_errors are empty</text>
+
+  <rect x="20" y="396" width="640" height="40" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="32" y="414" font-size="10" font-weight="700" fill="var(--accent-ink)">6. Only after everything passes apply [verified] (:230-236)</text>
+  <text x="32" y="430" font-size="9" font-family="monospace" fill="var(--ink)">git add -A &amp;&amp; git commit -m &quot;[verified] &lt;description&gt;&quot;</text>
+
+  <rect x="20" y="446" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="460" text-anchor="middle" font-size="9" fill="var(--muted)">Read this: one diff - the self-report path is rejected by a measured 503, the review path goes spec PASS then quality REQUEST_CHANGES; no agent self-certifies, fail-closed</text>
+</svg>
+<div class="fig-cap"><b>One diff, three real verdicts</b>: the generator changes <span class="mono">config.py:45</span> from <span class="mono">==</span> to <span class="mono">!=</span> and self-reports "uploaded successfully". <b>Path A</b> (self-report) follows the tool rule "summaries are SELF-REPORTS, verify it yourself", measures it -&gt; gets <span class="mono">HTTP 503</span> -&gt; judged <b>C-hallucination</b> and rejected; <b>Path B</b> (independent review) runs spec compliance on the diff only -&gt; <span class="mono">PASS</span>, then quality review -&gt; <span class="mono">REQUEST_CHANGES</span> (no regression test). The whole thing is <b>fail-closed</b>: <span class="mono">security_concerns</span> non-empty or unparseable means <span class="mono">passed=false</span>, and only when all pass is <span class="mono">[verified]</span> applied.</div>
 </div>
 <div class="selftest">
 <h2>🧪 Self-test - think about the design</h2>

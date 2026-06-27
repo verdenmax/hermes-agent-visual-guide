@@ -577,6 +577,82 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <p style="margin:.5rem 0 0">最后回到根:这套统一抽象之所以值得,落点还是<strong>单进程</strong>。一个进程才能共享同一份记忆、技能、cron 与配置状态,也才能让每会话的提示词缓存(项目铁律)长活;若二十个平台各起一个进程,共享状态、统一运维与缓存复用都无从谈起。窄腰把「平台数量」这条增长轴彻底挡在核心之外,核心的复杂度只跟「能力种类」走、不跟「平台个数」走——这才是单进程托管 20+ 平台在工程上真正成立的原因。</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 392" role="img" aria-label="实例图:一行真实 IRC 文本沿 adapter 逐字段翻成统一 MessageEvent。输入帧 :alice!~a@host PRIVMSG #ops :hermes: deploy staging。① 原生帧拆出 prefix command params;② 解析寻址得 sender_nick alice、target #ops、is_channel True 因井号、chat_type group,频道须被 @ 故剥 hermes: 前缀得 text deploy staging,未寻址则 return 丢弃;③ build_source 造出 SessionSource;④ MessageEvent 实例 text 等于 deploy staging、message_type 等于 MessageType.TEXT、message_id 等于 str int time 乘 1000;⑤ build_session_key 受 group_sessions_per_user True 与 thread_sessions_per_user False 调制路由;⑥ IRC 无 typing,send_typing 在边缘 no-op 吸收。">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:一行 IRC 文本 → 统一 MessageEvent</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">输入帧 :alice!~a@host PRIVMSG #ops :hermes: deploy staging</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🛰️</text>
+
+  <rect x="10" y="56" width="153" height="218" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="75" font-size="10" font-weight="700" fill="var(--blue)">① 原生 IRC 帧</text>
+  <text x="20" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:429</text>
+  <rect x="18" y="97" width="137" height="58" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="25" y="114" font-size="9" font-family="monospace" fill="var(--ink)">:alice!~a@host</text>
+  <text x="25" y="130" font-size="9" font-family="monospace" fill="var(--ink)">PRIVMSG #ops</text>
+  <text x="25" y="146" font-size="9" font-family="monospace" fill="var(--ink)">hermes: deploy staging</text>
+  <text x="20" y="176" font-size="9" fill="var(--muted)">prefix · command</text>
+  <text x="20" y="192" font-size="9" fill="var(--muted)">params[0]=#ops</text>
+  <text x="20" y="208" font-size="9" fill="var(--muted)">params[1]=trailing</text>
+  <text x="20" y="232" font-size="9" font-family="monospace" fill="var(--ink)">_extract_nick</text>
+  <text x="20" y="246" font-size="9" font-family="monospace" fill="var(--ink)">  (prefix)</text>
+
+  <path d="M165,160 L177,160 M173,156 L177,160 L173,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="179" y="56" width="153" height="218" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="189" y="75" font-size="10" font-weight="700" fill="var(--accent-ink)">② 解析+寻址</text>
+  <text x="189" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:447-475</text>
+  <text x="189" y="110" font-size="9" font-family="monospace" fill="var(--purple)">sender_nick=&quot;alice&quot;</text>
+  <text x="189" y="126" font-size="9" font-family="monospace" fill="var(--ink)">target=&quot;#ops&quot;</text>
+  <text x="189" y="142" font-size="9" font-family="monospace" fill="var(--ink)">is_channel=True (#)</text>
+  <text x="189" y="158" font-size="9" font-family="monospace" fill="var(--ink)">chat_type=&quot;group&quot;</text>
+  <text x="189" y="180" font-size="9" fill="var(--muted)">频道须被 @ → 剥 hermes:</text>
+  <text x="189" y="202" font-size="9" font-family="monospace" fill="var(--purple)">text=&quot;deploy</text>
+  <text x="189" y="216" font-size="9" font-family="monospace" fill="var(--purple)">  staging&quot;</text>
+  <text x="189" y="244" font-size="9" fill="var(--red)">未寻址 → return 丢弃</text>
+
+  <path d="M334,160 L346,160 M342,156 L346,160 L342,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="348" y="56" width="153" height="218" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="358" y="75" font-size="10" font-weight="700" fill="var(--accent-ink)">③ build_source</text>
+  <text x="358" y="89" font-size="9" fill="var(--muted)">base.py:5064</text>
+  <text x="358" y="112" font-size="9" font-family="monospace" fill="var(--ink)">build_source(</text>
+  <text x="358" y="128" font-size="9" font-family="monospace" fill="var(--ink)">  chat_id=&quot;#ops&quot;,</text>
+  <text x="358" y="144" font-size="9" font-family="monospace" fill="var(--ink)">  chat_type=&quot;group&quot;,</text>
+  <text x="358" y="160" font-size="9" font-family="monospace" fill="var(--ink)">  user_id=&quot;alice&quot;)</text>
+  <text x="358" y="186" font-size="9" font-family="monospace" fill="var(--accent-ink)">→ SessionSource</text>
+  <text x="358" y="214" font-size="9" fill="var(--muted)">归一化来源,</text>
+  <text x="358" y="230" font-size="9" fill="var(--muted)">供会话路由用</text>
+
+  <path d="M503,160 L515,160 M511,156 L515,160 L511,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="517" y="56" width="153" height="218" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="527" y="75" font-size="10" font-weight="700" fill="var(--purple)">④ MessageEvent</text>
+  <text x="527" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:501</text>
+  <text x="527" y="110" font-size="9" font-family="monospace" fill="var(--purple)">text=&quot;deploy</text>
+  <text x="527" y="124" font-size="9" font-family="monospace" fill="var(--purple)">  staging&quot;</text>
+  <text x="527" y="142" font-size="9" font-family="monospace" fill="var(--ink)">message_type=</text>
+  <text x="527" y="156" font-size="9" font-family="monospace" fill="var(--ink)">  MessageType.TEXT</text>
+  <text x="527" y="174" font-size="9" font-family="monospace" fill="var(--ink)">source=SessionSource</text>
+  <text x="527" y="192" font-size="9" font-family="monospace" fill="var(--ink)">message_id=</text>
+  <text x="527" y="206" font-size="9" font-family="monospace" fill="var(--ink)">  str(int(time*1000))</text>
+  <text x="527" y="232" font-size="9" fill="var(--muted)">所有适配器</text>
+  <text x="527" y="248" font-size="9" fill="var(--muted)">都产出它</text>
+
+  <rect x="10" y="284" width="330" height="62" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="303" font-size="10" font-weight="700" fill="var(--ink)">⑤ session_key 路由 · base.py:4249</text>
+  <text x="20" y="321" font-size="9" font-family="monospace" fill="var(--ink)">build_session_key(source,</text>
+  <text x="20" y="335" font-size="9" font-family="monospace" fill="var(--ink)">  group_sessions_per_user=True, thread_…=False)</text>
+
+  <rect x="348" y="284" width="322" height="62" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="358" y="303" font-size="10" font-weight="700" fill="var(--ink)">⑥ 能力降级 · adapter.py:281</text>
+  <text x="358" y="321" font-size="9" font-family="monospace" fill="var(--ink)">send_typing(chat_id) → pass</text>
+  <text x="358" y="335" font-size="9" fill="var(--muted)">IRC 无 typing 指示,边缘 no-op 吸收</text>
+
+  <text x="20" y="368" font-size="9.5" fill="var(--muted)">读这张图:一行平台原生文本止步于 adapter;核心只见统一 MessageEvent + session_key,从不认识 IRC 帧。</text>
+</svg>
+<div class="fig-cap"><b>实例:一行 IRC 文本 → MessageEvent</b>:拿真实帧 <span class="mono">:alice!~a@host PRIVMSG #ops :hermes: deploy staging</span> 走一遍——① 拆 <span class="mono">prefix/command/params</span>;② <span class="mono">_extract_nick</span> 得 <span class="mono">sender_nick=&quot;alice&quot;</span>、<span class="mono">target=&quot;#ops&quot;</span>、<span class="mono">is_channel=True</span>(<span class="mono">#</span>)→<span class="mono">chat_type=&quot;group&quot;</span>,频道须被 @ 故剥 <span class="mono">hermes:</span> 前缀得 <span class="mono">text=&quot;deploy staging&quot;</span>,未寻址直接 <span class="mono">return</span> 丢弃;③ <span class="mono">build_source</span> 造 <span class="mono">SessionSource</span>;④ <span class="mono">MessageEvent</span> 真实实例(<span class="mono">message_id=str(int(time*1000))</span>);⑤ <span class="mono">build_session_key</span> 受 <span class="mono">group_sessions_per_user=True</span>/<span class="mono">thread_sessions_per_user=False</span> 调制;⑥ IRC 无 typing,<span class="mono">send_typing</span> 在边缘 <span class="mono">pass</span>。每个值都能在 <span class="mono">irc/adapter.py</span> 与 <span class="mono">base.py</span> 对应行找到。</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
@@ -827,6 +903,82 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <p style="margin:.5rem 0 0">It's also the ultimate expression of the <strong>narrow waist</strong> (ch.4): even the adapters for mainstream platforms like Telegram/Discord/Slack are <strong>edge plugins</strong>, and the core gateway interacts mainly through the BasePlatformAdapter abstraction. (To be honest, <span class="mono">base.py</span> still keeps a few platform special-cases — e.g. Telegram DM-topic reply anchors, Feishu threads — but those are legacy corners, not the main-path architecture.) The anti-pattern: piling each platform's whole logic into the core as <span class="mono">if platform == ...</span> branches — that bloats the core explosively with each platform.</p>
   <p style="margin:.5rem 0 0">The abstraction's flexibility also shows in <strong>"one platform, two transports"</strong>: WhatsApp carries both the unofficial Baileys bridge (now a plugin, <span class="mono">plugins/platforms/whatsapp/adapter.py</span>) and the built-in official Cloud API (<span class="mono">whatsapp_cloud.py</span>), both sharing the protocol-agnostic gating, mention parsing, broadcast filtering, and markdown conversion in <span class="mono">WhatsAppBehaviorMixin</span> (<span class="mono">whatsapp_common.py</span>), while each owns only its transport and claims its own <span class="mono">Platform</span> enum value so both can run against different numbers at once (the mixin must come before the base class so its <span class="mono">format_message</span> overrides the default). Not two copies of the logic, but <strong>an abstract base class + a behavior mixin</strong> — the abstraction kills duplication even "within one platform."</p>
   <p style="margin:.5rem 0 0">Finally, back to the root: this unified abstraction is worth it because of <strong>the single process</strong>. One process is what lets the same memory, skills, cron, and config state be shared, and what keeps each conversation's prompt cache (a project hard rule) alive long-term; if twenty platforms each ran their own process, shared state, unified ops, and cache reuse would all be off the table. The narrow waist keeps the "number of platforms" growth axis entirely out of the core, so core complexity tracks "kinds of capability," not "count of platforms" — that's the real reason hosting 20+ platforms in one process is engineering-feasible at all.</p>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 392" role="img" aria-label="Worked example: one real IRC line is translated field-by-field through the adapter into a unified MessageEvent. Input frame :alice!~a@host PRIVMSG #ops :hermes: deploy staging. 1 native frame splits into prefix command params; 2 parse and address yields sender_nick alice, target #ops, is_channel True because of the hash, chat_type group, and since channels must be addressed it strips the hermes: prefix to get text deploy staging, an unaddressed line returns and is dropped; 3 build_source makes a SessionSource; 4 the MessageEvent instance has text deploy staging, message_type MessageType.TEXT, message_id str int time times 1000; 5 build_session_key is modulated by group_sessions_per_user True and thread_sessions_per_user False; 6 IRC has no typing so send_typing is a no-op absorbed at the edge.">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">Example: one IRC line → unified MessageEvent</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">input frame :alice!~a@host PRIVMSG #ops :hermes: deploy staging</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🛰️</text>
+
+  <rect x="10" y="56" width="153" height="218" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="75" font-size="10" font-weight="700" fill="var(--blue)">1 Native IRC frame</text>
+  <text x="20" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:429</text>
+  <rect x="18" y="97" width="137" height="58" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="25" y="114" font-size="9" font-family="monospace" fill="var(--ink)">:alice!~a@host</text>
+  <text x="25" y="130" font-size="9" font-family="monospace" fill="var(--ink)">PRIVMSG #ops</text>
+  <text x="25" y="146" font-size="9" font-family="monospace" fill="var(--ink)">hermes: deploy staging</text>
+  <text x="20" y="176" font-size="9" fill="var(--muted)">prefix · command</text>
+  <text x="20" y="192" font-size="9" fill="var(--muted)">params[0]=#ops</text>
+  <text x="20" y="208" font-size="9" fill="var(--muted)">params[1]=trailing</text>
+  <text x="20" y="232" font-size="9" font-family="monospace" fill="var(--ink)">_extract_nick</text>
+  <text x="20" y="246" font-size="9" font-family="monospace" fill="var(--ink)">  (prefix)</text>
+
+  <path d="M165,160 L177,160 M173,156 L177,160 L173,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="179" y="56" width="153" height="218" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="189" y="75" font-size="10" font-weight="700" fill="var(--accent-ink)">2 Parse + address</text>
+  <text x="189" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:447-475</text>
+  <text x="189" y="110" font-size="9" font-family="monospace" fill="var(--purple)">sender_nick=&quot;alice&quot;</text>
+  <text x="189" y="126" font-size="9" font-family="monospace" fill="var(--ink)">target=&quot;#ops&quot;</text>
+  <text x="189" y="142" font-size="9" font-family="monospace" fill="var(--ink)">is_channel=True (#)</text>
+  <text x="189" y="158" font-size="9" font-family="monospace" fill="var(--ink)">chat_type=&quot;group&quot;</text>
+  <text x="189" y="180" font-size="9" fill="var(--muted)">channel needs @ → strip hermes:</text>
+  <text x="189" y="202" font-size="9" font-family="monospace" fill="var(--purple)">text=&quot;deploy</text>
+  <text x="189" y="216" font-size="9" font-family="monospace" fill="var(--purple)">  staging&quot;</text>
+  <text x="189" y="244" font-size="9" fill="var(--red)">unaddressed → return drop</text>
+
+  <path d="M334,160 L346,160 M342,156 L346,160 L342,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="348" y="56" width="153" height="218" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="358" y="75" font-size="10" font-weight="700" fill="var(--accent-ink)">3 build_source</text>
+  <text x="358" y="89" font-size="9" fill="var(--muted)">base.py:5064</text>
+  <text x="358" y="112" font-size="9" font-family="monospace" fill="var(--ink)">build_source(</text>
+  <text x="358" y="128" font-size="9" font-family="monospace" fill="var(--ink)">  chat_id=&quot;#ops&quot;,</text>
+  <text x="358" y="144" font-size="9" font-family="monospace" fill="var(--ink)">  chat_type=&quot;group&quot;,</text>
+  <text x="358" y="160" font-size="9" font-family="monospace" fill="var(--ink)">  user_id=&quot;alice&quot;)</text>
+  <text x="358" y="186" font-size="9" font-family="monospace" fill="var(--accent-ink)">→ SessionSource</text>
+  <text x="358" y="214" font-size="9" fill="var(--muted)">normalized source,</text>
+  <text x="358" y="230" font-size="9" fill="var(--muted)">for session routing</text>
+
+  <path d="M503,160 L515,160 M511,156 L515,160 L511,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="517" y="56" width="153" height="218" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="527" y="75" font-size="10" font-weight="700" fill="var(--purple)">4 MessageEvent</text>
+  <text x="527" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:501</text>
+  <text x="527" y="110" font-size="9" font-family="monospace" fill="var(--purple)">text=&quot;deploy</text>
+  <text x="527" y="124" font-size="9" font-family="monospace" fill="var(--purple)">  staging&quot;</text>
+  <text x="527" y="142" font-size="9" font-family="monospace" fill="var(--ink)">message_type=</text>
+  <text x="527" y="156" font-size="9" font-family="monospace" fill="var(--ink)">  MessageType.TEXT</text>
+  <text x="527" y="174" font-size="9" font-family="monospace" fill="var(--ink)">source=SessionSource</text>
+  <text x="527" y="192" font-size="9" font-family="monospace" fill="var(--ink)">message_id=</text>
+  <text x="527" y="206" font-size="9" font-family="monospace" fill="var(--ink)">  str(int(time*1000))</text>
+  <text x="527" y="232" font-size="9" fill="var(--muted)">all adapters</text>
+  <text x="527" y="248" font-size="9" fill="var(--muted)">produce it</text>
+
+  <rect x="10" y="284" width="330" height="62" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="303" font-size="10" font-weight="700" fill="var(--ink)">5 session_key routing · base.py:4249</text>
+  <text x="20" y="321" font-size="9" font-family="monospace" fill="var(--ink)">build_session_key(source,</text>
+  <text x="20" y="335" font-size="9" font-family="monospace" fill="var(--ink)">  group_sessions_per_user=True, thread_…=False)</text>
+
+  <rect x="348" y="284" width="322" height="62" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="358" y="303" font-size="10" font-weight="700" fill="var(--ink)">6 Capability fallback · adapter.py:281</text>
+  <text x="358" y="321" font-size="9" font-family="monospace" fill="var(--ink)">send_typing(chat_id) → pass</text>
+  <text x="358" y="335" font-size="9" fill="var(--muted)">IRC has no typing, edge no-op absorbs it</text>
+
+  <text x="20" y="368" font-size="9.5" fill="var(--muted)">Read this: one native platform line stops at the adapter; the core sees only a unified MessageEvent + session_key, never the IRC frame.</text>
+</svg>
+<div class="fig-cap"><b>Example: one IRC line → MessageEvent</b>: take the real frame <span class="mono">:alice!~a@host PRIVMSG #ops :hermes: deploy staging</span> and walk it through — 1 split <span class="mono">prefix/command/params</span>; 2 <span class="mono">_extract_nick</span> gives <span class="mono">sender_nick=&quot;alice&quot;</span>, <span class="mono">target=&quot;#ops&quot;</span>, <span class="mono">is_channel=True</span> (<span class="mono">#</span>) → <span class="mono">chat_type=&quot;group&quot;</span>; since channels must be addressed it strips the <span class="mono">hermes:</span> prefix to <span class="mono">text=&quot;deploy staging&quot;</span>, and an unaddressed line just <span class="mono">return</span>s (dropped); 3 <span class="mono">build_source</span> makes a <span class="mono">SessionSource</span>; 4 the real <span class="mono">MessageEvent</span> instance (<span class="mono">message_id=str(int(time*1000))</span>); 5 <span class="mono">build_session_key</span> is modulated by <span class="mono">group_sessions_per_user=True</span>/<span class="mono">thread_sessions_per_user=False</span>; 6 IRC has no typing, so <span class="mono">send_typing</span> is a <span class="mono">pass</span>. Every value traces to a line in <span class="mono">irc/adapter.py</span> and <span class="mono">base.py</span>.</div>
 </div>
 
 <div class="card key">

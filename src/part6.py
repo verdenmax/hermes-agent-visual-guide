@@ -131,6 +131,80 @@ agent = AIAgent(
 
 <p>另一头的 catchup 是同样的「防雪崩」思路。设想笔记本合盖一整晚,开机时若把积压的几十次「每 5 分钟」补跑一股脑全发,既刷屏又烧钱。<span class="mono">_compute_grace_seconds</span> 把容忍窗口设为<strong>半个周期</strong>(clamp 在 120s–2h):错过得不久就补跑一次,错过太久就把 <span class="mono">next_run_at</span> <strong>快进</strong>到下一个整点、丢弃积压。而 <span class="mono">.tick.lock</span> 文件锁(底层是 <span class="mono">fcntl.flock</span>)保证哪怕网关与独立调度器同时在跑,同一时刻也只有一个 tick 真正推进任务。三个阀各管一类失控——不活动超时管「跑飞」、catchup 管「错过」、文件锁管「重复」——合起来把「定时」从玩具做成可托付的基础设施。值得一提的是,这套阀门的设计取向与第 13 章委派的「中断级联」同源:都不追求绝对掐死,而是给失控留一个<strong>可预期、可恢复</strong>的兜底,让正常路径丝毫不受影响、异常路径也能优雅止损。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 404" role="img" aria-label="三条真实调度表达式跑一遍:基准 now 为 2026-06-27T19:35;0 9 星号 经 parse_schedule 解析成 kind cron,croniter 算出 2026-06-28T09:00,grace 用 86400 除 2 等 43200 被 clamp 到 MAX 7200 秒;every 5m 解析成 kind interval minutes 5,下次触发 19:40,grace 300 除 2 等 150 秒;2026-06-28T14:00 解析成 kind once,下次触发即该时刻,grace 取 MIN 120 秒;底部 catchup 判定错过不超过 grace 就补跑一次,超过就快进丢弃积压">
+  <rect x="14" y="12" width="652" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="26" y="31" font-size="11.5" fill="var(--ink)">⏱ 基准 <tspan class="mono" font-weight="700" fill="var(--purple)">now = 2026-06-27T19:35</tspan> · grace 规则 = period//2 再 clamp(MIN 120s, MAX 7200s)</text>
+
+  <text x="16" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">① 调度表达式</text>
+  <text x="174" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">② parse_schedule →</text>
+  <text x="332" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">③ compute_next_run →</text>
+  <text x="490" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">④ _compute_grace_seconds</text>
+
+  <rect x="14" y="64" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">A · 每天 9 点</text>
+  <text x="22" y="105" class="mono" font-size="11" font-weight="700" fill="var(--ink)">"0 9 * * *"</text>
+  <text x="165" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="64" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="82" font-size="10" fill="var(--accent-ink)">{kind:&quot;cron&quot;,</text>
+  <text x="180" y="105" class="mono" font-size="9.5" fill="var(--ink)">expr:&quot;0 9 * * *&quot;}</text>
+  <text x="323" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="64" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="82" font-size="9.5" fill="var(--muted)">croniter 下一个整点</text>
+  <text x="338" y="105" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-28T09:00</text>
+  <text x="481" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="64" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="82" font-size="9.5" fill="var(--ink)">86400//2 = 43200</text>
+  <text x="496" y="105" font-size="10" font-weight="700" fill="var(--amber)">→ clamp MAX 7200s (2h)</text>
+
+  <rect x="14" y="128" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="146" font-size="9.5" font-weight="700" fill="var(--blue)">B · 每 5 分钟</text>
+  <text x="22" y="169" class="mono" font-size="11" font-weight="700" fill="var(--ink)">"every 5m"</text>
+  <text x="165" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="128" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="146" font-size="10" fill="var(--accent-ink)">{kind:&quot;interval&quot;,</text>
+  <text x="180" y="169" class="mono" font-size="9.5" fill="var(--ink)">minutes:5}</text>
+  <text x="323" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="128" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="146" font-size="9.5" fill="var(--muted)">now + 5m</text>
+  <text x="338" y="169" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-27T19:40</text>
+  <text x="481" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="128" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="146" font-size="9.5" fill="var(--ink)">300//2 = 150</text>
+  <text x="496" y="169" font-size="10" font-weight="700" fill="var(--amber)">150s ≥ MIN 120s ✓</text>
+
+  <rect x="14" y="192" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="210" font-size="9.5" font-weight="700" fill="var(--blue)">C · 指定时刻一次</text>
+  <text x="22" y="233" class="mono" font-size="9.5" font-weight="700" fill="var(--ink)">"2026-06-28T14:00"</text>
+  <text x="165" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="192" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="210" font-size="10" fill="var(--accent-ink)">{kind:&quot;once&quot;,</text>
+  <text x="180" y="233" class="mono" font-size="9" fill="var(--ink)">run_at:&quot;…T14:00&quot;}</text>
+  <text x="323" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="192" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="210" font-size="9.5" fill="var(--muted)">即该时刻</text>
+  <text x="338" y="233" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-28T14:00</text>
+  <text x="481" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="192" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="210" font-size="9.5" fill="var(--ink)">once → 无周期</text>
+  <text x="496" y="233" font-size="10" font-weight="700" fill="var(--amber)">→ 取 MIN 120s</text>
+
+  <rect x="14" y="262" width="652" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="279" class="mono" font-size="9" fill="var(--muted)">cron/jobs.py:498  return max(MIN_GRACE, min(grace, MAX_GRACE))   # MIN 120 · MAX 7200</text>
+
+  <text x="16" y="306" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ catchup 判定 · tick 醒来时距应跑时刻已过 Δ</text>
+  <rect x="14" y="312" width="324" height="46" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="332" font-size="10.5" fill="var(--accent-ink)">Δ ≤ grace → <tspan font-weight="700">补跑一次</tspan>(catch up)</text>
+  <text x="26" y="350" font-size="9" fill="var(--muted)">错过不久,该跑的那次仍要补上</text>
+  <rect x="346" y="312" width="320" height="46" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="358" y="332" font-size="10.5" fill="var(--red)">Δ &gt; grace → <tspan font-weight="700">快进 next_run · 丢积压</tspan></text>
+  <text x="358" y="350" font-size="9" fill="var(--muted)">免得开机把几十次堆积一股脑全跑</text>
+
+  <text x="16" y="380" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图:三条表达式各撞一个 clamp 边界 —— cron 撞 MAX 7200、interval 落区间内、once 撞 MIN 120。</text>
+</svg>
+<div class="fig-cap"><b>三条调度表达式跑一遍</b>:同一基准 <span class="mono">now=2026-06-27T19:35</span>,<span class="mono">parse_schedule</span> 把三种写法归一成 <span class="mono">cron/interval/once</span>,<span class="mono">compute_next_run</span> 算出各自下次触发,<span class="mono">_compute_grace_seconds</span> 用 <span class="mono">period//2</span> 再 clamp 出 grace:<b>cron 的 43200s 撞上 MAX 7200</b>、<b>interval 的 150s 落在区间内</b>、<b>once 直接取 MIN 120</b>。三条各演示一个边界,catchup 据 grace 决定补跑还是快进。</div>
+</div>
+
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><span class="mono">tick</span> 循环(<span class="mono">.tick.lock</span> 文件锁防重复)扫描到期任务</span></div>
   <div class="step"><span class="num">2</span><span class="sc">按 <span class="mono">parse_schedule</span> 的结构算下次触发;过了 catchup 窗口就快进</span></div>
@@ -301,6 +375,80 @@ agent = AIAgent(
 </div>
 
 <p>The catchup valve at the other end follows the same "anti-avalanche" logic. Imagine the laptop is closed all night; on boot, firing dozens of backlogged "every 5 min" runs at once would both flood you and burn money. <span class="mono">_compute_grace_seconds</span> sets the tolerance window to <strong>half the period</strong> (clamped 120s–2h): miss by a little and it catches up once; miss by a lot and it <strong>fast-forwards</strong> <span class="mono">next_run_at</span> to the next slot, dropping the backlog. The <span class="mono">.tick.lock</span> file lock (<span class="mono">fcntl.flock</span> underneath) ensures that even with the gateway and a standalone scheduler both running, only one tick advances jobs at a time. Three valves, three failure modes — inactivity for "runaway," catchup for "missed," the lock for "duplicate" — together turning "scheduling" from a toy into infrastructure you can trust. Notably, this valve philosophy shares roots with ch.13's delegation "interrupt cascade": neither chases an absolute kill, but gives runaways a <strong>predictable, recoverable</strong> backstop, leaving the normal path entirely unaffected while letting the abnormal one fail gracefully.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 404" role="img" aria-label="Three real schedule expressions walked through: baseline now is 2026-06-27T19:35; 0 9 star star star parses to kind cron, croniter yields 2026-06-28T09:00, grace is 86400 over 2 equals 43200 clamped to MAX 7200 seconds; every 5m parses to kind interval minutes 5, next run 19:40, grace is 300 over 2 equals 150 seconds; 2026-06-28T14:00 parses to kind once, next run is that instant, grace takes MIN 120 seconds; bottom catchup decides miss within grace catches up once, miss beyond grace fast-forwards and drops the backlog">
+  <rect x="14" y="12" width="652" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="26" y="31" font-size="11.5" fill="var(--ink)">⏱ baseline <tspan class="mono" font-weight="700" fill="var(--purple)">now = 2026-06-27T19:35</tspan> · grace rule = period//2 then clamp(MIN 120s, MAX 7200s)</text>
+
+  <text x="16" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">① schedule string</text>
+  <text x="174" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">② parse_schedule →</text>
+  <text x="332" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">③ compute_next_run →</text>
+  <text x="490" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">④ _compute_grace_seconds</text>
+
+  <rect x="14" y="64" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">A · daily 9am</text>
+  <text x="22" y="105" class="mono" font-size="11" font-weight="700" fill="var(--ink)">"0 9 * * *"</text>
+  <text x="165" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="64" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="82" font-size="10" fill="var(--accent-ink)">{kind:&quot;cron&quot;,</text>
+  <text x="180" y="105" class="mono" font-size="9.5" fill="var(--ink)">expr:&quot;0 9 * * *&quot;}</text>
+  <text x="323" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="64" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="82" font-size="9.5" fill="var(--muted)">croniter next slot</text>
+  <text x="338" y="105" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-28T09:00</text>
+  <text x="481" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="64" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="82" font-size="9.5" fill="var(--ink)">86400//2 = 43200</text>
+  <text x="496" y="105" font-size="10" font-weight="700" fill="var(--amber)">→ clamp MAX 7200s (2h)</text>
+
+  <rect x="14" y="128" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="146" font-size="9.5" font-weight="700" fill="var(--blue)">B · every 5 min</text>
+  <text x="22" y="169" class="mono" font-size="11" font-weight="700" fill="var(--ink)">"every 5m"</text>
+  <text x="165" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="128" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="146" font-size="10" fill="var(--accent-ink)">{kind:&quot;interval&quot;,</text>
+  <text x="180" y="169" class="mono" font-size="9.5" fill="var(--ink)">minutes:5}</text>
+  <text x="323" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="128" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="146" font-size="9.5" fill="var(--muted)">now + 5m</text>
+  <text x="338" y="169" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-27T19:40</text>
+  <text x="481" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="128" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="146" font-size="9.5" fill="var(--ink)">300//2 = 150</text>
+  <text x="496" y="169" font-size="10" font-weight="700" fill="var(--amber)">150s ≥ MIN 120s ✓</text>
+
+  <rect x="14" y="192" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="210" font-size="9.5" font-weight="700" fill="var(--blue)">C · once at instant</text>
+  <text x="22" y="233" class="mono" font-size="9.5" font-weight="700" fill="var(--ink)">"2026-06-28T14:00"</text>
+  <text x="165" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="192" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="210" font-size="10" fill="var(--accent-ink)">{kind:&quot;once&quot;,</text>
+  <text x="180" y="233" class="mono" font-size="9" fill="var(--ink)">run_at:&quot;…T14:00&quot;}</text>
+  <text x="323" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="192" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="210" font-size="9.5" fill="var(--muted)">that instant</text>
+  <text x="338" y="233" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-28T14:00</text>
+  <text x="481" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="192" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="210" font-size="9.5" fill="var(--ink)">once → no period</text>
+  <text x="496" y="233" font-size="10" font-weight="700" fill="var(--amber)">→ takes MIN 120s</text>
+
+  <rect x="14" y="262" width="652" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="279" class="mono" font-size="9" fill="var(--muted)">cron/jobs.py:498  return max(MIN_GRACE, min(grace, MAX_GRACE))   # MIN 120 · MAX 7200</text>
+
+  <text x="16" y="306" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ catchup check · when tick wakes, Δ since the due instant</text>
+  <rect x="14" y="312" width="324" height="46" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="332" font-size="10.5" fill="var(--accent-ink)">Δ ≤ grace → <tspan font-weight="700">catch up once</tspan></text>
+  <text x="26" y="350" font-size="9" fill="var(--muted)">missed by a little, still run that one</text>
+  <rect x="346" y="312" width="320" height="46" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="358" y="332" font-size="10.5" fill="var(--red)">Δ &gt; grace → <tspan font-weight="700">fast-forward · drop backlog</tspan></text>
+  <text x="358" y="350" font-size="9" fill="var(--muted)">so boot does not fire dozens at once</text>
+
+  <text x="16" y="380" font-size="10.5" font-weight="700" fill="var(--muted)">Read this: each expression hits one clamp edge — cron hits MAX 7200, interval lands inside, once hits MIN 120.</text>
+</svg>
+<div class="fig-cap"><b>Three schedule expressions walked through</b>: at one baseline <span class="mono">now=2026-06-27T19:35</span>, <span class="mono">parse_schedule</span> folds three syntaxes into <span class="mono">cron/interval/once</span>, <span class="mono">compute_next_run</span> yields each next fire time, and <span class="mono">_compute_grace_seconds</span> takes <span class="mono">period//2</span> then clamps: <b>cron's 43200s hits MAX 7200</b>, <b>interval's 150s lands inside</b>, <b>once takes MIN 120</b>. Each shows one edge; catchup uses grace to decide catch-up vs fast-forward.</div>
+</div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><span class="mono">tick</span> loop (<span class="mono">.tick.lock</span> file lock prevents duplicates) scans due jobs</span></div>
@@ -552,6 +700,72 @@ LESSON_22 = {
 <p>锁不变量换来的是什么?是<strong>能跟着系统一起演化</strong>的测试。「gemini 目录里至少有一个模型」「每个模型都有对应的上下文长度」这类断言,锁的是两份数据之间<strong>必须成立的关系</strong>,数据怎么更新都不破。这恰好和「窄腰」哲学互为表里:核心的契约越稳、越少,系统就越<strong>好测</strong>;反过来,正因为腰部的不变量被牢牢锁住,边缘才敢放心地快速扩张新平台、新模型、新 provider(参见讲工具集与约束的那几章)。所以评测在这里不是给代码拍快照,而是<strong>守护整个系统在持续迭代中的正确性</strong>——它和窄腰一道,让「核心稳、边缘野蛮生长」这件事在工程上可持续。</p>
 <p>再往深一层看,评测的本职其实是<strong>量化误差累积</strong>(约束 F)。agent 在多轮自主里,一个小判断失误会顺着后续步骤滚成雪球;不变量测试守住的,正是「这些必须成立的关系别在迭代里悄悄被破坏」。把它和轨迹的质量门槛并排看会更清楚:质量门槛挡住低质数据流进训练、免得把误差<strong>固化进下一代模型</strong>;不变量测试挡住回归在一次次提交中慢慢累积。一个在数据入口把关、一个在代码演化时把关,前后两道闸,都是在跟<strong>误差累积</strong>这条 LLM 固有约束较劲——这也是本章三件事(批量、轨迹、评测)其实围着同一个根在转的原因。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 452" role="img" aria-label="一条真实对话转成一条 ShareGPT 训练样本:用户 prompt 统计当前目录有多少 py 文件,跑两个 API 调用;convert_to_trajectory_format 产出 conversations 数组,依次是 from system 带 tools 标签、from human 原始 prompt、from gpt 带 think 推理块和 tool_call 调用 terminal、from tool 带 tool_response 返回 7;外层 batch_runner 落盘记录含 tool_stats terminal count 1 success 1 failure 0、metadata batch_num 0、api_calls 2;底部质检闸 has_any_reasoning 为真就追加进 jsonl,全程空 think 则 continue 丢弃但仍标记完成">
+  <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="26" y="30" font-size="11" fill="var(--ink)">输入对话:user prompt <tspan class="mono" font-weight="700" fill="var(--blue)">"统计当前目录有多少 .py 文件"</tspan> · 跑 2 个 API 调用 → 转 ShareGPT 样本</text>
+
+  <rect x="14" y="48" width="400" height="300" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="22" y="64" font-size="9.5" font-weight="700" fill="var(--purple)">conversations[] · ShareGPT {from, value}(不是 OpenAI role/content)</text>
+
+  <rect x="22" y="70" width="384" height="42" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="30" y="86" class="mono" font-size="9" fill="var(--accent-ink)">{"from":"system",</text>
+  <text x="30" y="103" class="mono" font-size="9" fill="var(--ink)"> "value":"…&lt;tools&gt; 工具签名 &lt;/tools&gt;…"}</text>
+
+  <rect x="22" y="116" width="384" height="38" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="30" y="131" class="mono" font-size="9" fill="var(--blue)">{"from":"human",</text>
+  <text x="30" y="148" class="mono" font-size="9" fill="var(--ink)"> "value":"统计当前目录有多少 .py 文件"}</text>
+
+  <rect x="22" y="158" width="384" height="100" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="30" y="174" class="mono" font-size="9" fill="var(--purple)">{"from":"gpt", "value":</text>
+  <text x="30" y="190" class="mono" font-size="9" fill="var(--ink)"> &lt;think&gt;先 ls 列出再 wc 计数&lt;/think&gt;</text>
+  <text x="30" y="206" class="mono" font-size="9" fill="var(--ink)"> &lt;tool_call&gt;</text>
+  <text x="30" y="222" class="mono" font-size="9" fill="var(--ink)"> {"name": "terminal", "arguments":</text>
+  <text x="30" y="238" class="mono" font-size="9" fill="var(--ink)"> {"command": "ls *.py | wc -l"}}</text>
+  <text x="30" y="254" class="mono" font-size="9" fill="var(--ink)"> &lt;/tool_call&gt;}</text>
+
+  <rect x="22" y="262" width="384" height="78" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="30" y="278" class="mono" font-size="9" fill="var(--muted)">{"from":"tool", "value":</text>
+  <text x="30" y="294" class="mono" font-size="9" fill="var(--ink)"> &lt;tool_response&gt;</text>
+  <text x="30" y="310" class="mono" font-size="9" fill="var(--ink)"> {"tool_call_id":"…","name":"terminal",</text>
+  <text x="30" y="326" class="mono" font-size="9" fill="var(--ink)"> "content":"7"} &lt;/tool_response&gt;}</text>
+
+  <rect x="426" y="48" width="240" height="300" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="434" y="64" font-size="9.5" font-weight="700" fill="var(--accent-ink)">外层落盘记录 · batch_runner</text>
+
+  <rect x="434" y="70" width="224" height="74" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="442" y="86" font-size="9" font-weight="700" fill="var(--accent-ink)">tool_stats(_extract_tool_stats)</text>
+  <text x="442" y="103" class="mono" font-size="9" fill="var(--ink)">{"terminal":{</text>
+  <text x="442" y="119" class="mono" font-size="9" fill="var(--ink)"> "count":1,"success":1,</text>
+  <text x="442" y="135" class="mono" font-size="9" fill="var(--ink)"> "failure":0}}</text>
+
+  <rect x="434" y="152" width="224" height="64" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="442" y="168" font-size="9" font-weight="700" fill="var(--muted)">metadata</text>
+  <text x="442" y="185" class="mono" font-size="9" fill="var(--ink)">{"batch_num":0,</text>
+  <text x="442" y="201" class="mono" font-size="9" fill="var(--ink)"> "model":"…"}</text>
+
+  <rect x="434" y="224" width="224" height="34" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="442" y="245" class="mono" font-size="9.5" fill="var(--blue)">"api_calls": 2</text>
+
+  <rect x="434" y="266" width="224" height="34" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="442" y="287" class="mono" font-size="9" fill="var(--muted)">"completed":true · "partial":false</text>
+
+  <text x="450" y="330" font-size="9" fill="var(--muted)">model 只是每条样本的字段,</text>
+  <text x="450" y="343" font-size="9" fill="var(--muted)">不按模型拆文件</text>
+
+  <text x="16" y="368" font-size="9.5" font-weight="700" fill="var(--muted)">⑥ 质检闸 · _extract_reasoning_stats → has_any_reasoning</text>
+  <rect x="14" y="374" width="400" height="44" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="394" font-size="10.5" fill="var(--accent-ink)"><tspan class="mono">has_any_reasoning=True</tspan>(有 &lt;think&gt; 内容)</text>
+  <text x="26" y="411" font-size="10" font-weight="700" fill="var(--accent-ink)">→ 追加进 batch_&lt;N&gt;.jsonl(增量落盘)</text>
+  <rect x="426" y="374" width="240" height="44" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="438" y="394" font-size="10" fill="var(--red)">全程空 &lt;think&gt; → <tspan class="mono">=False</tspan></text>
+  <text x="438" y="411" font-size="10" font-weight="700" fill="var(--red)">→ continue 丢弃(仍标记完成)</text>
+
+  <text x="16" y="440" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图:一条对话被改写成 {from,value} 的 ShareGPT 帧序列 —— 这是训练样本格式,不是推理时的 OpenAI role。</text>
+</svg>
+<div class="fig-cap"><b>一条对话 → 一条 ShareGPT 样本</b>:<span class="mono">convert_to_trajectory_format</span> 把内部 messages 改写成 <span class="mono">conversations[]</span>——<span class="mono">{from:"system"}</span> 带 <span class="mono">&lt;tools&gt;</span>、<span class="mono">{from:"human"}</span> 原始 prompt、<span class="mono">{from:"gpt"}</span> 带 <span class="mono">&lt;think&gt;</span>+<span class="mono">&lt;tool_call&gt;</span>、<span class="mono">{from:"tool"}</span> 带 <span class="mono">&lt;tool_response&gt;</span>。外层 <span class="mono">batch_runner</span> 落盘记录附 <span class="mono">tool_stats={"terminal":{count:1,success:1,failure:0}}</span>、<span class="mono">metadata.batch_num=0</span>、<span class="mono">api_calls=2</span>;质检闸只在 <b>有 <span class="mono">&lt;think&gt;</span> 推理</b>时写盘,空推理 <span class="mono">continue</span> 丢弃。注意是 <b><span class="mono">{from,value}</span> 而非 OpenAI role/content</b>。</div>
+</div>
+
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">一批 prompt 切分,丢给多个 <span class="mono">_process_batch_worker</span> 并行</span></div>
   <div class="step"><span class="num">2</span><span class="sc">每个 worker 独立跑 AIAgent(第 7 章核心循环),产出 trajectory</span></div>
@@ -797,6 +1011,72 @@ LESSON_22 = {
 <p>What does locking invariants buy? Tests that can <strong>evolve along with the system</strong>. Assertions like "the gemini catalog has at least one model" or "every model has a context length" lock the <strong>relation that must hold</strong> between two pieces of data, unbroken however the data updates. This mirrors the "narrow waist" philosophy: the more stable and minimal the core's contracts, the more <strong>testable</strong> the system; conversely, precisely because the waist's invariants are locked down, the edges dare to expand fast — new platforms, models, providers (see the chapters on toolsets and constraints). So eval here isn't snapshotting the code but <strong>guarding the whole system's correctness across continuous iteration</strong> — together with the narrow waist, it's what makes "stable core, wild edges" sustainable as engineering.</p>
 <p>One layer deeper: eval's real job is to <strong>quantify error accumulation</strong> (constraint F). In an agent's multi-turn autonomy, one small misjudgment snowballs down the subsequent steps; what invariant tests guard is precisely "don't let these must-hold relations quietly break across iterations." Put it beside the trajectory's quality gate and it's clearer: the quality gate stops low-quality data from flowing into training, lest the error get <strong>baked into the next model</strong>; invariant tests stop regressions from slowly piling up commit by commit. One gatekeeps at the data inlet, the other at code evolution — two gates, front and back, both fighting the inherent LLM constraint of <strong>error accumulation</strong> — which is why this chapter's three things (batch, trajectory, eval) really orbit the same root.</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 452" role="img" aria-label="One real conversation becomes one ShareGPT training sample: user prompt count the py files in this dir, two API calls; convert_to_trajectory_format produces a conversations array, in order from system with tools tag, from human raw prompt, from gpt with think reasoning block and tool_call invoking terminal, from tool with tool_response returning 7; the outer batch_runner record holds tool_stats terminal count 1 success 1 failure 0, metadata batch_num 0, api_calls 2; bottom quality gate has_any_reasoning true appends to jsonl, all-empty think means continue and discard but still marked done">
+  <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="26" y="30" font-size="11" fill="var(--ink)">Input conversation: user prompt <tspan class="mono" font-weight="700" fill="var(--blue)">"count the .py files in this dir"</tspan> · 2 API calls → ShareGPT sample</text>
+
+  <rect x="14" y="48" width="400" height="300" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="22" y="64" font-size="9.5" font-weight="700" fill="var(--purple)">conversations[] · ShareGPT {from, value} (not OpenAI role/content)</text>
+
+  <rect x="22" y="70" width="384" height="42" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="30" y="86" class="mono" font-size="9" fill="var(--accent-ink)">{"from":"system",</text>
+  <text x="30" y="103" class="mono" font-size="9" fill="var(--ink)"> "value":"…&lt;tools&gt; tool signatures &lt;/tools&gt;…"}</text>
+
+  <rect x="22" y="116" width="384" height="38" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="30" y="131" class="mono" font-size="9" fill="var(--blue)">{"from":"human",</text>
+  <text x="30" y="148" class="mono" font-size="9" fill="var(--ink)"> "value":"count the .py files in this dir"}</text>
+
+  <rect x="22" y="158" width="384" height="100" rx="6" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="30" y="174" class="mono" font-size="9" fill="var(--purple)">{"from":"gpt", "value":</text>
+  <text x="30" y="190" class="mono" font-size="9" fill="var(--ink)"> &lt;think&gt;ls then wc to count&lt;/think&gt;</text>
+  <text x="30" y="206" class="mono" font-size="9" fill="var(--ink)"> &lt;tool_call&gt;</text>
+  <text x="30" y="222" class="mono" font-size="9" fill="var(--ink)"> {"name": "terminal", "arguments":</text>
+  <text x="30" y="238" class="mono" font-size="9" fill="var(--ink)"> {"command": "ls *.py | wc -l"}}</text>
+  <text x="30" y="254" class="mono" font-size="9" fill="var(--ink)"> &lt;/tool_call&gt;}</text>
+
+  <rect x="22" y="262" width="384" height="78" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="30" y="278" class="mono" font-size="9" fill="var(--muted)">{"from":"tool", "value":</text>
+  <text x="30" y="294" class="mono" font-size="9" fill="var(--ink)"> &lt;tool_response&gt;</text>
+  <text x="30" y="310" class="mono" font-size="9" fill="var(--ink)"> {"tool_call_id":"…","name":"terminal",</text>
+  <text x="30" y="326" class="mono" font-size="9" fill="var(--ink)"> "content":"7"} &lt;/tool_response&gt;}</text>
+
+  <rect x="426" y="48" width="240" height="300" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="434" y="64" font-size="9.5" font-weight="700" fill="var(--accent-ink)">Outer record · batch_runner</text>
+
+  <rect x="434" y="70" width="224" height="74" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="442" y="86" font-size="9" font-weight="700" fill="var(--accent-ink)">tool_stats(_extract_tool_stats)</text>
+  <text x="442" y="103" class="mono" font-size="9" fill="var(--ink)">{"terminal":{</text>
+  <text x="442" y="119" class="mono" font-size="9" fill="var(--ink)"> "count":1,"success":1,</text>
+  <text x="442" y="135" class="mono" font-size="9" fill="var(--ink)"> "failure":0}}</text>
+
+  <rect x="434" y="152" width="224" height="64" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="442" y="168" font-size="9" font-weight="700" fill="var(--muted)">metadata</text>
+  <text x="442" y="185" class="mono" font-size="9" fill="var(--ink)">{"batch_num":0,</text>
+  <text x="442" y="201" class="mono" font-size="9" fill="var(--ink)"> "model":"…"}</text>
+
+  <rect x="434" y="224" width="224" height="34" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="442" y="245" class="mono" font-size="9.5" fill="var(--blue)">"api_calls": 2</text>
+
+  <rect x="434" y="266" width="224" height="34" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="442" y="287" class="mono" font-size="9" fill="var(--muted)">"completed":true · "partial":false</text>
+
+  <text x="450" y="330" font-size="9" fill="var(--muted)">model is just a per-sample field,</text>
+  <text x="450" y="343" font-size="9" fill="var(--muted)">never a per-model file split</text>
+
+  <text x="16" y="368" font-size="9.5" font-weight="700" fill="var(--muted)">⑥ Quality gate · _extract_reasoning_stats → has_any_reasoning</text>
+  <rect x="14" y="374" width="400" height="44" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="394" font-size="10.5" fill="var(--accent-ink)"><tspan class="mono">has_any_reasoning=True</tspan> (has &lt;think&gt; content)</text>
+  <text x="26" y="411" font-size="10" font-weight="700" fill="var(--accent-ink)">→ append to batch_&lt;N&gt;.jsonl (incremental)</text>
+  <rect x="426" y="374" width="240" height="44" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="438" y="394" font-size="10" fill="var(--red)">all-empty &lt;think&gt; → <tspan class="mono">=False</tspan></text>
+  <text x="438" y="411" font-size="10" font-weight="700" fill="var(--red)">→ continue, discard (still done)</text>
+
+  <text x="16" y="440" font-size="10.5" font-weight="700" fill="var(--muted)">Read this: one conversation is rewritten into a {from,value} ShareGPT frame sequence — a training format, not the inference-time OpenAI role.</text>
+</svg>
+<div class="fig-cap"><b>One conversation → one ShareGPT sample</b>: <span class="mono">convert_to_trajectory_format</span> rewrites internal messages into <span class="mono">conversations[]</span> — <span class="mono">{from:"system"}</span> with <span class="mono">&lt;tools&gt;</span>, <span class="mono">{from:"human"}</span> raw prompt, <span class="mono">{from:"gpt"}</span> with <span class="mono">&lt;think&gt;</span>+<span class="mono">&lt;tool_call&gt;</span>, <span class="mono">{from:"tool"}</span> with <span class="mono">&lt;tool_response&gt;</span>. The outer <span class="mono">batch_runner</span> record attaches <span class="mono">tool_stats={"terminal":{count:1,success:1,failure:0}}</span>, <span class="mono">metadata.batch_num=0</span>, <span class="mono">api_calls=2</span>; the gate writes only when <b>a <span class="mono">&lt;think&gt;</span></b> exists, else <span class="mono">continue</span> discards. Note it is <b><span class="mono">{from,value}</span>, not OpenAI role/content</b>.</div>
+</div>
+
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">a batch of prompts is split and handed to several <span class="mono">_process_batch_worker</span> in parallel</span></div>
   <div class="step"><span class="num">2</span><span class="sc">each worker runs AIAgent independently (ch.7 core loop), producing a trajectory</span></div>
@@ -997,6 +1277,60 @@ LESSON_23 = {
 
 <p>缓存这条线甚至约束到"装技能"本身:会改动 system-prompt 状态的 slash 命令(技能、工具、记忆)都是<strong>缓存感知</strong>的——默认<strong>延迟失效</strong>(改动下个会话才生效),想立刻生效得显式加 <span class="mono">--now</span>。<span class="mono">/skills install --now</span> 就是这条范式的样板。换句话说:边缘扩展不仅要<strong>挂得上</strong>,还要挂得<strong>不打扰正在进行的对话</strong>——能力是边缘的,但缓存纪律是全局的。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 418" role="img" aria-label="两个真实 MCP catalog 条目走一遍:左 linear 是远程 OAuth http,manifest 写 name linear、description Find create and update Linear issues、transport type http url mcp.linear.app、auth type oauth,install 后写进 config.yaml 的 mcp_servers,MCP client 连接走 OAuth 浏览器流暴露 find get list 加 create update;右 n8n 是本地 stdio 桥,transport type stdio command INSTALL_DIR 下的 python,install type git,auth type api_key,暴露 11 个工具,default_enabled 只留 8 个只读、剪掉 activate deactivate 和 container_logs 三个 mutating;底部零足迹门控:未 install 工具 schema 不进 context,进 optional-mcps 目录等于经 PR 审核的 Nous 批准">
+  <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="30" font-size="11" fill="var(--accent-ink)">两个真实 catalog 条目 install 后暴露什么 + 零足迹门控(<tspan class="mono">optional-mcps/&lt;name&gt;/manifest.yaml</tspan>)</text>
+
+  <text x="16" y="58" font-size="11" font-weight="700" fill="var(--blue)">🔗 linear · 远程 OAuth (http)</text>
+  <rect x="14" y="66" width="320" height="98" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="82" class="mono" font-size="9" fill="var(--ink)">name: linear</text>
+  <text x="22" y="97" class="mono" font-size="9" fill="var(--muted)">description: Find, create, and update</text>
+  <text x="22" y="112" class="mono" font-size="9" fill="var(--muted)"> Linear issues, projects, and comments.</text>
+  <text x="22" y="127" class="mono" font-size="9" fill="var(--ink)">transport: {type: http,</text>
+  <text x="22" y="142" class="mono" font-size="9" fill="var(--ink)"> url: https://mcp.linear.app/mcp}</text>
+  <text x="22" y="157" class="mono" font-size="9" fill="var(--purple)">auth: {type: oauth}</text>
+
+  <rect x="14" y="170" width="320" height="40" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="186" class="mono" font-size="9" fill="var(--ink)">hermes mcp install linear</text>
+  <text x="22" y="202" font-size="9" fill="var(--muted)">→ 写 config.yaml: mcp_servers.linear</text>
+
+  <rect x="14" y="216" width="320" height="76" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="22" y="233" font-size="9.5" font-weight="700" fill="var(--accent-ink)">MCP client 连接 → OAuth 浏览器流</text>
+  <text x="22" y="251" font-size="9.5" fill="var(--ink)">暴露 <tspan font-weight="700" fill="var(--purple)">find / get / list</tspan>(只读)</text>
+  <text x="22" y="269" font-size="9.5" fill="var(--ink)"> + <tspan font-weight="700" fill="var(--amber)">create / update</tspan>(写)</text>
+  <text x="22" y="286" font-size="9" fill="var(--muted)">跨 issues / projects / comments</text>
+
+  <text x="348" y="58" font-size="11" font-weight="700" fill="var(--blue)">🖥 n8n · 本地 stdio 桥</text>
+  <rect x="346" y="66" width="320" height="98" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="354" y="82" class="mono" font-size="9" fill="var(--ink)">name: n8n</text>
+  <text x="354" y="98" class="mono" font-size="9" fill="var(--ink)">transport: {type: stdio,</text>
+  <text x="354" y="113" class="mono" font-size="9" fill="var(--ink)"> command: ${INSTALL_DIR}/.venv/bin/python}</text>
+  <text x="354" y="129" class="mono" font-size="9" fill="var(--muted)">install: {type: git, ref: main}</text>
+  <text x="354" y="145" class="mono" font-size="9" fill="var(--purple)">auth: {type: api_key} · N8N_API_KEY</text>
+  <text x="354" y="160" class="mono" font-size="9" fill="var(--muted)">(stdio · 无公网端口)</text>
+
+  <rect x="346" y="170" width="320" height="40" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="354" y="186" class="mono" font-size="9" fill="var(--ink)">git clone + python -m venv .venv</text>
+  <text x="354" y="202" class="mono" font-size="9" fill="var(--muted)"> + pip install -r requirements.txt</text>
+
+  <rect x="346" y="216" width="320" height="76" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="354" y="233" font-size="9.5" font-weight="700" fill="var(--accent-ink)">暴露 11 工具 · tools.default_enabled 剪枝</text>
+  <text x="354" y="251" font-size="9" fill="var(--ink)"><tspan font-weight="700" fill="var(--purple)">✓ 8 只读</tspan> health · list_workflows · get_workflow…</text>
+  <text x="354" y="269" font-size="9" fill="var(--ink)"><tspan font-weight="700" fill="var(--red)">✗ 3 剪掉</tspan> activate/deactivate · container_logs</text>
+  <text x="354" y="286" font-size="9" fill="var(--muted)">mutating 默认不启,按威胁模型自行开</text>
+
+  <text x="16" y="312" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ 零足迹门控 + 「进 catalog = 经审核」</text>
+  <rect x="14" y="318" width="652" height="48" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="336" font-size="10" fill="var(--ink)">未 install → 工具 schema <tspan font-weight="700" fill="var(--purple)">不进 context</tspan>(零核心 schema 足迹);<tspan class="mono">check_fn</tspan> 门控让未配置就不暴露。</text>
+  <text x="22" y="356" font-size="10" fill="var(--ink)">进 <tspan class="mono">optional-mcps/</tspan> 目录 = <tspan font-weight="700" fill="var(--accent-ink)">Nous 批准(经 PR 审核)</tspan>;MCP 永不自动更新,需显式 re-install。</text>
+
+  <text x="16" y="386" class="mono" font-size="9" fill="var(--muted)">mcp_catalog.py:4  &quot;each catalog entry … ships disabled&quot;   ·   plugins.py:367  register_tool(check_fn=…)</text>
+  <text x="16" y="408" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图:同一套 catalog 容两种 transport —— linear 远程 OAuth、n8n 本地 stdio,都零核心 schema 足迹。</text>
+</svg>
+<div class="fig-cap"><b>两个真实 manifest 落地</b>:<span class="mono">linear</span>(<span class="mono">transport:{type:http, url:https://mcp.linear.app/mcp}</span>、<span class="mono">auth:{type:oauth}</span>)install 后写进 <span class="mono">config.yaml</span> 的 <span class="mono">mcp_servers.linear</span>,MCP client 走 OAuth 暴露 <b>find/get/list + create/update</b>;<span class="mono">n8n</span>(<span class="mono">transport:{type:stdio, command:${INSTALL_DIR}/.venv/bin/python}</span>)暴露 <b>11 工具</b>,<span class="mono">tools.default_enabled</span> 只留 8 个只读、剪掉 <span class="mono">activate/deactivate</span> 与 <span class="mono">container_logs</span> 三个 mutating。未 install 则 schema <b>不进 context</b>(零足迹),「进 <span class="mono">optional-mcps/</span> 目录 = 经 PR 审核的 Nous 批准」。</div>
+</div>
+
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">要加新能力 → 沿 Footprint Ladder 选<strong>足迹最小</strong>的一阶</span></div>
   <div class="step"><span class="num">2</span><span class="sc">插件:<span class="mono">register(ctx)</span> → <span class="mono">register_tool</span>(委托 registry)/<span class="mono">register_hook</span>,不碰核心文件</span></div>
@@ -1194,6 +1528,60 @@ LESSON_23 = {
 <p>A subtle aside on discovery: not every plugin uses the same discovery. The general <span class="mono">PluginManager</span> handles tools/hooks/CLI commands; but <strong>model-provider</strong> plugins use a <strong>separate, lazy discovery</strong> — scanned on the first <span class="mono">get_provider_profile()</span> or <span class="mono">list_providers()</span> call, NOT imported by the <span class="mono">PluginManager</span> (which would double-instantiate <span class="mono">ProviderProfile</span>). A user plugin of the same name <strong>overrides</strong> a built-in profile (last-writer-wins), so a third party can swap out any built-in provider without patching the repo. The same "edge extension" philosophy grows different discovery paths in different subsystems.</p>
 
 <p>The cache line even constrains "installing a skill" itself: slash commands that mutate system-prompt state (skills, tools, memory) are <strong>cache-aware</strong> — they <strong>defer invalidation</strong> by default (the change takes effect next session), and you must opt in with <span class="mono">--now</span> for it to apply immediately. <span class="mono">/skills install --now</span> is the canonical template. In other words: edge extension must not only <strong>attach</strong>, it must attach <strong>without disturbing the in-flight conversation</strong> — capability is at the edge, but cache discipline is global.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 418" role="img" aria-label="Two real MCP catalog entries walked through: left linear is remote OAuth over http, manifest sets name linear, description Find create and update Linear issues, transport type http url mcp.linear.app, auth type oauth; after install it writes config.yaml mcp_servers, the MCP client connects via the OAuth browser flow and exposes find get list plus create update; right n8n is a local stdio bridge, transport type stdio command INSTALL_DIR python, install type git, auth type api_key, it exposes 11 tools but default_enabled keeps only 8 read tools and prunes activate deactivate and container_logs; bottom zero-footprint gating: not installed means the tool schema never enters context, and being in optional-mcps equals a PR-reviewed Nous approval">
+  <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="30" font-size="11" fill="var(--accent-ink)">Two real catalog entries: what install exposes + zero-footprint gating (<tspan class="mono">optional-mcps/&lt;name&gt;/manifest.yaml</tspan>)</text>
+
+  <text x="16" y="58" font-size="11" font-weight="700" fill="var(--blue)">🔗 linear · remote OAuth (http)</text>
+  <rect x="14" y="66" width="320" height="98" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="82" class="mono" font-size="9" fill="var(--ink)">name: linear</text>
+  <text x="22" y="97" class="mono" font-size="9" fill="var(--muted)">description: Find, create, and update</text>
+  <text x="22" y="112" class="mono" font-size="9" fill="var(--muted)"> Linear issues, projects, and comments.</text>
+  <text x="22" y="127" class="mono" font-size="9" fill="var(--ink)">transport: {type: http,</text>
+  <text x="22" y="142" class="mono" font-size="9" fill="var(--ink)"> url: https://mcp.linear.app/mcp}</text>
+  <text x="22" y="157" class="mono" font-size="9" fill="var(--purple)">auth: {type: oauth}</text>
+
+  <rect x="14" y="170" width="320" height="40" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="186" class="mono" font-size="9" fill="var(--ink)">hermes mcp install linear</text>
+  <text x="22" y="202" font-size="9" fill="var(--muted)">→ writes config.yaml: mcp_servers.linear</text>
+
+  <rect x="14" y="216" width="320" height="76" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="22" y="233" font-size="9.5" font-weight="700" fill="var(--accent-ink)">MCP client connects → OAuth browser flow</text>
+  <text x="22" y="251" font-size="9.5" fill="var(--ink)">exposes <tspan font-weight="700" fill="var(--purple)">find / get / list</tspan> (read)</text>
+  <text x="22" y="269" font-size="9.5" fill="var(--ink)"> + <tspan font-weight="700" fill="var(--amber)">create / update</tspan> (write)</text>
+  <text x="22" y="286" font-size="9" fill="var(--muted)">across issues / projects / comments</text>
+
+  <text x="348" y="58" font-size="11" font-weight="700" fill="var(--blue)">🖥 n8n · local stdio bridge</text>
+  <rect x="346" y="66" width="320" height="98" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="354" y="82" class="mono" font-size="9" fill="var(--ink)">name: n8n</text>
+  <text x="354" y="98" class="mono" font-size="9" fill="var(--ink)">transport: {type: stdio,</text>
+  <text x="354" y="113" class="mono" font-size="9" fill="var(--ink)"> command: ${INSTALL_DIR}/.venv/bin/python}</text>
+  <text x="354" y="129" class="mono" font-size="9" fill="var(--muted)">install: {type: git, ref: main}</text>
+  <text x="354" y="145" class="mono" font-size="9" fill="var(--purple)">auth: {type: api_key} · N8N_API_KEY</text>
+  <text x="354" y="160" class="mono" font-size="9" fill="var(--muted)">(stdio · no public port)</text>
+
+  <rect x="346" y="170" width="320" height="40" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="354" y="186" class="mono" font-size="9" fill="var(--ink)">git clone + python -m venv .venv</text>
+  <text x="354" y="202" class="mono" font-size="9" fill="var(--muted)"> + pip install -r requirements.txt</text>
+
+  <rect x="346" y="216" width="320" height="76" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="354" y="233" font-size="9.5" font-weight="700" fill="var(--accent-ink)">exposes 11 tools · tools.default_enabled prunes</text>
+  <text x="354" y="251" font-size="9" fill="var(--ink)"><tspan font-weight="700" fill="var(--purple)">✓ 8 read</tspan> health · list_workflows · get_workflow…</text>
+  <text x="354" y="269" font-size="9" fill="var(--ink)"><tspan font-weight="700" fill="var(--red)">✗ 3 pruned</tspan> activate/deactivate · container_logs</text>
+  <text x="354" y="286" font-size="9" fill="var(--muted)">mutating off by default, opt in per threat model</text>
+
+  <text x="16" y="312" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ Zero-footprint gating + "in catalog = reviewed"</text>
+  <rect x="14" y="318" width="652" height="48" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="336" font-size="10" fill="var(--ink)">not installed → tool schema <tspan font-weight="700" fill="var(--purple)">never enters context</tspan> (zero core-schema footprint); <tspan class="mono">check_fn</tspan> hides it until configured.</text>
+  <text x="22" y="356" font-size="10" fill="var(--ink)">presence in <tspan class="mono">optional-mcps/</tspan> = <tspan font-weight="700" fill="var(--accent-ink)">Nous approval (merged via PR)</tspan>; MCPs never auto-update, re-install explicitly.</text>
+
+  <text x="16" y="386" class="mono" font-size="9" fill="var(--muted)">mcp_catalog.py:4  &quot;each catalog entry … ships disabled&quot;   ·   plugins.py:367  register_tool(check_fn=…)</text>
+  <text x="16" y="408" font-size="10.5" font-weight="700" fill="var(--muted)">Read this: one catalog holds two transports — linear remote OAuth, n8n local stdio — both with zero core-schema footprint.</text>
+</svg>
+<div class="fig-cap"><b>Two real manifests, made concrete</b>: <span class="mono">linear</span> (<span class="mono">transport:{type:http, url:https://mcp.linear.app/mcp}</span>, <span class="mono">auth:{type:oauth}</span>) on install writes <span class="mono">mcp_servers.linear</span> into <span class="mono">config.yaml</span>; the MCP client does OAuth and exposes <b>find/get/list + create/update</b>. <span class="mono">n8n</span> (<span class="mono">transport:{type:stdio, command:${INSTALL_DIR}/.venv/bin/python}</span>) exposes <b>11 tools</b>, and <span class="mono">tools.default_enabled</span> keeps only 8 read tools, pruning <span class="mono">activate/deactivate</span> and <span class="mono">container_logs</span>. Not installed → schema <b>never enters context</b> (zero footprint); "in <span class="mono">optional-mcps/</span> = a PR-reviewed Nous approval."</div>
+</div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">need a new capability → pick the <strong>smallest-footprint</strong> rung on the Footprint Ladder</span></div>

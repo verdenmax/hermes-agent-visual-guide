@@ -201,6 +201,62 @@ the agent is idle and forge a fresh user/internal turn from each event:
     <li><strong>非持久</strong>：background 委派进程内，进程退出/<span class="mono">/new</span> 即丢；要存活用 <span class="mono">cronjob</span> 或 <span class="mono">terminal(background, notify_on_complete)</span>。</li>
   </ul>
 </div>
+
+<div class="figure">
+<svg viewBox="0 0 680 490" role="img" aria-label="一次真实 delegate_task 调用走一遍：① 调用参数 goal/context/toolsets/role=leaf；② 构造子代理隔离 ephemeral_system_prompt、platform=subagent、skip_context_files、skip_memory、iteration_budget=None，继承 base_url/api_key/model/session_db；③ 剥离 DELEGATE_BLOCKED_TOOLS 五个工具并把 role 降级为 leaf；④ 子代理读约 20 个文件的中间过程全留在子 context 永不进父；⑤ 父只收一句最终摘要，background 时先返 delegation_id。">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">一次真实 delegate_task 调用 · 参数 → 隔离构造 → 只回一句摘要</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">例子：派一个 leaf 子代理审计 gateway 各 adapter 的 scoped lock</text>
+  <text x="628" y="32" font-size="22">🧩</text>
+
+  <rect x="20" y="50" width="640" height="60" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="32" y="68" font-size="10" font-weight="700" fill="var(--blue)">① 调用 · tools/delegate_tool.py</text>
+  <text x="32" y="86" font-size="9" font-family="monospace" fill="var(--ink)">delegate_task(goal=&quot;审计 gateway/platforms/ 各 adapter connect() 缺 acquire_scoped_lock&quot;,</text>
+  <text x="32" y="102" font-size="9" font-family="monospace" fill="var(--ink)">  context=&quot;模式见 irc/adapter.py&quot;, toolsets=[&quot;terminal&quot;,&quot;file&quot;,&quot;search&quot;], role=&quot;leaf&quot;)</text>
+
+  <line x1="340" y1="110" x2="340" y2="126" stroke="var(--line)" stroke-width="2"/>
+  <path d="M340 132 L334 122 L346 122 Z" fill="var(--line)"/>
+
+  <text x="340" y="146" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">② 构造子 AIAgent · 隔离 vs 继承（:1234-1249）</text>
+
+  <rect x="20" y="154" width="324" height="118" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="34" y="172" font-size="10" font-weight="700" fill="var(--accent-ink)">隔离 · 不入对话 / 不进缓存前缀</text>
+  <text x="34" y="190" font-size="9" font-family="monospace" fill="var(--ink)">ephemeral_system_prompt=child_prompt</text>
+  <text x="34" y="206" font-size="9" font-family="monospace" fill="var(--ink)">platform=&quot;subagent&quot;</text>
+  <text x="34" y="222" font-size="9" font-family="monospace" fill="var(--ink)">skip_context_files=True</text>
+  <text x="34" y="238" font-size="9" font-family="monospace" fill="var(--ink)">skip_memory=True</text>
+  <text x="34" y="256" font-size="9" font-family="monospace" fill="var(--purple)">iteration_budget=None  # fresh budget per subagent</text>
+
+  <rect x="356" y="154" width="304" height="118" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="370" y="172" font-size="10" font-weight="700" fill="var(--blue)">继承 · 仅供运行、不入对话</text>
+  <text x="370" y="190" font-size="9" font-family="monospace" fill="var(--ink)">base_url / api_key</text>
+  <text x="370" y="206" font-size="9" font-family="monospace" fill="var(--ink)">model / fallback_model</text>
+  <text x="370" y="222" font-size="9" font-family="monospace" fill="var(--ink)">session_db（共享会话库）</text>
+  <text x="370" y="246" font-size="9" fill="var(--muted)">运行时凭证照搬，但对话历史 / 上下文</text>
+  <text x="370" y="260" font-size="9" fill="var(--muted)">文件 / 记忆一律不继承 → 父缓存零扰动</text>
+
+  <rect x="20" y="282" width="640" height="74" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="32" y="300" font-size="10" font-weight="700" fill="var(--red)">③ 剥离高危工具 + role 降级 · :768 / :45-53 / :1023-1024</text>
+  <text x="32" y="318" font-size="9" font-family="monospace" fill="var(--ink)">child_toolsets = _strip_blocked_tools(child_toolsets)</text>
+  <text x="32" y="334" font-size="9" font-family="monospace" fill="var(--red)">✖ DELEGATE_BLOCKED_TOOLS(5): delegate_task · clarify · memory · send_message · execute_code</text>
+  <text x="32" y="350" font-size="9" font-family="monospace" fill="var(--purple)">effective_role = role if (role==&quot;orchestrator&quot; and orchestrator_ok) else &quot;leaf&quot;</text>
+
+  <rect x="20" y="366" width="324" height="92" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="34" y="384" font-size="10" font-weight="700" fill="var(--muted)">④ 子代理独立 context（永不进父）</text>
+  <text x="34" y="404" font-size="9" fill="var(--ink)">读 ~20 个 adapter.py · search/grep · 试错几十轮</text>
+  <text x="34" y="422" font-size="9" fill="var(--ink)">中间工具结果全留子 context</text>
+  <text x="34" y="440" font-size="9" fill="var(--muted)">platform=&quot;subagent&quot; · 跑完即弃</text>
+
+  <rect x="356" y="366" width="304" height="92" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="370" y="384" font-size="10" font-weight="700" fill="var(--accent-ink)">⑤ 父只收一句最终摘要</text>
+  <text x="370" y="404" font-size="9" fill="var(--ink)">&quot;审计 21 adapter：matrix/sms 缺 lock；</text>
+  <text x="370" y="420" font-size="9" fill="var(--ink)">　余 19 合规&quot;</text>
+  <text x="370" y="440" font-size="9" fill="var(--purple)">background=true → 先返 delegation_id（:2592）</text>
+
+  <rect x="20" y="466" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="480" text-anchor="middle" font-size="9" fill="var(--muted)">读这张图：一次 delegate_task = 继承运行时 + 隔离对话/文件/记忆 + 剥 5 工具降为 leaf；父只收一句摘要，缓存零扰动</text>
+</svg>
+<div class="fig-cap"><b>一次真实 delegate_task</b>：父调 <span class="mono">delegate_task(goal,context,toolsets,role=&quot;leaf&quot;)</span> → 子代理<b>隔离</b>构造（<span class="mono">ephemeral_system_prompt</span> / <span class="mono">platform=&quot;subagent&quot;</span> / <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> / <span class="mono">iteration_budget=None</span>），<b>继承</b> base_url/api_key/model/session_db；剥离 <span class="mono">DELEGATE_BLOCKED_TOOLS</span> 五个工具并把 role 降为 leaf；读约 20 个文件的<b>中间过程全留子 context</b>，父只收一句摘要「审计 21 adapter：matrix/sms 缺 lock；余 19 合规」（background 先返 <span class="mono">delegation_id</span>）。</div>
+</div>
 """,
     "en": r"""
 <p class="lead">
@@ -399,6 +455,62 @@ the agent is idle and forge a fresh user/internal turn from each event:
     <li><strong>Not durable</strong>: background delegation is process-local; process exit / <span class="mono">/new</span> discards it; for survival use <span class="mono">cronjob</span> or <span class="mono">terminal(background, notify_on_complete)</span>.</li>
   </ul>
 </div>
+
+<div class="figure">
+<svg viewBox="0 0 680 490" role="img" aria-label="One real delegate_task call walked through: 1 call args goal/context/toolsets/role=leaf; 2 build the subagent isolating ephemeral_system_prompt, platform=subagent, skip_context_files, skip_memory, iteration_budget=None while inheriting base_url/api_key/model/session_db; 3 strip the five DELEGATE_BLOCKED_TOOLS and downgrade role to leaf; 4 the subagent reads about 20 files and all intermediate work stays in its own context, never reaching the parent; 5 the parent receives only one final summary, returning a delegation_id first when background.">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">One real delegate_task call - args to isolated build to one summary</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">Example: dispatch a leaf subagent to audit scoped locks across gateway adapters</text>
+  <text x="628" y="32" font-size="22">🧩</text>
+
+  <rect x="20" y="50" width="640" height="60" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="32" y="68" font-size="10" font-weight="700" fill="var(--blue)">1. Call - tools/delegate_tool.py</text>
+  <text x="32" y="86" font-size="9" font-family="monospace" fill="var(--ink)">delegate_task(goal=&quot;audit gateway/platforms/ adapters whose connect() lacks acquire_scoped_lock&quot;,</text>
+  <text x="32" y="102" font-size="9" font-family="monospace" fill="var(--ink)">  context=&quot;pattern: irc/adapter.py&quot;, toolsets=[&quot;terminal&quot;,&quot;file&quot;,&quot;search&quot;], role=&quot;leaf&quot;)</text>
+
+  <line x1="340" y1="110" x2="340" y2="126" stroke="var(--line)" stroke-width="2"/>
+  <path d="M340 132 L334 122 L346 122 Z" fill="var(--line)"/>
+
+  <text x="340" y="146" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">2. Build the subagent - isolate vs inherit (:1234-1249)</text>
+
+  <rect x="20" y="154" width="324" height="118" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="34" y="172" font-size="10" font-weight="700" fill="var(--accent-ink)">Isolated - not in conversation / cache prefix</text>
+  <text x="34" y="190" font-size="9" font-family="monospace" fill="var(--ink)">ephemeral_system_prompt=child_prompt</text>
+  <text x="34" y="206" font-size="9" font-family="monospace" fill="var(--ink)">platform=&quot;subagent&quot;</text>
+  <text x="34" y="222" font-size="9" font-family="monospace" fill="var(--ink)">skip_context_files=True</text>
+  <text x="34" y="238" font-size="9" font-family="monospace" fill="var(--ink)">skip_memory=True</text>
+  <text x="34" y="256" font-size="9" font-family="monospace" fill="var(--purple)">iteration_budget=None  # fresh budget per subagent</text>
+
+  <rect x="356" y="154" width="304" height="118" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="370" y="172" font-size="10" font-weight="700" fill="var(--blue)">Inherited - runtime only, not conversation</text>
+  <text x="370" y="190" font-size="9" font-family="monospace" fill="var(--ink)">base_url / api_key</text>
+  <text x="370" y="206" font-size="9" font-family="monospace" fill="var(--ink)">model / fallback_model</text>
+  <text x="370" y="222" font-size="9" font-family="monospace" fill="var(--ink)">session_db (shared session store)</text>
+  <text x="370" y="246" font-size="9" fill="var(--muted)">Runtime creds copied, but conversation /</text>
+  <text x="370" y="260" font-size="9" fill="var(--muted)">context files / memory NOT inherited - cache safe</text>
+
+  <rect x="20" y="282" width="640" height="74" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="32" y="300" font-size="10" font-weight="700" fill="var(--red)">3. Strip dangerous tools + role downgrade - :768 / :45-53 / :1023-1024</text>
+  <text x="32" y="318" font-size="9" font-family="monospace" fill="var(--ink)">child_toolsets = _strip_blocked_tools(child_toolsets)</text>
+  <text x="32" y="334" font-size="9" font-family="monospace" fill="var(--red)">x DELEGATE_BLOCKED_TOOLS(5): delegate_task · clarify · memory · send_message · execute_code</text>
+  <text x="32" y="350" font-size="9" font-family="monospace" fill="var(--purple)">effective_role = role if (role==&quot;orchestrator&quot; and orchestrator_ok) else &quot;leaf&quot;</text>
+
+  <rect x="20" y="366" width="324" height="92" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="34" y="384" font-size="10" font-weight="700" fill="var(--muted)">4. Subagent's own context (never reaches parent)</text>
+  <text x="34" y="404" font-size="9" fill="var(--ink)">reads ~20 adapter.py · search/grep · dozens of retries</text>
+  <text x="34" y="422" font-size="9" fill="var(--ink)">all intermediate tool results stay in child context</text>
+  <text x="34" y="440" font-size="9" fill="var(--muted)">platform=&quot;subagent&quot; · discarded when done</text>
+
+  <rect x="356" y="366" width="304" height="92" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="370" y="384" font-size="10" font-weight="700" fill="var(--accent-ink)">5. Parent gets only one final summary</text>
+  <text x="370" y="404" font-size="9" fill="var(--ink)">&quot;audited 21 adapters: matrix/sms lack lock;</text>
+  <text x="370" y="420" font-size="9" fill="var(--ink)"> 19 others compliant&quot;</text>
+  <text x="370" y="440" font-size="9" fill="var(--purple)">background=true returns delegation_id first (:2592)</text>
+
+  <rect x="20" y="466" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="480" text-anchor="middle" font-size="9" fill="var(--muted)">Read this: one delegate_task = inherit runtime + isolate conversation/files/memory + strip 5 tools to leaf; parent gets one summary, cache untouched</text>
+</svg>
+<div class="fig-cap"><b>One real delegate_task</b>: the parent calls <span class="mono">delegate_task(goal,context,toolsets,role=&quot;leaf&quot;)</span> -&gt; the subagent is built <b>isolated</b> (<span class="mono">ephemeral_system_prompt</span> / <span class="mono">platform=&quot;subagent&quot;</span> / <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> / <span class="mono">iteration_budget=None</span>) while <b>inheriting</b> base_url/api_key/model/session_db; it strips the five <span class="mono">DELEGATE_BLOCKED_TOOLS</span> and downgrades role to leaf; reading ~20 files, <b>all intermediate work stays in the child context</b>, and the parent gets only the summary "audited 21 adapters: matrix/sms lack lock; 19 others compliant" (background returns a <span class="mono">delegation_id</span> first).</div>
+</div>
 """,
 }
 
@@ -584,6 +696,59 @@ Verdict: APPROVED or REQUEST_CHANGES.
     <li><strong>谄媚对策靠结构</strong>：核心 prompt 无 anti-sycophancy 指令；靠「独立验证者 + fresh context」的 context 隔离对抗自我背书。</li>
   </ul>
 </div>
+
+<div class="figure">
+<svg viewBox="0 0 680 486" role="img" aria-label="同一份 diff config.py:45 把 == 改成 != 走两条独立路径：自报路径里子代理自报上传成功，你按 self-reports verify yourself 实测得到 HTTP 503 判为 C 幻觉被驳；审查路径里 spec 合规审只拿 diff 判 PASS，PASS 后质量审判 REQUEST_CHANGES 未加回归测试；fail-closed 规则要求 security_concerns 非空或无法解析则 passed 为 false；只有通过后才打 verified 提交前缀。">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">同一份 diff，三个真实判定 · 自报被驳 / PASS / REQUEST_CHANGES</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">例子：config.py:45 把 == 改成 !=，附一句「我做完了」的自报</text>
+  <text x="628" y="32" font-size="22">⚖️</text>
+
+  <rect x="20" y="50" width="640" height="68" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="32" y="68" font-size="10" font-weight="700" fill="var(--ink)">① 共享输入 · 生成者交 diff + 自报</text>
+  <text x="32" y="86" font-size="9" font-family="monospace" fill="var(--red)">- config.py:45    if val == expected:</text>
+  <text x="360" y="86" font-size="9" font-family="monospace" fill="var(--accent-ink)">+ config.py:45    if val != expected:</text>
+  <text x="32" y="106" font-size="9" fill="var(--muted)">附自报：✅ &quot;改完并已上传成功&quot;（一句 SELF-REPORT，未经核验）</text>
+
+  <rect x="20" y="132" width="324" height="170" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="34" y="150" font-size="10" font-weight="700" fill="var(--red)">路径 A · 自报被驳（:2923-2929）</text>
+  <text x="34" y="170" font-size="9" fill="var(--ink)">② 工具描述铁律：Subagent summaries</text>
+  <text x="34" y="184" font-size="9" font-family="monospace" fill="var(--ink)">are SELF-REPORTS, verify it yourself</text>
+  <text x="34" y="204" font-size="9" fill="var(--ink)">自报：✅ 上传成功</text>
+  <text x="34" y="222" font-size="9" fill="var(--ink)">→ 你 fetch URL 实测拿到把手：</text>
+  <rect x="34" y="230" width="120" height="22" rx="5" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="94" y="245" text-anchor="middle" font-size="10" font-weight="700" fill="var(--red)">HTTP 503</text>
+  <text x="34" y="272" font-size="9" fill="var(--muted)">须返可验证把手(URL/ID/路径/HTTP)</text>
+  <text x="34" y="290" font-size="9.5" font-weight="700" fill="var(--red)">判定：C·幻觉（真诚误报）→ 驳回</text>
+
+  <rect x="356" y="132" width="304" height="170" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="370" y="150" font-size="10" font-weight="700" fill="var(--blue)">路径 B · 独立审查（两阶段顺序门）</text>
+  <rect x="368" y="158" width="280" height="60" rx="7" fill="var(--panel)" stroke="var(--blue)"/>
+  <text x="378" y="174" font-size="9" font-weight="700" fill="var(--blue)">③ spec 合规审 · 只拿 diff（:127-130）</text>
+  <text x="378" y="190" font-size="9" fill="var(--ink)">reviewer 无生成者上下文，对照 spec</text>
+  <rect x="378" y="196" width="78" height="18" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="417" y="209" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">PASS (:113)</text>
+  <rect x="368" y="226" width="280" height="66" rx="7" fill="var(--panel)" stroke="var(--amber)"/>
+  <text x="378" y="242" font-size="9" font-weight="700" fill="var(--amber)">④ 质量审 · 仅 PASS 后（:142-145）</text>
+  <text x="378" y="258" font-size="9" fill="var(--ink)">Verdict: APPROVED / REQUEST_CHANGES</text>
+  <rect x="378" y="264" width="200" height="20" rx="5" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="388" y="278" font-size="9.5" font-weight="700" fill="var(--amber)">REQUEST_CHANGES — 未加回归测试</text>
+
+  <rect x="20" y="312" width="640" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="32" y="330" font-size="10" font-weight="700" fill="var(--purple)">⑤ fail-closed · 解析失败 / 有顾虑一律 false（:138-140）</text>
+  <text x="32" y="349" font-size="9" font-family="monospace" fill="var(--ink)">security_concerns non-empty -&gt; passed must be false</text>
+  <text x="360" y="349" font-size="9" font-family="monospace" fill="var(--ink)">Cannot parse diff -&gt; passed must be false</text>
+  <text x="32" y="368" font-size="9" font-family="monospace" fill="var(--purple)">{&quot;passed&quot;: false, &quot;security_concerns&quot;:[…], &quot;logic_errors&quot;:[…], &quot;summary&quot;:&quot;…&quot;}</text>
+  <text x="32" y="382" font-size="9" fill="var(--muted)">只有 security_concerns 与 logic_errors 两列表都空，passed 才为 true</text>
+
+  <rect x="20" y="396" width="640" height="40" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="32" y="414" font-size="10" font-weight="700" fill="var(--accent-ink)">⑥ 全部通过后才打 [verified]（:230-236）</text>
+  <text x="32" y="430" font-size="9" font-family="monospace" fill="var(--ink)">git add -A &amp;&amp; git commit -m &quot;[verified] &lt;description&gt;&quot;</text>
+
+  <rect x="20" y="446" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="460" text-anchor="middle" font-size="9" fill="var(--muted)">读这张图：同一份 diff，自报路径被实测 503 驳回，审查路径 spec→PASS 再质量→REQUEST_CHANGES；无 agent 自证、fail-closed</text>
+</svg>
+<div class="fig-cap"><b>同一份 diff，三个真实判定</b>：生成者把 <span class="mono">config.py:45</span> 的 <span class="mono">==</span> 改成 <span class="mono">!=</span> 并自报「上传成功」。<b>路径 A</b>（自报）按工具铁律「summaries are SELF-REPORTS, verify it yourself」实测 → 拿到 <span class="mono">HTTP 503</span> → 判 <b>C·幻觉</b>驳回；<b>路径 B</b>（独立审查）spec 合规审只拿 diff → <span class="mono">PASS</span>，PASS 后质量审 → <span class="mono">REQUEST_CHANGES</span>（未加回归测试）。整套 <b>fail-closed</b>：<span class="mono">security_concerns</span> 非空或无法解析则 <span class="mono">passed=false</span>，全过才打 <span class="mono">[verified]</span>。</div>
+</div>
 """,
     "en": r"""
 <p class="lead">
@@ -765,6 +930,59 @@ Verdict: APPROVED or REQUEST_CHANGES.
     <li><strong>Two-stage review</strong>: spec compliance (PASS/gaps) + code quality (APPROVED/REQUEST_CHANGES), "catch before they compound" — the generation-verification gap engineered.</li>
     <li><strong>Sycophancy countered structurally</strong>: the core prompt has no anti-sycophancy instruction; it relies on the "independent verifier + fresh context" isolation to resist self-endorsement.</li>
   </ul>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 486" role="img" aria-label="The same diff config.py:45 changing == to != takes two independent paths: on the self-report path the subagent claims upload succeeded, and following self-reports verify yourself you fetch and measure HTTP 503, judged C hallucination and rejected; on the review path spec compliance takes only the diff and returns PASS, then quality review returns REQUEST_CHANGES for missing regression test; fail-closed rules require passed false when security_concerns is non-empty or the diff cannot be parsed; only after passing is the verified commit prefix applied.">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">One diff, three real verdicts - self-report rejected / PASS / REQUEST_CHANGES</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">Example: config.py:45 changes == to !=, with an "I'm done" self-report</text>
+  <text x="628" y="32" font-size="22">⚖️</text>
+
+  <rect x="20" y="50" width="640" height="68" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="32" y="68" font-size="10" font-weight="700" fill="var(--ink)">1. Shared input - generator submits diff + self-report</text>
+  <text x="32" y="86" font-size="9" font-family="monospace" fill="var(--red)">- config.py:45    if val == expected:</text>
+  <text x="360" y="86" font-size="9" font-family="monospace" fill="var(--accent-ink)">+ config.py:45    if val != expected:</text>
+  <text x="32" y="106" font-size="9" fill="var(--muted)">self-report: ok &quot;changed and uploaded successfully&quot; (a SELF-REPORT, unverified)</text>
+
+  <rect x="20" y="132" width="324" height="170" rx="9" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/>
+  <text x="34" y="150" font-size="10" font-weight="700" fill="var(--red)">Path A - self-report rejected (:2923-2929)</text>
+  <text x="34" y="170" font-size="9" fill="var(--ink)">2. Tool-desc rule: Subagent summaries</text>
+  <text x="34" y="184" font-size="9" font-family="monospace" fill="var(--ink)">are SELF-REPORTS, verify it yourself</text>
+  <text x="34" y="204" font-size="9" fill="var(--ink)">claim: ok uploaded successfully</text>
+  <text x="34" y="222" font-size="9" fill="var(--ink)">you fetch the URL and measure a handle:</text>
+  <rect x="34" y="230" width="120" height="22" rx="5" fill="var(--panel)" stroke="var(--red)"/>
+  <text x="94" y="245" text-anchor="middle" font-size="10" font-weight="700" fill="var(--red)">HTTP 503</text>
+  <text x="34" y="272" font-size="9" fill="var(--muted)">demand a handle (URL/ID/path/HTTP status)</text>
+  <text x="34" y="290" font-size="9.5" font-weight="700" fill="var(--red)">verdict: C-hallucination (sincere) - rejected</text>
+
+  <rect x="356" y="132" width="304" height="170" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="370" y="150" font-size="10" font-weight="700" fill="var(--blue)">Path B - independent review (two-stage gate)</text>
+  <rect x="368" y="158" width="280" height="60" rx="7" fill="var(--panel)" stroke="var(--blue)"/>
+  <text x="378" y="174" font-size="9" font-weight="700" fill="var(--blue)">3. Spec compliance - diff only (:127-130)</text>
+  <text x="378" y="190" font-size="9" fill="var(--ink)">reviewer has no generator context, vs spec</text>
+  <rect x="378" y="196" width="78" height="18" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="417" y="209" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent-ink)">PASS (:113)</text>
+  <rect x="368" y="226" width="280" height="66" rx="7" fill="var(--panel)" stroke="var(--amber)"/>
+  <text x="378" y="242" font-size="9" font-weight="700" fill="var(--amber)">4. Quality - only after PASS (:142-145)</text>
+  <text x="378" y="258" font-size="9" fill="var(--ink)">Verdict: APPROVED / REQUEST_CHANGES</text>
+  <rect x="378" y="264" width="220" height="20" rx="5" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="388" y="278" font-size="9.5" font-weight="700" fill="var(--amber)">REQUEST_CHANGES - no regression test</text>
+
+  <rect x="20" y="312" width="640" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="32" y="330" font-size="10" font-weight="700" fill="var(--purple)">5. Fail-closed - unparseable / any concern is false (:138-140)</text>
+  <text x="32" y="349" font-size="9" font-family="monospace" fill="var(--ink)">security_concerns non-empty -&gt; passed must be false</text>
+  <text x="360" y="349" font-size="9" font-family="monospace" fill="var(--ink)">Cannot parse diff -&gt; passed must be false</text>
+  <text x="32" y="368" font-size="9" font-family="monospace" fill="var(--purple)">{&quot;passed&quot;: false, &quot;security_concerns&quot;:[…], &quot;logic_errors&quot;:[…], &quot;summary&quot;:&quot;…&quot;}</text>
+  <text x="32" y="382" font-size="9" fill="var(--muted)">passed is true only when both security_concerns and logic_errors are empty</text>
+
+  <rect x="20" y="396" width="640" height="40" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="32" y="414" font-size="10" font-weight="700" fill="var(--accent-ink)">6. Only after everything passes apply [verified] (:230-236)</text>
+  <text x="32" y="430" font-size="9" font-family="monospace" fill="var(--ink)">git add -A &amp;&amp; git commit -m &quot;[verified] &lt;description&gt;&quot;</text>
+
+  <rect x="20" y="446" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="460" text-anchor="middle" font-size="9" fill="var(--muted)">Read this: one diff - the self-report path is rejected by a measured 503, the review path goes spec PASS then quality REQUEST_CHANGES; no agent self-certifies, fail-closed</text>
+</svg>
+<div class="fig-cap"><b>One diff, three real verdicts</b>: the generator changes <span class="mono">config.py:45</span> from <span class="mono">==</span> to <span class="mono">!=</span> and self-reports "uploaded successfully". <b>Path A</b> (self-report) follows the tool rule "summaries are SELF-REPORTS, verify it yourself", measures it -&gt; gets <span class="mono">HTTP 503</span> -&gt; judged <b>C-hallucination</b> and rejected; <b>Path B</b> (independent review) runs spec compliance on the diff only -&gt; <span class="mono">PASS</span>, then quality review -&gt; <span class="mono">REQUEST_CHANGES</span> (no regression test). The whole thing is <b>fail-closed</b>: <span class="mono">security_concerns</span> non-empty or unparseable means <span class="mono">passed=false</span>, and only when all pass is <span class="mono">[verified]</span> applied.</div>
 </div>
 """,
 }
@@ -962,6 +1180,72 @@ agent._cached_system_prompt = new_system_prompt      <span class="cm"># 写回�
     <li><strong>顺带刷新记忆</strong>:invalidate 时 <span class="mono">load_from_disk()</span> 重载记忆快照(第 11 章);摘要是中段消息,不在缓存前缀。</li>
   </ul>
 </div>
+
+<div class="figure">
+<svg viewBox="0 0 680 432" role="img" aria-label="一次真实压缩的内容变换：阈值时间线见第27.3章本图只讲内容怎么变；边界 protect_first_n 等于 3 且衰减到 0、protect_last_n 等于 20，中间 5 条待压；廉价剪枝 _prune_old_tool_results 无 LLM 把旧 tool 结果折成一行；模板填入真实摘要 Completed Actions 与 Critical Context REDACTED；token 从约 8400 降到约 600；缓存唯一例外 _invalidate_system_prompt 再 _build_system_prompt 写回并 load_from_disk。">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">一次压缩的内容变换 · 选哪 5 条 → 折成什么摘要 → 8400→600 tok</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">本图只讲「内容怎么变」（已判定触发，阈值时间线见第 27.3 章）</text>
+  <text x="628" y="32" font-size="22">🗜️</text>
+
+  <rect x="20" y="50" width="176" height="214" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="30" y="68" font-size="10" font-weight="700" fill="var(--ink)">② 边界（:787-788）</text>
+  <rect x="30" y="76" width="156" height="32" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="38" y="90" font-size="9" font-weight="700" fill="var(--accent-ink)">protect_first_n=3</text>
+  <text x="38" y="103" font-size="8.5" fill="var(--accent-ink)">保头 · 随增长衰减→0（:2024）</text>
+  <rect x="30" y="116" width="156" height="48" rx="6" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="38" y="132" font-size="9" font-weight="700" fill="var(--purple)">中间 5 条 ← 待压</text>
+  <text x="38" y="147" font-size="8.5" fill="var(--purple)">用辅助模型折成结构化要点</text>
+  <text x="38" y="159" font-size="8.5" fill="var(--purple)">（高信号留、低信号弃）</text>
+  <rect x="30" y="172" width="156" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="38" y="186" font-size="9" font-weight="700" fill="var(--blue)">protect_last_n=20</text>
+  <text x="38" y="199" font-size="8.5" fill="var(--blue)">保尾 · 最近上下文原样留</text>
+  <text x="30" y="224" font-size="9" fill="var(--muted)">保头保尾、只压中段</text>
+  <text x="30" y="240" font-size="9" fill="var(--muted)">→ 既省 token 又不丢</text>
+  <text x="30" y="256" font-size="9" fill="var(--muted)">　 最相关的近况</text>
+
+  <line x1="200" y1="157" x2="218" y2="157" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M224 157 L216 153 L216 161 Z" fill="var(--line)"/>
+
+  <rect x="226" y="50" width="290" height="70" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="238" y="68" font-size="10" font-weight="700" fill="var(--ink)">③ 廉价剪枝 _prune_old_tool_results · 无 LLM（:990）</text>
+  <text x="238" y="86" font-size="9" fill="var(--ink)">旧 tool 结果正文 → 1 行摘要（先省一轮，零成本）</text>
+  <text x="238" y="104" font-size="9" font-family="monospace" fill="var(--muted)">[old tool output pruned: N lines]</text>
+
+  <rect x="226" y="128" width="290" height="136" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="238" y="146" font-size="10" font-weight="700" fill="var(--accent-ink)">④ 模板填真实摘要 · context_compressor.py:1565-1575</text>
+  <text x="238" y="164" font-size="9" font-family="monospace" fill="var(--ink)">## Completed Actions</text>
+  <text x="238" y="180" font-size="9" font-family="monospace" fill="var(--ink)">1. READ config.py:45 — found == should be != [tool: read_file]</text>
+  <text x="238" y="196" font-size="9" font-family="monospace" fill="var(--ink)">3. TEST pytest tests/ — 3/50 failed [tool: terminal]</text>
+  <text x="238" y="216" font-size="9" font-family="monospace" fill="var(--ink)">## Critical Context</text>
+  <text x="238" y="232" font-size="9" font-family="monospace" fill="var(--red)">[REDACTED]   ← 凭证/密钥一律抹掉（:1603）</text>
+  <text x="238" y="252" font-size="9" fill="var(--muted)">格式 N. ACTION target — outcome [tool: name]</text>
+
+  <rect x="524" y="50" width="136" height="214" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="592" y="68" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">⑤ token 账</text>
+  <rect x="556" y="84" width="72" height="40" rx="6" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="592" y="100" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">~8400</text>
+  <text x="592" y="116" text-anchor="middle" font-size="9" fill="var(--amber)">tok（压前）</text>
+  <line x1="592" y1="130" x2="592" y2="160" stroke="var(--line)" stroke-width="2"/>
+  <path d="M592 166 L586 156 L598 156 Z" fill="var(--line)"/>
+  <rect x="556" y="172" width="72" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="592" y="188" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">~600</text>
+  <text x="592" y="204" text-anchor="middle" font-size="9" fill="var(--accent-ink)">tok（压后）</text>
+  <text x="592" y="234" text-anchor="middle" font-size="10" font-weight="700" fill="var(--purple)">≈ -93%</text>
+  <text x="592" y="252" text-anchor="middle" font-size="8.5" fill="var(--muted)">目标 ~0.20 比率</text>
+
+  <rect x="20" y="276" width="640" height="116" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="32" y="294" font-size="10" font-weight="700" fill="var(--blue)">⑥ 缓存的唯一例外 · conversation_compression.py:515-517</text>
+  <text x="32" y="314" font-size="9" font-family="monospace" fill="var(--ink)">agent._invalidate_system_prompt()</text>
+  <text x="32" y="332" font-size="9" font-family="monospace" fill="var(--ink)">new_system_prompt = agent._build_system_prompt(system_message)</text>
+  <text x="32" y="350" font-size="9" font-family="monospace" fill="var(--ink)">agent._cached_system_prompt = new_system_prompt</text>
+  <text x="32" y="370" font-size="9" fill="var(--muted)">同一刀顺带 load_from_disk() 把本会话新记忆/技能折进新前缀（第 11 章）</text>
+  <text x="32" y="386" font-size="9" fill="var(--purple)">这是全书唯一被允许动「神圣缓存前缀」的操作（第 6 章）</text>
+
+  <rect x="20" y="402" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="416" text-anchor="middle" font-size="9" fill="var(--muted)">读这张图：压缩=保头(3,衰减)+保尾(20)、中段 5 条折成 ## 模板摘要、凭证抹成 [REDACTED]，8400→600 tok，并唯一一次重建缓存前缀</text>
+</svg>
+<div class="fig-cap"><b>一次压缩的内容变换</b>：边界 <span class="mono">protect_first_n=3</span>（随增长衰减→0）/ <span class="mono">protect_last_n=20</span>，中间 <b>5 条</b>被选中压缩；先经 <span class="mono">_prune_old_tool_results</span>（<b>无 LLM</b>）把旧 tool 结果折成一行，再用辅助模型按模板填真实摘要 <span class="mono">## Completed Actions</span>（<span class="mono">1. READ config.py:45 — found == should be !=</span> / <span class="mono">3. TEST pytest tests/ — 3/50 failed</span>）、<span class="mono">## Critical Context: [REDACTED]</span>；约 <b>8400→600 tok</b>。收尾是全书<b>唯一</b>动缓存前缀的操作：<span class="mono">_invalidate_system_prompt()</span> → <span class="mono">_build_system_prompt()</span> 写回 + <span class="mono">load_from_disk()</span>。</div>
+</div>
 """,
     "en": r"""
 <p class="lead">
@@ -1154,6 +1438,72 @@ agent._cached_system_prompt = new_system_prompt      <span class="cm"># write ba
     <li><strong>Fight context rot</strong>: temporal anchoring (to-dos to past tense to prevent re-execution), head-protection decay (no fossilizing), pruning old tool results.</li>
     <li><strong>Also refresh memory</strong>: invalidate triggers <span class="mono">load_from_disk()</span> to reload the memory snapshot (ch.11); the summary is a mid-conversation message, not in the cached prefix.</li>
   </ul>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 432" role="img" aria-label="The content transform of one real compression: the threshold timeline is in ch.27.3 and this figure only shows how content changes; boundaries protect_first_n=3 decaying to 0 and protect_last_n=20, with 5 middle messages to compress; the cheap prune _prune_old_tool_results with no LLM folds old tool results into one line; the template fills a real summary under Completed Actions and Critical Context REDACTED; tokens drop from about 8400 to about 600; the cache's only exception is _invalidate_system_prompt then _build_system_prompt writing back and load_from_disk.">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">One compression's content transform - which 5, folded into what, 8400 to 600 tok</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">This figure shows only how content changes (already triggered; threshold timeline in ch.27.3)</text>
+  <text x="628" y="32" font-size="22">🗜️</text>
+
+  <rect x="20" y="50" width="176" height="214" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="30" y="68" font-size="10" font-weight="700" fill="var(--ink)">2. Boundary (:787-788)</text>
+  <rect x="30" y="76" width="156" height="32" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="38" y="90" font-size="9" font-weight="700" fill="var(--accent-ink)">protect_first_n=3</text>
+  <text x="38" y="103" font-size="8.5" fill="var(--accent-ink)">head, decays to 0 as it grows (:2024)</text>
+  <rect x="30" y="116" width="156" height="48" rx="6" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="38" y="132" font-size="9" font-weight="700" fill="var(--purple)">middle 5 msgs - to compress</text>
+  <text x="38" y="147" font-size="8.5" fill="var(--purple)">aux model folds into points</text>
+  <text x="38" y="159" font-size="8.5" fill="var(--purple)">(keep high-signal, drop low)</text>
+  <rect x="30" y="172" width="156" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="38" y="186" font-size="9" font-weight="700" fill="var(--blue)">protect_last_n=20</text>
+  <text x="38" y="199" font-size="8.5" fill="var(--blue)">tail, recent context kept as-is</text>
+  <text x="30" y="224" font-size="9" fill="var(--muted)">keep head and tail,</text>
+  <text x="30" y="240" font-size="9" fill="var(--muted)">compress only the middle</text>
+  <text x="30" y="256" font-size="9" fill="var(--muted)">- saves tokens, keeps recents</text>
+
+  <line x1="200" y1="157" x2="218" y2="157" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M224 157 L216 153 L216 161 Z" fill="var(--line)"/>
+
+  <rect x="226" y="50" width="290" height="70" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="238" y="68" font-size="10" font-weight="700" fill="var(--ink)">3. Cheap prune _prune_old_tool_results - no LLM (:990)</text>
+  <text x="238" y="86" font-size="9" fill="var(--ink)">old tool result body -&gt; 1-line summary (free pre-pass)</text>
+  <text x="238" y="104" font-size="9" font-family="monospace" fill="var(--muted)">[old tool output pruned: N lines]</text>
+
+  <rect x="226" y="128" width="290" height="136" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="238" y="146" font-size="10" font-weight="700" fill="var(--accent-ink)">4. Template fills the real summary - context_compressor.py:1565-1575</text>
+  <text x="238" y="164" font-size="9" font-family="monospace" fill="var(--ink)">## Completed Actions</text>
+  <text x="238" y="180" font-size="9" font-family="monospace" fill="var(--ink)">1. READ config.py:45 — found == should be != [tool: read_file]</text>
+  <text x="238" y="196" font-size="9" font-family="monospace" fill="var(--ink)">3. TEST pytest tests/ — 3/50 failed [tool: terminal]</text>
+  <text x="238" y="216" font-size="9" font-family="monospace" fill="var(--ink)">## Critical Context</text>
+  <text x="238" y="232" font-size="9" font-family="monospace" fill="var(--red)">[REDACTED]   &lt;- creds/keys always wiped (:1603)</text>
+  <text x="238" y="252" font-size="9" fill="var(--muted)">format N. ACTION target — outcome [tool: name]</text>
+
+  <rect x="524" y="50" width="136" height="214" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="592" y="68" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">5. Token bill</text>
+  <rect x="556" y="84" width="72" height="40" rx="6" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="592" y="100" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">~8400</text>
+  <text x="592" y="116" text-anchor="middle" font-size="9" fill="var(--amber)">tok (before)</text>
+  <line x1="592" y1="130" x2="592" y2="160" stroke="var(--line)" stroke-width="2"/>
+  <path d="M592 166 L586 156 L598 156 Z" fill="var(--line)"/>
+  <rect x="556" y="172" width="72" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="592" y="188" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent-ink)">~600</text>
+  <text x="592" y="204" text-anchor="middle" font-size="9" fill="var(--accent-ink)">tok (after)</text>
+  <text x="592" y="234" text-anchor="middle" font-size="10" font-weight="700" fill="var(--purple)">~ -93%</text>
+  <text x="592" y="252" text-anchor="middle" font-size="8.5" fill="var(--muted)">target ~0.20 ratio</text>
+
+  <rect x="20" y="276" width="640" height="116" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="32" y="294" font-size="10" font-weight="700" fill="var(--blue)">6. The cache's only exception - conversation_compression.py:515-517</text>
+  <text x="32" y="314" font-size="9" font-family="monospace" fill="var(--ink)">agent._invalidate_system_prompt()</text>
+  <text x="32" y="332" font-size="9" font-family="monospace" fill="var(--ink)">new_system_prompt = agent._build_system_prompt(system_message)</text>
+  <text x="32" y="350" font-size="9" font-family="monospace" fill="var(--ink)">agent._cached_system_prompt = new_system_prompt</text>
+  <text x="32" y="370" font-size="9" fill="var(--muted)">the same cut piggybacks load_from_disk() to fold this session's new memory/skills in (ch.11)</text>
+  <text x="32" y="386" font-size="9" fill="var(--purple)">the only operation in the whole book allowed to touch the sacred cache prefix (ch.6)</text>
+
+  <rect x="20" y="402" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="416" text-anchor="middle" font-size="9" fill="var(--muted)">Read this: compress = keep head(3, decays) + tail(20), fold middle 5 into a ## template summary, wipe creds to [REDACTED], 8400 to 600 tok, the one cache rebuild</text>
+</svg>
+<div class="fig-cap"><b>One compression's content transform</b>: boundaries <span class="mono">protect_first_n=3</span> (decays to 0 as it grows) / <span class="mono">protect_last_n=20</span>, with the middle <b>5 messages</b> selected to compress; first <span class="mono">_prune_old_tool_results</span> (<b>no LLM</b>) folds old tool results into one line, then the aux model fills the template summary <span class="mono">## Completed Actions</span> (<span class="mono">1. READ config.py:45 — found == should be !=</span> / <span class="mono">3. TEST pytest tests/ — 3/50 failed</span>) and <span class="mono">## Critical Context: [REDACTED]</span>; about <b>8400 to 600 tok</b>. The finish is the book's <b>only</b> cache-prefix mutation: <span class="mono">_invalidate_system_prompt()</span> -&gt; <span class="mono">_build_system_prompt()</span> write-back + <span class="mono">load_from_disk()</span>.</div>
 </div>
 """,
 }
@@ -1382,6 +1732,58 @@ terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st
     <li><strong>后台进程</strong>:<span class="mono">background=True, notify_on_complete=True</span> 后台跑,完成时作新 turn(同委派完成队列,第 13 章),不破缓存。</li>
   </ul>
 </div>
+
+<div class="figure">
+<svg viewBox="0 0 680 484" role="img" aria-label="export TAG=v2 在 local docker ssh 三后端的真实包裹与 CWD 回传：统一中间脚本三后端逐字相同，先 source 快照、builtin cd 入会话目录、eval 命令、回写 export -p 快照、pwd -P 写临时文件并 printf 吐出 HERMES_CWD 标记；local 用 bash -c 加 os.setsid；docker 用 docker exec id bash -c；ssh 用 ssh bash -c shlex.quote；CWD 回传分叉本地读临时文件、docker 与 ssh 解析 stdout 标记；下一条 echo TAG 得到 v2。">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">一条命令，三后端真实包裹 · 同脚本逐字相同 + CWD 回传分叉</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">例子：terminal(&quot;export TAG=v2&quot;) 在 local / docker / ssh 三后端怎么跑</text>
+  <text x="628" y="32" font-size="22">🖥️</text>
+
+  <rect x="20" y="50" width="300" height="258" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="30" y="68" font-size="10" font-weight="700" fill="var(--ink)">① 统一中间脚本 · 三后端共享 verbatim</text>
+  <text x="30" y="82" font-size="9" fill="var(--muted)">tools/environments/base.py:418-470（_wrap_command）</text>
+  <text x="30" y="102" font-size="9" font-family="monospace" fill="var(--ink)">source &lt;snap&gt; &gt;/dev/null 2&gt;&amp;1 || true</text>
+  <text x="30" y="120" font-size="9" font-family="monospace" fill="var(--accent-ink)">builtin cd -- 'src' || exit 126</text>
+  <text x="30" y="138" font-size="9" font-family="monospace" fill="var(--purple)">eval 'export TAG=v2'</text>
+  <text x="30" y="156" font-size="9" font-family="monospace" fill="var(--ink)">__hermes_ec=$?</text>
+  <text x="30" y="174" font-size="9" font-family="monospace" fill="var(--ink)">export -p &gt; &lt;snap&gt; 2&gt;/dev/null || true</text>
+  <text x="30" y="192" font-size="9" font-family="monospace" fill="var(--blue)">pwd -P &gt; &lt;cwd_file&gt; 2&gt;/dev/null || true</text>
+  <text x="30" y="210" font-size="9" font-family="monospace" fill="var(--purple)">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</text>
+  <text x="42" y="226" font-size="9" font-family="monospace" fill="var(--purple)">&quot;$(pwd -P)&quot;</text>
+  <text x="30" y="244" font-size="9" font-family="monospace" fill="var(--ink)">exit $__hermes_ec</text>
+  <text x="30" y="266" font-size="8.5" fill="var(--muted)">cd 入会话 cwd → 跑命令 → 回写 env 快照</text>
+  <text x="30" y="280" font-size="8.5" fill="var(--muted)">→ 双通道吐 CWD（临时文件 + stdout 标记）</text>
+  <text x="30" y="298" font-size="8.5" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__（:280）</text>
+
+  <rect x="336" y="50" width="324" height="74" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="348" y="68" font-size="10" font-weight="700" fill="var(--accent-ink)">② local · environments/local.py:634-695</text>
+  <text x="348" y="88" font-size="9" font-family="monospace" fill="var(--ink)">args = [bash, &quot;-c&quot;, wrapped]</text>
+  <text x="348" y="108" font-size="9" font-family="monospace" fill="var(--ink)">preexec_fn = os.setsid  # 独立进程组，可整组中断</text>
+
+  <rect x="336" y="132" width="324" height="74" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="348" y="150" font-size="10" font-weight="700" fill="var(--blue)">③ docker · environments/docker.py:943-964</text>
+  <text x="348" y="170" font-size="9" font-family="monospace" fill="var(--ink)">cmd = [docker, exec, &lt;id&gt;, bash, -c, wrapped]</text>
+  <text x="348" y="190" font-size="9" fill="var(--muted)">同一脚本塞进容器内 bash 跑</text>
+
+  <rect x="336" y="214" width="324" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="348" y="232" font-size="10" font-weight="700" fill="var(--purple)">④ ssh · environments/ssh.py:343-352</text>
+  <text x="348" y="252" font-size="9" font-family="monospace" fill="var(--ink)">ssh … bash -c shlex.quote(wrapped)</text>
+  <text x="348" y="272" font-size="9" fill="var(--muted)">整段脚本 shlex.quote 后过 SSH</text>
+
+  <rect x="20" y="320" width="640" height="74" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="32" y="338" font-size="10" font-weight="700" fill="var(--ink)">⑤ CWD 回传分叉 · base.py:778-812（_extract_cwd_from_output）</text>
+  <text x="32" y="358" font-size="9" fill="var(--blue)">local：读临时文件 _cwd_file（脚本里 pwd -P 已写入）</text>
+  <text x="32" y="378" font-size="9" fill="var(--purple)">docker / ssh：解析 stdout 的 __HERMES_CWD_s1__…__HERMES_CWD_s1__ 标记并剥离</text>
+
+  <rect x="20" y="402" width="640" height="40" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="32" y="420" font-size="10" font-weight="700" fill="var(--accent-ink)">⑥ 下一条命令（env 经快照跨进程延续）</text>
+  <text x="32" y="436" font-size="9" font-family="monospace" fill="var(--ink)">terminal(&quot;echo $TAG&quot;)  →  v2</text>
+
+  <rect x="20" y="452" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="466" text-anchor="middle" font-size="9" fill="var(--muted)">读这张图：同一段包裹脚本三后端逐字相同，只有 spawn 方式（bash -c / docker exec / ssh）和 CWD 回传通道（临时文件 / stdout 标记）不同</text>
+</svg>
+<div class="fig-cap"><b>一条命令，三后端真实包裹</b>：<span class="mono">_wrap_command</span> 生成的中间脚本三后端<b>逐字相同</b>——<span class="mono">source &lt;snap&gt;</span> → <span class="mono">builtin cd -- 'src' || exit 126</span> → <span class="mono">eval 'export TAG=v2'</span> → <span class="mono">export -p &gt; &lt;snap&gt;</span> → <span class="mono">pwd -P &gt; &lt;cwd_file&gt;</span> → <span class="mono">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</span>。差异只在 spawn：local <span class="mono">[bash,-c]+os.setsid</span>、docker <span class="mono">[docker,exec,&lt;id&gt;,bash,-c]</span>、ssh <span class="mono">bash -c shlex.quote</span>；CWD 回传分叉——local 读 <span class="mono">_cwd_file</span>，docker/ssh 解析 stdout 标记。下条 <span class="mono">echo $TAG</span> → <span class="mono">v2</span>。</div>
+</div>
 """,
     "en": r"""
 <p class="lead">
@@ -1604,6 +2006,58 @@ terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st
     <li><strong>serverless savings</strong>: backends like modal start on demand and <span class="mono">cleanup()</span> when done, not paying to keep a server running for occasional commands.</li>
     <li><strong>Background processes</strong>: <span class="mono">background=True, notify_on_complete=True</span> runs in the background and surfaces as a new turn on completion (like the delegation completion queue, ch.13), not breaking the cache.</li>
   </ul>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 484" role="img" aria-label="export TAG=v2 wrapped across local docker and ssh backends with CWD return: the unified middle script is byte-identical across backends, sourcing the snapshot, builtin cd into the session dir, eval the command, write back export -p snapshot, pwd -P to a temp file and printf emits the HERMES_CWD marker; local uses bash -c plus os.setsid; docker uses docker exec id bash -c; ssh uses ssh bash -c shlex.quote; CWD return forks where local reads the temp file and docker and ssh parse the stdout marker; the next command echo TAG yields v2.">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">One command, three real wrappers - same script byte-for-byte + CWD return fork</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">Example: how terminal(&quot;export TAG=v2&quot;) runs on local / docker / ssh</text>
+  <text x="628" y="32" font-size="22">🖥️</text>
+
+  <rect x="20" y="50" width="300" height="258" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="30" y="68" font-size="10" font-weight="700" fill="var(--ink)">1. Unified middle script - shared verbatim by all 3</text>
+  <text x="30" y="82" font-size="9" fill="var(--muted)">tools/environments/base.py:418-470 (_wrap_command)</text>
+  <text x="30" y="102" font-size="9" font-family="monospace" fill="var(--ink)">source &lt;snap&gt; &gt;/dev/null 2&gt;&amp;1 || true</text>
+  <text x="30" y="120" font-size="9" font-family="monospace" fill="var(--accent-ink)">builtin cd -- 'src' || exit 126</text>
+  <text x="30" y="138" font-size="9" font-family="monospace" fill="var(--purple)">eval 'export TAG=v2'</text>
+  <text x="30" y="156" font-size="9" font-family="monospace" fill="var(--ink)">__hermes_ec=$?</text>
+  <text x="30" y="174" font-size="9" font-family="monospace" fill="var(--ink)">export -p &gt; &lt;snap&gt; 2&gt;/dev/null || true</text>
+  <text x="30" y="192" font-size="9" font-family="monospace" fill="var(--blue)">pwd -P &gt; &lt;cwd_file&gt; 2&gt;/dev/null || true</text>
+  <text x="30" y="210" font-size="9" font-family="monospace" fill="var(--purple)">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</text>
+  <text x="42" y="226" font-size="9" font-family="monospace" fill="var(--purple)">&quot;$(pwd -P)&quot;</text>
+  <text x="30" y="244" font-size="9" font-family="monospace" fill="var(--ink)">exit $__hermes_ec</text>
+  <text x="30" y="266" font-size="8.5" fill="var(--muted)">cd into session cwd -&gt; run -&gt; write env snapshot</text>
+  <text x="30" y="280" font-size="8.5" fill="var(--muted)">-&gt; emit CWD on two channels (temp file + stdout)</text>
+  <text x="30" y="298" font-size="8.5" fill="var(--muted)">_cwd_marker(sid)=__HERMES_CWD_s1__ (:280)</text>
+
+  <rect x="336" y="50" width="324" height="74" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="348" y="68" font-size="10" font-weight="700" fill="var(--accent-ink)">2. local - environments/local.py:634-695</text>
+  <text x="348" y="88" font-size="9" font-family="monospace" fill="var(--ink)">args = [bash, &quot;-c&quot;, wrapped]</text>
+  <text x="348" y="108" font-size="9" font-family="monospace" fill="var(--ink)">preexec_fn = os.setsid  # own pgid, group-interruptible</text>
+
+  <rect x="336" y="132" width="324" height="74" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="348" y="150" font-size="10" font-weight="700" fill="var(--blue)">3. docker - environments/docker.py:943-964</text>
+  <text x="348" y="170" font-size="9" font-family="monospace" fill="var(--ink)">cmd = [docker, exec, &lt;id&gt;, bash, -c, wrapped]</text>
+  <text x="348" y="190" font-size="9" fill="var(--muted)">same script, run by bash inside the container</text>
+
+  <rect x="336" y="214" width="324" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="348" y="232" font-size="10" font-weight="700" fill="var(--purple)">4. ssh - environments/ssh.py:343-352</text>
+  <text x="348" y="252" font-size="9" font-family="monospace" fill="var(--ink)">ssh … bash -c shlex.quote(wrapped)</text>
+  <text x="348" y="272" font-size="9" fill="var(--muted)">whole script shlex.quote'd, sent over SSH</text>
+
+  <rect x="20" y="320" width="640" height="74" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="32" y="338" font-size="10" font-weight="700" fill="var(--ink)">5. CWD return fork - base.py:778-812 (_extract_cwd_from_output)</text>
+  <text x="32" y="358" font-size="9" fill="var(--blue)">local: reads the temp file _cwd_file (pwd -P already wrote it)</text>
+  <text x="32" y="378" font-size="9" fill="var(--purple)">docker / ssh: parse the stdout __HERMES_CWD_s1__…__HERMES_CWD_s1__ marker and strip it</text>
+
+  <rect x="20" y="402" width="640" height="40" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="32" y="420" font-size="10" font-weight="700" fill="var(--accent-ink)">6. Next command (env carries across via the snapshot)</text>
+  <text x="32" y="436" font-size="9" font-family="monospace" fill="var(--ink)">terminal(&quot;echo $TAG&quot;)  -&gt;  v2</text>
+
+  <rect x="20" y="452" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="466" text-anchor="middle" font-size="9" fill="var(--muted)">Read this: the same wrapper script is byte-identical across backends; only the spawn (bash -c / docker exec / ssh) and the CWD channel (temp file / stdout marker) differ</text>
+</svg>
+<div class="fig-cap"><b>One command, three real wrappers</b>: the middle script from <span class="mono">_wrap_command</span> is <b>byte-identical</b> across backends - <span class="mono">source &lt;snap&gt;</span> -&gt; <span class="mono">builtin cd -- 'src' || exit 126</span> -&gt; <span class="mono">eval 'export TAG=v2'</span> -&gt; <span class="mono">export -p &gt; &lt;snap&gt;</span> -&gt; <span class="mono">pwd -P &gt; &lt;cwd_file&gt;</span> -&gt; <span class="mono">printf '\n__HERMES_CWD_s1__%s__HERMES_CWD_s1__\n'</span>. Only the spawn differs: local <span class="mono">[bash,-c]+os.setsid</span>, docker <span class="mono">[docker,exec,&lt;id&gt;,bash,-c]</span>, ssh <span class="mono">bash -c shlex.quote</span>; the CWD return forks - local reads <span class="mono">_cwd_file</span>, docker/ssh parse the stdout marker. The next <span class="mono">echo $TAG</span> -&gt; <span class="mono">v2</span>.</div>
 </div>
 """,
 }

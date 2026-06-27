@@ -502,6 +502,80 @@ agent = AIAgent(
 
 <p>另一头的 catchup 是同样的「防雪崩」思路。设想笔记本合盖一整晚,开机时若把积压的几十次「每 5 分钟」补跑一股脑全发,既刷屏又烧钱。<span class="mono">_compute_grace_seconds</span> 把容忍窗口设为<strong>半个周期</strong>(clamp 在 120s–2h):错过得不久就补跑一次,错过太久就把 <span class="mono">next_run_at</span> <strong>快进</strong>到下一个整点、丢弃积压。而 <span class="mono">.tick.lock</span> 文件锁(底层是 <span class="mono">fcntl.flock</span>)保证哪怕网关与独立调度器同时在跑,同一时刻也只有一个 tick 真正推进任务。三个阀各管一类失控——不活动超时管「跑飞」、catchup 管「错过」、文件锁管「重复」——合起来把「定时」从玩具做成可托付的基础设施。值得一提的是,这套阀门的设计取向与第 13 章委派的「中断级联」同源:都不追求绝对掐死,而是给失控留一个<strong>可预期、可恢复</strong>的兜底,让正常路径丝毫不受影响、异常路径也能优雅止损。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 404" role="img" aria-label="三条真实调度表达式跑一遍:基准 now 为 2026-06-27T19:35;0 9 星号 经 parse_schedule 解析成 kind cron,croniter 算出 2026-06-28T09:00,grace 用 86400 除 2 等 43200 被 clamp 到 MAX 7200 秒;every 5m 解析成 kind interval minutes 5,下次触发 19:40,grace 300 除 2 等 150 秒;2026-06-28T14:00 解析成 kind once,下次触发即该时刻,grace 取 MIN 120 秒;底部 catchup 判定错过不超过 grace 就补跑一次,超过就快进丢弃积压">
+  <rect x="14" y="12" width="652" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="26" y="31" font-size="11.5" fill="var(--ink)">⏱ 基准 <tspan class="mono" font-weight="700" fill="var(--purple)">now = 2026-06-27T19:35</tspan> · grace 规则 = period//2 再 clamp(MIN 120s, MAX 7200s)</text>
+
+  <text x="16" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">① 调度表达式</text>
+  <text x="174" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">② parse_schedule →</text>
+  <text x="332" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">③ compute_next_run →</text>
+  <text x="490" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">④ _compute_grace_seconds</text>
+
+  <rect x="14" y="64" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">A · 每天 9 点</text>
+  <text x="22" y="105" class="mono" font-size="11" font-weight="700" fill="var(--ink)">"0 9 * * *"</text>
+  <text x="165" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="64" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="82" font-size="10" fill="var(--accent-ink)">{kind:&quot;cron&quot;,</text>
+  <text x="180" y="105" class="mono" font-size="9.5" fill="var(--ink)">expr:&quot;0 9 * * *&quot;}</text>
+  <text x="323" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="64" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="82" font-size="9.5" fill="var(--muted)">croniter 下一个整点</text>
+  <text x="338" y="105" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-28T09:00</text>
+  <text x="481" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="64" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="82" font-size="9.5" fill="var(--ink)">86400//2 = 43200</text>
+  <text x="496" y="105" font-size="10" font-weight="700" fill="var(--amber)">→ clamp MAX 7200s (2h)</text>
+
+  <rect x="14" y="128" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="146" font-size="9.5" font-weight="700" fill="var(--blue)">B · 每 5 分钟</text>
+  <text x="22" y="169" class="mono" font-size="11" font-weight="700" fill="var(--ink)">"every 5m"</text>
+  <text x="165" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="128" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="146" font-size="10" fill="var(--accent-ink)">{kind:&quot;interval&quot;,</text>
+  <text x="180" y="169" class="mono" font-size="9.5" fill="var(--ink)">minutes:5}</text>
+  <text x="323" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="128" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="146" font-size="9.5" fill="var(--muted)">now + 5m</text>
+  <text x="338" y="169" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-27T19:40</text>
+  <text x="481" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="128" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="146" font-size="9.5" fill="var(--ink)">300//2 = 150</text>
+  <text x="496" y="169" font-size="10" font-weight="700" fill="var(--amber)">150s ≥ MIN 120s ✓</text>
+
+  <rect x="14" y="192" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="210" font-size="9.5" font-weight="700" fill="var(--blue)">C · 指定时刻一次</text>
+  <text x="22" y="233" class="mono" font-size="9.5" font-weight="700" fill="var(--ink)">"2026-06-28T14:00"</text>
+  <text x="165" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="192" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="210" font-size="10" fill="var(--accent-ink)">{kind:&quot;once&quot;,</text>
+  <text x="180" y="233" class="mono" font-size="9" fill="var(--ink)">run_at:&quot;…T14:00&quot;}</text>
+  <text x="323" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="192" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="210" font-size="9.5" fill="var(--muted)">即该时刻</text>
+  <text x="338" y="233" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-28T14:00</text>
+  <text x="481" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="192" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="210" font-size="9.5" fill="var(--ink)">once → 无周期</text>
+  <text x="496" y="233" font-size="10" font-weight="700" fill="var(--amber)">→ 取 MIN 120s</text>
+
+  <rect x="14" y="262" width="652" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="279" class="mono" font-size="9" fill="var(--muted)">cron/jobs.py:498  return max(MIN_GRACE, min(grace, MAX_GRACE))   # MIN 120 · MAX 7200</text>
+
+  <text x="16" y="306" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ catchup 判定 · tick 醒来时距应跑时刻已过 Δ</text>
+  <rect x="14" y="312" width="324" height="46" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="332" font-size="10.5" fill="var(--accent-ink)">Δ ≤ grace → <tspan font-weight="700">补跑一次</tspan>(catch up)</text>
+  <text x="26" y="350" font-size="9" fill="var(--muted)">错过不久,该跑的那次仍要补上</text>
+  <rect x="346" y="312" width="320" height="46" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="358" y="332" font-size="10.5" fill="var(--red)">Δ &gt; grace → <tspan font-weight="700">快进 next_run · 丢积压</tspan></text>
+  <text x="358" y="350" font-size="9" fill="var(--muted)">免得开机把几十次堆积一股脑全跑</text>
+
+  <text x="16" y="380" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图:三条表达式各撞一个 clamp 边界 —— cron 撞 MAX 7200、interval 落区间内、once 撞 MIN 120。</text>
+</svg>
+<div class="fig-cap"><b>三条调度表达式跑一遍</b>:同一基准 <span class="mono">now=2026-06-27T19:35</span>,<span class="mono">parse_schedule</span> 把三种写法归一成 <span class="mono">cron/interval/once</span>,<span class="mono">compute_next_run</span> 算出各自下次触发,<span class="mono">_compute_grace_seconds</span> 用 <span class="mono">period//2</span> 再 clamp 出 grace:<b>cron 的 43200s 撞上 MAX 7200</b>、<b>interval 的 150s 落在区间内</b>、<b>once 直接取 MIN 120</b>。三条各演示一个边界,catchup 据 grace 决定补跑还是快进。</div>
+</div>
+
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><span class="mono">tick</span> 循环(<span class="mono">.tick.lock</span> 文件锁防重复)扫描到期任务</span></div>
   <div class="step"><span class="num">2</span><span class="sc">按 <span class="mono">parse_schedule</span> 的结构算下次触发;过了 catchup 窗口就快进</span></div>
@@ -706,6 +780,80 @@ agent = AIAgent(
 </div>
 
 <p>The catchup valve at the other end follows the same "anti-avalanche" logic. Imagine the laptop is closed all night; on boot, firing dozens of backlogged "every 5 min" runs at once would both flood you and burn money. <span class="mono">_compute_grace_seconds</span> sets the tolerance window to <strong>half the period</strong> (clamped 120s–2h): miss by a little and it catches up once; miss by a lot and it <strong>fast-forwards</strong> <span class="mono">next_run_at</span> to the next slot, dropping the backlog. The <span class="mono">.tick.lock</span> file lock (<span class="mono">fcntl.flock</span> underneath) ensures that even with the gateway and a standalone scheduler both running, only one tick advances jobs at a time. Three valves, three failure modes — inactivity for "runaway," catchup for "missed," the lock for "duplicate" — together turning "scheduling" from a toy into infrastructure you can trust. Notably, this valve philosophy shares roots with ch.13's delegation "interrupt cascade": neither chases an absolute kill, but gives runaways a <strong>predictable, recoverable</strong> backstop, leaving the normal path entirely unaffected while letting the abnormal one fail gracefully.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 404" role="img" aria-label="Three real schedule expressions walked through: baseline now is 2026-06-27T19:35; 0 9 star star star parses to kind cron, croniter yields 2026-06-28T09:00, grace is 86400 over 2 equals 43200 clamped to MAX 7200 seconds; every 5m parses to kind interval minutes 5, next run 19:40, grace is 300 over 2 equals 150 seconds; 2026-06-28T14:00 parses to kind once, next run is that instant, grace takes MIN 120 seconds; bottom catchup decides miss within grace catches up once, miss beyond grace fast-forwards and drops the backlog">
+  <rect x="14" y="12" width="652" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="26" y="31" font-size="11.5" fill="var(--ink)">⏱ baseline <tspan class="mono" font-weight="700" fill="var(--purple)">now = 2026-06-27T19:35</tspan> · grace rule = period//2 then clamp(MIN 120s, MAX 7200s)</text>
+
+  <text x="16" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">① schedule string</text>
+  <text x="174" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">② parse_schedule →</text>
+  <text x="332" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">③ compute_next_run →</text>
+  <text x="490" y="58" font-size="9.5" font-weight="700" fill="var(--muted)">④ _compute_grace_seconds</text>
+
+  <rect x="14" y="64" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">A · daily 9am</text>
+  <text x="22" y="105" class="mono" font-size="11" font-weight="700" fill="var(--ink)">"0 9 * * *"</text>
+  <text x="165" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="64" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="82" font-size="10" fill="var(--accent-ink)">{kind:&quot;cron&quot;,</text>
+  <text x="180" y="105" class="mono" font-size="9.5" fill="var(--ink)">expr:&quot;0 9 * * *&quot;}</text>
+  <text x="323" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="64" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="82" font-size="9.5" fill="var(--muted)">croniter next slot</text>
+  <text x="338" y="105" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-28T09:00</text>
+  <text x="481" y="95" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="64" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="82" font-size="9.5" fill="var(--ink)">86400//2 = 43200</text>
+  <text x="496" y="105" font-size="10" font-weight="700" fill="var(--amber)">→ clamp MAX 7200s (2h)</text>
+
+  <rect x="14" y="128" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="146" font-size="9.5" font-weight="700" fill="var(--blue)">B · every 5 min</text>
+  <text x="22" y="169" class="mono" font-size="11" font-weight="700" fill="var(--ink)">"every 5m"</text>
+  <text x="165" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="128" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="146" font-size="10" fill="var(--accent-ink)">{kind:&quot;interval&quot;,</text>
+  <text x="180" y="169" class="mono" font-size="9.5" fill="var(--ink)">minutes:5}</text>
+  <text x="323" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="128" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="146" font-size="9.5" fill="var(--muted)">now + 5m</text>
+  <text x="338" y="169" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-27T19:40</text>
+  <text x="481" y="159" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="128" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="146" font-size="9.5" fill="var(--ink)">300//2 = 150</text>
+  <text x="496" y="169" font-size="10" font-weight="700" fill="var(--amber)">150s ≥ MIN 120s ✓</text>
+
+  <rect x="14" y="192" width="144" height="54" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="210" font-size="9.5" font-weight="700" fill="var(--blue)">C · once at instant</text>
+  <text x="22" y="233" class="mono" font-size="9.5" font-weight="700" fill="var(--ink)">"2026-06-28T14:00"</text>
+  <text x="165" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="172" y="192" width="144" height="54" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="180" y="210" font-size="10" fill="var(--accent-ink)">{kind:&quot;once&quot;,</text>
+  <text x="180" y="233" class="mono" font-size="9" fill="var(--ink)">run_at:&quot;…T14:00&quot;}</text>
+  <text x="323" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="330" y="192" width="144" height="54" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="338" y="210" font-size="9.5" fill="var(--muted)">that instant</text>
+  <text x="338" y="233" class="mono" font-size="11" font-weight="700" fill="var(--purple)">2026-06-28T14:00</text>
+  <text x="481" y="223" font-size="13" fill="var(--muted)">→</text>
+  <rect x="488" y="192" width="178" height="54" rx="7" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="496" y="210" font-size="9.5" fill="var(--ink)">once → no period</text>
+  <text x="496" y="233" font-size="10" font-weight="700" fill="var(--amber)">→ takes MIN 120s</text>
+
+  <rect x="14" y="262" width="652" height="26" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="279" class="mono" font-size="9" fill="var(--muted)">cron/jobs.py:498  return max(MIN_GRACE, min(grace, MAX_GRACE))   # MIN 120 · MAX 7200</text>
+
+  <text x="16" y="306" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ catchup check · when tick wakes, Δ since the due instant</text>
+  <rect x="14" y="312" width="324" height="46" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="332" font-size="10.5" fill="var(--accent-ink)">Δ ≤ grace → <tspan font-weight="700">catch up once</tspan></text>
+  <text x="26" y="350" font-size="9" fill="var(--muted)">missed by a little, still run that one</text>
+  <rect x="346" y="312" width="320" height="46" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="358" y="332" font-size="10.5" fill="var(--red)">Δ &gt; grace → <tspan font-weight="700">fast-forward · drop backlog</tspan></text>
+  <text x="358" y="350" font-size="9" fill="var(--muted)">so boot does not fire dozens at once</text>
+
+  <text x="16" y="380" font-size="10.5" font-weight="700" fill="var(--muted)">Read this: each expression hits one clamp edge — cron hits MAX 7200, interval lands inside, once hits MIN 120.</text>
+</svg>
+<div class="fig-cap"><b>Three schedule expressions walked through</b>: at one baseline <span class="mono">now=2026-06-27T19:35</span>, <span class="mono">parse_schedule</span> folds three syntaxes into <span class="mono">cron/interval/once</span>, <span class="mono">compute_next_run</span> yields each next fire time, and <span class="mono">_compute_grace_seconds</span> takes <span class="mono">period//2</span> then clamps: <b>cron's 43200s hits MAX 7200</b>, <b>interval's 150s lands inside</b>, <b>once takes MIN 120</b>. Each shows one edge; catchup uses grace to decide catch-up vs fast-forward.</div>
+</div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><span class="mono">tick</span> loop (<span class="mono">.tick.lock</span> file lock prevents duplicates) scans due jobs</span></div>

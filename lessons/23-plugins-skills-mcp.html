@@ -528,6 +528,60 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 
 <p>缓存这条线甚至约束到"装技能"本身:会改动 system-prompt 状态的 slash 命令(技能、工具、记忆)都是<strong>缓存感知</strong>的——默认<strong>延迟失效</strong>(改动下个会话才生效),想立刻生效得显式加 <span class="mono">--now</span>。<span class="mono">/skills install --now</span> 就是这条范式的样板。换句话说:边缘扩展不仅要<strong>挂得上</strong>,还要挂得<strong>不打扰正在进行的对话</strong>——能力是边缘的,但缓存纪律是全局的。</p>
 
+<div class="figure">
+<svg viewBox="0 0 680 418" role="img" aria-label="两个真实 MCP catalog 条目走一遍:左 linear 是远程 OAuth http,manifest 写 name linear、description Find create and update Linear issues、transport type http url mcp.linear.app、auth type oauth,install 后写进 config.yaml 的 mcp_servers,MCP client 连接走 OAuth 浏览器流暴露 find get list 加 create update;右 n8n 是本地 stdio 桥,transport type stdio command INSTALL_DIR 下的 python,install type git,auth type api_key,暴露 11 个工具,default_enabled 只留 8 个只读、剪掉 activate deactivate 和 container_logs 三个 mutating;底部零足迹门控:未 install 工具 schema 不进 context,进 optional-mcps 目录等于经 PR 审核的 Nous 批准">
+  <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="30" font-size="11" fill="var(--accent-ink)">两个真实 catalog 条目 install 后暴露什么 + 零足迹门控(<tspan class="mono">optional-mcps/&lt;name&gt;/manifest.yaml</tspan>)</text>
+
+  <text x="16" y="58" font-size="11" font-weight="700" fill="var(--blue)">🔗 linear · 远程 OAuth (http)</text>
+  <rect x="14" y="66" width="320" height="98" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="82" class="mono" font-size="9" fill="var(--ink)">name: linear</text>
+  <text x="22" y="97" class="mono" font-size="9" fill="var(--muted)">description: Find, create, and update</text>
+  <text x="22" y="112" class="mono" font-size="9" fill="var(--muted)"> Linear issues, projects, and comments.</text>
+  <text x="22" y="127" class="mono" font-size="9" fill="var(--ink)">transport: {type: http,</text>
+  <text x="22" y="142" class="mono" font-size="9" fill="var(--ink)"> url: https://mcp.linear.app/mcp}</text>
+  <text x="22" y="157" class="mono" font-size="9" fill="var(--purple)">auth: {type: oauth}</text>
+
+  <rect x="14" y="170" width="320" height="40" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="186" class="mono" font-size="9" fill="var(--ink)">hermes mcp install linear</text>
+  <text x="22" y="202" font-size="9" fill="var(--muted)">→ 写 config.yaml: mcp_servers.linear</text>
+
+  <rect x="14" y="216" width="320" height="76" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="22" y="233" font-size="9.5" font-weight="700" fill="var(--accent-ink)">MCP client 连接 → OAuth 浏览器流</text>
+  <text x="22" y="251" font-size="9.5" fill="var(--ink)">暴露 <tspan font-weight="700" fill="var(--purple)">find / get / list</tspan>(只读)</text>
+  <text x="22" y="269" font-size="9.5" fill="var(--ink)"> + <tspan font-weight="700" fill="var(--amber)">create / update</tspan>(写)</text>
+  <text x="22" y="286" font-size="9" fill="var(--muted)">跨 issues / projects / comments</text>
+
+  <text x="348" y="58" font-size="11" font-weight="700" fill="var(--blue)">🖥 n8n · 本地 stdio 桥</text>
+  <rect x="346" y="66" width="320" height="98" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="354" y="82" class="mono" font-size="9" fill="var(--ink)">name: n8n</text>
+  <text x="354" y="98" class="mono" font-size="9" fill="var(--ink)">transport: {type: stdio,</text>
+  <text x="354" y="113" class="mono" font-size="9" fill="var(--ink)"> command: ${INSTALL_DIR}/.venv/bin/python}</text>
+  <text x="354" y="129" class="mono" font-size="9" fill="var(--muted)">install: {type: git, ref: main}</text>
+  <text x="354" y="145" class="mono" font-size="9" fill="var(--purple)">auth: {type: api_key} · N8N_API_KEY</text>
+  <text x="354" y="160" class="mono" font-size="9" fill="var(--muted)">(stdio · 无公网端口)</text>
+
+  <rect x="346" y="170" width="320" height="40" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="354" y="186" class="mono" font-size="9" fill="var(--ink)">git clone + python -m venv .venv</text>
+  <text x="354" y="202" class="mono" font-size="9" fill="var(--muted)"> + pip install -r requirements.txt</text>
+
+  <rect x="346" y="216" width="320" height="76" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="354" y="233" font-size="9.5" font-weight="700" fill="var(--accent-ink)">暴露 11 工具 · tools.default_enabled 剪枝</text>
+  <text x="354" y="251" font-size="9" fill="var(--ink)"><tspan font-weight="700" fill="var(--purple)">✓ 8 只读</tspan> health · list_workflows · get_workflow…</text>
+  <text x="354" y="269" font-size="9" fill="var(--ink)"><tspan font-weight="700" fill="var(--red)">✗ 3 剪掉</tspan> activate/deactivate · container_logs</text>
+  <text x="354" y="286" font-size="9" fill="var(--muted)">mutating 默认不启,按威胁模型自行开</text>
+
+  <text x="16" y="312" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ 零足迹门控 + 「进 catalog = 经审核」</text>
+  <rect x="14" y="318" width="652" height="48" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="336" font-size="10" fill="var(--ink)">未 install → 工具 schema <tspan font-weight="700" fill="var(--purple)">不进 context</tspan>(零核心 schema 足迹);<tspan class="mono">check_fn</tspan> 门控让未配置就不暴露。</text>
+  <text x="22" y="356" font-size="10" fill="var(--ink)">进 <tspan class="mono">optional-mcps/</tspan> 目录 = <tspan font-weight="700" fill="var(--accent-ink)">Nous 批准(经 PR 审核)</tspan>;MCP 永不自动更新,需显式 re-install。</text>
+
+  <text x="16" y="386" class="mono" font-size="9" fill="var(--muted)">mcp_catalog.py:4  &quot;each catalog entry … ships disabled&quot;   ·   plugins.py:367  register_tool(check_fn=…)</text>
+  <text x="16" y="408" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图:同一套 catalog 容两种 transport —— linear 远程 OAuth、n8n 本地 stdio,都零核心 schema 足迹。</text>
+</svg>
+<div class="fig-cap"><b>两个真实 manifest 落地</b>:<span class="mono">linear</span>(<span class="mono">transport:{type:http, url:https://mcp.linear.app/mcp}</span>、<span class="mono">auth:{type:oauth}</span>)install 后写进 <span class="mono">config.yaml</span> 的 <span class="mono">mcp_servers.linear</span>,MCP client 走 OAuth 暴露 <b>find/get/list + create/update</b>;<span class="mono">n8n</span>(<span class="mono">transport:{type:stdio, command:${INSTALL_DIR}/.venv/bin/python}</span>)暴露 <b>11 工具</b>,<span class="mono">tools.default_enabled</span> 只留 8 个只读、剪掉 <span class="mono">activate/deactivate</span> 与 <span class="mono">container_logs</span> 三个 mutating。未 install 则 schema <b>不进 context</b>(零足迹),「进 <span class="mono">optional-mcps/</span> 目录 = 经 PR 审核的 Nous 批准」。</div>
+</div>
+
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">要加新能力 → 沿 Footprint Ladder 选<strong>足迹最小</strong>的一阶</span></div>
   <div class="step"><span class="num">2</span><span class="sc">插件:<span class="mono">register(ctx)</span> → <span class="mono">register_tool</span>(委托 registry)/<span class="mono">register_hook</span>,不碰核心文件</span></div>
@@ -759,6 +813,60 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 <p>A subtle aside on discovery: not every plugin uses the same discovery. The general <span class="mono">PluginManager</span> handles tools/hooks/CLI commands; but <strong>model-provider</strong> plugins use a <strong>separate, lazy discovery</strong> — scanned on the first <span class="mono">get_provider_profile()</span> or <span class="mono">list_providers()</span> call, NOT imported by the <span class="mono">PluginManager</span> (which would double-instantiate <span class="mono">ProviderProfile</span>). A user plugin of the same name <strong>overrides</strong> a built-in profile (last-writer-wins), so a third party can swap out any built-in provider without patching the repo. The same "edge extension" philosophy grows different discovery paths in different subsystems.</p>
 
 <p>The cache line even constrains "installing a skill" itself: slash commands that mutate system-prompt state (skills, tools, memory) are <strong>cache-aware</strong> — they <strong>defer invalidation</strong> by default (the change takes effect next session), and you must opt in with <span class="mono">--now</span> for it to apply immediately. <span class="mono">/skills install --now</span> is the canonical template. In other words: edge extension must not only <strong>attach</strong>, it must attach <strong>without disturbing the in-flight conversation</strong> — capability is at the edge, but cache discipline is global.</p>
+
+<div class="figure">
+<svg viewBox="0 0 680 418" role="img" aria-label="Two real MCP catalog entries walked through: left linear is remote OAuth over http, manifest sets name linear, description Find create and update Linear issues, transport type http url mcp.linear.app, auth type oauth; after install it writes config.yaml mcp_servers, the MCP client connects via the OAuth browser flow and exposes find get list plus create update; right n8n is a local stdio bridge, transport type stdio command INSTALL_DIR python, install type git, auth type api_key, it exposes 11 tools but default_enabled keeps only 8 read tools and prunes activate deactivate and container_logs; bottom zero-footprint gating: not installed means the tool schema never enters context, and being in optional-mcps equals a PR-reviewed Nous approval">
+  <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="26" y="30" font-size="11" fill="var(--accent-ink)">Two real catalog entries: what install exposes + zero-footprint gating (<tspan class="mono">optional-mcps/&lt;name&gt;/manifest.yaml</tspan>)</text>
+
+  <text x="16" y="58" font-size="11" font-weight="700" fill="var(--blue)">🔗 linear · remote OAuth (http)</text>
+  <rect x="14" y="66" width="320" height="98" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="82" class="mono" font-size="9" fill="var(--ink)">name: linear</text>
+  <text x="22" y="97" class="mono" font-size="9" fill="var(--muted)">description: Find, create, and update</text>
+  <text x="22" y="112" class="mono" font-size="9" fill="var(--muted)"> Linear issues, projects, and comments.</text>
+  <text x="22" y="127" class="mono" font-size="9" fill="var(--ink)">transport: {type: http,</text>
+  <text x="22" y="142" class="mono" font-size="9" fill="var(--ink)"> url: https://mcp.linear.app/mcp}</text>
+  <text x="22" y="157" class="mono" font-size="9" fill="var(--purple)">auth: {type: oauth}</text>
+
+  <rect x="14" y="170" width="320" height="40" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="186" class="mono" font-size="9" fill="var(--ink)">hermes mcp install linear</text>
+  <text x="22" y="202" font-size="9" fill="var(--muted)">→ writes config.yaml: mcp_servers.linear</text>
+
+  <rect x="14" y="216" width="320" height="76" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="22" y="233" font-size="9.5" font-weight="700" fill="var(--accent-ink)">MCP client connects → OAuth browser flow</text>
+  <text x="22" y="251" font-size="9.5" fill="var(--ink)">exposes <tspan font-weight="700" fill="var(--purple)">find / get / list</tspan> (read)</text>
+  <text x="22" y="269" font-size="9.5" fill="var(--ink)"> + <tspan font-weight="700" fill="var(--amber)">create / update</tspan> (write)</text>
+  <text x="22" y="286" font-size="9" fill="var(--muted)">across issues / projects / comments</text>
+
+  <text x="348" y="58" font-size="11" font-weight="700" fill="var(--blue)">🖥 n8n · local stdio bridge</text>
+  <rect x="346" y="66" width="320" height="98" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="354" y="82" class="mono" font-size="9" fill="var(--ink)">name: n8n</text>
+  <text x="354" y="98" class="mono" font-size="9" fill="var(--ink)">transport: {type: stdio,</text>
+  <text x="354" y="113" class="mono" font-size="9" fill="var(--ink)"> command: ${INSTALL_DIR}/.venv/bin/python}</text>
+  <text x="354" y="129" class="mono" font-size="9" fill="var(--muted)">install: {type: git, ref: main}</text>
+  <text x="354" y="145" class="mono" font-size="9" fill="var(--purple)">auth: {type: api_key} · N8N_API_KEY</text>
+  <text x="354" y="160" class="mono" font-size="9" fill="var(--muted)">(stdio · no public port)</text>
+
+  <rect x="346" y="170" width="320" height="40" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="354" y="186" class="mono" font-size="9" fill="var(--ink)">git clone + python -m venv .venv</text>
+  <text x="354" y="202" class="mono" font-size="9" fill="var(--muted)"> + pip install -r requirements.txt</text>
+
+  <rect x="346" y="216" width="320" height="76" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="354" y="233" font-size="9.5" font-weight="700" fill="var(--accent-ink)">exposes 11 tools · tools.default_enabled prunes</text>
+  <text x="354" y="251" font-size="9" fill="var(--ink)"><tspan font-weight="700" fill="var(--purple)">✓ 8 read</tspan> health · list_workflows · get_workflow…</text>
+  <text x="354" y="269" font-size="9" fill="var(--ink)"><tspan font-weight="700" fill="var(--red)">✗ 3 pruned</tspan> activate/deactivate · container_logs</text>
+  <text x="354" y="286" font-size="9" fill="var(--muted)">mutating off by default, opt in per threat model</text>
+
+  <text x="16" y="312" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ Zero-footprint gating + "in catalog = reviewed"</text>
+  <rect x="14" y="318" width="652" height="48" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="22" y="336" font-size="10" fill="var(--ink)">not installed → tool schema <tspan font-weight="700" fill="var(--purple)">never enters context</tspan> (zero core-schema footprint); <tspan class="mono">check_fn</tspan> hides it until configured.</text>
+  <text x="22" y="356" font-size="10" fill="var(--ink)">presence in <tspan class="mono">optional-mcps/</tspan> = <tspan font-weight="700" fill="var(--accent-ink)">Nous approval (merged via PR)</tspan>; MCPs never auto-update, re-install explicitly.</text>
+
+  <text x="16" y="386" class="mono" font-size="9" fill="var(--muted)">mcp_catalog.py:4  &quot;each catalog entry … ships disabled&quot;   ·   plugins.py:367  register_tool(check_fn=…)</text>
+  <text x="16" y="408" font-size="10.5" font-weight="700" fill="var(--muted)">Read this: one catalog holds two transports — linear remote OAuth, n8n local stdio — both with zero core-schema footprint.</text>
+</svg>
+<div class="fig-cap"><b>Two real manifests, made concrete</b>: <span class="mono">linear</span> (<span class="mono">transport:{type:http, url:https://mcp.linear.app/mcp}</span>, <span class="mono">auth:{type:oauth}</span>) on install writes <span class="mono">mcp_servers.linear</span> into <span class="mono">config.yaml</span>; the MCP client does OAuth and exposes <b>find/get/list + create/update</b>. <span class="mono">n8n</span> (<span class="mono">transport:{type:stdio, command:${INSTALL_DIR}/.venv/bin/python}</span>) exposes <b>11 tools</b>, and <span class="mono">tools.default_enabled</span> keeps only 8 read tools, pruning <span class="mono">activate/deactivate</span> and <span class="mono">container_logs</span>. Not installed → schema <b>never enters context</b> (zero footprint); "in <span class="mono">optional-mcps/</span> = a PR-reviewed Nous approval."</div>
+</div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">need a new capability → pick the <strong>smallest-footprint</strong> rung on the Footprint Ladder</span></div>

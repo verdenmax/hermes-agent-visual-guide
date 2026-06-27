@@ -206,6 +206,82 @@ LESSON_17 = {
   <p style="margin:.5rem 0 0">最后回到根:这套统一抽象之所以值得,落点还是<strong>单进程</strong>。一个进程才能共享同一份记忆、技能、cron 与配置状态,也才能让每会话的提示词缓存(项目铁律)长活;若二十个平台各起一个进程,共享状态、统一运维与缓存复用都无从谈起。窄腰把「平台数量」这条增长轴彻底挡在核心之外,核心的复杂度只跟「能力种类」走、不跟「平台个数」走——这才是单进程托管 20+ 平台在工程上真正成立的原因。</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 392" role="img" aria-label="实例图:一行真实 IRC 文本沿 adapter 逐字段翻成统一 MessageEvent。输入帧 :alice!~a@host PRIVMSG #ops :hermes: deploy staging。① 原生帧拆出 prefix command params;② 解析寻址得 sender_nick alice、target #ops、is_channel True 因井号、chat_type group,频道须被 @ 故剥 hermes: 前缀得 text deploy staging,未寻址则 return 丢弃;③ build_source 造出 SessionSource;④ MessageEvent 实例 text 等于 deploy staging、message_type 等于 MessageType.TEXT、message_id 等于 str int time 乘 1000;⑤ build_session_key 受 group_sessions_per_user True 与 thread_sessions_per_user False 调制路由;⑥ IRC 无 typing,send_typing 在边缘 no-op 吸收。">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:一行 IRC 文本 → 统一 MessageEvent</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">输入帧 :alice!~a@host PRIVMSG #ops :hermes: deploy staging</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🛰️</text>
+
+  <rect x="10" y="56" width="153" height="218" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="75" font-size="10" font-weight="700" fill="var(--blue)">① 原生 IRC 帧</text>
+  <text x="20" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:429</text>
+  <rect x="18" y="97" width="137" height="58" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="25" y="114" font-size="9" font-family="monospace" fill="var(--ink)">:alice!~a@host</text>
+  <text x="25" y="130" font-size="9" font-family="monospace" fill="var(--ink)">PRIVMSG #ops</text>
+  <text x="25" y="146" font-size="9" font-family="monospace" fill="var(--ink)">hermes: deploy staging</text>
+  <text x="20" y="176" font-size="9" fill="var(--muted)">prefix · command</text>
+  <text x="20" y="192" font-size="9" fill="var(--muted)">params[0]=#ops</text>
+  <text x="20" y="208" font-size="9" fill="var(--muted)">params[1]=trailing</text>
+  <text x="20" y="232" font-size="9" font-family="monospace" fill="var(--ink)">_extract_nick</text>
+  <text x="20" y="246" font-size="9" font-family="monospace" fill="var(--ink)">  (prefix)</text>
+
+  <path d="M165,160 L177,160 M173,156 L177,160 L173,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="179" y="56" width="153" height="218" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="189" y="75" font-size="10" font-weight="700" fill="var(--accent-ink)">② 解析+寻址</text>
+  <text x="189" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:447-475</text>
+  <text x="189" y="110" font-size="9" font-family="monospace" fill="var(--purple)">sender_nick=&quot;alice&quot;</text>
+  <text x="189" y="126" font-size="9" font-family="monospace" fill="var(--ink)">target=&quot;#ops&quot;</text>
+  <text x="189" y="142" font-size="9" font-family="monospace" fill="var(--ink)">is_channel=True (#)</text>
+  <text x="189" y="158" font-size="9" font-family="monospace" fill="var(--ink)">chat_type=&quot;group&quot;</text>
+  <text x="189" y="180" font-size="9" fill="var(--muted)">频道须被 @ → 剥 hermes:</text>
+  <text x="189" y="202" font-size="9" font-family="monospace" fill="var(--purple)">text=&quot;deploy</text>
+  <text x="189" y="216" font-size="9" font-family="monospace" fill="var(--purple)">  staging&quot;</text>
+  <text x="189" y="244" font-size="9" fill="var(--red)">未寻址 → return 丢弃</text>
+
+  <path d="M334,160 L346,160 M342,156 L346,160 L342,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="348" y="56" width="153" height="218" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="358" y="75" font-size="10" font-weight="700" fill="var(--accent-ink)">③ build_source</text>
+  <text x="358" y="89" font-size="9" fill="var(--muted)">base.py:5064</text>
+  <text x="358" y="112" font-size="9" font-family="monospace" fill="var(--ink)">build_source(</text>
+  <text x="358" y="128" font-size="9" font-family="monospace" fill="var(--ink)">  chat_id=&quot;#ops&quot;,</text>
+  <text x="358" y="144" font-size="9" font-family="monospace" fill="var(--ink)">  chat_type=&quot;group&quot;,</text>
+  <text x="358" y="160" font-size="9" font-family="monospace" fill="var(--ink)">  user_id=&quot;alice&quot;)</text>
+  <text x="358" y="186" font-size="9" font-family="monospace" fill="var(--accent-ink)">→ SessionSource</text>
+  <text x="358" y="214" font-size="9" fill="var(--muted)">归一化来源,</text>
+  <text x="358" y="230" font-size="9" fill="var(--muted)">供会话路由用</text>
+
+  <path d="M503,160 L515,160 M511,156 L515,160 L511,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="517" y="56" width="153" height="218" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="527" y="75" font-size="10" font-weight="700" fill="var(--purple)">④ MessageEvent</text>
+  <text x="527" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:501</text>
+  <text x="527" y="110" font-size="9" font-family="monospace" fill="var(--purple)">text=&quot;deploy</text>
+  <text x="527" y="124" font-size="9" font-family="monospace" fill="var(--purple)">  staging&quot;</text>
+  <text x="527" y="142" font-size="9" font-family="monospace" fill="var(--ink)">message_type=</text>
+  <text x="527" y="156" font-size="9" font-family="monospace" fill="var(--ink)">  MessageType.TEXT</text>
+  <text x="527" y="174" font-size="9" font-family="monospace" fill="var(--ink)">source=SessionSource</text>
+  <text x="527" y="192" font-size="9" font-family="monospace" fill="var(--ink)">message_id=</text>
+  <text x="527" y="206" font-size="9" font-family="monospace" fill="var(--ink)">  str(int(time*1000))</text>
+  <text x="527" y="232" font-size="9" fill="var(--muted)">所有适配器</text>
+  <text x="527" y="248" font-size="9" fill="var(--muted)">都产出它</text>
+
+  <rect x="10" y="284" width="330" height="62" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="303" font-size="10" font-weight="700" fill="var(--ink)">⑤ session_key 路由 · base.py:4249</text>
+  <text x="20" y="321" font-size="9" font-family="monospace" fill="var(--ink)">build_session_key(source,</text>
+  <text x="20" y="335" font-size="9" font-family="monospace" fill="var(--ink)">  group_sessions_per_user=True, thread_…=False)</text>
+
+  <rect x="348" y="284" width="322" height="62" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="358" y="303" font-size="10" font-weight="700" fill="var(--ink)">⑥ 能力降级 · adapter.py:281</text>
+  <text x="358" y="321" font-size="9" font-family="monospace" fill="var(--ink)">send_typing(chat_id) → pass</text>
+  <text x="358" y="335" font-size="9" fill="var(--muted)">IRC 无 typing 指示,边缘 no-op 吸收</text>
+
+  <text x="20" y="368" font-size="9.5" fill="var(--muted)">读这张图:一行平台原生文本止步于 adapter;核心只见统一 MessageEvent + session_key,从不认识 IRC 帧。</text>
+</svg>
+<div class="fig-cap"><b>实例:一行 IRC 文本 → MessageEvent</b>:拿真实帧 <span class="mono">:alice!~a@host PRIVMSG #ops :hermes: deploy staging</span> 走一遍——① 拆 <span class="mono">prefix/command/params</span>;② <span class="mono">_extract_nick</span> 得 <span class="mono">sender_nick=&quot;alice&quot;</span>、<span class="mono">target=&quot;#ops&quot;</span>、<span class="mono">is_channel=True</span>(<span class="mono">#</span>)→<span class="mono">chat_type=&quot;group&quot;</span>,频道须被 @ 故剥 <span class="mono">hermes:</span> 前缀得 <span class="mono">text=&quot;deploy staging&quot;</span>,未寻址直接 <span class="mono">return</span> 丢弃;③ <span class="mono">build_source</span> 造 <span class="mono">SessionSource</span>;④ <span class="mono">MessageEvent</span> 真实实例(<span class="mono">message_id=str(int(time*1000))</span>);⑤ <span class="mono">build_session_key</span> 受 <span class="mono">group_sessions_per_user=True</span>/<span class="mono">thread_sessions_per_user=False</span> 调制;⑥ IRC 无 typing,<span class="mono">send_typing</span> 在边缘 <span class="mono">pass</span>。每个值都能在 <span class="mono">irc/adapter.py</span> 与 <span class="mono">base.py</span> 对应行找到。</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
@@ -424,6 +500,82 @@ LESSON_17 = {
   <p style="margin:.5rem 0 0">Finally, back to the root: this unified abstraction is worth it because of <strong>the single process</strong>. One process is what lets the same memory, skills, cron, and config state be shared, and what keeps each conversation's prompt cache (a project hard rule) alive long-term; if twenty platforms each ran their own process, shared state, unified ops, and cache reuse would all be off the table. The narrow waist keeps the "number of platforms" growth axis entirely out of the core, so core complexity tracks "kinds of capability," not "count of platforms" — that's the real reason hosting 20+ platforms in one process is engineering-feasible at all.</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 392" role="img" aria-label="Worked example: one real IRC line is translated field-by-field through the adapter into a unified MessageEvent. Input frame :alice!~a@host PRIVMSG #ops :hermes: deploy staging. 1 native frame splits into prefix command params; 2 parse and address yields sender_nick alice, target #ops, is_channel True because of the hash, chat_type group, and since channels must be addressed it strips the hermes: prefix to get text deploy staging, an unaddressed line returns and is dropped; 3 build_source makes a SessionSource; 4 the MessageEvent instance has text deploy staging, message_type MessageType.TEXT, message_id str int time times 1000; 5 build_session_key is modulated by group_sessions_per_user True and thread_sessions_per_user False; 6 IRC has no typing so send_typing is a no-op absorbed at the edge.">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">Example: one IRC line → unified MessageEvent</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">input frame :alice!~a@host PRIVMSG #ops :hermes: deploy staging</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🛰️</text>
+
+  <rect x="10" y="56" width="153" height="218" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="75" font-size="10" font-weight="700" fill="var(--blue)">1 Native IRC frame</text>
+  <text x="20" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:429</text>
+  <rect x="18" y="97" width="137" height="58" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="25" y="114" font-size="9" font-family="monospace" fill="var(--ink)">:alice!~a@host</text>
+  <text x="25" y="130" font-size="9" font-family="monospace" fill="var(--ink)">PRIVMSG #ops</text>
+  <text x="25" y="146" font-size="9" font-family="monospace" fill="var(--ink)">hermes: deploy staging</text>
+  <text x="20" y="176" font-size="9" fill="var(--muted)">prefix · command</text>
+  <text x="20" y="192" font-size="9" fill="var(--muted)">params[0]=#ops</text>
+  <text x="20" y="208" font-size="9" fill="var(--muted)">params[1]=trailing</text>
+  <text x="20" y="232" font-size="9" font-family="monospace" fill="var(--ink)">_extract_nick</text>
+  <text x="20" y="246" font-size="9" font-family="monospace" fill="var(--ink)">  (prefix)</text>
+
+  <path d="M165,160 L177,160 M173,156 L177,160 L173,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="179" y="56" width="153" height="218" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="189" y="75" font-size="10" font-weight="700" fill="var(--accent-ink)">2 Parse + address</text>
+  <text x="189" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:447-475</text>
+  <text x="189" y="110" font-size="9" font-family="monospace" fill="var(--purple)">sender_nick=&quot;alice&quot;</text>
+  <text x="189" y="126" font-size="9" font-family="monospace" fill="var(--ink)">target=&quot;#ops&quot;</text>
+  <text x="189" y="142" font-size="9" font-family="monospace" fill="var(--ink)">is_channel=True (#)</text>
+  <text x="189" y="158" font-size="9" font-family="monospace" fill="var(--ink)">chat_type=&quot;group&quot;</text>
+  <text x="189" y="180" font-size="9" fill="var(--muted)">channel needs @ → strip hermes:</text>
+  <text x="189" y="202" font-size="9" font-family="monospace" fill="var(--purple)">text=&quot;deploy</text>
+  <text x="189" y="216" font-size="9" font-family="monospace" fill="var(--purple)">  staging&quot;</text>
+  <text x="189" y="244" font-size="9" fill="var(--red)">unaddressed → return drop</text>
+
+  <path d="M334,160 L346,160 M342,156 L346,160 L342,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="348" y="56" width="153" height="218" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="358" y="75" font-size="10" font-weight="700" fill="var(--accent-ink)">3 build_source</text>
+  <text x="358" y="89" font-size="9" fill="var(--muted)">base.py:5064</text>
+  <text x="358" y="112" font-size="9" font-family="monospace" fill="var(--ink)">build_source(</text>
+  <text x="358" y="128" font-size="9" font-family="monospace" fill="var(--ink)">  chat_id=&quot;#ops&quot;,</text>
+  <text x="358" y="144" font-size="9" font-family="monospace" fill="var(--ink)">  chat_type=&quot;group&quot;,</text>
+  <text x="358" y="160" font-size="9" font-family="monospace" fill="var(--ink)">  user_id=&quot;alice&quot;)</text>
+  <text x="358" y="186" font-size="9" font-family="monospace" fill="var(--accent-ink)">→ SessionSource</text>
+  <text x="358" y="214" font-size="9" fill="var(--muted)">normalized source,</text>
+  <text x="358" y="230" font-size="9" fill="var(--muted)">for session routing</text>
+
+  <path d="M503,160 L515,160 M511,156 L515,160 L511,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="517" y="56" width="153" height="218" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="527" y="75" font-size="10" font-weight="700" fill="var(--purple)">4 MessageEvent</text>
+  <text x="527" y="89" font-size="9" fill="var(--muted)">irc/adapter.py:501</text>
+  <text x="527" y="110" font-size="9" font-family="monospace" fill="var(--purple)">text=&quot;deploy</text>
+  <text x="527" y="124" font-size="9" font-family="monospace" fill="var(--purple)">  staging&quot;</text>
+  <text x="527" y="142" font-size="9" font-family="monospace" fill="var(--ink)">message_type=</text>
+  <text x="527" y="156" font-size="9" font-family="monospace" fill="var(--ink)">  MessageType.TEXT</text>
+  <text x="527" y="174" font-size="9" font-family="monospace" fill="var(--ink)">source=SessionSource</text>
+  <text x="527" y="192" font-size="9" font-family="monospace" fill="var(--ink)">message_id=</text>
+  <text x="527" y="206" font-size="9" font-family="monospace" fill="var(--ink)">  str(int(time*1000))</text>
+  <text x="527" y="232" font-size="9" fill="var(--muted)">all adapters</text>
+  <text x="527" y="248" font-size="9" fill="var(--muted)">produce it</text>
+
+  <rect x="10" y="284" width="330" height="62" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="303" font-size="10" font-weight="700" fill="var(--ink)">5 session_key routing · base.py:4249</text>
+  <text x="20" y="321" font-size="9" font-family="monospace" fill="var(--ink)">build_session_key(source,</text>
+  <text x="20" y="335" font-size="9" font-family="monospace" fill="var(--ink)">  group_sessions_per_user=True, thread_…=False)</text>
+
+  <rect x="348" y="284" width="322" height="62" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="358" y="303" font-size="10" font-weight="700" fill="var(--ink)">6 Capability fallback · adapter.py:281</text>
+  <text x="358" y="321" font-size="9" font-family="monospace" fill="var(--ink)">send_typing(chat_id) → pass</text>
+  <text x="358" y="335" font-size="9" fill="var(--muted)">IRC has no typing, edge no-op absorbs it</text>
+
+  <text x="20" y="368" font-size="9.5" fill="var(--muted)">Read this: one native platform line stops at the adapter; the core sees only a unified MessageEvent + session_key, never the IRC frame.</text>
+</svg>
+<div class="fig-cap"><b>Example: one IRC line → MessageEvent</b>: take the real frame <span class="mono">:alice!~a@host PRIVMSG #ops :hermes: deploy staging</span> and walk it through — 1 split <span class="mono">prefix/command/params</span>; 2 <span class="mono">_extract_nick</span> gives <span class="mono">sender_nick=&quot;alice&quot;</span>, <span class="mono">target=&quot;#ops&quot;</span>, <span class="mono">is_channel=True</span> (<span class="mono">#</span>) → <span class="mono">chat_type=&quot;group&quot;</span>; since channels must be addressed it strips the <span class="mono">hermes:</span> prefix to <span class="mono">text=&quot;deploy staging&quot;</span>, and an unaddressed line just <span class="mono">return</span>s (dropped); 3 <span class="mono">build_source</span> makes a <span class="mono">SessionSource</span>; 4 the real <span class="mono">MessageEvent</span> instance (<span class="mono">message_id=str(int(time*1000))</span>); 5 <span class="mono">build_session_key</span> is modulated by <span class="mono">group_sessions_per_user=True</span>/<span class="mono">thread_sessions_per_user=False</span>; 6 IRC has no typing, so <span class="mono">send_typing</span> is a <span class="mono">pass</span>. Every value traces to a line in <span class="mono">irc/adapter.py</span> and <span class="mono">base.py</span>.</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 Key points</div>
   <ul>
@@ -628,6 +780,73 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
   <p style="margin:.5rem 0 0">为什么说这层就是第 24 章纵深防御里的「<strong>注入隔离</strong>」:控制通道和数据通道在网关就被<strong>物理分开</strong>——能解析的命令走代码识别 + 旁路,永不进对话历史;只有真正的对话才进 <span class="mono">_pending_messages</span> 喂给模型。这条「指令绝不当数据」的边界既挡注入(伪造指令进不了控制通道),又顺手护住第 6 章缓存与第 7 章角色交替:因为历史里<strong>永远不会</strong>冒出一条被误当用户文本的 <span class="mono">/stop</span>,缓存前缀和严格交替自然就稳了。</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 400" role="img" aria-label="实例图:一条 /approve 在 agent 阻塞于 threading.Event.wait 时如何穿过两道守卫并 set 那个 Event。① agent 阻塞:_ApprovalEntry.event 等于 threading.Event,entry.event.wait 暂停,asyncio 中断叫不醒线程 Event;② 守卫① 适配器层 base.py,session_key in _active_sessions 为真,cmd 等于 event.get_command 得 approve;③ 旁路判定 commands.py,should_bypass_active_session approve 为真,且 cmd 不属于 stop new reset 集合,故内联派发,禁用 _process_message_background;④ 守卫② runner run.py,/approve 绕过 interrupt,直达 _handle_approve_command;⑤ 解锁 approval.py,resolve_gateway_approval 把 entry.result 设为 choice 并 entry.event.set,① 的 wait 返回 agent 续跑;⑥ 反事实红框:若当普通消息排进 _pending_messages,agent 永远阻塞,/approve 进不来形成死锁。">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:/approve 穿两道守卫 → set 那个 Event</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">agent 阻塞在 threading.Event.wait(),asyncio 中断叫不醒它</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🔓</text>
+
+  <rect x="10" y="56" width="150" height="216" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="20" y="75" font-size="10" font-weight="700" fill="var(--amber)">① agent 阻塞中</text>
+  <text x="20" y="89" font-size="9" fill="var(--muted)">approval.py:690-700</text>
+  <text x="20" y="110" font-size="9" font-family="monospace" fill="var(--ink)">_ApprovalEntry.event</text>
+  <text x="20" y="124" font-size="9" font-family="monospace" fill="var(--ink)">  = threading.Event()</text>
+  <text x="20" y="146" font-size="9" font-family="monospace" fill="var(--ink)">entry.event.wait()</text>
+  <text x="78" y="172" text-anchor="middle" font-size="22">⏸️</text>
+  <text x="20" y="198" font-size="9" fill="var(--muted)">线程 Event,</text>
+  <text x="20" y="212" font-size="9" fill="var(--muted)">asyncio 中断</text>
+  <text x="20" y="226" font-size="9" fill="var(--muted)">叫不醒它</text>
+  <text x="20" y="252" font-size="9" font-weight="700" fill="var(--accent-ink)">⑤ 后:✓ 续跑</text>
+
+  <rect x="186" y="52" width="116" height="26" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.6"/>
+  <text x="244" y="69" text-anchor="middle" font-size="10" font-weight="700" fill="var(--purple)">用户发 /approve</text>
+  <path d="M244,78 L244,90 M240,86 L244,90 L248,86" stroke="var(--purple)" stroke-width="1.6" fill="none"/>
+
+  <rect x="186" y="92" width="232" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="196" y="110" font-size="10" font-weight="700" fill="var(--ink)">② 守卫① 适配器层</text>
+  <text x="196" y="124" font-size="9" fill="var(--muted)">base.py:4262-4298</text>
+  <text x="196" y="142" font-size="9" font-family="monospace" fill="var(--ink)">session_key in _active_sessions → True</text>
+  <text x="196" y="158" font-size="9" font-family="monospace" fill="var(--ink)">cmd = event.get_command() → &quot;approve&quot;</text>
+  <text x="196" y="172" font-size="9" fill="var(--muted)">普通对话会进 _pending_messages 排队</text>
+
+  <path d="M302,184 L302,196 M298,192 L302,196 L306,192" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="186" y="198" width="232" height="86" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="196" y="216" font-size="10" font-weight="700" fill="var(--accent-ink)">③ 旁路判定</text>
+  <text x="196" y="230" font-size="9" fill="var(--muted)">commands.py:379-399</text>
+  <text x="196" y="248" font-size="9" font-family="monospace" fill="var(--purple)">should_bypass_active_session(&quot;approve&quot;)=True</text>
+  <text x="196" y="263" font-size="9" font-family="monospace" fill="var(--ink)">cmd ∉ {stop,new,reset} → 内联派发</text>
+  <text x="196" y="278" font-size="9" fill="var(--red)">✗ 禁用 _process_message_background</text>
+
+  <path d="M418,134 L432,134 M428,130 L432,134 L428,138" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="434" y="92" width="236" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="444" y="110" font-size="10" font-weight="700" fill="var(--ink)">④ 守卫② runner</text>
+  <text x="444" y="124" font-size="9" fill="var(--muted)">run.py:7764-7771</text>
+  <text x="444" y="142" font-size="9" font-family="monospace" fill="var(--ink)">/approve 绕过 interrupt</text>
+  <text x="444" y="158" font-size="9" font-family="monospace" fill="var(--ink)">_handle_approve_command(event)</text>
+  <text x="444" y="172" font-size="9" fill="var(--muted)">中断叫不醒线程 Event → 必须直达</text>
+
+  <path d="M552,176 L552,188 L552,198 M548,194 L552,198 L556,194" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="434" y="198" width="236" height="86" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="444" y="216" font-size="10" font-weight="700" fill="var(--accent-ink)">⑤ 解锁 Event</text>
+  <text x="444" y="230" font-size="9" fill="var(--muted)">approval.py:729-754</text>
+  <text x="444" y="248" font-size="9" font-family="monospace" fill="var(--ink)">resolve_gateway_approval(key, choice)</text>
+  <text x="444" y="263" font-size="9" font-family="monospace" fill="var(--ink)">entry.result = choice</text>
+  <text x="444" y="278" font-size="9" font-family="monospace" fill="var(--accent-ink)">entry.event.set() ✓ → ① wait() 返回</text>
+
+  <path d="M434,241 C360,241 160,250 160,170 L160,150 M156,158 L160,150 L164,158" stroke="var(--accent)" stroke-width="1.6" fill="none" stroke-dasharray="3 3"/>
+
+  <rect x="10" y="294" width="660" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="20" y="312" font-size="10" font-weight="700" fill="var(--red)">⑥ 反事实:若当普通消息排队进 _pending_messages</text>
+  <text x="20" y="329" font-size="9" fill="var(--red)">agent 永远阻塞在 wait();/approve 永远进不来 → 死锁(且兜底会把命令文本丢弃成空响应)。</text>
+
+  <text x="20" y="360" font-size="9.5" fill="var(--muted)">读这张图:审批命令必须同时旁路两道守卫并直达 runner,才能 set 那个线程 Event,把阻塞的 agent 解锁。</text>
+</svg>
+<div class="fig-cap"><b>实例:一条 /approve 的真实解锁链</b>:agent 阻塞在 <span class="mono">_ApprovalEntry.event=threading.Event()</span> 的 <span class="mono">.wait()</span>(asyncio 中断叫不醒线程 Event)。① 阻塞;② <b>守卫①</b>(<span class="mono">base.py:4262</span>)<span class="mono">session_key in _active_sessions</span>→<span class="mono">cmd=&quot;approve&quot;</span>;③ <span class="mono">should_bypass_active_session(&quot;approve&quot;)→True</span> 且 <span class="mono">∉{stop,new,reset}</span>→<b>内联派发</b>(禁 <span class="mono">_process_message_background</span>);④ <b>守卫②</b> runner(<span class="mono">run.py:7764</span>)<span class="mono">/approve</span> 绕过 <span class="mono">interrupt</span>→<span class="mono">_handle_approve_command</span>;⑤ <span class="mono">resolve_gateway_approval</span>→<span class="mono">entry.event.set()</span>→<span class="mono">wait()</span> 返回、agent 续跑;⑥ 反事实:排队即死锁。这正解释了「审批必须同时旁路两道守卫」。</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
@@ -826,6 +1045,73 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
   <p style="margin:.5rem 0 0">The anti-pattern: queueing all messages alike — <span class="mono">/approve</span> deadlocks (the agent blocks waiting for approval while the approval waits in the queue for the agent), <span class="mono">/stop</span> is lost, and a mid-run <span class="mono">/model</span> becomes an empty response.</p>
   <p style="margin:.5rem 0 0">Seen together, why are the two guards <strong>each indispensable</strong>: guard one (adapter) only decides "who queues, who bypasses when busy," but a let-through command still needs someone to handle it; guard two (runner) dispatches it by <span class="mono">canonical</span> name to a dedicated handler like <span class="mono">_handle_approve_command</span>, and rejects any command with no handler. Their duties are orthogonal — one decides "<strong>queue or not</strong>," the other "<strong>dispatch to whom</strong>." Drop guard one and <span class="mono">/approve</span> deadlocks in the queue; drop guard two and a bypassed command finds no handler and is discarded as text by the catch-all — an empty response again.</p>
   <p style="margin:.5rem 0 0">Why this layer IS the "<strong>injection isolation</strong>" rung of ch.24's defense-in-depth: control channel and data channel are <strong>physically split</strong> at the gateway — resolvable commands ride code recognition + bypass and never enter conversation history; only genuine conversation enters <span class="mono">_pending_messages</span> to feed the model. This "an instruction is never data" boundary both blocks injection (a forged instruction can't reach the control channel) and incidentally protects ch.6 caching and ch.7 role alternation: because history will <strong>never</strong> sprout a <span class="mono">/stop</span> mistaken for user text, the cached prefix and strict alternation stay stable.</p>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 400" role="img" aria-label="Worked example: how one /approve crosses both guards and sets the Event while the agent is blocked on threading.Event.wait. 1 agent blocked: _ApprovalEntry.event equals threading.Event, entry.event.wait pauses, an asyncio interrupt cannot wake a thread Event; 2 guard one adapter layer base.py, session_key in _active_sessions is True, cmd equals event.get_command giving approve; 3 bypass decision commands.py, should_bypass_active_session approve is True and cmd is not in the stop new reset set so it dispatches inline, forbidding _process_message_background; 4 guard two runner run.py, /approve bypasses interrupt straight to _handle_approve_command; 5 unlock approval.py, resolve_gateway_approval sets entry.result to choice and calls entry.event.set, so step one wait returns and the agent resumes; 6 counterfactual red box: if queued as an ordinary message into _pending_messages the agent stays blocked forever and /approve never arrives, a deadlock.">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">Example: /approve crosses both guards → sets the Event</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">the agent is blocked on threading.Event.wait(); an asyncio interrupt cannot wake it</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🔓</text>
+
+  <rect x="10" y="56" width="150" height="216" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="20" y="75" font-size="10" font-weight="700" fill="var(--amber)">1 agent blocked</text>
+  <text x="20" y="89" font-size="9" fill="var(--muted)">approval.py:690-700</text>
+  <text x="20" y="110" font-size="9" font-family="monospace" fill="var(--ink)">_ApprovalEntry.event</text>
+  <text x="20" y="124" font-size="9" font-family="monospace" fill="var(--ink)">  = threading.Event()</text>
+  <text x="20" y="146" font-size="9" font-family="monospace" fill="var(--ink)">entry.event.wait()</text>
+  <text x="78" y="172" text-anchor="middle" font-size="22">⏸️</text>
+  <text x="20" y="198" font-size="9" fill="var(--muted)">thread Event,</text>
+  <text x="20" y="212" font-size="9" fill="var(--muted)">an asyncio</text>
+  <text x="20" y="226" font-size="9" fill="var(--muted)">interrupt won't wake it</text>
+  <text x="20" y="252" font-size="9" font-weight="700" fill="var(--accent-ink)">after 5: ✓ resumes</text>
+
+  <rect x="186" y="52" width="116" height="26" rx="8" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.6"/>
+  <text x="244" y="69" text-anchor="middle" font-size="10" font-weight="700" fill="var(--purple)">user sends /approve</text>
+  <path d="M244,78 L244,90 M240,86 L244,90 L248,86" stroke="var(--purple)" stroke-width="1.6" fill="none"/>
+
+  <rect x="186" y="92" width="232" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="196" y="110" font-size="10" font-weight="700" fill="var(--ink)">2 guard 1 · adapter layer</text>
+  <text x="196" y="124" font-size="9" fill="var(--muted)">base.py:4262-4298</text>
+  <text x="196" y="142" font-size="9" font-family="monospace" fill="var(--ink)">session_key in _active_sessions → True</text>
+  <text x="196" y="158" font-size="9" font-family="monospace" fill="var(--ink)">cmd = event.get_command() → &quot;approve&quot;</text>
+  <text x="196" y="172" font-size="9" fill="var(--muted)">ordinary chat would queue in _pending_messages</text>
+
+  <path d="M302,184 L302,196 M298,192 L302,196 L306,192" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="186" y="198" width="232" height="86" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="196" y="216" font-size="10" font-weight="700" fill="var(--accent-ink)">3 bypass decision</text>
+  <text x="196" y="230" font-size="9" fill="var(--muted)">commands.py:379-399</text>
+  <text x="196" y="248" font-size="9" font-family="monospace" fill="var(--purple)">should_bypass_active_session(&quot;approve&quot;)=True</text>
+  <text x="196" y="263" font-size="9" font-family="monospace" fill="var(--ink)">cmd ∉ {stop,new,reset} → inline dispatch</text>
+  <text x="196" y="278" font-size="9" fill="var(--red)">✗ no _process_message_background</text>
+
+  <path d="M418,134 L432,134 M428,130 L432,134 L428,138" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="434" y="92" width="236" height="84" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="444" y="110" font-size="10" font-weight="700" fill="var(--ink)">4 guard 2 · runner</text>
+  <text x="444" y="124" font-size="9" fill="var(--muted)">run.py:7764-7771</text>
+  <text x="444" y="142" font-size="9" font-family="monospace" fill="var(--ink)">/approve bypasses interrupt</text>
+  <text x="444" y="158" font-size="9" font-family="monospace" fill="var(--ink)">_handle_approve_command(event)</text>
+  <text x="444" y="172" font-size="9" fill="var(--muted)">interrupt can't wake a thread Event → go direct</text>
+
+  <path d="M552,176 L552,188 L552,198 M548,194 L552,198 L556,194" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="434" y="198" width="236" height="86" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="444" y="216" font-size="10" font-weight="700" fill="var(--accent-ink)">5 unlock the Event</text>
+  <text x="444" y="230" font-size="9" fill="var(--muted)">approval.py:729-754</text>
+  <text x="444" y="248" font-size="9" font-family="monospace" fill="var(--ink)">resolve_gateway_approval(key, choice)</text>
+  <text x="444" y="263" font-size="9" font-family="monospace" fill="var(--ink)">entry.result = choice</text>
+  <text x="444" y="278" font-size="9" font-family="monospace" fill="var(--accent-ink)">entry.event.set() ✓ → 1's wait() returns</text>
+
+  <path d="M434,241 C360,241 160,250 160,170 L160,150 M156,158 L160,150 L164,158" stroke="var(--accent)" stroke-width="1.6" fill="none" stroke-dasharray="3 3"/>
+
+  <rect x="10" y="294" width="660" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="20" y="312" font-size="10" font-weight="700" fill="var(--red)">6 counterfactual: if queued as ordinary text into _pending_messages</text>
+  <text x="20" y="329" font-size="9" fill="var(--red)">the agent stays blocked on wait() forever; /approve never arrives → deadlock (and the safety net discards the text as an empty response).</text>
+
+  <text x="20" y="360" font-size="9.5" fill="var(--muted)">Read this: an approval command must bypass BOTH guards and reach the runner directly to set that thread Event and unblock the agent.</text>
+</svg>
+<div class="fig-cap"><b>Example: one /approve unlock chain</b>: the agent is blocked on <span class="mono">_ApprovalEntry.event=threading.Event()</span>'s <span class="mono">.wait()</span> (an asyncio interrupt can't wake a thread Event). 1 blocked; 2 <b>guard 1</b> (<span class="mono">base.py:4262</span>) <span class="mono">session_key in _active_sessions</span> → <span class="mono">cmd=&quot;approve&quot;</span>; 3 <span class="mono">should_bypass_active_session(&quot;approve&quot;)→True</span> and <span class="mono">∉{stop,new,reset}</span> → <b>inline dispatch</b> (no <span class="mono">_process_message_background</span>); 4 <b>guard 2</b> runner (<span class="mono">run.py:7764</span>) <span class="mono">/approve</span> bypasses <span class="mono">interrupt</span> → <span class="mono">_handle_approve_command</span>; 5 <span class="mono">resolve_gateway_approval</span> → <span class="mono">entry.event.set()</span> → <span class="mono">wait()</span> returns, agent resumes; 6 counterfactual: queueing deadlocks. This is exactly why "approvals must bypass both guards."</div>
 </div>
 
 <div class="card key">
@@ -1061,6 +1347,62 @@ LESSON_19 = {
   <p style="margin:.5rem 0 0">把镜头拉到全书:本章其实是「<strong>窄腰</strong>」最直观的一次落地。同一个 AIAgent 核心(第 7 章)被<strong>四类外壳</strong>共用——经典 CLI、Ink TUI、桌面 App,以及第 17 章的消息网关——它们要么是 JSON-RPC 前端,要么是网关适配器,核心只维护一份。<span class="mono">prompt.submit</span> 那句 <span class="mono">session busy</span> 忙检查,和第 18 章网关「agent 运行时拒新输入」的守卫是<strong>同一个意思</strong>:一个会话同一时刻只跑一轮。而仪表盘嵌入复用、桌面共享后端、TUI 流式回推,合起来印证了那条贯穿全书的取舍——<strong>把易变的前端推到边缘,把稳定的能力收进窄腰</strong>:前端可以百花齐放、各用各的栈崩了也不连累核心,而 agent 的会话、工具、缓存纪律只在一处被定义、被守护。</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 408" role="img" aria-label="实例图:一次真实 prompt.submit 的 JSON-RPC 帧序列。① 前端 request,jsonrpc 2.0,id 1,method prompt.submit,params 含 session_id s1 与 text 列出本目录;② 后端立即响应 result status streaming,会话忙时回 error code 4009 session busy;③ 事件流,_emit message.delta sid 与 payload text delta,真实信封 method event,params 含 type message.delta、session_id、payload text delta,server.py 887 与 7222;④ 同一 event 信封管道还推 tool.start、tool.complete、approval.request;⑤ history_version 守门 server.py 7244,current_version 等于 history_version 才写历史,否则响应可见但未写历史;⑥ message.complete payload,text raw、usage、status 取 complete 或 interrupted 或 error,server.py 7305。">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:一次 prompt.submit 的 JSON-RPC 帧序列</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">前端 request → status:streaming → N×message.delta → message.complete</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🎞️</text>
+
+  <rect x="10" y="56" width="424" height="62" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="74" font-size="10" font-weight="700" fill="var(--blue)">① 前端 request → 后端 · server.py:6828</text>
+  <text x="20" y="91" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,</text>
+  <text x="20" y="105" font-size="9" font-family="monospace" fill="var(--ink)"> &quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;列出本目录&quot;}}</text>
+
+  <path d="M222,118 L222,128 M218,124 L222,128 L226,124" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="130" width="424" height="62" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="148" font-size="10" font-weight="700" fill="var(--accent-ink)">② 立即响应 _ok · server.py:953</text>
+  <text x="20" y="165" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</text>
+  <text x="20" y="182" font-size="9" font-family="monospace" fill="var(--red)">忙时 _err:{&quot;code&quot;:4009,&quot;message&quot;:&quot;session busy&quot;}</text>
+
+  <path d="M222,192 L222,202 M218,198 L222,202 L226,198" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="204" width="424" height="80" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="20" y="222" font-size="10" font-weight="700" fill="var(--purple)">③ N× message.delta(_emit 信封)· server.py:887,7222</text>
+  <text x="20" y="238" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:</text>
+  <text x="20" y="252" font-size="9" font-family="monospace" fill="var(--ink)"> &quot;message.delta&quot;,&quot;session_id&quot;:sid,</text>
+  <text x="20" y="266" font-size="9" font-family="monospace" fill="var(--purple)"> &quot;payload&quot;:{&quot;text&quot;:delta}}}</text>
+  <text x="20" y="280" font-size="9" fill="var(--muted)">_emit(&quot;message.delta&quot;, sid, {&quot;text&quot;: delta})</text>
+
+  <path d="M222,284 L222,294 M218,290 L222,294 L226,290" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="296" width="424" height="62" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="314" font-size="10" font-weight="700" fill="var(--accent-ink)">⑥ message.complete payload · server.py:7305</text>
+  <text x="20" y="331" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;text&quot;:raw,&quot;usage&quot;:{…},&quot;status&quot;:&quot;complete&quot;}</text>
+  <text x="20" y="348" font-size="9" font-family="monospace" fill="var(--purple)">status ∈ complete | interrupted | error</text>
+
+  <rect x="446" y="130" width="224" height="80" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="456" y="148" font-size="10" font-weight="700" fill="var(--ink)">④ 同一 event 信封管道</text>
+  <rect x="456" y="156" width="204" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="463" y="170" font-size="9" font-family="monospace" fill="var(--ink)">tool.start · tool.complete</text>
+  <rect x="456" y="180" width="204" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="463" y="194" font-size="9" font-family="monospace" fill="var(--ink)">approval.request</text>
+
+  <rect x="446" y="220" width="224" height="138" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="456" y="238" font-size="10" font-weight="700" fill="var(--amber)">⑤ history_version 守门</text>
+  <text x="456" y="252" font-size="9" fill="var(--muted)">server.py:7244-7264</text>
+  <text x="456" y="271" font-size="9" font-family="monospace" fill="var(--ink)">current_version ==</text>
+  <text x="456" y="285" font-size="9" font-family="monospace" fill="var(--ink)">  history_version ?</text>
+  <text x="456" y="305" font-size="9" fill="var(--accent-ink)">✓ 相等 → 写回历史</text>
+  <text x="456" y="324" font-size="9" fill="var(--red)">✗ 不匹配 → 响应可见,</text>
+  <text x="456" y="338" font-size="9" fill="var(--red)">  但未写历史(防 desync)</text>
+  <text x="456" y="352" font-size="9" fill="var(--muted)">undo/compress 期间的护栏</text>
+
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">读这张图:一次 prompt.submit 的真实帧录像——同步 result 只说「开始流式」,真实内容全靠后续 event 信封逐帧推送。</text>
+</svg>
+<div class="fig-cap"><b>实例:一次 prompt.submit 的 JSON 帧录像</b>:① 前端发 <span class="mono">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,&quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;列出本目录&quot;}}</span>;② 后端立即 <span class="mono">_ok</span> 回 <span class="mono">{&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</span>(忙时 <span class="mono">_err code 4009</span>);③ 内容靠 <span class="mono">_emit</span> 的真实信封 <span class="mono">{&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:&quot;message.delta&quot;,&quot;session_id&quot;:sid,&quot;payload&quot;:{&quot;text&quot;:delta}}}</span> 逐帧推;④ <span class="mono">tool.start/complete</span>、<span class="mono">approval.request</span> 走同一管道;⑤ <span class="mono">history_version</span> 守门——不匹配则响应可见但不写历史;⑥ <span class="mono">message.complete</span> 的 <span class="mono">{text,usage,status}</span>,<span class="mono">status ∈ complete|interrupted|error</span>。每个字段都能在 <span class="mono">tui_gateway/server.py</span> 对应行找到。</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
@@ -1289,6 +1631,62 @@ LESSON_19 = {
   <p style="margin:.5rem 0 0">It's also the <strong>narrow waist</strong> (ch.4): the chat experience (transcript/input/PTY terminal) is implemented <strong>once</strong> in Ink, and the dashboard reuses it by embedding via PTY. The anti-pattern: <strong>rewriting</strong> the transcript and composer in React for the browser — two implementations doomed to drift, fix one forget the other. AGENTS.md makes this a hard rule: "Do not re-implement the primary chat experience in React."</p>
   <p style="margin:.5rem 0 0">A third frontend deserves its own line: the <strong>Electron desktop app</strong> (<span class="mono">apps/desktop/</span>). It goes the <strong>opposite</strong> way from the dashboard — it does <strong>not</strong> embed <span class="mono">hermes --tui</span>, instead building its own composer, transcript, and slash pipeline with <span class="mono">@assistant-ui/react</span> + nanostore, talking to the same tui_gateway backend over the same JSON-RPC (<span class="mono">requestGateway</span>). Why allow a separate UI this time? Because it isn't a terminal and can't be stuffed into a PTY; it wants a rich native desktop experience — a genuinely <strong>separate chat surface</strong>, not a duplicate of the terminal one. Yet its slash commands are <strong>curated, not censored</strong>: the palette shows ~28 built-ins to avoid noise, but skills and user <span class="mono">quick_commands</span> — extensions the backend already surfaces — must still appear; what's hidden is noise, not user-activated capability.</p>
   <p style="margin:.5rem 0 0">Zoom out to the whole book: this chapter is the most concrete landing of the <strong>narrow waist</strong>. One AIAgent core (ch.7) is shared by <strong>four shells</strong> — the classic CLI, the Ink TUI, the desktop app, and the messaging gateway (ch.17) — each either a JSON-RPC frontend or a gateway adapter, with the core maintained once. <span class="mono">prompt.submit</span>'s <span class="mono">session busy</span> check is <strong>the same idea</strong> as ch.18's gateway guard "reject new input while the agent runs": one session runs one turn at a time. Dashboard embedding, desktop backend-sharing, and TUI streaming together prove the trade-off that runs through the book — <strong>push volatile frontends to the edges, pull stable capability into the waist</strong>: frontends can bloom and crash without dragging down the core, while sessions, tools, and cache discipline are defined and defended in exactly one place.</p>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 408" role="img" aria-label="Worked example: the JSON-RPC frame sequence of one real prompt.submit. 1 frontend request, jsonrpc 2.0, id 1, method prompt.submit, params with session_id s1 and text list this directory; 2 backend immediate response result status streaming, when the session is busy it returns error code 4009 session busy; 3 event stream, _emit message.delta sid with payload text delta, real envelope method event, params with type message.delta, session_id, payload text delta, server.py 887 and 7222; 4 the same event envelope pipeline also pushes tool.start, tool.complete, approval.request; 5 history_version guard server.py 7244, history is written only when current_version equals history_version, otherwise the response is visible but not written to history; 6 message.complete payload, text raw, usage, status one of complete or interrupted or error, server.py 7305.">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">Example: the JSON-RPC frames of one prompt.submit</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">request → status:streaming → N×message.delta → message.complete</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🎞️</text>
+
+  <rect x="10" y="56" width="424" height="62" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="74" font-size="10" font-weight="700" fill="var(--blue)">1 frontend request → backend · server.py:6828</text>
+  <text x="20" y="91" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,</text>
+  <text x="20" y="105" font-size="9" font-family="monospace" fill="var(--ink)"> &quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;list this dir&quot;}}</text>
+
+  <path d="M222,118 L222,128 M218,124 L222,128 L226,124" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="130" width="424" height="62" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="148" font-size="10" font-weight="700" fill="var(--accent-ink)">2 immediate response _ok · server.py:953</text>
+  <text x="20" y="165" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</text>
+  <text x="20" y="182" font-size="9" font-family="monospace" fill="var(--red)">busy → _err:{&quot;code&quot;:4009,&quot;message&quot;:&quot;session busy&quot;}</text>
+
+  <path d="M222,192 L222,202 M218,198 L222,202 L226,198" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="204" width="424" height="80" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="20" y="222" font-size="10" font-weight="700" fill="var(--purple)">3 N× message.delta (_emit envelope) · server.py:887,7222</text>
+  <text x="20" y="238" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:</text>
+  <text x="20" y="252" font-size="9" font-family="monospace" fill="var(--ink)"> &quot;message.delta&quot;,&quot;session_id&quot;:sid,</text>
+  <text x="20" y="266" font-size="9" font-family="monospace" fill="var(--purple)"> &quot;payload&quot;:{&quot;text&quot;:delta}}}</text>
+  <text x="20" y="280" font-size="9" fill="var(--muted)">_emit(&quot;message.delta&quot;, sid, {&quot;text&quot;: delta})</text>
+
+  <path d="M222,284 L222,294 M218,290 L222,294 L226,290" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="296" width="424" height="62" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="314" font-size="10" font-weight="700" fill="var(--accent-ink)">6 message.complete payload · server.py:7305</text>
+  <text x="20" y="331" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;text&quot;:raw,&quot;usage&quot;:{…},&quot;status&quot;:&quot;complete&quot;}</text>
+  <text x="20" y="348" font-size="9" font-family="monospace" fill="var(--purple)">status ∈ complete | interrupted | error</text>
+
+  <rect x="446" y="130" width="224" height="80" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="456" y="148" font-size="10" font-weight="700" fill="var(--ink)">4 same event envelope pipe</text>
+  <rect x="456" y="156" width="204" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="463" y="170" font-size="9" font-family="monospace" fill="var(--ink)">tool.start · tool.complete</text>
+  <rect x="456" y="180" width="204" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="463" y="194" font-size="9" font-family="monospace" fill="var(--ink)">approval.request</text>
+
+  <rect x="446" y="220" width="224" height="138" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="456" y="238" font-size="10" font-weight="700" fill="var(--amber)">5 history_version guard</text>
+  <text x="456" y="252" font-size="9" fill="var(--muted)">server.py:7244-7264</text>
+  <text x="456" y="271" font-size="9" font-family="monospace" fill="var(--ink)">current_version ==</text>
+  <text x="456" y="285" font-size="9" font-family="monospace" fill="var(--ink)">  history_version ?</text>
+  <text x="456" y="305" font-size="9" fill="var(--accent-ink)">✓ equal → write history</text>
+  <text x="456" y="324" font-size="9" fill="var(--red)">✗ mismatch → response shown,</text>
+  <text x="456" y="338" font-size="9" fill="var(--red)">  but NOT written (anti-desync)</text>
+  <text x="456" y="352" font-size="9" fill="var(--muted)">backstop during undo/compress</text>
+
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">Read this: a real frame recording of one prompt.submit — the sync result only says "streaming started"; the content arrives frame-by-frame via event envelopes.</text>
+</svg>
+<div class="fig-cap"><b>Example: a JSON frame recording of one prompt.submit</b>: 1 the frontend sends <span class="mono">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,&quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;list this dir&quot;}}</span>; 2 the backend immediately <span class="mono">_ok</span>s <span class="mono">{&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</span> (busy → <span class="mono">_err code 4009</span>); 3 content streams via <span class="mono">_emit</span>'s real envelope <span class="mono">{&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:&quot;message.delta&quot;,&quot;session_id&quot;:sid,&quot;payload&quot;:{&quot;text&quot;:delta}}}</span>; 4 <span class="mono">tool.start/complete</span> and <span class="mono">approval.request</span> ride the same pipe; 5 the <span class="mono">history_version</span> guard — on mismatch the response is shown but not written; 6 <span class="mono">message.complete</span>'s <span class="mono">{text,usage,status}</span> with <span class="mono">status ∈ complete|interrupted|error</span>. Every field traces to a line in <span class="mono">tui_gateway/server.py</span>.</div>
 </div>
 
 <div class="card key">
@@ -1520,6 +1918,82 @@ OPTIONAL_ENV_VARS = {
   <p style="margin:.5rem 0 0">最后一处易被忽略的对称:代码取路径用 <span class="mono">get_hermes_home()</span>,<strong>给人看</strong>路径却要用 <span class="mono">display_hermes_home()</span>。后者把绝对路径压成 <span class="mono">~/.hermes</span> 或 <span class="mono">~/.hermes/profiles/coder</span> 这样的友好写法,让 setup、日志、报错里印出的目录一眼就能认出「现在在哪个 profile」。若这里图省事硬编码 <span class="mono">~/.hermes</span>,profile 用户就会被「提示路径」与「真实路径」不一致坑到——这正是 PR #3575 那 5 个 bug 的同源教训:无论是写盘的代码还是给人读的文案,只要碰 home 路径,就得走 profile-aware 的那唯一一个入口。</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 420" role="img" aria-label="实例图:hermes -p coder chat 启动时,一个环境变量如何解析成真实路径与生效值。① _apply_profile_override 在 import 前裸调,扫 argv 得 profile_name coder 并剥掉 -p coder,main.py 336;② resolve_profile_env coder 解析出 ~/.hermes/profiles/coder 并写入 os.environ HERMES_HOME,profiles.py 1866;③ 业务 import 调 get_hermes_home,ContextVar override 为空,读 env 命中,返回 Path ~/.hermes/profiles/coder,hermes_constants.py 54 与 109;④ load_config 把 DEFAULT_CONFIG _config_version 30 与 coder 的 config.yaml 经 _deep_merge 合并,config.py 5366,用户写 agent.max_turns 40 覆盖默认 90 生效 40,未写的 gateway_timeout 保留 1800、terminal.cwd 保留点、compression.threshold 保留 0.50;⑤ 落盘隔离 profiles/coder 下各有 sessions memory logs,与 default 的 ~/.hermes/sessions 互不相干;⑥ 侧栏 display_hermes_home 给人看而 get_hermes_home 给代码,必须配对,PR 3575。">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:hermes -p coder chat 的解析链</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">一个 env var → 真实路径 → 合并后的生效值</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🧭</text>
+
+  <rect x="10" y="56" width="304" height="64" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="74" font-size="10" font-weight="700" fill="var(--blue)">① _apply_profile_override() · main.py:336</text>
+  <text x="20" y="91" font-size="9" fill="var(--muted)">import 前裸调,扫 sys.argv</text>
+  <text x="20" y="109" font-size="9" font-family="monospace" fill="var(--purple)">profile_name=&quot;coder&quot;(剥掉 -p coder)</text>
+
+  <path d="M162,120 L162,130 M158,126 L162,130 L166,126" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="132" width="304" height="64" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="150" font-size="10" font-weight="700" fill="var(--accent-ink)">② resolve_profile_env · profiles.py:1866</text>
+  <text x="20" y="167" font-size="9" font-family="monospace" fill="var(--ink)">→ ~/.hermes/profiles/coder</text>
+  <text x="20" y="184" font-size="9" font-family="monospace" fill="var(--ink)">os.environ[&quot;HERMES_HOME&quot;] = …/coder</text>
+
+  <path d="M162,196 L162,206 M158,202 L162,206 L166,202" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="208" width="304" height="78" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="226" font-size="10" font-weight="700" fill="var(--accent-ink)">③ get_hermes_home() · hermes_constants.py:54</text>
+  <text x="20" y="243" font-size="9" font-family="monospace" fill="var(--ink)">override = get_hermes_home_override()</text>
+  <text x="20" y="257" font-size="9" font-family="monospace" fill="var(--muted)">ContextVar 空 → 读 env 命中</text>
+  <text x="20" y="274" font-size="9" font-family="monospace" fill="var(--purple)">→ Path(&quot;~/.hermes/profiles/coder&quot;)</text>
+
+  <path d="M316,160 L330,160 M326,156 L330,160 L326,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="332" y="56" width="338" height="230" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="342" y="74" font-size="10" font-weight="700" fill="var(--ink)">④ load_config · _deep_merge · config.py:5366</text>
+  <text x="342" y="89" font-size="9" fill="var(--muted)">DEFAULT_CONFIG(_config_version:30) ⊕ coder/config.yaml</text>
+  <rect x="342" y="98" width="318" height="18" fill="var(--panel-2)"/>
+  <text x="348" y="111" font-size="9" font-weight="700" fill="var(--ink)">key</text>
+  <text x="500" y="111" font-size="9" font-weight="700" fill="var(--ink)">默认</text>
+  <text x="556" y="111" font-size="9" font-weight="700" fill="var(--ink)">用户写</text>
+  <text x="616" y="111" font-size="9" font-weight="700" fill="var(--ink)">生效</text>
+  <text x="348" y="134" font-size="9" font-family="monospace" fill="var(--ink)">agent.max_turns</text>
+  <text x="500" y="134" font-size="9" font-family="monospace" fill="var(--muted)">90</text>
+  <text x="556" y="134" font-size="9" font-family="monospace" fill="var(--purple)">40</text>
+  <text x="616" y="134" font-size="9" font-family="monospace" font-weight="700" fill="var(--purple)">40 覆盖</text>
+  <line x1="342" y1="142" x2="660" y2="142" stroke="var(--line)"/>
+  <text x="348" y="159" font-size="9" font-family="monospace" fill="var(--ink)">agent.gateway_timeout</text>
+  <text x="500" y="159" font-size="9" font-family="monospace" fill="var(--muted)">1800</text>
+  <text x="556" y="159" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="616" y="159" font-size="9" font-family="monospace" fill="var(--accent-ink)">1800 保留</text>
+  <line x1="342" y1="167" x2="660" y2="167" stroke="var(--line)"/>
+  <text x="348" y="184" font-size="9" font-family="monospace" fill="var(--ink)">terminal.cwd</text>
+  <text x="500" y="184" font-size="9" font-family="monospace" fill="var(--muted)">&quot;.&quot;</text>
+  <text x="556" y="184" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="616" y="184" font-size="9" font-family="monospace" fill="var(--accent-ink)">&quot;.&quot; 保留</text>
+  <line x1="342" y1="192" x2="660" y2="192" stroke="var(--line)"/>
+  <text x="348" y="209" font-size="9" font-family="monospace" fill="var(--ink)">compression.threshold</text>
+  <text x="500" y="209" font-size="9" font-family="monospace" fill="var(--muted)">0.50</text>
+  <text x="556" y="209" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="616" y="209" font-size="9" font-family="monospace" fill="var(--accent-ink)">0.50 保留</text>
+  <line x1="342" y1="217" x2="660" y2="217" stroke="var(--line)"/>
+  <text x="342" y="234" font-size="9" fill="var(--muted)">_deep_merge:用户键优先,未写键自动补默认</text>
+  <text x="342" y="252" font-size="9" fill="var(--muted)">(默认值见 config.py:887/900/1020/1265)</text>
+  <text x="342" y="272" font-size="9" fill="var(--ink)">同一进程内,这套生效值只属于 coder 这个岛</text>
+
+  <rect x="10" y="298" width="304" height="60" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="316" font-size="10" font-weight="700" fill="var(--ink)">⑤ 落盘隔离</text>
+  <text x="20" y="333" font-size="9" font-family="monospace" fill="var(--ink)">profiles/coder/{sessions,memory,logs}</text>
+  <text x="20" y="349" font-size="9" font-family="monospace" fill="var(--muted)">vs default ~/.hermes/sessions(互不相干)</text>
+
+  <rect x="332" y="298" width="338" height="60" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="342" y="316" font-size="10" font-weight="700" fill="var(--purple)">⑥ 给人看 vs 给代码,必须配对 · PR #3575</text>
+  <text x="342" y="333" font-size="9" font-family="monospace" fill="var(--ink)">display_hermes_home() → ~/.hermes/profiles/coder</text>
+  <text x="342" y="349" font-size="9" font-family="monospace" fill="var(--ink)">get_hermes_home()     → Path(给代码读写)</text>
+
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">读这张图:一个 -p coder 经裸调 → env var → 单一入口 → 深合并,落成一组真实路径与生效值,与 default 岛完全隔离。</text>
+  <text x="20" y="402" font-size="9.5" fill="var(--muted)">未写的键自动保留默认(1800 / &quot;.&quot; / 0.50),只有用户显式写的 max_turns:40 覆盖默认 90。</text>
+</svg>
+<div class="fig-cap"><b>实例:hermes -p coder chat 的解析链</b>:① <span class="mono">_apply_profile_override()</span> 在 import 前裸调,扫 <span class="mono">argv</span> 得 <span class="mono">profile_name=&quot;coder&quot;</span> 并剥 <span class="mono">-p coder</span>;② <span class="mono">resolve_profile_env(&quot;coder&quot;)</span>→<span class="mono">~/.hermes/profiles/coder</span>→写 <span class="mono">os.environ[&quot;HERMES_HOME&quot;]</span>;③ 业务 <span class="mono">get_hermes_home()</span>:ContextVar 空→读 env→<span class="mono">Path(profiles/coder)</span>;④ <span class="mono">load_config()</span> 把 <span class="mono">DEFAULT_CONFIG(_config_version:30)</span> 与 coder 的 <span class="mono">config.yaml</span> 经 <span class="mono">_deep_merge</span> 合并:用户写 <span class="mono">agent.max_turns:40</span> 覆盖默认 <span class="mono">90</span>→生效 <span class="mono">40</span>;未写则 <span class="mono">gateway_timeout</span> 保留 <span class="mono">1800</span>、<span class="mono">terminal.cwd</span> 保留 <span class="mono">&quot;.&quot;</span>、<span class="mono">compression.threshold</span> 保留 <span class="mono">0.50</span>;⑤ <span class="mono">profiles/coder/{sessions,memory,logs}</span> 与 default 隔离;⑥ <span class="mono">display_hermes_home()</span>(给人看)与 <span class="mono">get_hermes_home()</span>(给代码)必须配对(PR #3575)。</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
@@ -1743,6 +2217,82 @@ OPTIONAL_ENV_VARS = {
   <p style="margin:.5rem 0 0">Why are profiles <strong>independent islands</strong> by design, deliberately without live config inheritance? Because coupling is exactly what isolation is meant to prevent: if the coder profile inherited default's config live, one edit to default would silently mutate every profile, and cross-instance contamination would return. When you want to "start from my default," the right move is a one-time copy at creation — <span class="mono">hermes profile create coder --clone</span> copies config, <span class="mono">.env</span>, skills and so on across, after which the two go their own ways untouched. An easily-missed detail: <span class="mono">_get_profiles_root()</span> is anchored to the <strong>default</strong> home rather than the current <span class="mono">HERMES_HOME</span>, so even while you're inside the coder instance, <span class="mono">hermes -p coder profile list</span> can still see all profiles, not just its own.</p>
   <p style="margin:.5rem 0 0">Isolation also has to plug a cross-instance trap: if two profiles use the same bot token to connect to Telegram at once, the platform kicks them back and forth and messages scramble. So a gateway platform adapter calls <span class="mono">acquire_scoped_lock()</span> (from <span class="mono">gateway.status</span>) in <span class="mono">connect()</span> to lock by credential and releases it in <span class="mono">disconnect()</span>, ensuring only one instance globally uses a given credential (see ch.17). Combined with profile directory isolation, this is one strand of ch.24's security defense — what it guards against is not only external attackers but also your own multiple instances crossing wires and polluting each other's memory and sessions.</p>
   <p style="margin:.5rem 0 0">One last easily-overlooked symmetry: code reads paths with <span class="mono">get_hermes_home()</span>, but <strong>showing</strong> a path to a human uses <span class="mono">display_hermes_home()</span>. The latter compresses the absolute path into friendly forms like <span class="mono">~/.hermes</span> or <span class="mono">~/.hermes/profiles/coder</span>, so the directory printed in setup, logs, and errors instantly reveals which profile you're in. Hardcode <span class="mono">~/.hermes</span> here to save effort and profile users get burned by a mismatch between the "displayed path" and the "real path" — exactly the shared lesson of those 5 PR #3575 bugs: whether it's disk-writing code or human-readable copy, anytime you touch the home path you must go through that one profile-aware entry.</p>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 420" role="img" aria-label="Worked example: at hermes -p coder chat startup, how one env var resolves into real paths and effective values. 1 _apply_profile_override runs bare before imports, scans argv to profile_name coder and strips -p coder, main.py 336; 2 resolve_profile_env coder resolves ~/.hermes/profiles/coder and writes os.environ HERMES_HOME, profiles.py 1866; 3 business imports call get_hermes_home, the ContextVar override is empty, the env is read and hit, returning Path ~/.hermes/profiles/coder, hermes_constants.py 54 and 109; 4 load_config merges DEFAULT_CONFIG _config_version 30 with the coder config.yaml via _deep_merge, config.py 5366, the user-written agent.max_turns 40 overrides the default 90 to 40, while unwritten gateway_timeout keeps 1800, terminal.cwd keeps dot, compression.threshold keeps 0.50; 5 on-disk isolation profiles/coder has its own sessions memory logs, separate from default ~/.hermes/sessions; 6 sidebar display_hermes_home is for humans and get_hermes_home is for code and they must be paired, PR 3575.">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">Example: the resolution chain of hermes -p coder chat</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">one env var → real path → merged effective values</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🧭</text>
+
+  <rect x="10" y="56" width="304" height="64" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="74" font-size="10" font-weight="700" fill="var(--blue)">1 _apply_profile_override() · main.py:336</text>
+  <text x="20" y="91" font-size="9" fill="var(--muted)">runs bare before imports, scans sys.argv</text>
+  <text x="20" y="109" font-size="9" font-family="monospace" fill="var(--purple)">profile_name=&quot;coder&quot; (strips -p coder)</text>
+
+  <path d="M162,120 L162,130 M158,126 L162,130 L166,126" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="132" width="304" height="64" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="150" font-size="10" font-weight="700" fill="var(--accent-ink)">2 resolve_profile_env · profiles.py:1866</text>
+  <text x="20" y="167" font-size="9" font-family="monospace" fill="var(--ink)">→ ~/.hermes/profiles/coder</text>
+  <text x="20" y="184" font-size="9" font-family="monospace" fill="var(--ink)">os.environ[&quot;HERMES_HOME&quot;] = …/coder</text>
+
+  <path d="M162,196 L162,206 M158,202 L162,206 L166,202" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="208" width="304" height="78" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="226" font-size="10" font-weight="700" fill="var(--accent-ink)">3 get_hermes_home() · hermes_constants.py:54</text>
+  <text x="20" y="243" font-size="9" font-family="monospace" fill="var(--ink)">override = get_hermes_home_override()</text>
+  <text x="20" y="257" font-size="9" font-family="monospace" fill="var(--muted)">ContextVar empty → read env, hit</text>
+  <text x="20" y="274" font-size="9" font-family="monospace" fill="var(--purple)">→ Path(&quot;~/.hermes/profiles/coder&quot;)</text>
+
+  <path d="M316,160 L330,160 M326,156 L330,160 L326,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="332" y="56" width="338" height="230" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="342" y="74" font-size="10" font-weight="700" fill="var(--ink)">4 load_config · _deep_merge · config.py:5366</text>
+  <text x="342" y="89" font-size="9" fill="var(--muted)">DEFAULT_CONFIG(_config_version:30) ⊕ coder/config.yaml</text>
+  <rect x="342" y="98" width="318" height="18" fill="var(--panel-2)"/>
+  <text x="348" y="111" font-size="9" font-weight="700" fill="var(--ink)">key</text>
+  <text x="498" y="111" font-size="9" font-weight="700" fill="var(--ink)">default</text>
+  <text x="556" y="111" font-size="9" font-weight="700" fill="var(--ink)">user</text>
+  <text x="606" y="111" font-size="9" font-weight="700" fill="var(--ink)">effective</text>
+  <text x="348" y="134" font-size="9" font-family="monospace" fill="var(--ink)">agent.max_turns</text>
+  <text x="498" y="134" font-size="9" font-family="monospace" fill="var(--muted)">90</text>
+  <text x="556" y="134" font-size="9" font-family="monospace" fill="var(--purple)">40</text>
+  <text x="606" y="134" font-size="9" font-family="monospace" font-weight="700" fill="var(--purple)">40 override</text>
+  <line x1="342" y1="142" x2="660" y2="142" stroke="var(--line)"/>
+  <text x="348" y="159" font-size="9" font-family="monospace" fill="var(--ink)">agent.gateway_timeout</text>
+  <text x="498" y="159" font-size="9" font-family="monospace" fill="var(--muted)">1800</text>
+  <text x="556" y="159" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="606" y="159" font-size="9" font-family="monospace" fill="var(--accent-ink)">1800 kept</text>
+  <line x1="342" y1="167" x2="660" y2="167" stroke="var(--line)"/>
+  <text x="348" y="184" font-size="9" font-family="monospace" fill="var(--ink)">terminal.cwd</text>
+  <text x="498" y="184" font-size="9" font-family="monospace" fill="var(--muted)">&quot;.&quot;</text>
+  <text x="556" y="184" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="606" y="184" font-size="9" font-family="monospace" fill="var(--accent-ink)">&quot;.&quot; kept</text>
+  <line x1="342" y1="192" x2="660" y2="192" stroke="var(--line)"/>
+  <text x="348" y="209" font-size="9" font-family="monospace" fill="var(--ink)">compression.threshold</text>
+  <text x="498" y="209" font-size="9" font-family="monospace" fill="var(--muted)">0.50</text>
+  <text x="556" y="209" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="606" y="209" font-size="9" font-family="monospace" fill="var(--accent-ink)">0.50 kept</text>
+  <line x1="342" y1="217" x2="660" y2="217" stroke="var(--line)"/>
+  <text x="342" y="234" font-size="9" fill="var(--muted)">_deep_merge: user keys win, unwritten keys keep defaults</text>
+  <text x="342" y="252" font-size="9" fill="var(--muted)">(defaults at config.py:887/900/1020/1265)</text>
+  <text x="342" y="272" font-size="9" fill="var(--ink)">within one process, these values belong only to the coder island</text>
+
+  <rect x="10" y="298" width="304" height="60" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="316" font-size="10" font-weight="700" fill="var(--ink)">5 on-disk isolation</text>
+  <text x="20" y="333" font-size="9" font-family="monospace" fill="var(--ink)">profiles/coder/{sessions,memory,logs}</text>
+  <text x="20" y="349" font-size="9" font-family="monospace" fill="var(--muted)">vs default ~/.hermes/sessions (disjoint)</text>
+
+  <rect x="332" y="298" width="338" height="60" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="342" y="316" font-size="10" font-weight="700" fill="var(--purple)">6 humans vs code, must be paired · PR #3575</text>
+  <text x="342" y="333" font-size="9" font-family="monospace" fill="var(--ink)">display_hermes_home() → ~/.hermes/profiles/coder</text>
+  <text x="342" y="349" font-size="9" font-family="monospace" fill="var(--ink)">get_hermes_home()     → Path (for code I/O)</text>
+
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">Read this: one -p coder flows bare-call → env var → single entry → deep merge into a set of real paths and effective values, fully isolated from default.</text>
+  <text x="20" y="402" font-size="9.5" fill="var(--muted)">Unwritten keys keep their defaults (1800 / &quot;.&quot; / 0.50); only the explicitly written max_turns:40 overrides the default 90.</text>
+</svg>
+<div class="fig-cap"><b>Example: the resolution chain of hermes -p coder chat</b>: 1 <span class="mono">_apply_profile_override()</span> runs bare before imports, scanning <span class="mono">argv</span> to <span class="mono">profile_name=&quot;coder&quot;</span> and stripping <span class="mono">-p coder</span>; 2 <span class="mono">resolve_profile_env(&quot;coder&quot;)</span> → <span class="mono">~/.hermes/profiles/coder</span> → writes <span class="mono">os.environ[&quot;HERMES_HOME&quot;]</span>; 3 business <span class="mono">get_hermes_home()</span>: ContextVar empty → read env → <span class="mono">Path(profiles/coder)</span>; 4 <span class="mono">load_config()</span> merges <span class="mono">DEFAULT_CONFIG(_config_version:30)</span> with the coder <span class="mono">config.yaml</span> via <span class="mono">_deep_merge</span>: the user-written <span class="mono">agent.max_turns:40</span> overrides the default <span class="mono">90</span> → effective <span class="mono">40</span>; unwritten ones keep <span class="mono">gateway_timeout</span> = <span class="mono">1800</span>, <span class="mono">terminal.cwd</span> = <span class="mono">&quot;.&quot;</span>, <span class="mono">compression.threshold</span> = <span class="mono">0.50</span>; 5 <span class="mono">profiles/coder/{sessions,memory,logs}</span> is isolated from default; 6 <span class="mono">display_hermes_home()</span> (for humans) and <span class="mono">get_hermes_home()</span> (for code) must be paired (PR #3575).</div>
 </div>
 
 <div class="card key">

@@ -584,6 +584,82 @@ OPTIONAL_ENV_VARS = {
   <p style="margin:.5rem 0 0">最后一处易被忽略的对称:代码取路径用 <span class="mono">get_hermes_home()</span>,<strong>给人看</strong>路径却要用 <span class="mono">display_hermes_home()</span>。后者把绝对路径压成 <span class="mono">~/.hermes</span> 或 <span class="mono">~/.hermes/profiles/coder</span> 这样的友好写法,让 setup、日志、报错里印出的目录一眼就能认出「现在在哪个 profile」。若这里图省事硬编码 <span class="mono">~/.hermes</span>,profile 用户就会被「提示路径」与「真实路径」不一致坑到——这正是 PR #3575 那 5 个 bug 的同源教训:无论是写盘的代码还是给人读的文案,只要碰 home 路径,就得走 profile-aware 的那唯一一个入口。</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 420" role="img" aria-label="实例图:hermes -p coder chat 启动时,一个环境变量如何解析成真实路径与生效值。① _apply_profile_override 在 import 前裸调,扫 argv 得 profile_name coder 并剥掉 -p coder,main.py 336;② resolve_profile_env coder 解析出 ~/.hermes/profiles/coder 并写入 os.environ HERMES_HOME,profiles.py 1866;③ 业务 import 调 get_hermes_home,ContextVar override 为空,读 env 命中,返回 Path ~/.hermes/profiles/coder,hermes_constants.py 54 与 109;④ load_config 把 DEFAULT_CONFIG _config_version 30 与 coder 的 config.yaml 经 _deep_merge 合并,config.py 5366,用户写 agent.max_turns 40 覆盖默认 90 生效 40,未写的 gateway_timeout 保留 1800、terminal.cwd 保留点、compression.threshold 保留 0.50;⑤ 落盘隔离 profiles/coder 下各有 sessions memory logs,与 default 的 ~/.hermes/sessions 互不相干;⑥ 侧栏 display_hermes_home 给人看而 get_hermes_home 给代码,必须配对,PR 3575。">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:hermes -p coder chat 的解析链</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">一个 env var → 真实路径 → 合并后的生效值</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🧭</text>
+
+  <rect x="10" y="56" width="304" height="64" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="74" font-size="10" font-weight="700" fill="var(--blue)">① _apply_profile_override() · main.py:336</text>
+  <text x="20" y="91" font-size="9" fill="var(--muted)">import 前裸调,扫 sys.argv</text>
+  <text x="20" y="109" font-size="9" font-family="monospace" fill="var(--purple)">profile_name=&quot;coder&quot;(剥掉 -p coder)</text>
+
+  <path d="M162,120 L162,130 M158,126 L162,130 L166,126" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="132" width="304" height="64" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="150" font-size="10" font-weight="700" fill="var(--accent-ink)">② resolve_profile_env · profiles.py:1866</text>
+  <text x="20" y="167" font-size="9" font-family="monospace" fill="var(--ink)">→ ~/.hermes/profiles/coder</text>
+  <text x="20" y="184" font-size="9" font-family="monospace" fill="var(--ink)">os.environ[&quot;HERMES_HOME&quot;] = …/coder</text>
+
+  <path d="M162,196 L162,206 M158,202 L162,206 L166,202" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="208" width="304" height="78" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="226" font-size="10" font-weight="700" fill="var(--accent-ink)">③ get_hermes_home() · hermes_constants.py:54</text>
+  <text x="20" y="243" font-size="9" font-family="monospace" fill="var(--ink)">override = get_hermes_home_override()</text>
+  <text x="20" y="257" font-size="9" font-family="monospace" fill="var(--muted)">ContextVar 空 → 读 env 命中</text>
+  <text x="20" y="274" font-size="9" font-family="monospace" fill="var(--purple)">→ Path(&quot;~/.hermes/profiles/coder&quot;)</text>
+
+  <path d="M316,160 L330,160 M326,156 L330,160 L326,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="332" y="56" width="338" height="230" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="342" y="74" font-size="10" font-weight="700" fill="var(--ink)">④ load_config · _deep_merge · config.py:5366</text>
+  <text x="342" y="89" font-size="9" fill="var(--muted)">DEFAULT_CONFIG(_config_version:30) ⊕ coder/config.yaml</text>
+  <rect x="342" y="98" width="318" height="18" fill="var(--panel-2)"/>
+  <text x="348" y="111" font-size="9" font-weight="700" fill="var(--ink)">key</text>
+  <text x="500" y="111" font-size="9" font-weight="700" fill="var(--ink)">默认</text>
+  <text x="556" y="111" font-size="9" font-weight="700" fill="var(--ink)">用户写</text>
+  <text x="616" y="111" font-size="9" font-weight="700" fill="var(--ink)">生效</text>
+  <text x="348" y="134" font-size="9" font-family="monospace" fill="var(--ink)">agent.max_turns</text>
+  <text x="500" y="134" font-size="9" font-family="monospace" fill="var(--muted)">90</text>
+  <text x="556" y="134" font-size="9" font-family="monospace" fill="var(--purple)">40</text>
+  <text x="616" y="134" font-size="9" font-family="monospace" font-weight="700" fill="var(--purple)">40 覆盖</text>
+  <line x1="342" y1="142" x2="660" y2="142" stroke="var(--line)"/>
+  <text x="348" y="159" font-size="9" font-family="monospace" fill="var(--ink)">agent.gateway_timeout</text>
+  <text x="500" y="159" font-size="9" font-family="monospace" fill="var(--muted)">1800</text>
+  <text x="556" y="159" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="616" y="159" font-size="9" font-family="monospace" fill="var(--accent-ink)">1800 保留</text>
+  <line x1="342" y1="167" x2="660" y2="167" stroke="var(--line)"/>
+  <text x="348" y="184" font-size="9" font-family="monospace" fill="var(--ink)">terminal.cwd</text>
+  <text x="500" y="184" font-size="9" font-family="monospace" fill="var(--muted)">&quot;.&quot;</text>
+  <text x="556" y="184" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="616" y="184" font-size="9" font-family="monospace" fill="var(--accent-ink)">&quot;.&quot; 保留</text>
+  <line x1="342" y1="192" x2="660" y2="192" stroke="var(--line)"/>
+  <text x="348" y="209" font-size="9" font-family="monospace" fill="var(--ink)">compression.threshold</text>
+  <text x="500" y="209" font-size="9" font-family="monospace" fill="var(--muted)">0.50</text>
+  <text x="556" y="209" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="616" y="209" font-size="9" font-family="monospace" fill="var(--accent-ink)">0.50 保留</text>
+  <line x1="342" y1="217" x2="660" y2="217" stroke="var(--line)"/>
+  <text x="342" y="234" font-size="9" fill="var(--muted)">_deep_merge:用户键优先,未写键自动补默认</text>
+  <text x="342" y="252" font-size="9" fill="var(--muted)">(默认值见 config.py:887/900/1020/1265)</text>
+  <text x="342" y="272" font-size="9" fill="var(--ink)">同一进程内,这套生效值只属于 coder 这个岛</text>
+
+  <rect x="10" y="298" width="304" height="60" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="316" font-size="10" font-weight="700" fill="var(--ink)">⑤ 落盘隔离</text>
+  <text x="20" y="333" font-size="9" font-family="monospace" fill="var(--ink)">profiles/coder/{sessions,memory,logs}</text>
+  <text x="20" y="349" font-size="9" font-family="monospace" fill="var(--muted)">vs default ~/.hermes/sessions(互不相干)</text>
+
+  <rect x="332" y="298" width="338" height="60" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="342" y="316" font-size="10" font-weight="700" fill="var(--purple)">⑥ 给人看 vs 给代码,必须配对 · PR #3575</text>
+  <text x="342" y="333" font-size="9" font-family="monospace" fill="var(--ink)">display_hermes_home() → ~/.hermes/profiles/coder</text>
+  <text x="342" y="349" font-size="9" font-family="monospace" fill="var(--ink)">get_hermes_home()     → Path(给代码读写)</text>
+
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">读这张图:一个 -p coder 经裸调 → env var → 单一入口 → 深合并,落成一组真实路径与生效值,与 default 岛完全隔离。</text>
+  <text x="20" y="402" font-size="9.5" fill="var(--muted)">未写的键自动保留默认(1800 / &quot;.&quot; / 0.50),只有用户显式写的 max_turns:40 覆盖默认 90。</text>
+</svg>
+<div class="fig-cap"><b>实例:hermes -p coder chat 的解析链</b>:① <span class="mono">_apply_profile_override()</span> 在 import 前裸调,扫 <span class="mono">argv</span> 得 <span class="mono">profile_name=&quot;coder&quot;</span> 并剥 <span class="mono">-p coder</span>;② <span class="mono">resolve_profile_env(&quot;coder&quot;)</span>→<span class="mono">~/.hermes/profiles/coder</span>→写 <span class="mono">os.environ[&quot;HERMES_HOME&quot;]</span>;③ 业务 <span class="mono">get_hermes_home()</span>:ContextVar 空→读 env→<span class="mono">Path(profiles/coder)</span>;④ <span class="mono">load_config()</span> 把 <span class="mono">DEFAULT_CONFIG(_config_version:30)</span> 与 coder 的 <span class="mono">config.yaml</span> 经 <span class="mono">_deep_merge</span> 合并:用户写 <span class="mono">agent.max_turns:40</span> 覆盖默认 <span class="mono">90</span>→生效 <span class="mono">40</span>;未写则 <span class="mono">gateway_timeout</span> 保留 <span class="mono">1800</span>、<span class="mono">terminal.cwd</span> 保留 <span class="mono">&quot;.&quot;</span>、<span class="mono">compression.threshold</span> 保留 <span class="mono">0.50</span>;⑤ <span class="mono">profiles/coder/{sessions,memory,logs}</span> 与 default 隔离;⑥ <span class="mono">display_hermes_home()</span>(给人看)与 <span class="mono">get_hermes_home()</span>(给代码)必须配对(PR #3575)。</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
@@ -841,6 +917,82 @@ OPTIONAL_ENV_VARS = {
   <p style="margin:.5rem 0 0">Why are profiles <strong>independent islands</strong> by design, deliberately without live config inheritance? Because coupling is exactly what isolation is meant to prevent: if the coder profile inherited default's config live, one edit to default would silently mutate every profile, and cross-instance contamination would return. When you want to "start from my default," the right move is a one-time copy at creation — <span class="mono">hermes profile create coder --clone</span> copies config, <span class="mono">.env</span>, skills and so on across, after which the two go their own ways untouched. An easily-missed detail: <span class="mono">_get_profiles_root()</span> is anchored to the <strong>default</strong> home rather than the current <span class="mono">HERMES_HOME</span>, so even while you're inside the coder instance, <span class="mono">hermes -p coder profile list</span> can still see all profiles, not just its own.</p>
   <p style="margin:.5rem 0 0">Isolation also has to plug a cross-instance trap: if two profiles use the same bot token to connect to Telegram at once, the platform kicks them back and forth and messages scramble. So a gateway platform adapter calls <span class="mono">acquire_scoped_lock()</span> (from <span class="mono">gateway.status</span>) in <span class="mono">connect()</span> to lock by credential and releases it in <span class="mono">disconnect()</span>, ensuring only one instance globally uses a given credential (see ch.17). Combined with profile directory isolation, this is one strand of ch.24's security defense — what it guards against is not only external attackers but also your own multiple instances crossing wires and polluting each other's memory and sessions.</p>
   <p style="margin:.5rem 0 0">One last easily-overlooked symmetry: code reads paths with <span class="mono">get_hermes_home()</span>, but <strong>showing</strong> a path to a human uses <span class="mono">display_hermes_home()</span>. The latter compresses the absolute path into friendly forms like <span class="mono">~/.hermes</span> or <span class="mono">~/.hermes/profiles/coder</span>, so the directory printed in setup, logs, and errors instantly reveals which profile you're in. Hardcode <span class="mono">~/.hermes</span> here to save effort and profile users get burned by a mismatch between the "displayed path" and the "real path" — exactly the shared lesson of those 5 PR #3575 bugs: whether it's disk-writing code or human-readable copy, anytime you touch the home path you must go through that one profile-aware entry.</p>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 420" role="img" aria-label="Worked example: at hermes -p coder chat startup, how one env var resolves into real paths and effective values. 1 _apply_profile_override runs bare before imports, scans argv to profile_name coder and strips -p coder, main.py 336; 2 resolve_profile_env coder resolves ~/.hermes/profiles/coder and writes os.environ HERMES_HOME, profiles.py 1866; 3 business imports call get_hermes_home, the ContextVar override is empty, the env is read and hit, returning Path ~/.hermes/profiles/coder, hermes_constants.py 54 and 109; 4 load_config merges DEFAULT_CONFIG _config_version 30 with the coder config.yaml via _deep_merge, config.py 5366, the user-written agent.max_turns 40 overrides the default 90 to 40, while unwritten gateway_timeout keeps 1800, terminal.cwd keeps dot, compression.threshold keeps 0.50; 5 on-disk isolation profiles/coder has its own sessions memory logs, separate from default ~/.hermes/sessions; 6 sidebar display_hermes_home is for humans and get_hermes_home is for code and they must be paired, PR 3575.">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">Example: the resolution chain of hermes -p coder chat</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">one env var → real path → merged effective values</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🧭</text>
+
+  <rect x="10" y="56" width="304" height="64" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="74" font-size="10" font-weight="700" fill="var(--blue)">1 _apply_profile_override() · main.py:336</text>
+  <text x="20" y="91" font-size="9" fill="var(--muted)">runs bare before imports, scans sys.argv</text>
+  <text x="20" y="109" font-size="9" font-family="monospace" fill="var(--purple)">profile_name=&quot;coder&quot; (strips -p coder)</text>
+
+  <path d="M162,120 L162,130 M158,126 L162,130 L166,126" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="132" width="304" height="64" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="150" font-size="10" font-weight="700" fill="var(--accent-ink)">2 resolve_profile_env · profiles.py:1866</text>
+  <text x="20" y="167" font-size="9" font-family="monospace" fill="var(--ink)">→ ~/.hermes/profiles/coder</text>
+  <text x="20" y="184" font-size="9" font-family="monospace" fill="var(--ink)">os.environ[&quot;HERMES_HOME&quot;] = …/coder</text>
+
+  <path d="M162,196 L162,206 M158,202 L162,206 L166,202" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="208" width="304" height="78" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="226" font-size="10" font-weight="700" fill="var(--accent-ink)">3 get_hermes_home() · hermes_constants.py:54</text>
+  <text x="20" y="243" font-size="9" font-family="monospace" fill="var(--ink)">override = get_hermes_home_override()</text>
+  <text x="20" y="257" font-size="9" font-family="monospace" fill="var(--muted)">ContextVar empty → read env, hit</text>
+  <text x="20" y="274" font-size="9" font-family="monospace" fill="var(--purple)">→ Path(&quot;~/.hermes/profiles/coder&quot;)</text>
+
+  <path d="M316,160 L330,160 M326,156 L330,160 L326,164" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="332" y="56" width="338" height="230" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="342" y="74" font-size="10" font-weight="700" fill="var(--ink)">4 load_config · _deep_merge · config.py:5366</text>
+  <text x="342" y="89" font-size="9" fill="var(--muted)">DEFAULT_CONFIG(_config_version:30) ⊕ coder/config.yaml</text>
+  <rect x="342" y="98" width="318" height="18" fill="var(--panel-2)"/>
+  <text x="348" y="111" font-size="9" font-weight="700" fill="var(--ink)">key</text>
+  <text x="498" y="111" font-size="9" font-weight="700" fill="var(--ink)">default</text>
+  <text x="556" y="111" font-size="9" font-weight="700" fill="var(--ink)">user</text>
+  <text x="606" y="111" font-size="9" font-weight="700" fill="var(--ink)">effective</text>
+  <text x="348" y="134" font-size="9" font-family="monospace" fill="var(--ink)">agent.max_turns</text>
+  <text x="498" y="134" font-size="9" font-family="monospace" fill="var(--muted)">90</text>
+  <text x="556" y="134" font-size="9" font-family="monospace" fill="var(--purple)">40</text>
+  <text x="606" y="134" font-size="9" font-family="monospace" font-weight="700" fill="var(--purple)">40 override</text>
+  <line x1="342" y1="142" x2="660" y2="142" stroke="var(--line)"/>
+  <text x="348" y="159" font-size="9" font-family="monospace" fill="var(--ink)">agent.gateway_timeout</text>
+  <text x="498" y="159" font-size="9" font-family="monospace" fill="var(--muted)">1800</text>
+  <text x="556" y="159" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="606" y="159" font-size="9" font-family="monospace" fill="var(--accent-ink)">1800 kept</text>
+  <line x1="342" y1="167" x2="660" y2="167" stroke="var(--line)"/>
+  <text x="348" y="184" font-size="9" font-family="monospace" fill="var(--ink)">terminal.cwd</text>
+  <text x="498" y="184" font-size="9" font-family="monospace" fill="var(--muted)">&quot;.&quot;</text>
+  <text x="556" y="184" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="606" y="184" font-size="9" font-family="monospace" fill="var(--accent-ink)">&quot;.&quot; kept</text>
+  <line x1="342" y1="192" x2="660" y2="192" stroke="var(--line)"/>
+  <text x="348" y="209" font-size="9" font-family="monospace" fill="var(--ink)">compression.threshold</text>
+  <text x="498" y="209" font-size="9" font-family="monospace" fill="var(--muted)">0.50</text>
+  <text x="556" y="209" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
+  <text x="606" y="209" font-size="9" font-family="monospace" fill="var(--accent-ink)">0.50 kept</text>
+  <line x1="342" y1="217" x2="660" y2="217" stroke="var(--line)"/>
+  <text x="342" y="234" font-size="9" fill="var(--muted)">_deep_merge: user keys win, unwritten keys keep defaults</text>
+  <text x="342" y="252" font-size="9" fill="var(--muted)">(defaults at config.py:887/900/1020/1265)</text>
+  <text x="342" y="272" font-size="9" fill="var(--ink)">within one process, these values belong only to the coder island</text>
+
+  <rect x="10" y="298" width="304" height="60" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="316" font-size="10" font-weight="700" fill="var(--ink)">5 on-disk isolation</text>
+  <text x="20" y="333" font-size="9" font-family="monospace" fill="var(--ink)">profiles/coder/{sessions,memory,logs}</text>
+  <text x="20" y="349" font-size="9" font-family="monospace" fill="var(--muted)">vs default ~/.hermes/sessions (disjoint)</text>
+
+  <rect x="332" y="298" width="338" height="60" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="342" y="316" font-size="10" font-weight="700" fill="var(--purple)">6 humans vs code, must be paired · PR #3575</text>
+  <text x="342" y="333" font-size="9" font-family="monospace" fill="var(--ink)">display_hermes_home() → ~/.hermes/profiles/coder</text>
+  <text x="342" y="349" font-size="9" font-family="monospace" fill="var(--ink)">get_hermes_home()     → Path (for code I/O)</text>
+
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">Read this: one -p coder flows bare-call → env var → single entry → deep merge into a set of real paths and effective values, fully isolated from default.</text>
+  <text x="20" y="402" font-size="9.5" fill="var(--muted)">Unwritten keys keep their defaults (1800 / &quot;.&quot; / 0.50); only the explicitly written max_turns:40 overrides the default 90.</text>
+</svg>
+<div class="fig-cap"><b>Example: the resolution chain of hermes -p coder chat</b>: 1 <span class="mono">_apply_profile_override()</span> runs bare before imports, scanning <span class="mono">argv</span> to <span class="mono">profile_name=&quot;coder&quot;</span> and stripping <span class="mono">-p coder</span>; 2 <span class="mono">resolve_profile_env(&quot;coder&quot;)</span> → <span class="mono">~/.hermes/profiles/coder</span> → writes <span class="mono">os.environ[&quot;HERMES_HOME&quot;]</span>; 3 business <span class="mono">get_hermes_home()</span>: ContextVar empty → read env → <span class="mono">Path(profiles/coder)</span>; 4 <span class="mono">load_config()</span> merges <span class="mono">DEFAULT_CONFIG(_config_version:30)</span> with the coder <span class="mono">config.yaml</span> via <span class="mono">_deep_merge</span>: the user-written <span class="mono">agent.max_turns:40</span> overrides the default <span class="mono">90</span> → effective <span class="mono">40</span>; unwritten ones keep <span class="mono">gateway_timeout</span> = <span class="mono">1800</span>, <span class="mono">terminal.cwd</span> = <span class="mono">&quot;.&quot;</span>, <span class="mono">compression.threshold</span> = <span class="mono">0.50</span>; 5 <span class="mono">profiles/coder/{sessions,memory,logs}</span> is isolated from default; 6 <span class="mono">display_hermes_home()</span> (for humans) and <span class="mono">get_hermes_home()</span> (for code) must be paired (PR #3575).</div>
 </div>
 
 <div class="card key">

@@ -554,6 +554,66 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 <div class="fig-cap"><b>4 断点 + 签名安全</b>：<span class="mono">system_and_3</span> 在 system 前缀和末 3 条非 system 上打 4 个 <span class="mono">cache_control</span> 断点（同 TTL、打在 deepcopy 副本上）；但 marker 必须从 <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span> 块上<b>剥掉</b>，否则破坏签名验证。</div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 410" role="img" aria-label="一条真实 system prompt 的三层拼装、打缓存 marker 与第 2 轮 token 账">
+  <text x="18" y="23" font-size="13" font-weight="700" fill="var(--accent-ink)">实例：一条真实 system prompt 三层拼装 → 打 marker → 第 2 轮 token 账</text>
+
+  <rect x="18" y="36" width="332" height="92" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="30" y="55" font-size="10.5" font-weight="700" fill="var(--accent-ink)">① stable 层 · DEFAULT_AGENT_IDENTITY</text>
+  <text x="30" y="76" font-size="9" font-family="monospace" fill="var(--ink)">You are Hermes Agent, an intelligent AI</text>
+  <text x="30" y="89" font-size="9" font-family="monospace" fill="var(--ink)">assistant created by Nous Research. ...</text>
+  <text x="30" y="113" font-size="9" fill="var(--muted)">prompt_builder.py:123</text>
+  <text x="338" y="113" text-anchor="end" font-size="11" font-weight="700" fill="var(--purple)">≈ 6800 tok</text>
+
+  <rect x="18" y="136" width="332" height="62" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="30" y="155" font-size="10.5" font-weight="700" fill="var(--blue)">② context 层 · context_parts</text>
+  <text x="30" y="175" font-size="9" font-family="monospace" fill="var(--ink)">AGENTS.md 项目约定（注入前已扫描）</text>
+  <text x="30" y="192" font-size="9" fill="var(--muted)">system_prompt.py · context</text>
+  <text x="338" y="192" text-anchor="end" font-size="11" font-weight="700" fill="var(--purple)">≈ 1200 tok</text>
+
+  <rect x="18" y="206" width="332" height="98" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="30" y="225" font-size="10.5" font-weight="700" fill="var(--purple)">③ volatile 层 · timestamp（放最后）</text>
+  <text x="30" y="245" font-size="9" font-family="monospace" fill="var(--ink)">Conversation started: Saturday, June 27, 2026</text>
+  <text x="30" y="259" font-size="9" font-family="monospace" fill="var(--ink)">Model: claude-opus-4.7</text>
+  <text x="30" y="273" font-size="9" font-family="monospace" fill="var(--ink)">Provider: anthropic</text>
+  <text x="30" y="296" font-size="9" fill="var(--muted)">system_prompt.py:454-461</text>
+  <text x="338" y="296" text-anchor="end" font-size="11" font-weight="700" fill="var(--purple)">≈ 900 tok</text>
+
+  <path d="M352 56 L360 56 L360 286 L352 286" fill="none" stroke="var(--accent)" stroke-width="1.3"/>
+  <path d="M360 171 L370 171" stroke="var(--accent)" stroke-width="1.5"/>
+  <path d="M366 167 L374 171 L366 175 Z" fill="var(--accent)"/>
+
+  <rect x="376" y="36" width="286" height="116" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="388" y="56" font-size="10.5" font-weight="700" fill="var(--ink)">④ 一次构建 → _cached_system_prompt</text>
+  <text x="388" y="78" font-size="9" font-family="monospace" fill="var(--ink)">joined = &quot;\n\n&quot;.join(p for p in</text>
+  <text x="388" y="91" font-size="9" font-family="monospace" fill="var(--ink)">  (stable, context, volatile) if p)</text>
+  <text x="388" y="113" font-size="9" fill="var(--muted)">每会话只建一次（仅压缩时重建）</text>
+  <text x="388" y="133" font-size="9" fill="var(--muted)">system_prompt.py:486</text>
+
+  <rect x="376" y="160" width="286" height="144" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="388" y="180" font-size="10.5" font-weight="700" fill="var(--accent-ink)">⑤ 打 cache_control marker</text>
+  <text x="388" y="202" font-size="9" font-family="monospace" fill="var(--ink)">marker = {&quot;type&quot;:&quot;ephemeral&quot;}</text>
+  <rect x="388" y="212" width="262" height="20" rx="4" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="396" y="226" font-size="9" font-weight="700" fill="var(--accent-ink)">5m 默认：无 ttl 键（易错点）</text>
+  <text x="388" y="252" font-size="9" font-family="monospace" fill="var(--ink)">if ttl==&quot;1h&quot;: marker[&quot;ttl&quot;]=&quot;1h&quot;</text>
+  <text x="388" y="276" font-size="9" fill="var(--muted)">prompt_caching.py:43-46</text>
+  <text x="388" y="294" font-size="9" fill="var(--muted)">cache_ttl=&quot;5m&quot;（默认）</text>
+
+  <path d="M519 304 L519 316" stroke="var(--accent)" stroke-width="1.5"/>
+  <path d="M515 310 L519 318 L523 310 Z" fill="var(--accent)"/>
+  <rect x="18" y="320" width="644" height="60" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="30" y="339" font-size="10.5" font-weight="700" fill="var(--ink)">⑥ 第 2 轮 token 账：6800 + 1200 + 900 = 8900 前缀 tok</text>
+  <rect x="30" y="348" width="430" height="20" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="245" y="362" text-anchor="middle" font-size="9" fill="var(--accent-ink)">前缀 ≈ 8900 tok · 按缓存读取价 (1/10)</text>
+  <rect x="466" y="348" width="78" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="505" y="362" text-anchor="middle" font-size="9" fill="var(--blue)">尾 ≈150 · 全价</text>
+  <text x="656" y="362" text-anchor="end" font-size="11" font-weight="700" fill="var(--red)">→ 输入成本 ↓ ~75%</text>
+
+  <text x="18" y="400" font-size="9.5" fill="var(--muted)">读这张图：易变的 timestamp 压在 volatile 最末；5m 默认 marker 只有 {&quot;type&quot;:&quot;ephemeral&quot;}，没有 ttl 键才是默认。</text>
+</svg>
+<div class="fig-cap"><b>一条真实 system prompt 走一遍</b>：stable（<span class="mono">DEFAULT_AGENT_IDENTITY</span> ≈6800 tok）→ context（AGENTS.md ≈1200 tok）→ volatile（真实 <span class="mono">timestamp</span> 块 ≈900 tok）用 <span class="mono">&quot;\n\n&quot;.join</span> 拼成 <span class="mono">_cached_system_prompt</span>，每会话只建一次；打 marker 时 <b>5m 默认只有 <span class="mono">{&quot;type&quot;:&quot;ephemeral&quot;}</span></b>、唯独 1h 才加 <span class="mono">&quot;ttl&quot;:&quot;1h&quot;</span>；第 2 轮 8900 tok 前缀按缓存读取价计费，输入成本 <b>↓~75%</b>。</div>
+</div>
+
 <h2>守住前缀的最后一道闸：注入前扫描</h2>
 <p>三层里的 <span class="mono">context</span> 会把 <strong>AGENTS.md / .cursorrules</strong> 等文件原样塞进 system prompt。问题是：这些文件可能来自 clone 来的仓库，里面可能藏着 <strong>prompt 注入</strong>。一旦进了 system prompt，它就成了<strong>会话期固定前缀的一部分</strong>，用户<strong>没有任何机会</strong>拦截。所以 Hermes 在注入<strong>之前</strong>先扫一遍：</p>
 
@@ -853,6 +913,66 @@ This is the book's <strong>core chapter</strong>. Almost every Hermes design ult
   <text x="42" y="362" font-size="10.5" fill="var(--muted)">Also: a marker-bearing system prompt stays as content blocks (a list), not a plain string, so cache_control survives.</text>
 </svg>
 <div class="fig-cap"><b>4 breakpoints + signature safety</b>: <span class="mono">system_and_3</span> places 4 <span class="mono">cache_control</span> breakpoints on the system prefix and the last 3 non-system messages (same TTL, on a deepcopy); but the marker must be <b>stripped</b> from <span class="mono">thinking</span> / <span class="mono">redacted_thinking</span> blocks, or it breaks signature validation.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 410" role="img" aria-label="One real system prompt: three-tier assembly, cache marker, and the second-turn token bill">
+  <text x="18" y="23" font-size="13" font-weight="700" fill="var(--accent-ink)">Example: one real system prompt - 3 tiers join, marker, 2nd-turn token bill</text>
+
+  <rect x="18" y="36" width="332" height="92" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="30" y="55" font-size="10.5" font-weight="700" fill="var(--accent-ink)">(1) stable tier - DEFAULT_AGENT_IDENTITY</text>
+  <text x="30" y="76" font-size="9" font-family="monospace" fill="var(--ink)">You are Hermes Agent, an intelligent AI</text>
+  <text x="30" y="89" font-size="9" font-family="monospace" fill="var(--ink)">assistant created by Nous Research. ...</text>
+  <text x="30" y="113" font-size="9" fill="var(--muted)">prompt_builder.py:123</text>
+  <text x="338" y="113" text-anchor="end" font-size="11" font-weight="700" fill="var(--purple)">~ 6800 tok</text>
+
+  <rect x="18" y="136" width="332" height="62" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="30" y="155" font-size="10.5" font-weight="700" fill="var(--blue)">(2) context tier - context_parts</text>
+  <text x="30" y="175" font-size="9" font-family="monospace" fill="var(--ink)">AGENTS.md project rules (scanned first)</text>
+  <text x="30" y="192" font-size="9" fill="var(--muted)">system_prompt.py - context</text>
+  <text x="338" y="192" text-anchor="end" font-size="11" font-weight="700" fill="var(--purple)">~ 1200 tok</text>
+
+  <rect x="18" y="206" width="332" height="98" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="30" y="225" font-size="10.5" font-weight="700" fill="var(--purple)">(3) volatile tier - timestamp (last)</text>
+  <text x="30" y="245" font-size="9" font-family="monospace" fill="var(--ink)">Conversation started: Saturday, June 27, 2026</text>
+  <text x="30" y="259" font-size="9" font-family="monospace" fill="var(--ink)">Model: claude-opus-4.7</text>
+  <text x="30" y="273" font-size="9" font-family="monospace" fill="var(--ink)">Provider: anthropic</text>
+  <text x="30" y="296" font-size="9" fill="var(--muted)">system_prompt.py:454-461</text>
+  <text x="338" y="296" text-anchor="end" font-size="11" font-weight="700" fill="var(--purple)">~ 900 tok</text>
+
+  <path d="M352 56 L360 56 L360 286 L352 286" fill="none" stroke="var(--accent)" stroke-width="1.3"/>
+  <path d="M360 171 L370 171" stroke="var(--accent)" stroke-width="1.5"/>
+  <path d="M366 167 L374 171 L366 175 Z" fill="var(--accent)"/>
+
+  <rect x="376" y="36" width="286" height="116" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="388" y="56" font-size="10.5" font-weight="700" fill="var(--ink)">(4) built once - _cached_system_prompt</text>
+  <text x="388" y="78" font-size="9" font-family="monospace" fill="var(--ink)">joined = &quot;\n\n&quot;.join(p for p in</text>
+  <text x="388" y="91" font-size="9" font-family="monospace" fill="var(--ink)">  (stable, context, volatile) if p)</text>
+  <text x="388" y="113" font-size="9" fill="var(--muted)">built once per session (rebuilt only on compression)</text>
+  <text x="388" y="133" font-size="9" fill="var(--muted)">system_prompt.py:486</text>
+
+  <rect x="376" y="160" width="286" height="144" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="388" y="180" font-size="10.5" font-weight="700" fill="var(--accent-ink)">(5) apply cache_control marker</text>
+  <text x="388" y="202" font-size="9" font-family="monospace" fill="var(--ink)">marker = {&quot;type&quot;:&quot;ephemeral&quot;}</text>
+  <rect x="388" y="212" width="262" height="20" rx="4" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="396" y="226" font-size="9" font-weight="700" fill="var(--accent-ink)">5m default: no ttl key (easy to miss)</text>
+  <text x="388" y="252" font-size="9" font-family="monospace" fill="var(--ink)">if ttl==&quot;1h&quot;: marker[&quot;ttl&quot;]=&quot;1h&quot;</text>
+  <text x="388" y="276" font-size="9" fill="var(--muted)">prompt_caching.py:43-46</text>
+  <text x="388" y="294" font-size="9" fill="var(--muted)">cache_ttl=&quot;5m&quot; (default)</text>
+
+  <path d="M519 304 L519 316" stroke="var(--accent)" stroke-width="1.5"/>
+  <path d="M515 310 L519 318 L523 310 Z" fill="var(--accent)"/>
+  <rect x="18" y="320" width="644" height="60" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="30" y="339" font-size="10.5" font-weight="700" fill="var(--ink)">(6) 2nd-turn token bill: 6800 + 1200 + 900 = 8900 prefix tok</text>
+  <rect x="30" y="348" width="430" height="20" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="245" y="362" text-anchor="middle" font-size="9" fill="var(--accent-ink)">prefix ~ 8900 tok - cache-read price (1/10)</text>
+  <rect x="466" y="348" width="78" height="20" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="505" y="362" text-anchor="middle" font-size="9" fill="var(--blue)">tail ~150 - full</text>
+  <text x="656" y="362" text-anchor="end" font-size="11" font-weight="700" fill="var(--red)">input cost ↓ ~75%</text>
+
+  <text x="18" y="400" font-size="9.5" fill="var(--muted)">Read this: the volatile timestamp sits last; the 5m default marker is just {&quot;type&quot;:&quot;ephemeral&quot;} - no ttl key.</text>
+</svg>
+<div class="fig-cap"><b>One real system prompt, end to end</b>: stable (<span class="mono">DEFAULT_AGENT_IDENTITY</span> ~6800 tok) + context (AGENTS.md ~1200 tok) + volatile (real <span class="mono">timestamp</span> block ~900 tok) are joined by <span class="mono">&quot;\n\n&quot;.join</span> into <span class="mono">_cached_system_prompt</span>, built once per session; the <b>5m default marker is only <span class="mono">{&quot;type&quot;:&quot;ephemeral&quot;}</span></b>, and only 1h adds <span class="mono">&quot;ttl&quot;:&quot;1h&quot;</span>; on turn 2 the 8900-tok prefix bills at cache-read price, cutting input cost <b>~75%</b>.</div>
 </div>
 
 <h2>The last gate guarding the prefix: scan before injection</h2>

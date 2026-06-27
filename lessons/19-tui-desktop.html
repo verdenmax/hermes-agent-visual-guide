@@ -589,6 +589,62 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <p style="margin:.5rem 0 0">把镜头拉到全书:本章其实是「<strong>窄腰</strong>」最直观的一次落地。同一个 AIAgent 核心(第 7 章)被<strong>四类外壳</strong>共用——经典 CLI、Ink TUI、桌面 App,以及第 17 章的消息网关——它们要么是 JSON-RPC 前端,要么是网关适配器,核心只维护一份。<span class="mono">prompt.submit</span> 那句 <span class="mono">session busy</span> 忙检查,和第 18 章网关「agent 运行时拒新输入」的守卫是<strong>同一个意思</strong>:一个会话同一时刻只跑一轮。而仪表盘嵌入复用、桌面共享后端、TUI 流式回推,合起来印证了那条贯穿全书的取舍——<strong>把易变的前端推到边缘,把稳定的能力收进窄腰</strong>:前端可以百花齐放、各用各的栈崩了也不连累核心,而 agent 的会话、工具、缓存纪律只在一处被定义、被守护。</p>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 408" role="img" aria-label="实例图:一次真实 prompt.submit 的 JSON-RPC 帧序列。① 前端 request,jsonrpc 2.0,id 1,method prompt.submit,params 含 session_id s1 与 text 列出本目录;② 后端立即响应 result status streaming,会话忙时回 error code 4009 session busy;③ 事件流,_emit message.delta sid 与 payload text delta,真实信封 method event,params 含 type message.delta、session_id、payload text delta,server.py 887 与 7222;④ 同一 event 信封管道还推 tool.start、tool.complete、approval.request;⑤ history_version 守门 server.py 7244,current_version 等于 history_version 才写历史,否则响应可见但未写历史;⑥ message.complete payload,text raw、usage、status 取 complete 或 interrupted 或 error,server.py 7305。">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:一次 prompt.submit 的 JSON-RPC 帧序列</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">前端 request → status:streaming → N×message.delta → message.complete</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🎞️</text>
+
+  <rect x="10" y="56" width="424" height="62" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="74" font-size="10" font-weight="700" fill="var(--blue)">① 前端 request → 后端 · server.py:6828</text>
+  <text x="20" y="91" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,</text>
+  <text x="20" y="105" font-size="9" font-family="monospace" fill="var(--ink)"> &quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;列出本目录&quot;}}</text>
+
+  <path d="M222,118 L222,128 M218,124 L222,128 L226,124" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="130" width="424" height="62" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="148" font-size="10" font-weight="700" fill="var(--accent-ink)">② 立即响应 _ok · server.py:953</text>
+  <text x="20" y="165" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</text>
+  <text x="20" y="182" font-size="9" font-family="monospace" fill="var(--red)">忙时 _err:{&quot;code&quot;:4009,&quot;message&quot;:&quot;session busy&quot;}</text>
+
+  <path d="M222,192 L222,202 M218,198 L222,202 L226,198" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="204" width="424" height="80" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="20" y="222" font-size="10" font-weight="700" fill="var(--purple)">③ N× message.delta(_emit 信封)· server.py:887,7222</text>
+  <text x="20" y="238" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:</text>
+  <text x="20" y="252" font-size="9" font-family="monospace" fill="var(--ink)"> &quot;message.delta&quot;,&quot;session_id&quot;:sid,</text>
+  <text x="20" y="266" font-size="9" font-family="monospace" fill="var(--purple)"> &quot;payload&quot;:{&quot;text&quot;:delta}}}</text>
+  <text x="20" y="280" font-size="9" fill="var(--muted)">_emit(&quot;message.delta&quot;, sid, {&quot;text&quot;: delta})</text>
+
+  <path d="M222,284 L222,294 M218,290 L222,294 L226,290" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="296" width="424" height="62" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="314" font-size="10" font-weight="700" fill="var(--accent-ink)">⑥ message.complete payload · server.py:7305</text>
+  <text x="20" y="331" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;text&quot;:raw,&quot;usage&quot;:{…},&quot;status&quot;:&quot;complete&quot;}</text>
+  <text x="20" y="348" font-size="9" font-family="monospace" fill="var(--purple)">status ∈ complete | interrupted | error</text>
+
+  <rect x="446" y="130" width="224" height="80" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="456" y="148" font-size="10" font-weight="700" fill="var(--ink)">④ 同一 event 信封管道</text>
+  <rect x="456" y="156" width="204" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="463" y="170" font-size="9" font-family="monospace" fill="var(--ink)">tool.start · tool.complete</text>
+  <rect x="456" y="180" width="204" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="463" y="194" font-size="9" font-family="monospace" fill="var(--ink)">approval.request</text>
+
+  <rect x="446" y="220" width="224" height="138" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="456" y="238" font-size="10" font-weight="700" fill="var(--amber)">⑤ history_version 守门</text>
+  <text x="456" y="252" font-size="9" fill="var(--muted)">server.py:7244-7264</text>
+  <text x="456" y="271" font-size="9" font-family="monospace" fill="var(--ink)">current_version ==</text>
+  <text x="456" y="285" font-size="9" font-family="monospace" fill="var(--ink)">  history_version ?</text>
+  <text x="456" y="305" font-size="9" fill="var(--accent-ink)">✓ 相等 → 写回历史</text>
+  <text x="456" y="324" font-size="9" fill="var(--red)">✗ 不匹配 → 响应可见,</text>
+  <text x="456" y="338" font-size="9" fill="var(--red)">  但未写历史(防 desync)</text>
+  <text x="456" y="352" font-size="9" fill="var(--muted)">undo/compress 期间的护栏</text>
+
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">读这张图:一次 prompt.submit 的真实帧录像——同步 result 只说「开始流式」,真实内容全靠后续 event 信封逐帧推送。</text>
+</svg>
+<div class="fig-cap"><b>实例:一次 prompt.submit 的 JSON 帧录像</b>:① 前端发 <span class="mono">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,&quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;列出本目录&quot;}}</span>;② 后端立即 <span class="mono">_ok</span> 回 <span class="mono">{&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</span>(忙时 <span class="mono">_err code 4009</span>);③ 内容靠 <span class="mono">_emit</span> 的真实信封 <span class="mono">{&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:&quot;message.delta&quot;,&quot;session_id&quot;:sid,&quot;payload&quot;:{&quot;text&quot;:delta}}}</span> 逐帧推;④ <span class="mono">tool.start/complete</span>、<span class="mono">approval.request</span> 走同一管道;⑤ <span class="mono">history_version</span> 守门——不匹配则响应可见但不写历史;⑥ <span class="mono">message.complete</span> 的 <span class="mono">{text,usage,status}</span>,<span class="mono">status ∈ complete|interrupted|error</span>。每个字段都能在 <span class="mono">tui_gateway/server.py</span> 对应行找到。</div>
+</div>
+
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
@@ -851,6 +907,62 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <p style="margin:.5rem 0 0">It's also the <strong>narrow waist</strong> (ch.4): the chat experience (transcript/input/PTY terminal) is implemented <strong>once</strong> in Ink, and the dashboard reuses it by embedding via PTY. The anti-pattern: <strong>rewriting</strong> the transcript and composer in React for the browser — two implementations doomed to drift, fix one forget the other. AGENTS.md makes this a hard rule: "Do not re-implement the primary chat experience in React."</p>
   <p style="margin:.5rem 0 0">A third frontend deserves its own line: the <strong>Electron desktop app</strong> (<span class="mono">apps/desktop/</span>). It goes the <strong>opposite</strong> way from the dashboard — it does <strong>not</strong> embed <span class="mono">hermes --tui</span>, instead building its own composer, transcript, and slash pipeline with <span class="mono">@assistant-ui/react</span> + nanostore, talking to the same tui_gateway backend over the same JSON-RPC (<span class="mono">requestGateway</span>). Why allow a separate UI this time? Because it isn't a terminal and can't be stuffed into a PTY; it wants a rich native desktop experience — a genuinely <strong>separate chat surface</strong>, not a duplicate of the terminal one. Yet its slash commands are <strong>curated, not censored</strong>: the palette shows ~28 built-ins to avoid noise, but skills and user <span class="mono">quick_commands</span> — extensions the backend already surfaces — must still appear; what's hidden is noise, not user-activated capability.</p>
   <p style="margin:.5rem 0 0">Zoom out to the whole book: this chapter is the most concrete landing of the <strong>narrow waist</strong>. One AIAgent core (ch.7) is shared by <strong>four shells</strong> — the classic CLI, the Ink TUI, the desktop app, and the messaging gateway (ch.17) — each either a JSON-RPC frontend or a gateway adapter, with the core maintained once. <span class="mono">prompt.submit</span>'s <span class="mono">session busy</span> check is <strong>the same idea</strong> as ch.18's gateway guard "reject new input while the agent runs": one session runs one turn at a time. Dashboard embedding, desktop backend-sharing, and TUI streaming together prove the trade-off that runs through the book — <strong>push volatile frontends to the edges, pull stable capability into the waist</strong>: frontends can bloom and crash without dragging down the core, while sessions, tools, and cache discipline are defined and defended in exactly one place.</p>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 408" role="img" aria-label="Worked example: the JSON-RPC frame sequence of one real prompt.submit. 1 frontend request, jsonrpc 2.0, id 1, method prompt.submit, params with session_id s1 and text list this directory; 2 backend immediate response result status streaming, when the session is busy it returns error code 4009 session busy; 3 event stream, _emit message.delta sid with payload text delta, real envelope method event, params with type message.delta, session_id, payload text delta, server.py 887 and 7222; 4 the same event envelope pipeline also pushes tool.start, tool.complete, approval.request; 5 history_version guard server.py 7244, history is written only when current_version equals history_version, otherwise the response is visible but not written to history; 6 message.complete payload, text raw, usage, status one of complete or interrupted or error, server.py 7305.">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">Example: the JSON-RPC frames of one prompt.submit</text>
+  <text x="20" y="44" font-size="10" fill="var(--muted)">request → status:streaming → N×message.delta → message.complete</text>
+  <text x="644" y="33" text-anchor="middle" font-size="22">🎞️</text>
+
+  <rect x="10" y="56" width="424" height="62" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="20" y="74" font-size="10" font-weight="700" fill="var(--blue)">1 frontend request → backend · server.py:6828</text>
+  <text x="20" y="91" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,</text>
+  <text x="20" y="105" font-size="9" font-family="monospace" fill="var(--ink)"> &quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;list this dir&quot;}}</text>
+
+  <path d="M222,118 L222,128 M218,124 L222,128 L226,124" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="130" width="424" height="62" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="148" font-size="10" font-weight="700" fill="var(--accent-ink)">2 immediate response _ok · server.py:953</text>
+  <text x="20" y="165" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</text>
+  <text x="20" y="182" font-size="9" font-family="monospace" fill="var(--red)">busy → _err:{&quot;code&quot;:4009,&quot;message&quot;:&quot;session busy&quot;}</text>
+
+  <path d="M222,192 L222,202 M218,198 L222,202 L226,198" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="204" width="424" height="80" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="20" y="222" font-size="10" font-weight="700" fill="var(--purple)">3 N× message.delta (_emit envelope) · server.py:887,7222</text>
+  <text x="20" y="238" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:</text>
+  <text x="20" y="252" font-size="9" font-family="monospace" fill="var(--ink)"> &quot;message.delta&quot;,&quot;session_id&quot;:sid,</text>
+  <text x="20" y="266" font-size="9" font-family="monospace" fill="var(--purple)"> &quot;payload&quot;:{&quot;text&quot;:delta}}}</text>
+  <text x="20" y="280" font-size="9" fill="var(--muted)">_emit(&quot;message.delta&quot;, sid, {&quot;text&quot;: delta})</text>
+
+  <path d="M222,284 L222,294 M218,290 L222,294 L226,290" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
+
+  <rect x="10" y="296" width="424" height="62" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="20" y="314" font-size="10" font-weight="700" fill="var(--accent-ink)">6 message.complete payload · server.py:7305</text>
+  <text x="20" y="331" font-size="9" font-family="monospace" fill="var(--ink)">{&quot;text&quot;:raw,&quot;usage&quot;:{…},&quot;status&quot;:&quot;complete&quot;}</text>
+  <text x="20" y="348" font-size="9" font-family="monospace" fill="var(--purple)">status ∈ complete | interrupted | error</text>
+
+  <rect x="446" y="130" width="224" height="80" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="456" y="148" font-size="10" font-weight="700" fill="var(--ink)">4 same event envelope pipe</text>
+  <rect x="456" y="156" width="204" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="463" y="170" font-size="9" font-family="monospace" fill="var(--ink)">tool.start · tool.complete</text>
+  <rect x="456" y="180" width="204" height="20" rx="5" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="463" y="194" font-size="9" font-family="monospace" fill="var(--ink)">approval.request</text>
+
+  <rect x="446" y="220" width="224" height="138" rx="8" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="456" y="238" font-size="10" font-weight="700" fill="var(--amber)">5 history_version guard</text>
+  <text x="456" y="252" font-size="9" fill="var(--muted)">server.py:7244-7264</text>
+  <text x="456" y="271" font-size="9" font-family="monospace" fill="var(--ink)">current_version ==</text>
+  <text x="456" y="285" font-size="9" font-family="monospace" fill="var(--ink)">  history_version ?</text>
+  <text x="456" y="305" font-size="9" fill="var(--accent-ink)">✓ equal → write history</text>
+  <text x="456" y="324" font-size="9" fill="var(--red)">✗ mismatch → response shown,</text>
+  <text x="456" y="338" font-size="9" fill="var(--red)">  but NOT written (anti-desync)</text>
+  <text x="456" y="352" font-size="9" fill="var(--muted)">backstop during undo/compress</text>
+
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">Read this: a real frame recording of one prompt.submit — the sync result only says "streaming started"; the content arrives frame-by-frame via event envelopes.</text>
+</svg>
+<div class="fig-cap"><b>Example: a JSON frame recording of one prompt.submit</b>: 1 the frontend sends <span class="mono">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,&quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;list this dir&quot;}}</span>; 2 the backend immediately <span class="mono">_ok</span>s <span class="mono">{&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</span> (busy → <span class="mono">_err code 4009</span>); 3 content streams via <span class="mono">_emit</span>'s real envelope <span class="mono">{&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:&quot;message.delta&quot;,&quot;session_id&quot;:sid,&quot;payload&quot;:{&quot;text&quot;:delta}}}</span>; 4 <span class="mono">tool.start/complete</span> and <span class="mono">approval.request</span> ride the same pipe; 5 the <span class="mono">history_version</span> guard — on mismatch the response is shown but not written; 6 <span class="mono">message.complete</span>'s <span class="mono">{text,usage,status}</span> with <span class="mono">status ∈ complete|interrupted|error</span>. Every field traces to a line in <span class="mono">tui_gateway/server.py</span>.</div>
 </div>
 
 <div class="card key">

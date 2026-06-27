@@ -503,6 +503,65 @@ merges all of that into a single calling shape with no mode parameter,
   <div class="step"><span class="num">5</span><span class="sc">不改 system prompt / 不改历史轮次 → 缓存前缀逐字节不变，召回<strong>不破缓存</strong></span></div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 462" role="img" aria-label="session_search 以 query deployment plan 走一遍：写入即索引由 messages_fts_insert 触发器把 new.id 当 rowid 同步进 FTS5；检索 SQL 用 snippet messages_fts 0 三个大于号 三个小于号 省略号 40 加上 messages_fts MATCH 问号再 ORDER BY rank 走 BM25；中文走 trigram 兜底，每词不足 3 个汉字时 trigram 返 0 故退回 LIKE 子串；get_anchored_view bookend 等于 3 返回三片 bookend_start 取会话前三条、window 正负 5 以锚点居中、bookend_end 取会话末三条；命中原文 append 为 tool 消息，零 LLM 不破缓存；三种调用模式无 mode 参数按 args 推断 DISCOVERY SCROLL BROWSE，service-gated 且 WAL 写重试 15 次上限 0.150 秒">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">session_search(query='deployment plan') 走一遍 · 索引 → SQL → bookend=3 → tool 消息</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">写入即索引、检索 SQL、CJK 兜底、锚定窗口、零 LLM append，看每步真实形状</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🔍</text>
+  <rect x="10" y="62" width="210" height="108" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="82" font-size="9.5" font-weight="700" fill="var(--ink)">① 写入即索引 · 触发器</text>
+  <text x="20" y="100" font-size="9" fill="var(--ink)">messages_fts_insert</text>
+  <text x="20" y="114" font-size="9" fill="var(--ink)">AFTER INSERT ON messages</text>
+  <text x="20" y="128" font-size="9" fill="var(--ink)">INSERT INTO messages_fts(rowid, ...)</text>
+  <text x="20" y="142" font-size="9" font-weight="700" fill="var(--accent-ink)">VALUES (new.id, ...)</text>
+  <text x="20" y="162" font-size="9" fill="var(--muted)">hermes_state.py:616-621</text>
+  <line x1="220" y1="116" x2="240" y2="116" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M246,116 L238,112 L238,120 Z" fill="var(--line)"/>
+  <rect x="230" y="62" width="210" height="108" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="240" y="82" font-size="9.5" font-weight="700" fill="var(--accent-ink)">② 检索 SQL · DISCOVERY</text>
+  <text x="240" y="100" font-size="9" fill="var(--accent-ink)">snippet(messages_fts, 0,</text>
+  <text x="240" y="114" font-size="9" fill="var(--accent-ink)">  '&gt;&gt;&gt;', '&lt;&lt;&lt;', '...', 40)</text>
+  <text x="240" y="128" font-size="9" fill="var(--accent-ink)">WHERE messages_fts MATCH ?</text>
+  <text x="240" y="142" font-size="9" font-weight="700" fill="var(--accent-ink)">ORDER BY rank   (BM25)</text>
+  <text x="240" y="162" font-size="9" fill="var(--muted)">hermes_state.py:3532/3535/3566</text>
+  <line x1="440" y1="116" x2="460" y2="116" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M466,116 L458,112 L458,120 Z" fill="var(--line)"/>
+  <rect x="450" y="62" width="220" height="108" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="460" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">③ CJK 兜底 · trigram</text>
+  <text x="460" y="100" font-size="9" fill="var(--blue)">messages_fts_trigram</text>
+  <text x="460" y="114" font-size="9" fill="var(--blue)">tokenize='trigram'</text>
+  <text x="460" y="128" font-size="9" fill="var(--blue)">每词 &lt;3 汉字 → trigram 返 0</text>
+  <text x="460" y="142" font-size="9" font-weight="700" fill="var(--blue)">→ 退回 LIKE 子串</text>
+  <text x="460" y="162" font-size="9" fill="var(--muted)">hermes_state.py:641-643</text>
+  <rect x="10" y="186" width="660" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="206" font-size="9.5" font-weight="700" fill="var(--ink)">snippet 输出 · 命中处用 &gt;&gt;&gt; &lt;&lt;&lt; 包裹，窗口 40 token</text>
+  <text x="24" y="230" font-size="9" fill="var(--accent-ink)">... finalize the Q3 &gt;&gt;&gt;deployment plan&lt;&lt;&lt; before the rollout ...</text>
+  <text x="20" y="262" font-size="10" font-weight="700" fill="var(--ink)">④ get_anchored_view(bookend=3) 返回三片 (hermes_state.py:2875-2895)</text>
+  <rect x="10" y="272" width="200" height="80" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="292" font-size="9.5" font-weight="700" fill="var(--blue)">bookend_start [3]</text>
+  <text x="18" y="310" font-size="9" fill="var(--blue)">会话前 3 条</text>
+  <text x="18" y="326" font-size="9" fill="var(--blue)">user / assistant</text>
+  <rect x="222" y="272" width="236" height="80" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="230" y="292" font-size="9.5" font-weight="700" fill="var(--accent-ink)">window ±5 · 锚点居中</text>
+  <text x="230" y="310" font-size="9" fill="var(--accent-ink)">messages_before / messages_after</text>
+  <text x="230" y="326" font-size="9" fill="var(--accent-ink)">anchor 命中行始终保留</text>
+  <rect x="470" y="272" width="200" height="80" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="478" y="292" font-size="9.5" font-weight="700" fill="var(--blue)">bookend_end [3]</text>
+  <text x="478" y="310" font-size="9" fill="var(--blue)">会话末 3 条</text>
+  <text x="478" y="326" font-size="9" fill="var(--blue)">user / assistant</text>
+  <rect x="10" y="364" width="324" height="72" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="20" y="384" font-size="9.5" font-weight="700" fill="var(--accent-ink)">⑤ 命中原文 append 为 tool 消息</text>
+  <text x="20" y="404" font-size="9" fill="var(--accent-ink)">片段以 tool 角色接回消息序列</text>
+  <text x="20" y="422" font-size="9" font-weight="700" fill="var(--accent-ink)">零 LLM · 不破缓存</text>
+  <rect x="342" y="364" width="328" height="72" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="352" y="384" font-size="9.5" font-weight="700" fill="var(--ink)">⑥ 三模式（无 mode 参数，按 args 推断）</text>
+  <text x="352" y="404" font-size="9" fill="var(--ink)">DISCOVERY(query) · SCROLL(session_id+id) · BROWSE()</text>
+  <text x="352" y="422" font-size="9" fill="var(--ink)">service-gated check_fn · WAL retry 15 次 / 0.150s</text>
+  <text x="20" y="452" font-size="9" fill="var(--muted)">读这张图：写入即被触发器索引，一条 query 经真实 SQL 拿 snippet 与 bookend，命中原文 append 为 tool 消息——全程零 LLM、不破缓存。</text>
+</svg>
+<div class="fig-cap"><b>一条 query 走完跨会话搜索的真实形状</b>：写入即被 <span class="mono">messages_fts_insert</span> 触发器以 <span class="mono">rowid=new.id</span> 同步进 FTS5。检索走真实 SQL：<span class="mono">snippet(messages_fts, 0, '&gt;&gt;&gt;', '&lt;&lt;&lt;', '...', 40)</span> + <span class="mono">messages_fts MATCH ?</span> + <span class="mono">ORDER BY rank</span>（BM25），命中处用 <span class="mono">&gt;&gt;&gt;…&lt;&lt;&lt;</span> 包裹、窗口 40 token；中文走 <span class="mono">trigram</span> 兜底（每词不足 3 汉字 trigram 返 0 → 退回 LIKE）。<span class="mono">get_anchored_view(bookend=3)</span> 返回三片：<span class="mono">bookend_start</span>（会话前 3 条）+ <span class="mono">window ±5</span>（锚点居中）+ <span class="mono">bookend_end</span>（末 3 条）。命中原文 <b>append 为 tool 消息</b>——零 LLM、不破缓存；三模式 <span class="mono">DISCOVERY/SCROLL/BROWSE</span> 无 mode 参数、按 args 推断，且 service-gated。</div>
+</div>
+
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「零成本召回而不破缓存」</div>
   <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
@@ -737,6 +796,65 @@ merges all of that into a single calling shape with no mode parameter,
   <div class="step"><span class="num">3</span><span class="sc"><strong>Anchored window</strong>: take ±N context messages + session bookends (on-demand, not loading the whole thing)</span></div>
   <div class="step"><span class="num">4</span><span class="sc"><strong>Append verbatim</strong>: results appended as a tool message at the conversation tail — zero LLM summary, originals handed to the agent to read</span></div>
   <div class="step"><span class="num">5</span><span class="sc">no change to system prompt / prior turns → the cache prefix stays byte-identical, recall <strong>doesn't break the cache</strong></span></div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 462" role="img" aria-label="session_search with query deployment plan runs end to end: writes are indexed immediately by the messages_fts_insert trigger that uses new.id as rowid into FTS5; the retrieval SQL uses snippet messages_fts 0 three greater-than signs three less-than signs ellipsis 40 plus messages_fts MATCH question mark then ORDER BY rank over BM25; CJK falls back to trigram, and when a term has fewer than 3 characters trigram returns 0 so it falls back to LIKE substring; get_anchored_view with bookend equal to 3 returns three slices bookend_start the first three messages, window plus or minus 5 centered on the anchor, and bookend_end the last three; the matched text is appended as a tool message with zero LLM and no cache break; three calling modes have no mode parameter and are inferred from args DISCOVERY SCROLL BROWSE, the tool is service-gated and WAL writes retry up to 15 times within 0.150 seconds">
+  <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">session_search(query='deployment plan') end to end · index → SQL → bookend=3 → tool msg</text>
+  <text x="20" y="46" font-size="10.5" fill="var(--muted)">index on write, retrieval SQL, CJK fallback, anchored window, zero-LLM append; real shape at each step</text>
+  <text x="606" y="34" text-anchor="middle" font-size="22">🔍</text>
+  <rect x="10" y="62" width="210" height="108" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="20" y="82" font-size="9.5" font-weight="700" fill="var(--ink)">1 · index on write · trigger</text>
+  <text x="20" y="100" font-size="9" fill="var(--ink)">messages_fts_insert</text>
+  <text x="20" y="114" font-size="9" fill="var(--ink)">AFTER INSERT ON messages</text>
+  <text x="20" y="128" font-size="9" fill="var(--ink)">INSERT INTO messages_fts(rowid, ...)</text>
+  <text x="20" y="142" font-size="9" font-weight="700" fill="var(--accent-ink)">VALUES (new.id, ...)</text>
+  <text x="20" y="162" font-size="9" fill="var(--muted)">hermes_state.py:616-621</text>
+  <line x1="220" y1="116" x2="240" y2="116" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M246,116 L238,112 L238,120 Z" fill="var(--line)"/>
+  <rect x="230" y="62" width="210" height="108" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="240" y="82" font-size="9.5" font-weight="700" fill="var(--accent-ink)">2 · retrieval SQL · DISCOVERY</text>
+  <text x="240" y="100" font-size="9" fill="var(--accent-ink)">snippet(messages_fts, 0,</text>
+  <text x="240" y="114" font-size="9" fill="var(--accent-ink)">  '&gt;&gt;&gt;', '&lt;&lt;&lt;', '...', 40)</text>
+  <text x="240" y="128" font-size="9" fill="var(--accent-ink)">WHERE messages_fts MATCH ?</text>
+  <text x="240" y="142" font-size="9" font-weight="700" fill="var(--accent-ink)">ORDER BY rank   (BM25)</text>
+  <text x="240" y="162" font-size="9" fill="var(--muted)">hermes_state.py:3532/3535/3566</text>
+  <line x1="440" y1="116" x2="460" y2="116" stroke="var(--line)" stroke-width="1.8"/>
+  <path d="M466,116 L458,112 L458,120 Z" fill="var(--line)"/>
+  <rect x="450" y="62" width="220" height="108" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="460" y="82" font-size="9.5" font-weight="700" fill="var(--blue)">3 · CJK fallback · trigram</text>
+  <text x="460" y="100" font-size="9" fill="var(--blue)">messages_fts_trigram</text>
+  <text x="460" y="114" font-size="9" fill="var(--blue)">tokenize='trigram'</text>
+  <text x="460" y="128" font-size="9" fill="var(--blue)">term &lt;3 chars → trigram returns 0</text>
+  <text x="460" y="142" font-size="9" font-weight="700" fill="var(--blue)">→ fall back to LIKE</text>
+  <text x="460" y="162" font-size="9" fill="var(--muted)">hermes_state.py:641-643</text>
+  <rect x="10" y="186" width="660" height="56" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="24" y="206" font-size="9.5" font-weight="700" fill="var(--ink)">snippet output · match wrapped in &gt;&gt;&gt; &lt;&lt;&lt;, window 40 tokens</text>
+  <text x="24" y="230" font-size="9" fill="var(--accent-ink)">... finalize the Q3 &gt;&gt;&gt;deployment plan&lt;&lt;&lt; before the rollout ...</text>
+  <text x="20" y="262" font-size="10" font-weight="700" fill="var(--ink)">4 · get_anchored_view(bookend=3) returns three slices (hermes_state.py:2875-2895)</text>
+  <rect x="10" y="272" width="200" height="80" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="18" y="292" font-size="9.5" font-weight="700" fill="var(--blue)">bookend_start [3]</text>
+  <text x="18" y="310" font-size="9" fill="var(--blue)">first 3 of the session</text>
+  <text x="18" y="326" font-size="9" fill="var(--blue)">user / assistant</text>
+  <rect x="222" y="272" width="236" height="80" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="230" y="292" font-size="9.5" font-weight="700" fill="var(--accent-ink)">window ±5 · anchor centered</text>
+  <text x="230" y="310" font-size="9" fill="var(--accent-ink)">messages_before / messages_after</text>
+  <text x="230" y="326" font-size="9" fill="var(--accent-ink)">anchor row always kept</text>
+  <rect x="470" y="272" width="200" height="80" rx="8" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="478" y="292" font-size="9.5" font-weight="700" fill="var(--blue)">bookend_end [3]</text>
+  <text x="478" y="310" font-size="9" fill="var(--blue)">last 3 of the session</text>
+  <text x="478" y="326" font-size="9" fill="var(--blue)">user / assistant</text>
+  <rect x="10" y="364" width="324" height="72" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="20" y="384" font-size="9.5" font-weight="700" fill="var(--accent-ink)">5 · matched text appended as a tool message</text>
+  <text x="20" y="404" font-size="9" fill="var(--accent-ink)">fragments rejoin the sequence with tool role</text>
+  <text x="20" y="422" font-size="9" font-weight="700" fill="var(--accent-ink)">zero LLM · no cache break</text>
+  <rect x="342" y="364" width="328" height="72" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="352" y="384" font-size="9.5" font-weight="700" fill="var(--ink)">6 · three modes (no mode param, inferred from args)</text>
+  <text x="352" y="404" font-size="9" fill="var(--ink)">DISCOVERY(query) · SCROLL(session_id+id) · BROWSE()</text>
+  <text x="352" y="422" font-size="9" fill="var(--ink)">service-gated check_fn · WAL retry 15x / 0.150s</text>
+  <text x="20" y="452" font-size="9" fill="var(--muted)">Read this figure: writes are indexed by the trigger, one query takes real SQL for snippet and bookends, the hit is appended as a tool message — all zero-LLM and cache-safe.</text>
+</svg>
+<div class="fig-cap"><b>One query runs the real shape of cross-session search</b>: writes are indexed immediately by the <span class="mono">messages_fts_insert</span> trigger with <span class="mono">rowid=new.id</span> into FTS5. Retrieval uses real SQL: <span class="mono">snippet(messages_fts, 0, '&gt;&gt;&gt;', '&lt;&lt;&lt;', '...', 40)</span> + <span class="mono">messages_fts MATCH ?</span> + <span class="mono">ORDER BY rank</span> (BM25), wrapping the match in <span class="mono">&gt;&gt;&gt;…&lt;&lt;&lt;</span> over a 40-token window; CJK falls back to <span class="mono">trigram</span> (a term under 3 chars makes trigram return 0 → fall back to LIKE). <span class="mono">get_anchored_view(bookend=3)</span> returns three slices: <span class="mono">bookend_start</span> (first 3) + <span class="mono">window ±5</span> (anchor centered) + <span class="mono">bookend_end</span> (last 3). The hit is <b>appended as a tool message</b> — zero LLM, no cache break; the three modes <span class="mono">DISCOVERY/SCROLL/BROWSE</span> carry no mode parameter, inferred from args, and are service-gated.</div>
 </div>
 
 <div class="card collab">

@@ -567,6 +567,62 @@ the agent is idle and forge a fresh user/internal turn from each event:
     <li><strong>非持久</strong>：background 委派进程内，进程退出/<span class="mono">/new</span> 即丢；要存活用 <span class="mono">cronjob</span> 或 <span class="mono">terminal(background, notify_on_complete)</span>。</li>
   </ul>
 </div>
+
+<div class="figure">
+<svg viewBox="0 0 680 490" role="img" aria-label="一次真实 delegate_task 调用走一遍：① 调用参数 goal/context/toolsets/role=leaf；② 构造子代理隔离 ephemeral_system_prompt、platform=subagent、skip_context_files、skip_memory、iteration_budget=None，继承 base_url/api_key/model/session_db；③ 剥离 DELEGATE_BLOCKED_TOOLS 五个工具并把 role 降级为 leaf；④ 子代理读约 20 个文件的中间过程全留在子 context 永不进父；⑤ 父只收一句最终摘要，background 时先返 delegation_id。">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">一次真实 delegate_task 调用 · 参数 → 隔离构造 → 只回一句摘要</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">例子：派一个 leaf 子代理审计 gateway 各 adapter 的 scoped lock</text>
+  <text x="628" y="32" font-size="22">🧩</text>
+
+  <rect x="20" y="50" width="640" height="60" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="32" y="68" font-size="10" font-weight="700" fill="var(--blue)">① 调用 · tools/delegate_tool.py</text>
+  <text x="32" y="86" font-size="9" font-family="monospace" fill="var(--ink)">delegate_task(goal=&quot;审计 gateway/platforms/ 各 adapter connect() 缺 acquire_scoped_lock&quot;,</text>
+  <text x="32" y="102" font-size="9" font-family="monospace" fill="var(--ink)">  context=&quot;模式见 irc/adapter.py&quot;, toolsets=[&quot;terminal&quot;,&quot;file&quot;,&quot;search&quot;], role=&quot;leaf&quot;)</text>
+
+  <line x1="340" y1="110" x2="340" y2="126" stroke="var(--line)" stroke-width="2"/>
+  <path d="M340 132 L334 122 L346 122 Z" fill="var(--line)"/>
+
+  <text x="340" y="146" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">② 构造子 AIAgent · 隔离 vs 继承（:1234-1249）</text>
+
+  <rect x="20" y="154" width="324" height="118" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="34" y="172" font-size="10" font-weight="700" fill="var(--accent-ink)">隔离 · 不入对话 / 不进缓存前缀</text>
+  <text x="34" y="190" font-size="9" font-family="monospace" fill="var(--ink)">ephemeral_system_prompt=child_prompt</text>
+  <text x="34" y="206" font-size="9" font-family="monospace" fill="var(--ink)">platform=&quot;subagent&quot;</text>
+  <text x="34" y="222" font-size="9" font-family="monospace" fill="var(--ink)">skip_context_files=True</text>
+  <text x="34" y="238" font-size="9" font-family="monospace" fill="var(--ink)">skip_memory=True</text>
+  <text x="34" y="256" font-size="9" font-family="monospace" fill="var(--purple)">iteration_budget=None  # fresh budget per subagent</text>
+
+  <rect x="356" y="154" width="304" height="118" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="370" y="172" font-size="10" font-weight="700" fill="var(--blue)">继承 · 仅供运行、不入对话</text>
+  <text x="370" y="190" font-size="9" font-family="monospace" fill="var(--ink)">base_url / api_key</text>
+  <text x="370" y="206" font-size="9" font-family="monospace" fill="var(--ink)">model / fallback_model</text>
+  <text x="370" y="222" font-size="9" font-family="monospace" fill="var(--ink)">session_db（共享会话库）</text>
+  <text x="370" y="246" font-size="9" fill="var(--muted)">运行时凭证照搬，但对话历史 / 上下文</text>
+  <text x="370" y="260" font-size="9" fill="var(--muted)">文件 / 记忆一律不继承 → 父缓存零扰动</text>
+
+  <rect x="20" y="282" width="640" height="74" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="32" y="300" font-size="10" font-weight="700" fill="var(--red)">③ 剥离高危工具 + role 降级 · :768 / :45-53 / :1023-1024</text>
+  <text x="32" y="318" font-size="9" font-family="monospace" fill="var(--ink)">child_toolsets = _strip_blocked_tools(child_toolsets)</text>
+  <text x="32" y="334" font-size="9" font-family="monospace" fill="var(--red)">✖ DELEGATE_BLOCKED_TOOLS(5): delegate_task · clarify · memory · send_message · execute_code</text>
+  <text x="32" y="350" font-size="9" font-family="monospace" fill="var(--purple)">effective_role = role if (role==&quot;orchestrator&quot; and orchestrator_ok) else &quot;leaf&quot;</text>
+
+  <rect x="20" y="366" width="324" height="92" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="34" y="384" font-size="10" font-weight="700" fill="var(--muted)">④ 子代理独立 context（永不进父）</text>
+  <text x="34" y="404" font-size="9" fill="var(--ink)">读 ~20 个 adapter.py · search/grep · 试错几十轮</text>
+  <text x="34" y="422" font-size="9" fill="var(--ink)">中间工具结果全留子 context</text>
+  <text x="34" y="440" font-size="9" fill="var(--muted)">platform=&quot;subagent&quot; · 跑完即弃</text>
+
+  <rect x="356" y="366" width="304" height="92" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="370" y="384" font-size="10" font-weight="700" fill="var(--accent-ink)">⑤ 父只收一句最终摘要</text>
+  <text x="370" y="404" font-size="9" fill="var(--ink)">&quot;审计 21 adapter：matrix/sms 缺 lock；</text>
+  <text x="370" y="420" font-size="9" fill="var(--ink)">　余 19 合规&quot;</text>
+  <text x="370" y="440" font-size="9" fill="var(--purple)">background=true → 先返 delegation_id（:2592）</text>
+
+  <rect x="20" y="466" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="480" text-anchor="middle" font-size="9" fill="var(--muted)">读这张图：一次 delegate_task = 继承运行时 + 隔离对话/文件/记忆 + 剥 5 工具降为 leaf；父只收一句摘要，缓存零扰动</text>
+</svg>
+<div class="fig-cap"><b>一次真实 delegate_task</b>：父调 <span class="mono">delegate_task(goal,context,toolsets,role=&quot;leaf&quot;)</span> → 子代理<b>隔离</b>构造（<span class="mono">ephemeral_system_prompt</span> / <span class="mono">platform=&quot;subagent&quot;</span> / <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> / <span class="mono">iteration_budget=None</span>），<b>继承</b> base_url/api_key/model/session_db；剥离 <span class="mono">DELEGATE_BLOCKED_TOOLS</span> 五个工具并把 role 降为 leaf；读约 20 个文件的<b>中间过程全留子 context</b>，父只收一句摘要「审计 21 adapter：matrix/sms 缺 lock；余 19 合规」（background 先返 <span class="mono">delegation_id</span>）。</div>
+</div>
 <div class="selftest">
 <h2>🧪 自测 · 想一想为什么这么设计</h2>
 <div class="quiz">
@@ -798,6 +854,62 @@ the agent is idle and forge a fresh user/internal turn from each event:
     <li><strong>Background doesn't break the cache</strong>: the completion event goes to the shared queue and surfaces as a new turn when the parent is <strong>idle</strong>, keeping strict role alternation (ch.7) + the cache (ch.6).</li>
     <li><strong>Not durable</strong>: background delegation is process-local; process exit / <span class="mono">/new</span> discards it; for survival use <span class="mono">cronjob</span> or <span class="mono">terminal(background, notify_on_complete)</span>.</li>
   </ul>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 490" role="img" aria-label="One real delegate_task call walked through: 1 call args goal/context/toolsets/role=leaf; 2 build the subagent isolating ephemeral_system_prompt, platform=subagent, skip_context_files, skip_memory, iteration_budget=None while inheriting base_url/api_key/model/session_db; 3 strip the five DELEGATE_BLOCKED_TOOLS and downgrade role to leaf; 4 the subagent reads about 20 files and all intermediate work stays in its own context, never reaching the parent; 5 the parent receives only one final summary, returning a delegation_id first when background.">
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">One real delegate_task call - args to isolated build to one summary</text>
+  <text x="340" y="40" text-anchor="middle" font-size="10" fill="var(--muted)">Example: dispatch a leaf subagent to audit scoped locks across gateway adapters</text>
+  <text x="628" y="32" font-size="22">🧩</text>
+
+  <rect x="20" y="50" width="640" height="60" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="32" y="68" font-size="10" font-weight="700" fill="var(--blue)">1. Call - tools/delegate_tool.py</text>
+  <text x="32" y="86" font-size="9" font-family="monospace" fill="var(--ink)">delegate_task(goal=&quot;audit gateway/platforms/ adapters whose connect() lacks acquire_scoped_lock&quot;,</text>
+  <text x="32" y="102" font-size="9" font-family="monospace" fill="var(--ink)">  context=&quot;pattern: irc/adapter.py&quot;, toolsets=[&quot;terminal&quot;,&quot;file&quot;,&quot;search&quot;], role=&quot;leaf&quot;)</text>
+
+  <line x1="340" y1="110" x2="340" y2="126" stroke="var(--line)" stroke-width="2"/>
+  <path d="M340 132 L334 122 L346 122 Z" fill="var(--line)"/>
+
+  <text x="340" y="146" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">2. Build the subagent - isolate vs inherit (:1234-1249)</text>
+
+  <rect x="20" y="154" width="324" height="118" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="34" y="172" font-size="10" font-weight="700" fill="var(--accent-ink)">Isolated - not in conversation / cache prefix</text>
+  <text x="34" y="190" font-size="9" font-family="monospace" fill="var(--ink)">ephemeral_system_prompt=child_prompt</text>
+  <text x="34" y="206" font-size="9" font-family="monospace" fill="var(--ink)">platform=&quot;subagent&quot;</text>
+  <text x="34" y="222" font-size="9" font-family="monospace" fill="var(--ink)">skip_context_files=True</text>
+  <text x="34" y="238" font-size="9" font-family="monospace" fill="var(--ink)">skip_memory=True</text>
+  <text x="34" y="256" font-size="9" font-family="monospace" fill="var(--purple)">iteration_budget=None  # fresh budget per subagent</text>
+
+  <rect x="356" y="154" width="304" height="118" rx="9" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+  <text x="370" y="172" font-size="10" font-weight="700" fill="var(--blue)">Inherited - runtime only, not conversation</text>
+  <text x="370" y="190" font-size="9" font-family="monospace" fill="var(--ink)">base_url / api_key</text>
+  <text x="370" y="206" font-size="9" font-family="monospace" fill="var(--ink)">model / fallback_model</text>
+  <text x="370" y="222" font-size="9" font-family="monospace" fill="var(--ink)">session_db (shared session store)</text>
+  <text x="370" y="246" font-size="9" fill="var(--muted)">Runtime creds copied, but conversation /</text>
+  <text x="370" y="260" font-size="9" fill="var(--muted)">context files / memory NOT inherited - cache safe</text>
+
+  <rect x="20" y="282" width="640" height="74" rx="9" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="32" y="300" font-size="10" font-weight="700" fill="var(--red)">3. Strip dangerous tools + role downgrade - :768 / :45-53 / :1023-1024</text>
+  <text x="32" y="318" font-size="9" font-family="monospace" fill="var(--ink)">child_toolsets = _strip_blocked_tools(child_toolsets)</text>
+  <text x="32" y="334" font-size="9" font-family="monospace" fill="var(--red)">x DELEGATE_BLOCKED_TOOLS(5): delegate_task · clarify · memory · send_message · execute_code</text>
+  <text x="32" y="350" font-size="9" font-family="monospace" fill="var(--purple)">effective_role = role if (role==&quot;orchestrator&quot; and orchestrator_ok) else &quot;leaf&quot;</text>
+
+  <rect x="20" y="366" width="324" height="92" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="34" y="384" font-size="10" font-weight="700" fill="var(--muted)">4. Subagent's own context (never reaches parent)</text>
+  <text x="34" y="404" font-size="9" fill="var(--ink)">reads ~20 adapter.py · search/grep · dozens of retries</text>
+  <text x="34" y="422" font-size="9" fill="var(--ink)">all intermediate tool results stay in child context</text>
+  <text x="34" y="440" font-size="9" fill="var(--muted)">platform=&quot;subagent&quot; · discarded when done</text>
+
+  <rect x="356" y="366" width="304" height="92" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="370" y="384" font-size="10" font-weight="700" fill="var(--accent-ink)">5. Parent gets only one final summary</text>
+  <text x="370" y="404" font-size="9" fill="var(--ink)">&quot;audited 21 adapters: matrix/sms lack lock;</text>
+  <text x="370" y="420" font-size="9" fill="var(--ink)"> 19 others compliant&quot;</text>
+  <text x="370" y="440" font-size="9" fill="var(--purple)">background=true returns delegation_id first (:2592)</text>
+
+  <rect x="20" y="466" width="640" height="20" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
+  <text x="340" y="480" text-anchor="middle" font-size="9" fill="var(--muted)">Read this: one delegate_task = inherit runtime + isolate conversation/files/memory + strip 5 tools to leaf; parent gets one summary, cache untouched</text>
+</svg>
+<div class="fig-cap"><b>One real delegate_task</b>: the parent calls <span class="mono">delegate_task(goal,context,toolsets,role=&quot;leaf&quot;)</span> -&gt; the subagent is built <b>isolated</b> (<span class="mono">ephemeral_system_prompt</span> / <span class="mono">platform=&quot;subagent&quot;</span> / <span class="mono">skip_context_files</span> / <span class="mono">skip_memory</span> / <span class="mono">iteration_budget=None</span>) while <b>inheriting</b> base_url/api_key/model/session_db; it strips the five <span class="mono">DELEGATE_BLOCKED_TOOLS</span> and downgrades role to leaf; reading ~20 files, <b>all intermediate work stays in the child context</b>, and the parent gets only the summary "audited 21 adapters: matrix/sms lack lock; 19 others compliant" (background returns a <span class="mono">delegation_id</span> first).</div>
 </div>
 <div class="selftest">
 <h2>🧪 Self-test - think about the design</h2>
