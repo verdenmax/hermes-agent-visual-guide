@@ -417,7 +417,7 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <path d="M30,79 L39,74 L39,84 Z" fill="var(--accent)"/>
   <line x1="218" y1="98" x2="218" y2="109" stroke="var(--muted)" stroke-width="1.4"/>
   <path d="M218,112 L213,103 L223,103 Z" fill="var(--muted)"/>
-  <text x="228" y="109" font-size="8.5" fill="var(--red)">未命中</text>
+  <text x="228" y="109" font-size="9" fill="var(--red)">未命中</text>
   <rect x="58" y="112" width="320" height="38" rx="9" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
   <text x="70" y="132" font-size="12" font-weight="700" fill="var(--purple)">① 持久缓存（曾探测落盘）</text>
   <text x="70" y="145" font-size="9" fill="var(--muted)">Nous URL 在此跳过，以门户 /v1/models 为准</text>
@@ -425,7 +425,7 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <path d="M30,131 L39,126 L39,136 Z" fill="var(--accent)"/>
   <line x1="218" y1="150" x2="218" y2="161" stroke="var(--muted)" stroke-width="1.4"/>
   <path d="M218,164 L213,155 L223,155 Z" fill="var(--muted)"/>
-  <text x="228" y="161" font-size="8.5" fill="var(--red)">未命中</text>
+  <text x="228" y="161" font-size="9" fill="var(--red)">未命中</text>
   <rect x="58" y="164" width="320" height="142" rx="9" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
   <text x="70" y="183" font-size="11.5" font-weight="700" fill="var(--purple)">②–⑥ provider 逐个探测（按序）</text>
   <rect x="66" y="194" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
@@ -444,13 +444,13 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <text x="252" y="249" text-anchor="middle" font-size="9" fill="var(--ink)">OpenRouter</text>
   <rect x="294" y="230" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="328" y="249" text-anchor="middle" font-size="9" fill="var(--ink)">models.dev</text>
-  <text x="70" y="280" font-size="8.5" fill="var(--muted)">探测成功即落盘缓存（LM Studio / Nous 除外，故下次仍重探）</text>
-  <text x="70" y="296" font-size="8.5" fill="var(--muted)">⑥ OpenRouter 带 Kimi 32k 守卫，避免低报覆盖真实窗口</text>
+  <text x="70" y="280" font-size="9" fill="var(--muted)">探测成功即落盘缓存（LM Studio / Nous 除外，故下次仍重探）</text>
+  <text x="70" y="296" font-size="9" fill="var(--muted)">⑥ OpenRouter 带 Kimi 32k 守卫，避免低报覆盖真实窗口</text>
   <line x1="58" y1="235" x2="34" y2="235" stroke="var(--accent)" stroke-width="1.4"/>
   <path d="M30,235 L39,230 L39,240 Z" fill="var(--accent)"/>
   <line x1="218" y1="306" x2="218" y2="317" stroke="var(--muted)" stroke-width="1.4"/>
   <path d="M218,320 L213,311 L223,311 Z" fill="var(--muted)"/>
-  <text x="228" y="317" font-size="8.5" fill="var(--red)">未命中</text>
+  <text x="228" y="317" font-size="9" fill="var(--red)">未命中</text>
   <rect x="58" y="320" width="320" height="42" rx="9" fill="var(--panel-2)" stroke="var(--purple)" stroke-width="1.5"/>
   <text x="70" y="340" font-size="12" font-weight="700" fill="var(--purple)">⑦–⑨ 硬编码默认 → 兜底 256K</text>
   <text x="70" y="354" font-size="9" fill="var(--muted)">按模型家族、最长键优先；都不中则 DEFAULT_FALLBACK_CONTEXT</text>
@@ -461,7 +461,7 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <text x="418" y="151" font-size="9" fill="var(--muted)">缓存命中 ≠ 可信：窗口会变 / 曾错写</text>
   <text x="418" y="170" font-size="9.5" fill="var(--ink)">LM Studio · Nous · Codex</text>
   <text x="418" y="188" font-size="9.5" fill="var(--ink)">Kimi · MiniMax · Grok</text>
-  <text x="418" y="202" font-size="8.5" fill="var(--amber)">→ 丢弃旧值、重新探测</text>
+  <text x="418" y="202" font-size="9" fill="var(--amber)">→ 丢弃旧值、重新探测</text>
   <line x1="406" y1="140" x2="382" y2="133" stroke="var(--amber)" stroke-width="1.4"/>
   <path d="M378,132 L388,130 L385,139 Z" fill="var(--amber)"/>
   <rect x="24" y="384" width="632" height="42" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
@@ -480,11 +480,11 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <rect x="40" y="84" width="258" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <rect x="556" y="84" width="84" height="34" fill="var(--amber-soft)" stroke="var(--amber)"/>
   <text x="160" y="105" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">已用 tokens（增长 →）</text>
-  <text x="598" y="100" text-anchor="middle" font-size="8.5" fill="var(--amber)">max_tokens</text>
-  <text x="598" y="111" text-anchor="middle" font-size="8.5" fill="var(--amber)">预留（输出）</text>
+  <text x="598" y="100" text-anchor="middle" font-size="9" fill="var(--amber)">max_tokens</text>
+  <text x="598" y="111" text-anchor="middle" font-size="9" fill="var(--amber)">预留（输出）</text>
   <line x1="298" y1="76" x2="298" y2="126" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
   <text x="298" y="139" text-anchor="middle" font-size="9" fill="var(--red)">触发阈值 = 50% × 有效预算（≥ 64K floor）</text>
-  <text x="420" y="79" font-size="8.5" fill="var(--muted)">有效输入预算 = 窗口 − max_tokens</text>
+  <text x="420" y="79" font-size="9" fill="var(--muted)">有效输入预算 = 窗口 − max_tokens</text>
   <text x="335" y="105" font-size="11" fill="var(--red)">→ 越过即触发压缩</text>
   <text x="20" y="172" font-size="11.5" font-weight="700" fill="var(--purple)">小窗口（resolved window = 64K，本地模型）</text>
   <rect x="40" y="182" width="320" height="34" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
@@ -493,8 +493,8 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <text x="150" y="203" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">已用 tokens（增长 →）</text>
   <line x1="287" y1="174" x2="287" y2="224" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
   <text x="287" y="237" text-anchor="middle" font-size="9" fill="var(--red)">floor ≥ 窗口 → 退化 → 在 85% 触发</text>
-  <text x="372" y="195" font-size="8.5" fill="var(--muted)">50%×64K = 32K，但 floor 64K = 整窗</text>
-  <text x="372" y="208" font-size="8.5" fill="var(--muted)">→ 永不触发，故改 85%（_MIN_CTX_TRIGGER_RATIO）</text>
+  <text x="372" y="195" font-size="9" fill="var(--muted)">50%×64K = 32K，但 floor 64K = 整窗</text>
+  <text x="372" y="208" font-size="9" fill="var(--muted)">→ 永不触发，故改 85%（_MIN_CTX_TRIGGER_RATIO）</text>
   <rect x="20" y="296" width="640" height="60" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="34" y="316" font-size="10" font-weight="700" fill="var(--red)">⚠ 窗口算错的两种代价</text>
   <text x="34" y="334" font-size="9.5" fill="var(--ink)">偏大 → 阈值过高 → 压缩太晚，先被 provider 400 拒（max_tokens 没扣，输入预算虚高）</text>
@@ -940,7 +940,7 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <path d="M30,79 L39,74 L39,84 Z" fill="var(--accent)"/>
   <line x1="218" y1="98" x2="218" y2="109" stroke="var(--muted)" stroke-width="1.4"/>
   <path d="M218,112 L213,103 L223,103 Z" fill="var(--muted)"/>
-  <text x="228" y="109" font-size="8.5" fill="var(--red)">miss</text>
+  <text x="228" y="109" font-size="9" fill="var(--red)">miss</text>
   <rect x="58" y="112" width="320" height="38" rx="9" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
   <text x="70" y="132" font-size="12" font-weight="700" fill="var(--purple)">① persistent cache (probed, on disk)</text>
   <text x="70" y="145" font-size="9" fill="var(--muted)">Nous URLs bypass here, deferring to portal /v1/models</text>
@@ -948,7 +948,7 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <path d="M30,131 L39,126 L39,136 Z" fill="var(--accent)"/>
   <line x1="218" y1="150" x2="218" y2="161" stroke="var(--muted)" stroke-width="1.4"/>
   <path d="M218,164 L213,155 L223,155 Z" fill="var(--muted)"/>
-  <text x="228" y="161" font-size="8.5" fill="var(--red)">miss</text>
+  <text x="228" y="161" font-size="9" fill="var(--red)">miss</text>
   <rect x="58" y="164" width="320" height="142" rx="9" fill="var(--panel)" stroke="var(--purple)" stroke-width="1.5"/>
   <text x="70" y="183" font-size="11.5" font-weight="700" fill="var(--purple)">②–⑥ provider probes (in order)</text>
   <rect x="66" y="194" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
@@ -967,13 +967,13 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <text x="252" y="249" text-anchor="middle" font-size="9" fill="var(--ink)">OpenRouter</text>
   <rect x="294" y="230" width="68" height="30" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="328" y="249" text-anchor="middle" font-size="9" fill="var(--ink)">models.dev</text>
-  <text x="70" y="280" font-size="8.5" fill="var(--muted)">a successful probe is cached (except LM Studio / Nous)</text>
-  <text x="70" y="296" font-size="8.5" fill="var(--muted)">⑥ OpenRouter carries a Kimi 32k guard so an underreport can't win</text>
+  <text x="70" y="280" font-size="9" fill="var(--muted)">a successful probe is cached (except LM Studio / Nous)</text>
+  <text x="70" y="296" font-size="9" fill="var(--muted)">⑥ OpenRouter carries a Kimi 32k guard so an underreport can't win</text>
   <line x1="58" y1="235" x2="34" y2="235" stroke="var(--accent)" stroke-width="1.4"/>
   <path d="M30,235 L39,230 L39,240 Z" fill="var(--accent)"/>
   <line x1="218" y1="306" x2="218" y2="317" stroke="var(--muted)" stroke-width="1.4"/>
   <path d="M218,320 L213,311 L223,311 Z" fill="var(--muted)"/>
-  <text x="228" y="317" font-size="8.5" fill="var(--red)">miss</text>
+  <text x="228" y="317" font-size="9" fill="var(--red)">miss</text>
   <rect x="58" y="320" width="320" height="42" rx="9" fill="var(--panel-2)" stroke="var(--purple)" stroke-width="1.5"/>
   <text x="70" y="340" font-size="12" font-weight="700" fill="var(--purple)">⑦–⑨ hardcoded defaults → 256K fallback</text>
   <text x="70" y="354" font-size="9" fill="var(--muted)">by family, longest-key-first; else DEFAULT_FALLBACK_CONTEXT</text>
@@ -984,7 +984,7 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <text x="418" y="151" font-size="9" fill="var(--muted)">a cache hit ≠ trustworthy: window shifts</text>
   <text x="418" y="170" font-size="9.5" fill="var(--ink)">LM Studio · Nous · Codex</text>
   <text x="418" y="188" font-size="9.5" fill="var(--ink)">Kimi · MiniMax · Grok</text>
-  <text x="418" y="202" font-size="8.5" fill="var(--amber)">→ drop the stale value, re-probe</text>
+  <text x="418" y="202" font-size="9" fill="var(--amber)">→ drop the stale value, re-probe</text>
   <line x1="406" y1="140" x2="382" y2="133" stroke="var(--amber)" stroke-width="1.4"/>
   <path d="M378,132 L388,130 L385,139 Z" fill="var(--amber)"/>
   <rect x="24" y="384" width="632" height="42" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
@@ -1003,11 +1003,11 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <rect x="40" y="84" width="258" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <rect x="556" y="84" width="84" height="34" fill="var(--amber-soft)" stroke="var(--amber)"/>
   <text x="160" y="105" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">used tokens (growing →)</text>
-  <text x="598" y="100" text-anchor="middle" font-size="8.5" fill="var(--amber)">max_tokens</text>
-  <text x="598" y="111" text-anchor="middle" font-size="8.5" fill="var(--amber)">reserve (output)</text>
+  <text x="598" y="100" text-anchor="middle" font-size="9" fill="var(--amber)">max_tokens</text>
+  <text x="598" y="111" text-anchor="middle" font-size="9" fill="var(--amber)">reserve (output)</text>
   <line x1="298" y1="76" x2="298" y2="126" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
   <text x="298" y="139" text-anchor="middle" font-size="9" fill="var(--red)">trigger = 50% × budget (≥ 64K floor)</text>
-  <text x="420" y="79" font-size="8.5" fill="var(--muted)">effective input budget = window − max_tokens</text>
+  <text x="420" y="79" font-size="9" fill="var(--muted)">effective input budget = window − max_tokens</text>
   <text x="335" y="105" font-size="11" fill="var(--red)">→ cross it, compress</text>
   <text x="20" y="172" font-size="11.5" font-weight="700" fill="var(--purple)">Small window (resolved window = 64K, local model)</text>
   <rect x="40" y="182" width="320" height="34" rx="6" fill="var(--panel-2)" stroke="var(--line)"/>
@@ -1016,8 +1016,8 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <text x="150" y="203" text-anchor="middle" font-size="9.5" fill="var(--accent-ink)">used tokens (growing →)</text>
   <line x1="287" y1="174" x2="287" y2="224" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
   <text x="287" y="237" text-anchor="middle" font-size="9" fill="var(--red)">floor ≥ window → degenerate → trigger at 85%</text>
-  <text x="372" y="195" font-size="8.5" fill="var(--muted)">50%×64K = 32K, but floor 64K = whole window</text>
-  <text x="372" y="208" font-size="8.5" fill="var(--muted)">→ never fires, so use 85% (_MIN_CTX_TRIGGER_RATIO)</text>
+  <text x="372" y="195" font-size="9" fill="var(--muted)">50%×64K = 32K, but floor 64K = whole window</text>
+  <text x="372" y="208" font-size="9" fill="var(--muted)">→ never fires, so use 85% (_MIN_CTX_TRIGGER_RATIO)</text>
   <rect x="20" y="296" width="640" height="60" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="34" y="316" font-size="10" font-weight="700" fill="var(--red)">⚠ two costs of a miscomputed window</text>
   <text x="34" y="334" font-size="9.5" fill="var(--ink)">too large → threshold too high → compresses too late, hits a provider 400 first (max_tokens not subtracted)</text>
