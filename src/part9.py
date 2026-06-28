@@ -655,6 +655,69 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
 </div>
 
 <div class="figure">
+<svg viewBox="0 0 680 428" role="img" aria-label="各 provider 上下文窗口横向柱状对比，对数刻度（log₂，每格 ×2），从小到大八根柱：探测档 32K（32000，琥珀）；floor 兜底 64K（64000，红色高亮，MINIMUM_CONTEXT_LENGTH）；llama／qwen／grok／gemma-3 共 128K（131072，蓝）；Claude 旧版 200K（200000，蓝）；default 兜底 256K（256000，蓝，DEFAULT_FALLBACK_CONTEXT）；Codex OAuth 上限 272K（272000，蓝）；GLM-5.2 与 DeepSeek-v4 约 1M（1048576 与 1000000，金）；GPT-5.4 最大 1.05M（1050000，金）。红虚线标 floor 64K、紫虚线标 default 256K。窗口越大压缩越晚触发、能塞更多上下文但单轮越贵；解析不出则落 floor 64K。数值取自 model_metadata.py，会随模型更新而变。">
+  <text x="12" y="24" font-size="13.5" font-weight="700" fill="var(--ink)">各 provider 上下文窗口横向对比 · 对数刻度（log₂，每格 ×2）</text>
+  <text x="12" y="44" font-size="10.5" fill="var(--muted)">窗口大小决定压缩何时触发与内存预算；32K→1.05M 跨约 32×，故用对数刻度，小窗口才看得见</text>
+  <text x="648" y="34" text-anchor="middle" font-size="24">📊</text>
+  <line x1="190" y1="60" x2="190" y2="308" stroke="var(--line)" stroke-width="1.4"/>
+  <line x1="265" y1="60" x2="265" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="340" y1="60" x2="340" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="415" y1="60" x2="415" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="490" y1="60" x2="490" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="565" y1="60" x2="565" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="640" y1="60" x2="640" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <text x="265" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">32K</text>
+  <text x="340" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">64K</text>
+  <text x="415" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">128K</text>
+  <text x="490" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">256K</text>
+  <text x="565" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">512K</text>
+  <text x="640" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">1M</text>
+  <text x="12" y="54" font-size="9" fill="var(--faint)">tokens →</text>
+  <text x="12" y="90" font-size="9" fill="var(--ink)">探测档 · 32K</text>
+  <rect x="190" y="78" width="72" height="17" rx="4" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="255" y="91" text-anchor="end" font-size="9" fill="var(--amber)">32000</text>
+  <text x="12" y="119" font-size="9" font-weight="700" fill="var(--red)">floor 兜底 · 64K</text>
+  <rect x="190" y="107" width="147" height="17" rx="4" fill="var(--amber-soft)" stroke="var(--red)" stroke-width="1.6"/>
+  <text x="330" y="120" text-anchor="end" font-size="9" fill="var(--red)">64000</text>
+  <text x="12" y="148" font-size="9" fill="var(--ink)">llama／qwen／grok · 128K</text>
+  <rect x="190" y="136" width="225" height="17" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="408" y="149" text-anchor="end" font-size="9" fill="var(--blue)">131072</text>
+  <text x="12" y="177" font-size="9" fill="var(--ink)">Claude 旧版 · 200K</text>
+  <rect x="190" y="165" width="271" height="17" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="454" y="178" text-anchor="end" font-size="9" fill="var(--blue)">200000</text>
+  <text x="12" y="206" font-size="9" fill="var(--ink)">default 兜底 · 256K</text>
+  <rect x="190" y="194" width="297" height="17" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="480" y="207" text-anchor="end" font-size="9" fill="var(--blue)">256000</text>
+  <text x="12" y="235" font-size="9" fill="var(--ink)">Codex OAuth · 272K</text>
+  <rect x="190" y="223" width="304" height="17" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="487" y="236" text-anchor="end" font-size="9" fill="var(--blue)">272000</text>
+  <text x="12" y="264" font-size="9" fill="var(--ink)">GLM-5.2／DeepSeek · 1M</text>
+  <rect x="190" y="252" width="450" height="17" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="633" y="265" text-anchor="end" font-size="9" fill="var(--accent-ink)">1048576</text>
+  <text x="12" y="293" font-size="9" font-weight="700" fill="var(--accent-ink)">GPT-5.4（最大）· 1.05M</text>
+  <rect x="190" y="281" width="452" height="17" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="635" y="294" text-anchor="end" font-size="9" fill="var(--accent-ink)">1050000</text>
+  <line x1="337" y1="66" x2="337" y2="308" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <line x1="487" y1="66" x2="487" y2="308" stroke="var(--purple)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <rect x="12" y="320" width="656" height="96" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="24" y="331" width="16" height="11" rx="2" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="46" y="340" font-size="9" fill="var(--ink)">小窗 32–64K</text>
+  <rect x="150" y="331" width="16" height="11" rx="2" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="172" y="340" font-size="9" fill="var(--ink)">中窗 128–272K</text>
+  <rect x="300" y="331" width="16" height="11" rx="2" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="322" y="340" font-size="9" fill="var(--ink)">大窗 1M+</text>
+  <line x1="420" y1="337" x2="440" y2="337" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="444" y="340" font-size="9" fill="var(--ink)">floor 64K</text>
+  <line x1="540" y1="337" x2="560" y2="337" stroke="var(--purple)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="564" y="340" font-size="9" fill="var(--ink)">default 256K</text>
+  <text x="24" y="364" font-size="9.5" fill="var(--ink)">窗口越大 → 压缩越晚触发 → 能塞更多上下文，但单轮越贵；解析不出则落 floor 64K（见本章上方瀑布图）。</text>
+  <text x="24" y="384" font-size="9.5" fill="var(--muted)">floor 64K = MINIMUM_CONTEXT_LENGTH 兜底；default 256K = DEFAULT_FALLBACK_CONTEXT；Codex OAuth 封顶 272K。</text>
+  <text x="24" y="404" font-size="9.5" fill="var(--muted)">数值取自 model_metadata.py 的真实登记值，会随模型更新而变 —— 故按契约理解，勿写成快照测试。</text>
+</svg>
+<div class="fig-cap"><b>窗口横向对比</b>：从探测档 <span class="mono">32K</span> 到 GPT-5.4 的 <span class="mono">1.05M</span> 跨约 32×，故用对数刻度（每格 ×2）。<span class="mono">floor 64K</span>（<span class="mono">MINIMUM_CONTEXT_LENGTH</span>，解析失败的兜底）与 <span class="mono">default 256K</span>（<span class="mono">DEFAULT_FALLBACK_CONTEXT</span>，无命中默认）分别标红、紫虚线；窗口越大压缩越晚触发、能塞更多上下文但<strong>单轮越贵</strong>。值取自 <span class="mono">model_metadata.py</span>，会随模型更新而变 —— 按契约读，勿写快照测试。</div>
+</div>
+
+<div class="figure">
 <svg viewBox="0 0 680 412" role="img" aria-label="压缩触发逐帧状态快照：一个 256K 窗口的长对话，token 一帧帧涨到 50% 阈值触发压缩再回落，每帧画一条水平 token 进度条与一条 50% 阈值虚线。T0 早期 token 约 30%（绿），注有效输入预算等于窗口 256K 减去 max_tokens 预留，未触发；对话继续增长后 T1 token 涨到恰好 50%（琥珀），抵到阈值虚线，达 threshold_percent = 0.50，触发判定；触发压缩是缓存铁律的唯一例外，T2 压缩中把 5 条长历史消息折叠成 1 个摘要块（蓝），token 条因之大幅缩短；续聊后 T3 token 回落到约 20%（绿），继续增长进入下一轮循环。底部旁注：窗口解析不出时 fallback MINIMUM_CONTEXT_LENGTH = 64K；小窗口用 _MIN_CTX_TRIGGER_RATIO = 0.85 设上限防误触，触发点约 max(有效预算×0.50, 64K)，小窗退化到 85%，default 256K、Codex 272K。">
   <text x="20" y="26" font-size="13.5" font-weight="700" fill="var(--ink)">压缩触发逐帧快照 · token 涨到 50% 阈值 → 压缩 → 回落</text>
   <text x="20" y="46" font-size="10.5" fill="var(--muted)">256K 窗口的一次长对话，沿时间线看 token 进度条如何抵达阈值再回落</text>
@@ -1409,6 +1472,69 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <text x="34" y="350" font-size="9.5" fill="var(--ink)">too small / floor degeneracy unhandled → compresses too early, wastes a prefix still in cache</text>
 </svg>
 <div class="fig-cap"><b>Window → threshold</b>: the trigger = <span class="mono">max(effective input budget × 0.50, 64K)</span>; a large window lands mid-bar, a small one degenerates via the floor to <strong>85%</strong>. The <span class="mono">max_tokens</span> reserve must be subtracted from the window, or compressing <strong>too late</strong> hits a provider 400; leaving the floor degeneracy unhandled compresses <strong>too early</strong> and wastes the cache.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 428" role="img" aria-label="Horizontal bar comparison of context windows by provider, log scale (log2, each step x2), eight bars small to large: probe tier 32K (32000, amber); fallback floor 64K (64000, red highlight, MINIMUM_CONTEXT_LENGTH); llama/qwen/grok/gemma-3 at 128K (131072, blue); Claude legacy 200K (200000, blue); default fallback 256K (256000, blue, DEFAULT_FALLBACK_CONTEXT); Codex OAuth cap 272K (272000, blue); GLM-5.2 and DeepSeek-v4 about 1M (1048576 and 1000000, gold); GPT-5.4 max 1.05M (1050000, gold). A red dashed line marks floor 64K and a purple dashed line marks default 256K. A bigger window fires compression later and fits more context but costs more per turn; if it cannot be resolved it falls to floor 64K. Values come from model_metadata.py and change as models update.">
+  <text x="12" y="24" font-size="13.5" font-weight="700" fill="var(--ink)">Context window by provider · horizontal bars, log scale (log2, each step x2)</text>
+  <text x="12" y="44" font-size="10.5" fill="var(--muted)">Window size sets when compression fires and the memory budget; 32K→1.05M spans ~32×, so a log scale keeps small windows visible</text>
+  <text x="648" y="34" text-anchor="middle" font-size="24">📊</text>
+  <line x1="190" y1="60" x2="190" y2="308" stroke="var(--line)" stroke-width="1.4"/>
+  <line x1="265" y1="60" x2="265" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="340" y1="60" x2="340" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="415" y1="60" x2="415" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="490" y1="60" x2="490" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="565" y1="60" x2="565" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="640" y1="60" x2="640" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <text x="265" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">32K</text>
+  <text x="340" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">64K</text>
+  <text x="415" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">128K</text>
+  <text x="490" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">256K</text>
+  <text x="565" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">512K</text>
+  <text x="640" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">1M</text>
+  <text x="12" y="54" font-size="9" fill="var(--faint)">tokens →</text>
+  <text x="12" y="90" font-size="9" fill="var(--ink)">Probe tier · 32K</text>
+  <rect x="190" y="78" width="72" height="17" rx="4" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="255" y="91" text-anchor="end" font-size="9" fill="var(--amber)">32000</text>
+  <text x="12" y="119" font-size="9" font-weight="700" fill="var(--red)">Fallback floor · 64K</text>
+  <rect x="190" y="107" width="147" height="17" rx="4" fill="var(--amber-soft)" stroke="var(--red)" stroke-width="1.6"/>
+  <text x="330" y="120" text-anchor="end" font-size="9" fill="var(--red)">64000</text>
+  <text x="12" y="148" font-size="9" fill="var(--ink)">llama/qwen/grok · 128K</text>
+  <rect x="190" y="136" width="225" height="17" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="408" y="149" text-anchor="end" font-size="9" fill="var(--blue)">131072</text>
+  <text x="12" y="177" font-size="9" fill="var(--ink)">Claude legacy · 200K</text>
+  <rect x="190" y="165" width="271" height="17" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="454" y="178" text-anchor="end" font-size="9" fill="var(--blue)">200000</text>
+  <text x="12" y="206" font-size="9" fill="var(--ink)">Default fallback · 256K</text>
+  <rect x="190" y="194" width="297" height="17" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="480" y="207" text-anchor="end" font-size="9" fill="var(--blue)">256000</text>
+  <text x="12" y="235" font-size="9" fill="var(--ink)">Codex OAuth · 272K</text>
+  <rect x="190" y="223" width="304" height="17" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="487" y="236" text-anchor="end" font-size="9" fill="var(--blue)">272000</text>
+  <text x="12" y="264" font-size="9" fill="var(--ink)">GLM-5.2/DeepSeek · 1M</text>
+  <rect x="190" y="252" width="450" height="17" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="633" y="265" text-anchor="end" font-size="9" fill="var(--accent-ink)">1048576</text>
+  <text x="12" y="293" font-size="9" font-weight="700" fill="var(--accent-ink)">GPT-5.4 (max) · 1.05M</text>
+  <rect x="190" y="281" width="452" height="17" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="635" y="294" text-anchor="end" font-size="9" fill="var(--accent-ink)">1050000</text>
+  <line x1="337" y1="66" x2="337" y2="308" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <line x1="487" y1="66" x2="487" y2="308" stroke="var(--purple)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <rect x="12" y="320" width="656" height="96" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="24" y="331" width="16" height="11" rx="2" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="46" y="340" font-size="9" fill="var(--ink)">Small 32-64K</text>
+  <rect x="150" y="331" width="16" height="11" rx="2" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="172" y="340" font-size="9" fill="var(--ink)">Mid 128-272K</text>
+  <rect x="300" y="331" width="16" height="11" rx="2" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="322" y="340" font-size="9" fill="var(--ink)">Large 1M+</text>
+  <line x1="420" y1="337" x2="440" y2="337" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="444" y="340" font-size="9" fill="var(--ink)">floor 64K</text>
+  <line x1="540" y1="337" x2="560" y2="337" stroke="var(--purple)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="564" y="340" font-size="9" fill="var(--ink)">default 256K</text>
+  <text x="24" y="364" font-size="9.5" fill="var(--ink)">Bigger window → compression fires later → more context fits, but each turn costs more; if unresolved it falls to floor 64K (see the waterfall above).</text>
+  <text x="24" y="384" font-size="9.5" fill="var(--muted)">floor 64K = MINIMUM_CONTEXT_LENGTH fallback; default 256K = DEFAULT_FALLBACK_CONTEXT; Codex OAuth caps at 272K.</text>
+  <text x="24" y="404" font-size="9.5" fill="var(--muted)">Values are model_metadata.py real registered entries and change as models update — read them as a contract, do not snapshot-test.</text>
+</svg>
+<div class="fig-cap"><b>Window comparison</b>: from the probe tier <span class="mono">32K</span> to GPT-5.4's <span class="mono">1.05M</span> spans ~32×, so the axis is log scale (each step x2). <span class="mono">floor 64K</span> (<span class="mono">MINIMUM_CONTEXT_LENGTH</span>, the fallback when resolution fails) and <span class="mono">default 256K</span> (<span class="mono">DEFAULT_FALLBACK_CONTEXT</span>, the no-hit default) are marked by the red and purple dashed lines; a bigger window fires compression later and fits more context but costs <strong>more per turn</strong>. Values are from <span class="mono">model_metadata.py</span> and change as models update — read them as a contract, not a snapshot test.</div>
 </div>
 
 <div class="figure">

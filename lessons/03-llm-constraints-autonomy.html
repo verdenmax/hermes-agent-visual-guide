@@ -523,6 +523,63 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 </svg>
 <div class="fig-cap"><b>F·误差累积：小错滚雪球</b>：自主循环里每一步都以上一步的输出为输入——包括上一步犯的错。中途没有外部标准答案把状态拉回正轨，早期一个<b>小错（红点）</b>被一路带进、放大，回合越往后雪球越大，可靠率随步数连乘衰减。对策是把累积<b>在中途截断</b>：生成-验证分离(第14章)让另一遍核查、上下文压缩(第15章)收束历史、评测 eval 集(第22章)钉住行为契约。</div>
 </div>
+<div class="figure">
+<svg viewBox="0 0 680 300" role="img" aria-label="F 误差累积衰减曲线：整体成功率随自主步数按 0.95 的 n 次方连乘衰减，1 步 95%、5 步 77%、10 步 60%、20 步 36%；作为对比，单步可靠 99% 时 20 步仍有 82%，凸显短循环与中途截断的价值">
+  <text x="20" y="20" font-size="13.5" font-weight="700" fill="var(--accent-ink)">F·误差累积：可靠性随自主步数连乘衰减</text>
+  <text x="20" y="40" font-size="11" fill="var(--muted)">每步 95% 可靠，误差连乘衰减：20 步仅剩 36%——故 agent 要短循环、把累积在中途截断</text>
+  <polygon points="70,70 92.5,79 115,87.6 137.5,95.7 160,103.4 182.5,110.7 205,117.7 227.5,124.3 250,130.6 272.5,136.6 295,142.2 317.5,147.6 340,152.7 362.5,157.6 385,162.2 407.5,166.6 430,170.8 452.5,174.7 475,178.5 497.5,182.1 520,185.5 520,70" fill="var(--red-soft)"/>
+  <line x1="70" y1="70" x2="520" y2="70" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>
+  <line x1="70" y1="115" x2="520" y2="115" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>
+  <line x1="70" y1="160" x2="520" y2="160" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>
+  <line x1="70" y1="205" x2="520" y2="205" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>
+  <line x1="70" y1="60" x2="70" y2="250" stroke="var(--line)" stroke-width="1.8"/>
+  <line x1="70" y1="250" x2="535" y2="250" stroke="var(--line)" stroke-width="1.8"/>
+  <polygon points="535,245 545,250 535,255" fill="var(--line)"/>
+  <g font-size="9.5" fill="var(--muted)" text-anchor="end">
+    <text x="62" y="74">100%</text>
+    <text x="62" y="119">75%</text>
+    <text x="62" y="164">50%</text>
+    <text x="62" y="209">25%</text>
+    <text x="62" y="254">0%</text>
+  </g>
+  <g font-size="9.5" fill="var(--muted)" text-anchor="middle">
+    <text x="70" y="264">0</text>
+    <text x="92.5" y="264">1</text>
+    <text x="182.5" y="264">5</text>
+    <text x="295" y="264">10</text>
+    <text x="407.5" y="264">15</text>
+    <text x="520" y="264">20</text>
+  </g>
+  <text x="295" y="283" font-size="10" fill="var(--faint)" text-anchor="middle">自主步数 n →</text>
+  <text x="22" y="160" font-size="9.5" fill="var(--muted)" text-anchor="middle" transform="rotate(-90 22 160)">整体成功率</text>
+  <polyline points="70,70 182.5,78.8 295,87.2 407.5,95.2 520,102.8" fill="none" stroke="var(--purple)" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <circle cx="520" cy="102.8" r="3.5" fill="none" stroke="var(--purple)" stroke-width="1.4"/>
+  <polyline points="70,70 92.5,79 115,87.6 137.5,95.7 160,103.4 182.5,110.7 205,117.7 227.5,124.3 250,130.6 272.5,136.6 295,142.2 317.5,147.6 340,152.7 362.5,157.6 385,162.2 407.5,166.6 430,170.8 452.5,174.7 475,178.5 497.5,182.1 520,185.5" fill="none" stroke="var(--red)" stroke-width="2.2"/>
+  <text x="235" y="90" font-size="9.5" fill="var(--red)" text-anchor="middle">流失的可靠性</text>
+  <g fill="var(--red)">
+    <circle cx="92.5" cy="79" r="4"/>
+    <circle cx="182.5" cy="110.7" r="4"/>
+    <circle cx="295" cy="142.2" r="4"/>
+    <circle cx="520" cy="185.5" r="4.5"/>
+  </g>
+  <g font-size="10" fill="var(--ink)" font-weight="700">
+    <text x="100" y="74">1 步 95%</text>
+    <text x="190" y="106">5 步 77%</text>
+    <text x="302" y="138">10 步 60%</text>
+  </g>
+  <text x="514" y="201" font-size="10.5" font-weight="700" fill="var(--red)" text-anchor="end">20 步 → 36%</text>
+  <text x="548" y="86" font-size="10" font-weight="700" fill="var(--amber)">✂ 中途截断累积</text>
+  <g font-size="9.5" fill="var(--ink)">
+    <text x="548" y="104">▸ 短循环 + 分解 13章</text>
+    <text x="548" y="120">▸ 生成-验证分离 14章</text>
+    <text x="548" y="136">▸ 压缩 / 重新锚定 15章</text>
+  </g>
+  <text x="548" y="168" font-size="9.5" font-weight="700" fill="var(--purple)">杠杆 · 单步可靠性</text>
+  <text x="548" y="184" font-size="9" fill="var(--purple)">若 99%/步 → 20 步 82%</text>
+  <text x="548" y="198" font-size="9" fill="var(--purple)">（紫色虚线）</text>
+</svg>
+<div class="fig-cap"><b>F·误差累积：可靠性衰减曲线</b>：把正文的数值画成下降曲线——单步 95% 可靠时，整体成功率按 0.95 的 n 次方<b>连乘衰减</b>：1 步 95%、5 步 77%、10 步 60%、20 步只剩 <b>36%</b>，红色阴影是一路<b>流失的可靠性</b>。紫色虚线是对比：若把单步提到 99%，20 步仍有 82%——可见<b>单步可靠性的杠杆效应</b>。对策不是追求单步完美，而是把累积<b>在中途截断</b>：短循环 + 任务分解（第 13 章委派）、生成-验证分离（第 14 章）、压缩 / 重新锚定（第 15 章）。</div>
+</div>
 <div class="cellgroup">
   <div class="cg-cap">每步 95% 可靠，连乘 N 步后的整体成功率：</div>
   <div class="cells">
@@ -786,6 +843,63 @@ Hermes' delegation (ch.13) fights this with “short loop + decomposition.”</p
   <text x="557" y="266" text-anchor="middle" font-size="10.5" fill="var(--muted)">ch.22</text>
 </svg>
 <div class="fig-cap"><b>F · error compounding: small errors snowball</b>: in an autonomous loop every step takes the previous step's output as input — including the mistake it just made. With no external ground truth mid-stream to pull state back, one <b>small early error (red dot)</b> is carried forward and amplified, the snowball grows with each turn, and reliability decays multiplicatively. The fix is to <b>truncate the accumulation mid-stream</b>: a generator-verifier split (ch.14) lets a separate pass check, context compression (ch.15) reins history in, and an eval set (ch.22) pins a behavior contract.</div>
+</div>
+<div class="figure">
+<svg viewBox="0 0 680 300" role="img" aria-label="F error-compounding decay curve: overall success rate decays multiplicatively as 0.95 to the power n with autonomous steps -- 95% at 1 step, 77% at 5, 60% at 10, 36% at 20; for contrast, at 99% per-step reliability 20 steps still keep 82%, showing the value of short loops and mid-stream truncation">
+  <text x="20" y="20" font-size="13.5" font-weight="700" fill="var(--accent-ink)">F · error compounding: reliability decays multiplicatively with autonomous steps</text>
+  <text x="20" y="40" font-size="11" fill="var(--muted)">95% reliable per step, errors multiply — only 36% left after 20 steps; keep loops short, truncate mid-stream</text>
+  <polygon points="70,70 92.5,79 115,87.6 137.5,95.7 160,103.4 182.5,110.7 205,117.7 227.5,124.3 250,130.6 272.5,136.6 295,142.2 317.5,147.6 340,152.7 362.5,157.6 385,162.2 407.5,166.6 430,170.8 452.5,174.7 475,178.5 497.5,182.1 520,185.5 520,70" fill="var(--red-soft)"/>
+  <line x1="70" y1="70" x2="520" y2="70" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>
+  <line x1="70" y1="115" x2="520" y2="115" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>
+  <line x1="70" y1="160" x2="520" y2="160" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>
+  <line x1="70" y1="205" x2="520" y2="205" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>
+  <line x1="70" y1="60" x2="70" y2="250" stroke="var(--line)" stroke-width="1.8"/>
+  <line x1="70" y1="250" x2="535" y2="250" stroke="var(--line)" stroke-width="1.8"/>
+  <polygon points="535,245 545,250 535,255" fill="var(--line)"/>
+  <g font-size="9.5" fill="var(--muted)" text-anchor="end">
+    <text x="62" y="74">100%</text>
+    <text x="62" y="119">75%</text>
+    <text x="62" y="164">50%</text>
+    <text x="62" y="209">25%</text>
+    <text x="62" y="254">0%</text>
+  </g>
+  <g font-size="9.5" fill="var(--muted)" text-anchor="middle">
+    <text x="70" y="264">0</text>
+    <text x="92.5" y="264">1</text>
+    <text x="182.5" y="264">5</text>
+    <text x="295" y="264">10</text>
+    <text x="407.5" y="264">15</text>
+    <text x="520" y="264">20</text>
+  </g>
+  <text x="295" y="283" font-size="10" fill="var(--faint)" text-anchor="middle">autonomous steps n →</text>
+  <text x="22" y="160" font-size="9.5" fill="var(--muted)" text-anchor="middle" transform="rotate(-90 22 160)">overall success rate</text>
+  <polyline points="70,70 182.5,78.8 295,87.2 407.5,95.2 520,102.8" fill="none" stroke="var(--purple)" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <circle cx="520" cy="102.8" r="3.5" fill="none" stroke="var(--purple)" stroke-width="1.4"/>
+  <polyline points="70,70 92.5,79 115,87.6 137.5,95.7 160,103.4 182.5,110.7 205,117.7 227.5,124.3 250,130.6 272.5,136.6 295,142.2 317.5,147.6 340,152.7 362.5,157.6 385,162.2 407.5,166.6 430,170.8 452.5,174.7 475,178.5 497.5,182.1 520,185.5" fill="none" stroke="var(--red)" stroke-width="2.2"/>
+  <text x="235" y="90" font-size="9.5" fill="var(--red)" text-anchor="middle">lost reliability</text>
+  <g fill="var(--red)">
+    <circle cx="92.5" cy="79" r="4"/>
+    <circle cx="182.5" cy="110.7" r="4"/>
+    <circle cx="295" cy="142.2" r="4"/>
+    <circle cx="520" cy="185.5" r="4.5"/>
+  </g>
+  <g font-size="10" fill="var(--ink)" font-weight="700">
+    <text x="100" y="74">1 step 95%</text>
+    <text x="190" y="106">5 steps 77%</text>
+    <text x="302" y="138">10 steps 60%</text>
+  </g>
+  <text x="514" y="201" font-size="10.5" font-weight="700" fill="var(--red)" text-anchor="end">20 steps → 36%</text>
+  <text x="548" y="86" font-size="10" font-weight="700" fill="var(--amber)">✂ truncate accrual</text>
+  <g font-size="9.5" fill="var(--ink)">
+    <text x="548" y="104">▸ short loop+split 13</text>
+    <text x="548" y="120">▸ gen-verify split 14</text>
+    <text x="548" y="136">▸ compress/anchor 15</text>
+  </g>
+  <text x="548" y="168" font-size="9.5" font-weight="700" fill="var(--purple)">leverage = step %</text>
+  <text x="548" y="184" font-size="9" fill="var(--purple)">99%/step → 82% @20</text>
+  <text x="548" y="198" font-size="9" fill="var(--purple)">(purple dashed)</text>
+</svg>
+<div class="fig-cap"><b>F · error compounding: the reliability-decay curve</b>: the chapter's numbers plotted as a falling curve — at 95% per-step reliability, overall success <b>decays multiplicatively</b> as 0.95^n: 95% at 1 step, 77% at 5, 60% at 10, and only <b>36%</b> at 20; the red shading is the reliability <b>lost</b> along the way. The purple dashed line is the contrast: lift per-step reliability to 99% and 20 steps still keep 82% — the <b>leverage of single-step reliability</b>. The fix isn't a perfect step but <b>truncating the accrual mid-stream</b>: short loops + decomposition (ch.13 delegation), a generator-verifier split (ch.14), and compression / re-anchoring (ch.15).</div>
 </div>
 <div class="cellgroup">
   <div class="cg-cap">95% reliable per step — overall success after N steps:</div>

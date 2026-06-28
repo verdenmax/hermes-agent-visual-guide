@@ -1053,6 +1053,63 @@ Hermes' delegation (ch.13) fights this with “short loop + decomposition.”</p
 </svg>
 <div class="fig-cap"><b>F · error compounding: small errors snowball</b>: in an autonomous loop every step takes the previous step's output as input — including the mistake it just made. With no external ground truth mid-stream to pull state back, one <b>small early error (red dot)</b> is carried forward and amplified, the snowball grows with each turn, and reliability decays multiplicatively. The fix is to <b>truncate the accumulation mid-stream</b>: a generator-verifier split (ch.14) lets a separate pass check, context compression (ch.15) reins history in, and an eval set (ch.22) pins a behavior contract.</div>
 </div>
+<div class="figure">
+<svg viewBox="0 0 680 300" role="img" aria-label="F error-compounding decay curve: overall success rate decays multiplicatively as 0.95 to the power n with autonomous steps -- 95% at 1 step, 77% at 5, 60% at 10, 36% at 20; for contrast, at 99% per-step reliability 20 steps still keep 82%, showing the value of short loops and mid-stream truncation">
+  <text x="20" y="20" font-size="13.5" font-weight="700" fill="var(--accent-ink)">F · error compounding: reliability decays multiplicatively with autonomous steps</text>
+  <text x="20" y="40" font-size="11" fill="var(--muted)">95% reliable per step, errors multiply — only 36% left after 20 steps; keep loops short, truncate mid-stream</text>
+  <polygon points="70,70 92.5,79 115,87.6 137.5,95.7 160,103.4 182.5,110.7 205,117.7 227.5,124.3 250,130.6 272.5,136.6 295,142.2 317.5,147.6 340,152.7 362.5,157.6 385,162.2 407.5,166.6 430,170.8 452.5,174.7 475,178.5 497.5,182.1 520,185.5 520,70" fill="var(--red-soft)"/>
+  <line x1="70" y1="70" x2="520" y2="70" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>
+  <line x1="70" y1="115" x2="520" y2="115" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>
+  <line x1="70" y1="160" x2="520" y2="160" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>
+  <line x1="70" y1="205" x2="520" y2="205" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>
+  <line x1="70" y1="60" x2="70" y2="250" stroke="var(--line)" stroke-width="1.8"/>
+  <line x1="70" y1="250" x2="535" y2="250" stroke="var(--line)" stroke-width="1.8"/>
+  <polygon points="535,245 545,250 535,255" fill="var(--line)"/>
+  <g font-size="9.5" fill="var(--muted)" text-anchor="end">
+    <text x="62" y="74">100%</text>
+    <text x="62" y="119">75%</text>
+    <text x="62" y="164">50%</text>
+    <text x="62" y="209">25%</text>
+    <text x="62" y="254">0%</text>
+  </g>
+  <g font-size="9.5" fill="var(--muted)" text-anchor="middle">
+    <text x="70" y="264">0</text>
+    <text x="92.5" y="264">1</text>
+    <text x="182.5" y="264">5</text>
+    <text x="295" y="264">10</text>
+    <text x="407.5" y="264">15</text>
+    <text x="520" y="264">20</text>
+  </g>
+  <text x="295" y="283" font-size="10" fill="var(--faint)" text-anchor="middle">autonomous steps n →</text>
+  <text x="22" y="160" font-size="9.5" fill="var(--muted)" text-anchor="middle" transform="rotate(-90 22 160)">overall success rate</text>
+  <polyline points="70,70 182.5,78.8 295,87.2 407.5,95.2 520,102.8" fill="none" stroke="var(--purple)" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <circle cx="520" cy="102.8" r="3.5" fill="none" stroke="var(--purple)" stroke-width="1.4"/>
+  <polyline points="70,70 92.5,79 115,87.6 137.5,95.7 160,103.4 182.5,110.7 205,117.7 227.5,124.3 250,130.6 272.5,136.6 295,142.2 317.5,147.6 340,152.7 362.5,157.6 385,162.2 407.5,166.6 430,170.8 452.5,174.7 475,178.5 497.5,182.1 520,185.5" fill="none" stroke="var(--red)" stroke-width="2.2"/>
+  <text x="235" y="90" font-size="9.5" fill="var(--red)" text-anchor="middle">lost reliability</text>
+  <g fill="var(--red)">
+    <circle cx="92.5" cy="79" r="4"/>
+    <circle cx="182.5" cy="110.7" r="4"/>
+    <circle cx="295" cy="142.2" r="4"/>
+    <circle cx="520" cy="185.5" r="4.5"/>
+  </g>
+  <g font-size="10" fill="var(--ink)" font-weight="700">
+    <text x="100" y="74">1 step 95%</text>
+    <text x="190" y="106">5 steps 77%</text>
+    <text x="302" y="138">10 steps 60%</text>
+  </g>
+  <text x="514" y="201" font-size="10.5" font-weight="700" fill="var(--red)" text-anchor="end">20 steps → 36%</text>
+  <text x="548" y="86" font-size="10" font-weight="700" fill="var(--amber)">✂ truncate accrual</text>
+  <g font-size="9.5" fill="var(--ink)">
+    <text x="548" y="104">▸ short loop+split 13</text>
+    <text x="548" y="120">▸ gen-verify split 14</text>
+    <text x="548" y="136">▸ compress/anchor 15</text>
+  </g>
+  <text x="548" y="168" font-size="9.5" font-weight="700" fill="var(--purple)">leverage = step %</text>
+  <text x="548" y="184" font-size="9" fill="var(--purple)">99%/step → 82% @20</text>
+  <text x="548" y="198" font-size="9" fill="var(--purple)">(purple dashed)</text>
+</svg>
+<div class="fig-cap"><b>F · error compounding: the reliability-decay curve</b>: the chapter's numbers plotted as a falling curve — at 95% per-step reliability, overall success <b>decays multiplicatively</b> as 0.95^n: 95% at 1 step, 77% at 5, 60% at 10, and only <b>36%</b> at 20; the red shading is the reliability <b>lost</b> along the way. The purple dashed line is the contrast: lift per-step reliability to 99% and 20 steps still keep 82% — the <b>leverage of single-step reliability</b>. The fix isn't a perfect step but <b>truncating the accrual mid-stream</b>: short loops + decomposition (ch.13 delegation), a generator-verifier split (ch.14), and compression / re-anchoring (ch.15).</div>
+</div>
 <div class="cellgroup">
   <div class="cg-cap">95% reliable per step — overall success after N steps:</div>
   <div class="cells">
@@ -7485,6 +7542,44 @@ agent = AIAgent(
 <div class="fig-cap"><b>An obfuscated command's deterministic defeat</b>: a <span class="mono">r\m -rf /home/alice/*</span> (using <span class="mono">\</span> escapes and empty quotes to split tokens and dodge the regex) is first restored by <span class="mono">_normalize_command_for_detection</span>'s normalization steps to <span class="mono">rm -rf ~/*</span> (crucially <span class="mono">re.sub(r'\\([^\n])', r'\1')</span> strips the backslash and <span class="mono">_rewrite_resolved_user_home</span> folds <span class="mono">/home/alice/</span> back to <span class="mono">~/</span>), then matches the HARDLINE regex <span class="mono">"recursive delete of home directory"</span> and is hard-blocked — <b>refused even with <span class="mono">--yolo</span></b>. Contrast: had we let the model judge "dangerous?", a single "safe cleanup script" would fool it. <b>A deterministic regex beats wording obfuscation.</b></div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 466" role="img" aria-label="One real subagent strip-down ruling: (1) the parent calls delegate_task to send a child to tidy the error logs under logs/, role is leaf, the child runs in an isolated context; (2) the child tries three stripped high-risk tools one by one and each is blocked in turn — memory write blocked, reason no writes to shared MEMORY.md; send_message blocked, reason no cross-platform side effects; delegate_task blocked, reason a leaf cannot spawn, no recursive delegation; all three live in the DELEGATE_BLOCKED_TOOLS frozenset; (3) the real mechanism is two stacked strip layers, layer one _strip_blocked_tools drops the whole delegation clarify memory code_execution toolsets, layer two DELEGATE_BLOCKED_TOOLS then blocks delegate_task clarify memory send_message execute_code; (4) side note, role leaf is the default, only orchestrator keeps delegate_task, capped by max_spawn_depth equals 1 so grandchildren are refused.">
+  <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">Subagent least-privilege · one real strip-down ruling</text>
+  <text x="20" y="42" font-size="10" fill="var(--muted)">A parent delegates log-tidying; the child tries 3 high-risk tools, each stripped in turn</text>
+  <text x="652" y="32" text-anchor="middle" font-size="22">🔒</text>
+  <rect x="40" y="54" width="600" height="50" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="54" y="73" font-size="10.5" font-weight="700" fill="var(--blue)">① Parent delegates · child runs in an isolated context</text>
+  <text x="626" y="73" text-anchor="end" font-size="9" fill="var(--muted)">tools/delegate_tool.py</text>
+  <text x="54" y="93" font-size="10" fill="var(--ink)">delegate_task(goal=&quot;tidy the error logs under logs/&quot;, role=&quot;leaf&quot;)</text>
+  <text x="340" y="120" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="126" width="600" height="184" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="54" y="146" font-size="11" font-weight="700" fill="var(--ink)">② Child tries the stripped high-risk tools one by one → each blocked</text>
+  <rect x="58" y="156" width="564" height="34" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="72" y="177" font-size="9.5" fill="var(--ink)">memory(action=&quot;write&quot;, ...)</text>
+  <text x="316" y="178" font-size="12" font-weight="700" fill="var(--red)">✗</text>
+  <text x="338" y="177" font-size="9" fill="var(--muted)">no writes to shared MEMORY.md</text>
+  <rect x="58" y="196" width="564" height="34" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="72" y="217" font-size="9.5" fill="var(--ink)">send_message(chat_id=…, text=…)</text>
+  <text x="316" y="218" font-size="12" font-weight="700" fill="var(--red)">✗</text>
+  <text x="338" y="217" font-size="9" fill="var(--muted)">no cross-platform side effects</text>
+  <rect x="58" y="236" width="564" height="34" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="72" y="257" font-size="9.5" fill="var(--ink)">delegate_task(goal=…)</text>
+  <text x="316" y="258" font-size="12" font-weight="700" fill="var(--red)">✗</text>
+  <text x="338" y="257" font-size="9" fill="var(--muted)">leaf can't spawn — no recursive delegation</text>
+  <text x="72" y="294" font-size="9" fill="var(--muted)">↳ all three live in the DELEGATE_BLOCKED_TOOLS frozenset · tools/delegate_tool.py:45-53</text>
+  <text x="340" y="324" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="330" width="600" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="54" y="350" font-size="10.5" font-weight="700" fill="var(--purple)">③ Real mechanism · two stacked strip layers</text>
+  <text x="626" y="350" text-anchor="end" font-size="9" fill="var(--muted)">delegate_tool.py</text>
+  <text x="58" y="372" font-size="9" fill="var(--ink)">Layer 1 · _strip_blocked_tools()@768 drops whole toolsets: delegation / clarify / memory / code_execution</text>
+  <text x="58" y="392" font-size="9" fill="var(--ink)">Layer 2 · DELEGATE_BLOCKED_TOOLS@45 then blocks 5: delegate_task / clarify / memory / send_message / execute_code</text>
+  <rect x="40" y="414" width="600" height="44" rx="9" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="54" y="433" font-size="10" font-weight="700" fill="var(--amber)">④ Side note · role=leaf is the default</text>
+  <text x="54" y="451" font-size="9" fill="var(--muted)">only role=orchestrator keeps delegate_task (capped by delegation.max_spawn_depth=1; grandchildren refused)</text>
+</svg>
+<div class="fig-cap"><b>One concrete strip-down ruling</b>: the parent's <span class="mono">delegate_task(role=&quot;leaf&quot;)</span> sends a child to tidy logs; in its isolated context the child tries <span class="mono">memory</span> / <span class="mono">send_message</span> / <span class="mono">delegate_task</span> — <b>each blocked in turn</b>, each with a definite reason (no shared-memory pollution / no cross-platform side effects / no recursion). The mechanism is <b>two stacked layers</b>: <span class="mono">_strip_blocked_tools()</span> drops the whole <span class="mono">delegation / clarify / memory / code_execution</span> toolsets, then the <span class="mono">DELEGATE_BLOCKED_TOOLS</span> frozenset blocks 5 by name. <span class="mono">role=leaf</span> is the default; only <span class="mono">orchestrator</span> keeps <span class="mono">delegate_task</span> (capped by <span class="mono">max_spawn_depth=1</span>).</div>
+</div>
+
 <h2>Layer two: subagent least-privilege</h2>
 <p>When delegating to a subagent, a batch of high-risk tools is <strong>taken away</strong> first:</p>
 
@@ -7767,6 +7862,55 @@ dependencies = [
   <text x="54" y="414" font-size="9" fill="var(--muted)">every skill install changes the prefix byte-for-byte → the whole conversation cache is voided, recomputed at full price</text>
 </svg>
 <div class="fig-cap"><b>One line of code hits all three lines</b>: when a user types <span class="mono">/my-skill</span>, <span class="mono">build_skill_invocation_message(...) -&gt; Optional[str]</span> (<span class="mono">skill_commands.py:517</span>, docstring "Build the user message content for a skill slash command") injects the skill as an <b>append-only user message</b> — that single choice simultaneously satisfies: <b>Line 1 sacred cache</b> (source comment <span class="mono">does NOT invalidate the skills system-prompt cache</span>, <span class="mono">skills called by name</span>), <b>Line 3 narrow waist</b> (skills add no core schema; <span class="mono">_HERMES_CORE_TOOLS</span> exposes only <span class="mono">skills_list / skill_view / skill_manage</span>), and <b>Line 2 self-evolution</b> (learnings externalized to files, append-only). Counterfactual: stuffing it into the system prompt would <b>void the whole cache</b> on every skill install.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 514" role="img" aria-label="One real Footprint Ladder ruling: which rung a new webhook-subscribe capability lands on. (1) Requirement: let the agent subscribe to a webhook; should we add a core tool for it? Walk the Footprint Ladder rung by rung. (2) Six rungs top-down, pick the smallest-footprint rung that solves it: rung 1 extend existing code, nothing to extend; rung 2 CLI command plus skill, zero tool footprint, webhook lands here; rung 3 service-gated tool check_fn; rung 4 plugin; rung 5 MCP server; rung 6 new core tool is the last resort, paid on every API call; rungs 3 through 6 are not reached. (3) Test: the stop-on-hit three questions, truly fundamental, truly needed by nearly everyone, truly no terminal or file alternative; webhook is buildable from terminal plus one skill, all three answer no, so not a core tool. (4) Against the real core tool list _HERMES_CORE_TOOLS, terminal, read_file and web_search are in the core because fundamental, near-universal and no substitute; webhook is not, landing on rung 2 CLI plus skill with zero core-schema footprint.">
+  <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">Footprint Ladder · one real ruling</text>
+  <text x="20" y="42" font-size="10" fill="var(--muted)">Adding a webhook-subscribe capability, descend the 6 rungs top-down, stop at rung 2</text>
+  <text x="652" y="32" text-anchor="middle" font-size="22">🪜</text>
+  <rect x="40" y="54" width="600" height="44" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="54" y="73" font-size="10.5" font-weight="700" fill="var(--blue)">① Requirement · let the agent subscribe to a webhook</text>
+  <text x="54" y="91" font-size="9.5" fill="var(--muted)">Add a core tool for it? Walk the Footprint Ladder rung by rung</text>
+  <text x="340" y="112" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="118" width="600" height="212" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="54" y="138" font-size="11" font-weight="700" fill="var(--ink)">② Footprint Ladder · pick the smallest-footprint rung that solves it</text>
+  <rect x="58" y="146" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="163" font-size="10" font-weight="700" fill="var(--muted)">1</text>
+  <text x="92" y="163" font-size="9.5" fill="var(--ink)">Extend existing code — zero new surface</text>
+  <text x="612" y="163" text-anchor="end" font-size="9" fill="var(--muted)">✗ nothing to extend</text>
+  <rect x="58" y="176" width="564" height="26" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="72" y="193" font-size="10" font-weight="700" fill="var(--accent-ink)">2</text>
+  <text x="92" y="193" font-size="9.5" font-weight="700" fill="var(--accent-ink)">CLI command + skill — agent runs hermes webhook, a skill guides (zero tool footprint)</text>
+  <text x="612" y="193" text-anchor="end" font-size="9" font-weight="700" fill="var(--accent-ink)">✓ webhook lands here</text>
+  <rect x="58" y="206" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="223" font-size="10" font-weight="700" fill="var(--faint)">3</text>
+  <text x="92" y="223" font-size="9.5" fill="var(--muted)">Service-gated tool (check_fn) — appears only when configured</text>
+  <text x="612" y="223" text-anchor="end" font-size="9" fill="var(--faint)">(not reached)</text>
+  <rect x="58" y="236" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="253" font-size="10" font-weight="700" fill="var(--faint)">4</text>
+  <text x="92" y="253" font-size="9.5" fill="var(--muted)">Plugin ~/.hermes/plugins/ — discovered at runtime</text>
+  <text x="612" y="253" text-anchor="end" font-size="9" fill="var(--faint)">(not reached)</text>
+  <rect x="58" y="266" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="283" font-size="10" font-weight="700" fill="var(--faint)">5</text>
+  <text x="92" y="283" font-size="9.5" fill="var(--muted)">MCP server (catalog) — via the built-in MCP client</text>
+  <text x="612" y="283" text-anchor="end" font-size="9" fill="var(--faint)">(not reached)</text>
+  <rect x="58" y="296" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="313" font-size="10" font-weight="700" fill="var(--faint)">6</text>
+  <text x="92" y="313" font-size="9.5" fill="var(--muted)">New core tool — last resort · paid on every API call</text>
+  <text x="612" y="313" text-anchor="end" font-size="9" fill="var(--faint)">(not reached)</text>
+  <text x="340" y="344" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="350" width="600" height="72" rx="9" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="54" y="370" font-size="10.5" font-weight="700" fill="var(--purple)">③ Test · the stop-on-hit three questions</text>
+  <text x="58" y="391" font-size="9" fill="var(--ink)">Truly fundamental? Truly needed by nearly everyone? Truly no terminal / file alternative?</text>
+  <text x="58" y="410" font-size="9" fill="var(--muted)">webhook: buildable from terminal + one skill → all three no → not a core tool</text>
+  <rect x="40" y="434" width="600" height="72" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="54" y="454" font-size="10.5" font-weight="700" fill="var(--accent-ink)">④ Against the real core · _HERMES_CORE_TOOLS</text>
+  <text x="626" y="454" text-anchor="end" font-size="9" fill="var(--muted)">toolsets.py:31</text>
+  <text x="58" y="475" font-size="9" fill="var(--ink)">In the core: terminal / read_file / web_search — fundamental, near-universal, no terminal/file substitute</text>
+  <text x="58" y="493" font-size="9" fill="var(--muted)">Not in the core: webhook → lands on rung 2 (CLI + skill), zero core-schema footprint</text>
+</svg>
+<div class="fig-cap"><b>How one capability gets ruled onto rung 2</b>: to let the agent <b>subscribe to a webhook</b>, descend the Footprint Ladder's six rungs <b>top-down, stopping on the first hit</b> — rung 1 "extend existing" has nothing to extend, <b>rung 2 "CLI command + skill" hits</b> (agent runs <span class="mono">hermes webhook</span>, a skill guides, <b>zero tool footprint</b>), so rungs 3-6 need never be reached. The test is <b>three questions</b>: truly fundamental? truly near-universal? truly no <span class="mono">terminal / file</span> substitute? webhook is buildable from terminal + one skill, so <b>all three say no → not a core tool</b>. Against <span class="mono">_HERMES_CORE_TOOLS</span> (<span class="mono">toolsets.py:31</span>): <span class="mono">terminal / read_file / web_search</span> are <b>in</b> the core (fundamental, near-universal, no substitute); webhook is <b>not</b>.</div>
 </div>
 
 <div class="card collab">
@@ -9891,6 +10035,69 @@ EXHAUSTED_TTL_DEFAULT_SECONDS = 60 * 60      # 1 hour</pre></div>
   <text x="34" y="350" font-size="9.5" fill="var(--ink)">too small / floor degeneracy unhandled → compresses too early, wastes a prefix still in cache</text>
 </svg>
 <div class="fig-cap"><b>Window → threshold</b>: the trigger = <span class="mono">max(effective input budget × 0.50, 64K)</span>; a large window lands mid-bar, a small one degenerates via the floor to <strong>85%</strong>. The <span class="mono">max_tokens</span> reserve must be subtracted from the window, or compressing <strong>too late</strong> hits a provider 400; leaving the floor degeneracy unhandled compresses <strong>too early</strong> and wastes the cache.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 428" role="img" aria-label="Horizontal bar comparison of context windows by provider, log scale (log2, each step x2), eight bars small to large: probe tier 32K (32000, amber); fallback floor 64K (64000, red highlight, MINIMUM_CONTEXT_LENGTH); llama/qwen/grok/gemma-3 at 128K (131072, blue); Claude legacy 200K (200000, blue); default fallback 256K (256000, blue, DEFAULT_FALLBACK_CONTEXT); Codex OAuth cap 272K (272000, blue); GLM-5.2 and DeepSeek-v4 about 1M (1048576 and 1000000, gold); GPT-5.4 max 1.05M (1050000, gold). A red dashed line marks floor 64K and a purple dashed line marks default 256K. A bigger window fires compression later and fits more context but costs more per turn; if it cannot be resolved it falls to floor 64K. Values come from model_metadata.py and change as models update.">
+  <text x="12" y="24" font-size="13.5" font-weight="700" fill="var(--ink)">Context window by provider · horizontal bars, log scale (log2, each step x2)</text>
+  <text x="12" y="44" font-size="10.5" fill="var(--muted)">Window size sets when compression fires and the memory budget; 32K→1.05M spans ~32×, so a log scale keeps small windows visible</text>
+  <text x="648" y="34" text-anchor="middle" font-size="24">📊</text>
+  <line x1="190" y1="60" x2="190" y2="308" stroke="var(--line)" stroke-width="1.4"/>
+  <line x1="265" y1="60" x2="265" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="340" y1="60" x2="340" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="415" y1="60" x2="415" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="490" y1="60" x2="490" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="565" y1="60" x2="565" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <line x1="640" y1="60" x2="640" y2="308" stroke="var(--line)" stroke-width="1"/>
+  <text x="265" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">32K</text>
+  <text x="340" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">64K</text>
+  <text x="415" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">128K</text>
+  <text x="490" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">256K</text>
+  <text x="565" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">512K</text>
+  <text x="640" y="54" text-anchor="middle" font-size="9" fill="var(--muted)">1M</text>
+  <text x="12" y="54" font-size="9" fill="var(--faint)">tokens →</text>
+  <text x="12" y="90" font-size="9" fill="var(--ink)">Probe tier · 32K</text>
+  <rect x="190" y="78" width="72" height="17" rx="4" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="255" y="91" text-anchor="end" font-size="9" fill="var(--amber)">32000</text>
+  <text x="12" y="119" font-size="9" font-weight="700" fill="var(--red)">Fallback floor · 64K</text>
+  <rect x="190" y="107" width="147" height="17" rx="4" fill="var(--amber-soft)" stroke="var(--red)" stroke-width="1.6"/>
+  <text x="330" y="120" text-anchor="end" font-size="9" fill="var(--red)">64000</text>
+  <text x="12" y="148" font-size="9" fill="var(--ink)">llama/qwen/grok · 128K</text>
+  <rect x="190" y="136" width="225" height="17" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="408" y="149" text-anchor="end" font-size="9" fill="var(--blue)">131072</text>
+  <text x="12" y="177" font-size="9" fill="var(--ink)">Claude legacy · 200K</text>
+  <rect x="190" y="165" width="271" height="17" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="454" y="178" text-anchor="end" font-size="9" fill="var(--blue)">200000</text>
+  <text x="12" y="206" font-size="9" fill="var(--ink)">Default fallback · 256K</text>
+  <rect x="190" y="194" width="297" height="17" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="480" y="207" text-anchor="end" font-size="9" fill="var(--blue)">256000</text>
+  <text x="12" y="235" font-size="9" fill="var(--ink)">Codex OAuth · 272K</text>
+  <rect x="190" y="223" width="304" height="17" rx="4" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="487" y="236" text-anchor="end" font-size="9" fill="var(--blue)">272000</text>
+  <text x="12" y="264" font-size="9" fill="var(--ink)">GLM-5.2/DeepSeek · 1M</text>
+  <rect x="190" y="252" width="450" height="17" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="633" y="265" text-anchor="end" font-size="9" fill="var(--accent-ink)">1048576</text>
+  <text x="12" y="293" font-size="9" font-weight="700" fill="var(--accent-ink)">GPT-5.4 (max) · 1.05M</text>
+  <rect x="190" y="281" width="452" height="17" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="635" y="294" text-anchor="end" font-size="9" fill="var(--accent-ink)">1050000</text>
+  <line x1="337" y1="66" x2="337" y2="308" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <line x1="487" y1="66" x2="487" y2="308" stroke="var(--purple)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <rect x="12" y="320" width="656" height="96" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
+  <rect x="24" y="331" width="16" height="11" rx="2" fill="var(--amber-soft)" stroke="var(--amber)"/>
+  <text x="46" y="340" font-size="9" fill="var(--ink)">Small 32-64K</text>
+  <rect x="150" y="331" width="16" height="11" rx="2" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="172" y="340" font-size="9" fill="var(--ink)">Mid 128-272K</text>
+  <rect x="300" y="331" width="16" height="11" rx="2" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="322" y="340" font-size="9" fill="var(--ink)">Large 1M+</text>
+  <line x1="420" y1="337" x2="440" y2="337" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="444" y="340" font-size="9" fill="var(--ink)">floor 64K</text>
+  <line x1="540" y1="337" x2="560" y2="337" stroke="var(--purple)" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <text x="564" y="340" font-size="9" fill="var(--ink)">default 256K</text>
+  <text x="24" y="364" font-size="9.5" fill="var(--ink)">Bigger window → compression fires later → more context fits, but each turn costs more; if unresolved it falls to floor 64K (see the waterfall above).</text>
+  <text x="24" y="384" font-size="9.5" fill="var(--muted)">floor 64K = MINIMUM_CONTEXT_LENGTH fallback; default 256K = DEFAULT_FALLBACK_CONTEXT; Codex OAuth caps at 272K.</text>
+  <text x="24" y="404" font-size="9.5" fill="var(--muted)">Values are model_metadata.py real registered entries and change as models update — read them as a contract, do not snapshot-test.</text>
+</svg>
+<div class="fig-cap"><b>Window comparison</b>: from the probe tier <span class="mono">32K</span> to GPT-5.4's <span class="mono">1.05M</span> spans ~32×, so the axis is log scale (each step x2). <span class="mono">floor 64K</span> (<span class="mono">MINIMUM_CONTEXT_LENGTH</span>, the fallback when resolution fails) and <span class="mono">default 256K</span> (<span class="mono">DEFAULT_FALLBACK_CONTEXT</span>, the no-hit default) are marked by the red and purple dashed lines; a bigger window fires compression later and fits more context but costs <strong>more per turn</strong>. Values are from <span class="mono">model_metadata.py</span> and change as models update — read them as a contract, not a snapshot test.</div>
 </div>
 
 <div class="figure">

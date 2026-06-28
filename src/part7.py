@@ -153,6 +153,44 @@ LESSON_24 = {
 <div class="fig-cap"><b>混淆命令的确定性败局</b>：一条 <span class="mono">r\m -rf /home/alice/*</span>（用 <span class="mono">\</span> 转义与空引号拆 token 躲正则）先被 <span class="mono">_normalize_command_for_detection</span> 逐步还原成 <span class="mono">rm -rf ~/*</span>（关键是 <span class="mono">re.sub(r'\\([^\n])', r'\1')</span> 剥反斜杠 + <span class="mono">_rewrite_resolved_user_home</span> 把 <span class="mono">/home/alice/</span> 折回 <span class="mono">~/</span>），再命中 HARDLINE 正则 <span class="mono">"recursive delete of home directory"</span> 被硬阻断——<b>连 <span class="mono">--yolo</span> 都不放行</b>。对照：若改让模型判「危不危险」，一句「安全清理脚本」就能骗过它。<b>确定性正则战胜措辞混淆。</b></div>
 </div>
 
+<div class="figure">
+<svg viewBox="0 0 680 466" role="img" aria-label="子代理最小权限的一次真实剥权判定：① 父代理调用 delegate_task 派子代理整理 logs 下的错误日志，role 为 leaf，子代理在隔离 context 中执行；② 子代理逐个尝试三件被剥离的高危工具，每件被逐条拦下——memory 写入被拦，理由防污染共享记忆 no writes to shared MEMORY.md；send_message 被拦，理由防跨平台副作用 no cross-platform side effects；delegate_task 被拦，理由防递归爆炸，leaf 不能再派生 no recursive delegation；三件都在 DELEGATE_BLOCKED_TOOLS frozenset 里；③ 真实机制是剥权两层叠加，层一 _strip_blocked_tools 移除整组 delegation clarify memory code_execution 四个 toolset，层二 DELEGATE_BLOCKED_TOOLS 再逐项拦 delegate_task clarify memory send_message execute_code 五件；④ 旁注，role leaf 是默认，只有 orchestrator 才保留 delegate_task，受 max_spawn_depth 等于 1 限制，孙代理被拒。">
+  <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">子代理最小权限 · 一次真实剥权判定</text>
+  <text x="20" y="42" font-size="10" fill="var(--muted)">父代理派活给子代理，子代理试调 3 件高危工具，逐条被剥权机制拦下</text>
+  <text x="652" y="32" text-anchor="middle" font-size="22">🔒</text>
+  <rect x="40" y="54" width="600" height="50" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="54" y="73" font-size="10.5" font-weight="700" fill="var(--blue)">① 父代理派活 · 子代理在隔离 context 中执行</text>
+  <text x="626" y="73" text-anchor="end" font-size="9" fill="var(--muted)">tools/delegate_tool.py</text>
+  <text x="54" y="93" font-size="10" fill="var(--ink)">delegate_task(goal=&quot;整理 logs/ 下的错误日志&quot;, role=&quot;leaf&quot;)</text>
+  <text x="340" y="120" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="126" width="600" height="184" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="54" y="146" font-size="11" font-weight="700" fill="var(--ink)">② 子代理逐个尝试被剥离的高危工具 → 每件被逐条拦下</text>
+  <rect x="58" y="156" width="564" height="34" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="72" y="177" font-size="9.5" fill="var(--ink)">memory(action=&quot;write&quot;, ...)</text>
+  <text x="296" y="178" font-size="12" font-weight="700" fill="var(--red)">✗</text>
+  <text x="318" y="177" font-size="9" fill="var(--muted)">防污染共享记忆 · no writes to shared MEMORY.md</text>
+  <rect x="58" y="196" width="564" height="34" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="72" y="217" font-size="9.5" fill="var(--ink)">send_message(chat_id=…, text=…)</text>
+  <text x="296" y="218" font-size="12" font-weight="700" fill="var(--red)">✗</text>
+  <text x="318" y="217" font-size="9" fill="var(--muted)">防跨平台副作用 · no cross-platform side effects</text>
+  <rect x="58" y="236" width="564" height="34" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="72" y="257" font-size="9.5" fill="var(--ink)">delegate_task(goal=…)</text>
+  <text x="296" y="258" font-size="12" font-weight="700" fill="var(--red)">✗</text>
+  <text x="318" y="257" font-size="9" fill="var(--muted)">防递归爆炸 · leaf 不能再派生 · no recursive delegation</text>
+  <text x="72" y="294" font-size="9" fill="var(--muted)">↳ 三件都在 DELEGATE_BLOCKED_TOOLS frozenset 里 · tools/delegate_tool.py:45-53</text>
+  <text x="340" y="324" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="330" width="600" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="54" y="350" font-size="10.5" font-weight="700" fill="var(--purple)">③ 真实机制 · 剥权两层叠加</text>
+  <text x="626" y="350" text-anchor="end" font-size="9" fill="var(--muted)">delegate_tool.py</text>
+  <text x="58" y="372" font-size="9" fill="var(--ink)">层1 · _strip_blocked_tools()@768 移除整组：delegation / clarify / memory / code_execution</text>
+  <text x="58" y="392" font-size="9" fill="var(--ink)">层2 · DELEGATE_BLOCKED_TOOLS@45 再拦：delegate_task / clarify / memory / send_message / execute_code</text>
+  <rect x="40" y="414" width="600" height="44" rx="9" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="54" y="433" font-size="10" font-weight="700" fill="var(--amber)">④ 旁注 · role=leaf 是默认</text>
+  <text x="54" y="451" font-size="9" fill="var(--muted)">只有 role=orchestrator 才保留 delegate_task（受 delegation.max_spawn_depth=1 限，孙代理被拒）</text>
+</svg>
+<div class="fig-cap"><b>一次具体的剥权判定</b>：父代理 <span class="mono">delegate_task(role=&quot;leaf&quot;)</span> 派子代理整理日志，子代理在隔离 context 里试调 <span class="mono">memory</span> / <span class="mono">send_message</span> / <span class="mono">delegate_task</span> 三件高危工具——<b>逐条被拦</b>，理由各自确定（防污染共享记忆 / 防跨平台副作用 / 防递归爆炸）。机制是<b>两层叠加</b>：<span class="mono">_strip_blocked_tools()</span> 整组移除 <span class="mono">delegation / clarify / memory / code_execution</span> 四个 toolset，<span class="mono">DELEGATE_BLOCKED_TOOLS</span> frozenset 再逐项拦 5 件。<span class="mono">role=leaf</span> 是默认，只有 <span class="mono">orchestrator</span> 才保留 <span class="mono">delegate_task</span>（受 <span class="mono">max_spawn_depth=1</span> 限）。</div>
+</div>
+
 <h2>第二层：子代理最小权限</h2>
 <p>派给子代理干活时，先把一批高危工具从它手里<strong>拿掉</strong>:</p>
 
@@ -380,6 +418,44 @@ dependencies = [
   <text x="54" y="505" font-size="9" fill="var(--muted)">it might answer this is a safe cleanup script and allow it — the regex matches deterministically, wording tricks are useless</text>
 </svg>
 <div class="fig-cap"><b>An obfuscated command's deterministic defeat</b>: a <span class="mono">r\m -rf /home/alice/*</span> (using <span class="mono">\</span> escapes and empty quotes to split tokens and dodge the regex) is first restored by <span class="mono">_normalize_command_for_detection</span>'s normalization steps to <span class="mono">rm -rf ~/*</span> (crucially <span class="mono">re.sub(r'\\([^\n])', r'\1')</span> strips the backslash and <span class="mono">_rewrite_resolved_user_home</span> folds <span class="mono">/home/alice/</span> back to <span class="mono">~/</span>), then matches the HARDLINE regex <span class="mono">"recursive delete of home directory"</span> and is hard-blocked — <b>refused even with <span class="mono">--yolo</span></b>. Contrast: had we let the model judge "dangerous?", a single "safe cleanup script" would fool it. <b>A deterministic regex beats wording obfuscation.</b></div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 466" role="img" aria-label="One real subagent strip-down ruling: (1) the parent calls delegate_task to send a child to tidy the error logs under logs/, role is leaf, the child runs in an isolated context; (2) the child tries three stripped high-risk tools one by one and each is blocked in turn — memory write blocked, reason no writes to shared MEMORY.md; send_message blocked, reason no cross-platform side effects; delegate_task blocked, reason a leaf cannot spawn, no recursive delegation; all three live in the DELEGATE_BLOCKED_TOOLS frozenset; (3) the real mechanism is two stacked strip layers, layer one _strip_blocked_tools drops the whole delegation clarify memory code_execution toolsets, layer two DELEGATE_BLOCKED_TOOLS then blocks delegate_task clarify memory send_message execute_code; (4) side note, role leaf is the default, only orchestrator keeps delegate_task, capped by max_spawn_depth equals 1 so grandchildren are refused.">
+  <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">Subagent least-privilege · one real strip-down ruling</text>
+  <text x="20" y="42" font-size="10" fill="var(--muted)">A parent delegates log-tidying; the child tries 3 high-risk tools, each stripped in turn</text>
+  <text x="652" y="32" text-anchor="middle" font-size="22">🔒</text>
+  <rect x="40" y="54" width="600" height="50" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="54" y="73" font-size="10.5" font-weight="700" fill="var(--blue)">① Parent delegates · child runs in an isolated context</text>
+  <text x="626" y="73" text-anchor="end" font-size="9" fill="var(--muted)">tools/delegate_tool.py</text>
+  <text x="54" y="93" font-size="10" fill="var(--ink)">delegate_task(goal=&quot;tidy the error logs under logs/&quot;, role=&quot;leaf&quot;)</text>
+  <text x="340" y="120" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="126" width="600" height="184" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="54" y="146" font-size="11" font-weight="700" fill="var(--ink)">② Child tries the stripped high-risk tools one by one → each blocked</text>
+  <rect x="58" y="156" width="564" height="34" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="72" y="177" font-size="9.5" fill="var(--ink)">memory(action=&quot;write&quot;, ...)</text>
+  <text x="316" y="178" font-size="12" font-weight="700" fill="var(--red)">✗</text>
+  <text x="338" y="177" font-size="9" fill="var(--muted)">no writes to shared MEMORY.md</text>
+  <rect x="58" y="196" width="564" height="34" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="72" y="217" font-size="9.5" fill="var(--ink)">send_message(chat_id=…, text=…)</text>
+  <text x="316" y="218" font-size="12" font-weight="700" fill="var(--red)">✗</text>
+  <text x="338" y="217" font-size="9" fill="var(--muted)">no cross-platform side effects</text>
+  <rect x="58" y="236" width="564" height="34" rx="6" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="72" y="257" font-size="9.5" fill="var(--ink)">delegate_task(goal=…)</text>
+  <text x="316" y="258" font-size="12" font-weight="700" fill="var(--red)">✗</text>
+  <text x="338" y="257" font-size="9" fill="var(--muted)">leaf can't spawn — no recursive delegation</text>
+  <text x="72" y="294" font-size="9" fill="var(--muted)">↳ all three live in the DELEGATE_BLOCKED_TOOLS frozenset · tools/delegate_tool.py:45-53</text>
+  <text x="340" y="324" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="330" width="600" height="74" rx="9" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="54" y="350" font-size="10.5" font-weight="700" fill="var(--purple)">③ Real mechanism · two stacked strip layers</text>
+  <text x="626" y="350" text-anchor="end" font-size="9" fill="var(--muted)">delegate_tool.py</text>
+  <text x="58" y="372" font-size="9" fill="var(--ink)">Layer 1 · _strip_blocked_tools()@768 drops whole toolsets: delegation / clarify / memory / code_execution</text>
+  <text x="58" y="392" font-size="9" fill="var(--ink)">Layer 2 · DELEGATE_BLOCKED_TOOLS@45 then blocks 5: delegate_task / clarify / memory / send_message / execute_code</text>
+  <rect x="40" y="414" width="600" height="44" rx="9" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="54" y="433" font-size="10" font-weight="700" fill="var(--amber)">④ Side note · role=leaf is the default</text>
+  <text x="54" y="451" font-size="9" fill="var(--muted)">only role=orchestrator keeps delegate_task (capped by delegation.max_spawn_depth=1; grandchildren refused)</text>
+</svg>
+<div class="fig-cap"><b>One concrete strip-down ruling</b>: the parent's <span class="mono">delegate_task(role=&quot;leaf&quot;)</span> sends a child to tidy logs; in its isolated context the child tries <span class="mono">memory</span> / <span class="mono">send_message</span> / <span class="mono">delegate_task</span> — <b>each blocked in turn</b>, each with a definite reason (no shared-memory pollution / no cross-platform side effects / no recursion). The mechanism is <b>two stacked layers</b>: <span class="mono">_strip_blocked_tools()</span> drops the whole <span class="mono">delegation / clarify / memory / code_execution</span> toolsets, then the <span class="mono">DELEGATE_BLOCKED_TOOLS</span> frozenset blocks 5 by name. <span class="mono">role=leaf</span> is the default; only <span class="mono">orchestrator</span> keeps <span class="mono">delegate_task</span> (capped by <span class="mono">max_spawn_depth=1</span>).</div>
 </div>
 
 <h2>Layer two: subagent least-privilege</h2>
@@ -630,6 +706,55 @@ LESSON_25 = {
   <text x="54" y="414" font-size="9" fill="var(--muted)">每装一个技能前缀就逐字节变 → 从该点起全对话 prompt 缓存作废、全价重算</text>
 </svg>
 <div class="fig-cap"><b>一行代码同时命中三条线</b>：用户敲 <span class="mono">/my-skill</span> 时，<span class="mono">build_skill_invocation_message(...) -&gt; Optional[str]</span>（<span class="mono">skill_commands.py:517</span>，docstring「Build the user message content for a skill slash command」）把技能<b>注入为一条 append-only 的 user 消息</b>——这一个选择同时满足：<b>线①缓存神圣</b>（源码注释 <span class="mono">does NOT invalidate the skills system-prompt cache</span>，<span class="mono">skills called by name</span>）、<b>线③窄腰</b>（技能不占核心 schema，<span class="mono">_HERMES_CORE_TOOLS</span> 仅 <span class="mono">skills_list / skill_view / skill_manage</span> 三入口）、<b>线②自我进化</b>（学到的外置成文件、只追加）。反事实：若塞进 system prompt，每装一个技能就让<b>全对话缓存作废</b>。</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 514" role="img" aria-label="Footprint Ladder 的一次真实裁决：新增订阅 webhook 能力该落在哪一阶。① 需求是想让 agent 能订阅 webhook，该不该为它新增核心工具，沿 Footprint Ladder 逐阶判。② 阶梯六阶自顶向下选能正确解决问题的最小足迹那阶：阶一扩展现有代码，无现成可扩展；阶二 CLI 命令加 skill，零工具足迹，webhook 命中落这里；阶三服务门控工具 check_fn；阶四插件；阶五 MCP 服务；阶六新核心工具是最后手段，每次 API 调用都付费；阶三到六均未到达。③ 判据是命中即停的三问，是不是真根本，真的人人要，真的没有 terminal 或 file 替代，webhook 可由 terminal 加一个 skill 拼出，三问全否，不进核心。④ 对照真实核心工具清单 _HERMES_CORE_TOOLS，terminal、read_file、web_search 进了核心，因为根本、人人要、无替代，webhook 没进，落在阶二 CLI 加 skill，零核心 schema 足迹。">
+  <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">Footprint Ladder · 一次真实裁决</text>
+  <text x="20" y="42" font-size="10" fill="var(--muted)">新增「订阅 webhook」能力，沿 6 阶阶梯自顶向下，命中第 2 阶即停</text>
+  <text x="652" y="32" text-anchor="middle" font-size="22">🪜</text>
+  <rect x="40" y="54" width="600" height="44" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="54" y="73" font-size="10.5" font-weight="700" fill="var(--blue)">① 需求 · 想让 agent 能订阅 webhook</text>
+  <text x="54" y="91" font-size="9.5" fill="var(--muted)">该不该为它新增一个核心工具？沿 Footprint Ladder 逐阶判</text>
+  <text x="340" y="112" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="118" width="600" height="212" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="54" y="138" font-size="11" font-weight="700" fill="var(--ink)">② Footprint Ladder · 选能正确解决问题的最小足迹那阶</text>
+  <rect x="58" y="146" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="163" font-size="10" font-weight="700" fill="var(--muted)">1</text>
+  <text x="92" y="163" font-size="9.5" fill="var(--ink)">扩展现有代码 — 零新增 surface</text>
+  <text x="612" y="163" text-anchor="end" font-size="9" fill="var(--muted)">✗ 无现成可扩展</text>
+  <rect x="58" y="176" width="564" height="26" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="72" y="193" font-size="10" font-weight="700" fill="var(--accent-ink)">2</text>
+  <text x="92" y="193" font-size="9.5" font-weight="700" fill="var(--accent-ink)">CLI 命令 + skill — agent 跑 hermes webhook，skill 引导（零工具足迹）</text>
+  <text x="612" y="193" text-anchor="end" font-size="9" font-weight="700" fill="var(--accent-ink)">✓ webhook 命中</text>
+  <rect x="58" y="206" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="223" font-size="10" font-weight="700" fill="var(--faint)">3</text>
+  <text x="92" y="223" font-size="9.5" fill="var(--muted)">服务门控工具 check_fn — 配置齐备才出现</text>
+  <text x="612" y="223" text-anchor="end" font-size="9" fill="var(--faint)">（未到达）</text>
+  <rect x="58" y="236" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="253" font-size="10" font-weight="700" fill="var(--faint)">4</text>
+  <text x="92" y="253" font-size="9.5" fill="var(--muted)">插件 ~/.hermes/plugins/ — 运行时发现</text>
+  <text x="612" y="253" text-anchor="end" font-size="9" fill="var(--faint)">（未到达）</text>
+  <rect x="58" y="266" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="283" font-size="10" font-weight="700" fill="var(--faint)">5</text>
+  <text x="92" y="283" font-size="9.5" fill="var(--muted)">MCP 服务（catalog）— 经内置 MCP 客户端接入</text>
+  <text x="612" y="283" text-anchor="end" font-size="9" fill="var(--faint)">（未到达）</text>
+  <rect x="58" y="296" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="313" font-size="10" font-weight="700" fill="var(--faint)">6</text>
+  <text x="92" y="313" font-size="9.5" fill="var(--muted)">新核心工具 — 最后手段 · 每次 API 调用都付费</text>
+  <text x="612" y="313" text-anchor="end" font-size="9" fill="var(--faint)">（未到达）</text>
+  <text x="340" y="344" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="350" width="600" height="72" rx="9" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="54" y="370" font-size="10.5" font-weight="700" fill="var(--purple)">③ 判据 · 命中即停的三问</text>
+  <text x="58" y="391" font-size="9" fill="var(--ink)">是不是真根本？真的人人要？真的没有 terminal / file 替代？</text>
+  <text x="58" y="410" font-size="9" fill="var(--muted)">webhook：可由 terminal + 一个 skill 拼出 → 三问全否 → 不进核心</text>
+  <rect x="40" y="434" width="600" height="72" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="54" y="454" font-size="10.5" font-weight="700" fill="var(--accent-ink)">④ 对照真实核心 · _HERMES_CORE_TOOLS</text>
+  <text x="626" y="454" text-anchor="end" font-size="9" fill="var(--muted)">toolsets.py:31</text>
+  <text x="58" y="475" font-size="9" fill="var(--ink)">进了核心：terminal / read_file / web_search — 根本、人人要、无 terminal/file 替代</text>
+  <text x="58" y="493" font-size="9" fill="var(--muted)">没进核心：webhook → 落在阶 2「CLI + skill」，零核心 schema 足迹</text>
+</svg>
+<div class="fig-cap"><b>一个能力如何被 Ladder 裁决到第 2 阶</b>：要让 agent 能<b>订阅 webhook</b>，沿 Footprint Ladder 六阶<b>自顶向下、命中即停</b>——阶 1「扩展现有」无现成可扩展，<b>阶 2「CLI 命令 + skill」命中</b>（agent 跑 <span class="mono">hermes webhook</span>、skill 引导，<b>零工具足迹</b>），阶 3-6 根本不必到达。判据是<b>三问</b>：真根本？真人人要？真无 <span class="mono">terminal / file</span> 替代？webhook 可由 terminal 加一个 skill 拼出，<b>三问全否 → 不进核心</b>。对照 <span class="mono">_HERMES_CORE_TOOLS</span>（<span class="mono">toolsets.py:31</span>）：<span class="mono">terminal / read_file / web_search</span> 因根本、人人要、无替代<b>进了</b>核心，webhook <b>没进</b>。</div>
 </div>
 
 <div class="card collab">
@@ -935,6 +1060,55 @@ LESSON_25 = {
   <text x="54" y="414" font-size="9" fill="var(--muted)">every skill install changes the prefix byte-for-byte → the whole conversation cache is voided, recomputed at full price</text>
 </svg>
 <div class="fig-cap"><b>One line of code hits all three lines</b>: when a user types <span class="mono">/my-skill</span>, <span class="mono">build_skill_invocation_message(...) -&gt; Optional[str]</span> (<span class="mono">skill_commands.py:517</span>, docstring "Build the user message content for a skill slash command") injects the skill as an <b>append-only user message</b> — that single choice simultaneously satisfies: <b>Line 1 sacred cache</b> (source comment <span class="mono">does NOT invalidate the skills system-prompt cache</span>, <span class="mono">skills called by name</span>), <b>Line 3 narrow waist</b> (skills add no core schema; <span class="mono">_HERMES_CORE_TOOLS</span> exposes only <span class="mono">skills_list / skill_view / skill_manage</span>), and <b>Line 2 self-evolution</b> (learnings externalized to files, append-only). Counterfactual: stuffing it into the system prompt would <b>void the whole cache</b> on every skill install.</div>
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 680 514" role="img" aria-label="One real Footprint Ladder ruling: which rung a new webhook-subscribe capability lands on. (1) Requirement: let the agent subscribe to a webhook; should we add a core tool for it? Walk the Footprint Ladder rung by rung. (2) Six rungs top-down, pick the smallest-footprint rung that solves it: rung 1 extend existing code, nothing to extend; rung 2 CLI command plus skill, zero tool footprint, webhook lands here; rung 3 service-gated tool check_fn; rung 4 plugin; rung 5 MCP server; rung 6 new core tool is the last resort, paid on every API call; rungs 3 through 6 are not reached. (3) Test: the stop-on-hit three questions, truly fundamental, truly needed by nearly everyone, truly no terminal or file alternative; webhook is buildable from terminal plus one skill, all three answer no, so not a core tool. (4) Against the real core tool list _HERMES_CORE_TOOLS, terminal, read_file and web_search are in the core because fundamental, near-universal and no substitute; webhook is not, landing on rung 2 CLI plus skill with zero core-schema footprint.">
+  <text x="20" y="22" font-size="13.5" font-weight="700" fill="var(--ink)">Footprint Ladder · one real ruling</text>
+  <text x="20" y="42" font-size="10" fill="var(--muted)">Adding a webhook-subscribe capability, descend the 6 rungs top-down, stop at rung 2</text>
+  <text x="652" y="32" text-anchor="middle" font-size="22">🪜</text>
+  <rect x="40" y="54" width="600" height="44" rx="9" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="54" y="73" font-size="10.5" font-weight="700" fill="var(--blue)">① Requirement · let the agent subscribe to a webhook</text>
+  <text x="54" y="91" font-size="9.5" fill="var(--muted)">Add a core tool for it? Walk the Footprint Ladder rung by rung</text>
+  <text x="340" y="112" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="118" width="600" height="212" rx="9" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="54" y="138" font-size="11" font-weight="700" fill="var(--ink)">② Footprint Ladder · pick the smallest-footprint rung that solves it</text>
+  <rect x="58" y="146" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="163" font-size="10" font-weight="700" fill="var(--muted)">1</text>
+  <text x="92" y="163" font-size="9.5" fill="var(--ink)">Extend existing code — zero new surface</text>
+  <text x="612" y="163" text-anchor="end" font-size="9" fill="var(--muted)">✗ nothing to extend</text>
+  <rect x="58" y="176" width="564" height="26" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>
+  <text x="72" y="193" font-size="10" font-weight="700" fill="var(--accent-ink)">2</text>
+  <text x="92" y="193" font-size="9.5" font-weight="700" fill="var(--accent-ink)">CLI command + skill — agent runs hermes webhook, a skill guides (zero tool footprint)</text>
+  <text x="612" y="193" text-anchor="end" font-size="9" font-weight="700" fill="var(--accent-ink)">✓ webhook lands here</text>
+  <rect x="58" y="206" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="223" font-size="10" font-weight="700" fill="var(--faint)">3</text>
+  <text x="92" y="223" font-size="9.5" fill="var(--muted)">Service-gated tool (check_fn) — appears only when configured</text>
+  <text x="612" y="223" text-anchor="end" font-size="9" fill="var(--faint)">(not reached)</text>
+  <rect x="58" y="236" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="253" font-size="10" font-weight="700" fill="var(--faint)">4</text>
+  <text x="92" y="253" font-size="9.5" fill="var(--muted)">Plugin ~/.hermes/plugins/ — discovered at runtime</text>
+  <text x="612" y="253" text-anchor="end" font-size="9" fill="var(--faint)">(not reached)</text>
+  <rect x="58" y="266" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="283" font-size="10" font-weight="700" fill="var(--faint)">5</text>
+  <text x="92" y="283" font-size="9.5" fill="var(--muted)">MCP server (catalog) — via the built-in MCP client</text>
+  <text x="612" y="283" text-anchor="end" font-size="9" fill="var(--faint)">(not reached)</text>
+  <rect x="58" y="296" width="564" height="26" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="72" y="313" font-size="10" font-weight="700" fill="var(--faint)">6</text>
+  <text x="92" y="313" font-size="9.5" fill="var(--muted)">New core tool — last resort · paid on every API call</text>
+  <text x="612" y="313" text-anchor="end" font-size="9" fill="var(--faint)">(not reached)</text>
+  <text x="340" y="344" text-anchor="middle" font-size="13" fill="var(--faint)">▾</text>
+  <rect x="40" y="350" width="600" height="72" rx="9" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+  <text x="54" y="370" font-size="10.5" font-weight="700" fill="var(--purple)">③ Test · the stop-on-hit three questions</text>
+  <text x="58" y="391" font-size="9" fill="var(--ink)">Truly fundamental? Truly needed by nearly everyone? Truly no terminal / file alternative?</text>
+  <text x="58" y="410" font-size="9" fill="var(--muted)">webhook: buildable from terminal + one skill → all three no → not a core tool</text>
+  <rect x="40" y="434" width="600" height="72" rx="9" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="54" y="454" font-size="10.5" font-weight="700" fill="var(--accent-ink)">④ Against the real core · _HERMES_CORE_TOOLS</text>
+  <text x="626" y="454" text-anchor="end" font-size="9" fill="var(--muted)">toolsets.py:31</text>
+  <text x="58" y="475" font-size="9" fill="var(--ink)">In the core: terminal / read_file / web_search — fundamental, near-universal, no terminal/file substitute</text>
+  <text x="58" y="493" font-size="9" fill="var(--muted)">Not in the core: webhook → lands on rung 2 (CLI + skill), zero core-schema footprint</text>
+</svg>
+<div class="fig-cap"><b>How one capability gets ruled onto rung 2</b>: to let the agent <b>subscribe to a webhook</b>, descend the Footprint Ladder's six rungs <b>top-down, stopping on the first hit</b> — rung 1 "extend existing" has nothing to extend, <b>rung 2 "CLI command + skill" hits</b> (agent runs <span class="mono">hermes webhook</span>, a skill guides, <b>zero tool footprint</b>), so rungs 3-6 need never be reached. The test is <b>three questions</b>: truly fundamental? truly near-universal? truly no <span class="mono">terminal / file</span> substitute? webhook is buildable from terminal + one skill, so <b>all three say no → not a core tool</b>. Against <span class="mono">_HERMES_CORE_TOOLS</span> (<span class="mono">toolsets.py:31</span>): <span class="mono">terminal / read_file / web_search</span> are <b>in</b> the core (fundamental, near-universal, no substitute); webhook is <b>not</b>.</div>
 </div>
 
 <div class="card collab">
