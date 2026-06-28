@@ -1,19 +1,19 @@
 LESSON_17 = {
     "zh": r"""
-<p class="lead">一个 Hermes 进程能同时在 Telegram、Discord、Slack、Matrix、飞书、微信……二十多个平台上收发消息。怎么做到的?核心只认<strong>一种</strong>消息——每个平台派一个「翻译官」(适配器),把五花八门的协议都翻译成同一种统一事件,核心网关的<strong>主路径几乎不碰任何具体平台</strong>。</p>
+<p class="lead">一个 Hermes 进程能同时在 Telegram、Discord、Slack、Matrix、飞书、微信……二十多个平台上收发消息。怎么做到的?核心只认<strong>一种</strong>消息——每个平台派一个「翻译官」(适配器)，把五花八门的协议都翻译成同一种统一事件，核心网关的<strong>主路径几乎不碰任何具体平台</strong>。</p>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 联合国同声传译</div>
-  各国代表说着不同语言(Telegram 的 Update、Discord 的 Gateway 事件、IRC 的一行文本……),但会场只用<strong>一种工作语言</strong>开会。每个语种配一名同传(适配器),把本国语翻成工作语言、再把决议翻回去。主持人(核心网关)<strong>只需听懂工作语言</strong>,完全不必会二十几国语言。
+  各国代表说着不同语言(Telegram 的 Update、Discord 的 Gateway 事件、IRC 的一行文本……)，但会场只用<strong>一种工作语言</strong>开会。每个语种配一名同传(适配器)，把本国语翻成工作语言、再把决议翻回去。主持人(核心网关)<strong>只需听懂工作语言</strong>，完全不必会二十几国语言。
 </div>
 
 <div class="card macro">
-  <div class="tag">🌍 宏观 · 统一抽象,平台差异在边缘</div>
-  核心定义两个统一抽象:<strong>MessageEvent</strong>(归一化的「一条消息」)和 <strong>BasePlatformAdapter</strong>(适配器契约)。约 28+ 个平台各写一个适配器子类,把平台原生消息翻成 MessageEvent 交给核心,再把核心的回复翻回平台格式。差异全沉在边缘,<strong>核心保持平台无关</strong>。
+  <div class="tag">🌍 宏观 · 统一抽象，平台差异在边缘</div>
+  核心定义两个统一抽象:<strong>MessageEvent</strong>(归一化的「一条消息」)和 <strong>BasePlatformAdapter</strong>(适配器契约)。约 28+ 个平台各写一个适配器子类，把平台原生消息翻成 MessageEvent 交给核心，再把核心的回复翻回平台格式。差异全沉在边缘,<strong>核心保持平台无关</strong>。
 </div>
 
 <h2>统一消息:MessageEvent</h2>
-<p>不管消息来自哪个平台,进核心前都被归一化成同一个数据结构:</p>
+<p>不管消息来自哪个平台，进核心前都被归一化成同一个数据结构:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">1599-1632 · 节选</span></div>
@@ -28,12 +28,12 @@ LESSON_17 = {
     media_urls: List[str] = field(default_factory=list)
     reply_to_message_id: Optional[str] = None</pre>
 </div>
-<p>点睛在那句 docstring:<strong>「Normalized representation that all adapters produce」——所有适配器都产出这一种归一化表示</strong>。Telegram 的富文本、Discord 的嵌入、IRC 的纯文本,进核心前统统被压成同一个 <span class="mono">MessageEvent</span>。核心的 agent 循环(第 7 章)<strong>只见过 MessageEvent,从不认识任何平台的原生格式</strong>。<span class="mono">source</span> 字段携带会话标识,核心据此把消息路由到正确的会话(每会话独立 = 约束 B)。</p>
+<p>点睛在那句 docstring:<strong>「Normalized representation that all adapters produce」——所有适配器都产出这一种归一化表示</strong>。Telegram 的富文本、Discord 的嵌入、IRC 的纯文本，进核心前统统被压成同一个 <span class="mono">MessageEvent</span>。核心的 agent 循环(第 7 章)<strong>只见过 MessageEvent，从不认识任何平台的原生格式</strong>。<span class="mono">source</span> 字段携带会话标识，核心据此把消息路由到正确的会话(每会话独立 = 约束 B)。</p>
 
-<p>为什么非要先归一化成一种结构?因为<strong>下游消费者太多</strong>:会话路由、两道守卫(第 18 章)、agent 核心循环(第 7 章消息流)、定时任务投递(cron)、审批与中断——若它们各自都要认 Telegram、Discord、微信……二十多种原生格式,复杂度就是「消费者数 × 平台数」的乘积,加一个平台得改一圈下游。在<strong>入口处翻译一次</strong>,把这层乘法塌缩成加法:平台只管产出 <span class="mono">MessageEvent</span>,下游只管消费它,两端各自演化、互不牵连。<span class="mono">raw_message</span> 仍留着平台原始对象做「留底」,真要平台专属细节时回查得到,但<strong>主路径只碰那几个归一化字段</strong>——这正是第 4 章「窄腰」在数据结构层面的投影:把宽阔的多样性收束成一道窄接口。</p>
+<p>为什么非要先归一化成一种结构?因为<strong>下游消费者太多</strong>：会话路由、两道守卫(第 18 章)、agent 核心循环(第 7 章消息流)、定时任务投递(cron)、审批与中断——若它们各自都要认 Telegram、Discord、微信……二十多种原生格式，复杂度就是「消费者数 × 平台数」的乘积，加一个平台得改一圈下游。在<strong>入口处翻译一次</strong>，把这层乘法塌缩成加法：平台只管产出 <span class="mono">MessageEvent</span>，下游只管消费它，两端各自演化、互不牵连。<span class="mono">raw_message</span> 仍留着平台原始对象做「留底」，真要平台专属细节时回查得到，但<strong>主路径只碰那几个归一化字段</strong>——这正是第 4 章「窄腰」在数据结构层面的投影：把宽阔的多样性收束成一道窄接口。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 352" role="img" aria-label="多平台归一化漏斗:各平台经各自适配器翻成统一 MessageEvent,再进单一 agent 核心">
+<svg viewBox="0 0 680 352" role="img" aria-label="多平台归一化漏斗：各平台经各自适配器翻成统一 MessageEvent，再进单一 agent 核心">
   <text x="340" y="20" text-anchor="middle" font-size="13" font-weight="700" fill="var(--blue)">▲ 协议各异 · 每个平台一种原生格式</text>
   <g font-size="11.5" text-anchor="middle">
     <rect x="15"  y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
@@ -82,13 +82,13 @@ LESSON_17 = {
   <text x="340" y="306" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">agent 核心</text>
   <text x="340" y="323" text-anchor="middle" font-size="10" fill="var(--muted)">只认这一种抽象</text>
 </svg>
-<div class="fig-cap"><b>多平台归一化漏斗</b>:二十多个平台各说各的协议(Telegram Update / Discord 事件 / IRC 文本行……),但每个平台派一个 <b>adapter</b> 把它翻成<b>同一个 MessageEvent</b>——漏斗在这里收口。核心 agent 只认这唯一一种抽象,从不认识任何平台的原生格式;加一个平台只是多接一条入水管,漏斗口与下游<b>纹丝不动</b>。这正是第 4 章「窄腰」在多端接入上的投影。(诚实地说,核心仍残留极少数平台特例,如 Telegram 私聊话题、Feishu 线程,但不在主路径上。)</div>
+<div class="fig-cap"><b>多平台归一化漏斗</b>：二十多个平台各说各的协议(Telegram Update / Discord 事件 / IRC 文本行……)，但每个平台派一个 <b>adapter</b> 把它翻成<b>同一个 MessageEvent</b>——漏斗在这里收口。核心 agent 只认这唯一一种抽象，从不认识任何平台的原生格式;加一个平台只是多接一条入水管，漏斗口与下游<b>纹丝不动</b>。这正是第 4 章「窄腰」在多端接入上的投影。(诚实地说，核心仍残留极少数平台特例，如 Telegram 私聊话题、Feishu 线程，但不在主路径上。)</div>
 </div>
 
-<p>诚实地说,<span class="mono">MessageEvent</span> 并非「纯净到不含一点平台味」:它身上挂着若干<strong>只有部分平台才填</strong>的可选字段——<span class="mono">platform_update_id</span>(Telegram 的 <span class="mono">update_id</span>,供 <span class="mono">/restart</span> 推进偏移、避免同一条更新被处理两次)、<span class="mono">reply_to_message_id</span> / <span class="mono">reply_to_author_id</span>(回复上下文)、<span class="mono">auto_skill</span>(Telegram 私聊话题、Discord 频道绑定时自动加载的技能)。设计上并不强求「完美纯净」,而是让这些字段<strong>默认 None、绝大多数平台直接忽略</strong>。务实地容纳少数平台的特性,好过为抽象洁癖把能力削平——抽象是为复用服务的,不是为教条服务的。这一点也提醒读者:窄腰不等于绝对零特例,而是把特例压到最小、且不让它们污染主路径。</p>
+<p>诚实地说,<span class="mono">MessageEvent</span> 并非「纯净到不含一点平台味」：它身上挂着若干<strong>只有部分平台才填</strong>的可选字段——<span class="mono">platform_update_id</span>(Telegram 的 <span class="mono">update_id</span>，供 <span class="mono">/restart</span> 推进偏移、避免同一条更新被处理两次)、<span class="mono">reply_to_message_id</span> / <span class="mono">reply_to_author_id</span>(回复上下文)、<span class="mono">auto_skill</span>(Telegram 私聊话题、Discord 频道绑定时自动加载的技能)。设计上并不强求「完美纯净」，而是让这些字段<strong>默认 None、绝大多数平台直接忽略</strong>。务实地容纳少数平台的特性，好过为抽象洁癖把能力削平——抽象是为复用服务的，不是为教条服务的。这一点也提醒读者：窄腰不等于绝对零特例，而是把特例压到最小、且不让它们污染主路径。</p>
 
 <h2>适配器契约:BasePlatformAdapter</h2>
-<p>「翻译官」要做的事被固化成一个抽象基类,每个平台子类只填平台专属的洞:</p>
+<p>「翻译官」要做的事被固化成一个抽象基类，每个平台子类只填平台专属的洞:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">2082-2620 · 节选</span></div>
@@ -110,14 +110,14 @@ LESSON_17 = {
         <span class="cm"># 把核心回复翻回平台格式发出</span>
         ...</pre>
 </div>
-<p><span class="mono">connect()</span> / <span class="mono">disconnect()</span> / <span class="mono">send()</span> 是每个适配器<strong>必须</strong>实现的抽象方法(另含 <span class="mono">get_chat_info</span>)——这是核心与平台之间的核心契约面。网关启动时把所有启用的适配器 <span class="mono">connect()</span> 起来,然后<strong>统一</strong>等它们产出 MessageEvent,根本不关心底层是长轮询、WebSocket 还是 IRC socket。</p>
+<p><span class="mono">connect()</span> / <span class="mono">disconnect()</span> / <span class="mono">send()</span> 是每个适配器<strong>必须</strong>实现的抽象方法(另含 <span class="mono">get_chat_info</span>)——这是核心与平台之间的核心契约面。网关启动时把所有启用的适配器 <span class="mono">connect()</span> 起来，然后<strong>统一</strong>等它们产出 MessageEvent，根本不关心底层是长轮询、WebSocket 还是 IRC socket。</p>
 
-<p>为什么把契约固化成 <span class="mono">ABC</span> + <span class="mono">@abstractmethod</span>,而不是写个普通基类靠口头约定?因为 abstractmethod 让<strong>「没实现 connect/send 就根本实例化不了」</strong>——契约从「文档里的君子协定」升级成「导入期的硬约束」,谁也没法只写半个适配器就硬上线。更要害的是<strong>职责切分</strong>:基类独占所有<strong>共性机器</strong>——会话路由、消息排队、<span class="mono">_active_sessions</span> 中断锁、审批、typing 心跳;子类只补<strong>传输层</strong>那点平台专属逻辑(怎么连、怎么收、怎么发)。若没有这层 ABC,每个平台都得重造一遍会话与守卫机制,bug 会在二十多份实现里各自分叉,一个修复要复制二十遍,根本无从统一收口。</p>
+<p>为什么把契约固化成 <span class="mono">ABC</span> + <span class="mono">@abstractmethod</span>，而不是写个普通基类靠口头约定?因为 abstractmethod 让<strong>「没实现 connect/send 就根本实例化不了」</strong>——契约从「文档里的君子协定」升级成「导入期的硬约束」，谁也没法只写半个适配器就硬上线。更要害的是<strong>职责切分</strong>：基类独占所有<strong>共性机器</strong>——会话路由、消息排队、<span class="mono">_active_sessions</span> 中断锁、审批、typing 心跳;子类只补<strong>传输层</strong>那点平台专属逻辑(怎么连、怎么收、怎么发)。若没有这层 ABC，每个平台都得重造一遍会话与守卫机制,bug 会在二十多份实现里各自分叉，一个修复要复制二十遍，根本无从统一收口。</p>
 
-<p>加一个平台有两条路(见 <span class="mono">ADDING_A_PLATFORM.md</span>):<strong>插件路</strong>(推荐)——在 <span class="mono">plugins/platforms/&lt;name&gt;/</span> 写 <span class="mono">adapter.py</span> 继承 <span class="mono">BasePlatformAdapter</span>,用 <span class="mono">ctx.register_platform()</span> 注册,<strong>零改核心</strong>,插件框架自动接管配置解析、用户授权、cron 投递、状态展示与网关装配;<strong>内置路</strong>仅留给核心贡献者。连 <span class="mono">Platform</span> 枚举都用 <span class="mono">_missing_()</span> 钩子为插件平台动态造成员,<span class="mono">Platform("irc")</span> 不改枚举即可成立(且身份稳定)。另外,凡用唯一凭据(如 bot token)连接的适配器,启动时都会 <span class="mono">acquire_scoped_lock</span> 抢一把<strong>令牌锁</strong>,防止两个 profile(第 20 章)拿同一个 token 同时上线、互相顶号——这是「单进程多实例」与「跨平台」必须同时成立时的安全护栏。</p>
+<p>加一个平台有两条路(见 <span class="mono">ADDING_A_PLATFORM.md</span>):<strong>插件路</strong>(推荐)——在 <span class="mono">plugins/platforms/&lt;name&gt;/</span> 写 <span class="mono">adapter.py</span> 继承 <span class="mono">BasePlatformAdapter</span>，用 <span class="mono">ctx.register_platform()</span> 注册,<strong>零改核心</strong>，插件框架自动接管配置解析、用户授权、cron 投递、状态展示与网关装配;<strong>内置路</strong>仅留给核心贡献者。连 <span class="mono">Platform</span> 枚举都用 <span class="mono">_missing_()</span> 钩子为插件平台动态造成员,<span class="mono">Platform("irc")</span> 不改枚举即可成立(且身份稳定)。另外，凡用唯一凭据(如 bot token)连接的适配器，启动时都会 <span class="mono">acquire_scoped_lock</span> 抢一把<strong>令牌锁</strong>，防止两个 profile(第 20 章)拿同一个 token 同时上线、互相顶号——这是「单进程多实例」与「跨平台」必须同时成立时的安全护栏。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 300" role="img" aria-label="加平台两条路:插件路零改核心,内置路改动核心仓库,但都继承同一 BasePlatformAdapter 契约">
+<svg viewBox="0 0 680 300" role="img" aria-label="加平台两条路：插件路零改核心，内置路改动核心仓库，但都继承同一 BasePlatformAdapter 契约">
   <text x="340" y="20" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">加一个平台的两条路</text>
   <rect x="25"  y="36" width="300" height="30" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
   <text x="175" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✅ 插件路(推荐)</text>
@@ -146,7 +146,7 @@ LESSON_17 = {
   <text x="340" y="250" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">都继承同一 BasePlatformAdapter 契约</text>
   <text x="340" y="268" text-anchor="middle" font-size="10.5" fill="var(--muted)">→ 核心网关主路径只认这一个抽象</text>
 </svg>
-<div class="fig-cap"><b>加平台两条路</b>:推荐的<b>插件路</b>在 <span class="mono">plugins/platforms/&lt;name&gt;/</span> 写一个子类、用 <span class="mono">ctx.register_platform()</span> 注册,<b>零改核心</b>,框架自动接管配置、授权、cron 投递与网关装配;<b>内置路</b>留给核心贡献者,要动核心仓库。两条路殊途同归——都继承同一个 <span class="mono">BasePlatformAdapter</span> 契约,核心网关主路径始终只认这一个抽象。绝大多数主流平台(telegram/discord/slack……)其实都走插件路。</div>
+<div class="fig-cap"><b>加平台两条路</b>：推荐的<b>插件路</b>在 <span class="mono">plugins/platforms/&lt;name&gt;/</span> 写一个子类、用 <span class="mono">ctx.register_platform()</span> 注册,<b>零改核心</b>，框架自动接管配置、授权、cron 投递与网关装配;<b>内置路</b>留给核心贡献者，要动核心仓库。两条路殊途同归——都继承同一个 <span class="mono">BasePlatformAdapter</span> 契约，核心网关主路径始终只认这一个抽象。绝大多数主流平台(telegram/discord/slack……)其实都走插件路。</div>
 </div>
 
 <h2>一个真实的翻译官:IRCAdapter</h2>
@@ -168,15 +168,15 @@ LESSON_17 = {
 
     <span class="kw">async def</span> <span class="fn">send_typing</span>(self, chat_id, metadata=None):
         <span class="cm">&quot;&quot;&quot;IRC has no typing indicator — no-op.&quot;&quot;&quot;</span>
-        <span class="kw">pass</span>                               <span class="cm"># 平台没有的能力,在边缘吸收</span></pre>
+        <span class="kw">pass</span>                               <span class="cm"># 平台没有的能力，在边缘吸收</span></pre>
 </div>
-<p>两个细节道尽设计精髓:(1) <span class="mono">_dispatch_message</span> 把 IRC 文本包成 <span class="mono">MessageEvent</span> 后调 <span class="mono">handle_message</span>——<strong>翻译完就交给基类统一入口</strong>,后面的路由/排队/审批核心全包;(2) <span class="mono">send_typing</span> 是个 <strong>no-op</strong>:IRC 没有「正在输入」指示,这个平台能力差异<strong>在边缘适配器里被悄悄吸收</strong>,核心永远不知道、也不必知道某个平台缺这个能力。</p>
+<p>两个细节道尽设计精髓:(1) <span class="mono">_dispatch_message</span> 把 IRC 文本包成 <span class="mono">MessageEvent</span> 后调 <span class="mono">handle_message</span>——<strong>翻译完就交给基类统一入口</strong>，后面的路由/排队/审批核心全包;(2) <span class="mono">send_typing</span> 是个 <strong>no-op</strong>:IRC 没有「正在输入」指示，这个平台能力差异<strong>在边缘适配器里被悄悄吸收</strong>，核心永远不知道、也不必知道某个平台缺这个能力。</p>
 
-<p>把「平台没有的能力」在边缘 no-op 吸收,而不是让核心去判断「这个平台支不支持 typing」,差别在哪?若核心要判断,就得维护一张<strong>能力矩阵</strong>外加满地的 <span class="mono">if platform == ...</span> 分支,平台一多立刻爆炸。反过来,契约把 <span class="mono">send_typing</span> / <span class="mono">format_message</span> 等定义成<strong>所有平台能力的并集</strong>,谁缺哪个就在子类里<strong>优雅降级</strong>(返回 <span class="mono">pass</span>,或回退到默认 markdown 转换)。核心永远当「每个平台都会 typing」,照常调用即可,缺失被边缘悄悄咽掉。<strong>把差异关进边缘、让核心面对一张统一且完整的接口</strong>,正是窄腰让核心保持简单所付的代价——代价不是消失,而是被转移到了不会扩散的地方。</p>
+<p>把「平台没有的能力」在边缘 no-op 吸收，而不是让核心去判断「这个平台支不支持 typing」，差别在哪?若核心要判断，就得维护一张<strong>能力矩阵</strong>外加满地的 <span class="mono">if platform == ...</span> 分支，平台一多立刻爆炸。反过来，契约把 <span class="mono">send_typing</span> / <span class="mono">format_message</span> 等定义成<strong>所有平台能力的并集</strong>，谁缺哪个就在子类里<strong>优雅降级</strong>(返回 <span class="mono">pass</span>，或回退到默认 markdown 转换)。核心永远当「每个平台都会 typing」，照常调用即可，缺失被边缘悄悄咽掉。<strong>把差异关进边缘、让核心面对一张统一且完整的接口</strong>，正是窄腰让核心保持简单所付的代价——代价不是消失，而是被转移到了不会扩散的地方。</p>
 
-<p><span class="mono">handle_message</span> 的 docstring 写得直白:它<strong>「靠 spawn 后台任务快速返回」</strong>——这一句是整套中断能力的地基。适配器收到消息不会卡在 agent 那一长串推理上,而是开一个后台任务就立刻回头去收下一条;<span class="mono">_active_sessions</span> 存每会话的中断 <span class="mono">Event</span>,<span class="mono">_pending_messages</span> 暂存追问消息。正因为收发不被 agent 阻塞,用户才能在 agent 跑着时再发 <span class="mono">/stop</span> 把它打断、或让后续消息排队。第 18 章那两道守卫,正是<strong>架在这套异步基底之上</strong>的:基类入口先做 stale-lock 自愈、再判 <span class="mono">_active_sessions</span> 决定排队还是旁路。若 <span class="mono">handle_message</span> 改成同步阻塞,一轮长回答就会冻住整个平台的收信——异步是「边收边算」的前提。</p>
+<p><span class="mono">handle_message</span> 的 docstring 写得直白：它<strong>「靠 spawn 后台任务快速返回」</strong>——这一句是整套中断能力的地基。适配器收到消息不会卡在 agent 那一长串推理上，而是开一个后台任务就立刻回头去收下一条;<span class="mono">_active_sessions</span> 存每会话的中断 <span class="mono">Event</span>,<span class="mono">_pending_messages</span> 暂存追问消息。正因为收发不被 agent 阻塞，用户才能在 agent 跑着时再发 <span class="mono">/stop</span> 把它打断、或让后续消息排队。第 18 章那两道守卫，正是<strong>架在这套异步基底之上</strong>的：基类入口先做 stale-lock 自愈、再判 <span class="mono">_active_sessions</span> 决定排队还是旁路。若 <span class="mono">handle_message</span> 改成同步阻塞，一轮长回答就会冻住整个平台的收信——异步是「边收边算」的前提。</p>
 
-<p>那「路由到哪个会话」又靠什么?是 <span class="mono">build_session_key()</span> 从 <span class="mono">source</span> 算出的会话键,它把 <span class="mono">platform</span> + <span class="mono">chat_id</span> + 可选的 <span class="mono">user_id</span> / <span class="mono">thread_id</span> 组合起来,并受 <span class="mono">group_sessions_per_user</span>、<span class="mono">thread_sessions_per_user</span> 两个开关调制——是「整个群共享一个会话」还是「群里每人一条独立会话」,由配置说了算。正因为核心不持有任何全局会话状态(约束 B),同一进程里 Telegram 的张三、Discord 的李四、微信群里的两个人才能凭这把键各走各的上下文、互不串台。这把键也是第 18 章两道守卫的<strong>锁粒度</strong>:守卫正是按 session_key 判断「这条会话是否正忙」,从而决定旁路还是排队,这把键贯穿了接入层到守卫层的全程。</p>
+<p>那「路由到哪个会话」又靠什么?是 <span class="mono">build_session_key()</span> 从 <span class="mono">source</span> 算出的会话键，它把 <span class="mono">platform</span> + <span class="mono">chat_id</span> + 可选的 <span class="mono">user_id</span> / <span class="mono">thread_id</span> 组合起来，并受 <span class="mono">group_sessions_per_user</span>、<span class="mono">thread_sessions_per_user</span> 两个开关调制——是「整个群共享一个会话」还是「群里每人一条独立会话」，由配置说了算。正因为核心不持有任何全局会话状态(约束 B)，同一进程里 Telegram 的张三、Discord 的李四、微信群里的两个人才能凭这把键各走各的上下文、互不串台。这把键也是第 18 章两道守卫的<strong>锁粒度</strong>：守卫正是按 session_key 判断「这条会话是否正忙」，从而决定旁路还是排队，这把键贯穿了接入层到守卫层的全程。</p>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">平台原生事件到达(Telegram Update / Discord 事件 / IRC 文本行)</span></div>
@@ -188,27 +188,27 @@ LESSON_17 = {
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「单进程跨多平台」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>MessageEvent</strong>(归一化消息)、<strong>BasePlatformAdapter</strong>(适配器契约)、<strong>handle_message</strong>(基类统一入口)、<strong>session_key 路由</strong>。跨章节配合:绝大多数适配器是 <span class="mono">plugins/platforms/</span> 下的<strong>边缘插件</strong>(第 23 章插件/技能/MCP),核心网关只认抽象——这正是<strong>窄腰</strong>(第 4 章);消息进来后先过<strong>两道守卫</strong>(第 18 章)才到 agent;统一的 MessageEvent 最终喂给 <strong>agent 核心循环</strong>(第 7 章消息流);每个平台的 bot 凭据用 <strong>token lock</strong> 防两个 profile 抢同一令牌(第 20 章 Profiles)。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>MessageEvent</strong>(归一化消息)、<strong>BasePlatformAdapter</strong>(适配器契约)、<strong>handle_message</strong>(基类统一入口)、<strong>session_key 路由</strong>。跨章节配合：绝大多数适配器是 <span class="mono">plugins/platforms/</span> 下的<strong>边缘插件</strong>(第 23 章插件/技能/MCP)，核心网关只认抽象——这正是<strong>窄腰</strong>(第 4 章);消息进来后先过<strong>两道守卫</strong>(第 18 章)才到 agent;统一的 MessageEvent 最终喂给 <strong>agent 核心循环</strong>(第 7 章消息流);每个平台的 bot 凭据用 <strong>token lock</strong> 防两个 profile 抢同一令牌(第 20 章 Profiles)。
   <div class="collab-sub">② 数据流时序</div>
   平台原生事件 → 适配器 <span class="mono">build_source()</span> + <span class="mono">MessageEvent(...)</span> → <span class="mono">handle_message()</span> → 按 session_key 路由到会话 → 两道守卫(第 18 章) → agent 循环 → <span class="mono">send()</span> 翻回平台格式。
   <div class="collab-sub">③ 关键点</div>
-  「单进程服务 28+ 平台」靠的是<strong>两个统一抽象 + 边缘翻译</strong>:核心只认 <span class="mono">MessageEvent</span> 与 <span class="mono">BasePlatformAdapter</span>,各平台的协议/能力/格式差异(连「有没有 typing 指示」)全沉到边缘适配器。加一个新平台 = 写一个 <span class="mono">plugins/platforms/&lt;name&gt;/adapter.py</span> 子类,核心网关<strong>主路径</strong>零改动。
+  「单进程服务 28+ 平台」靠的是<strong>两个统一抽象 + 边缘翻译</strong>：核心只认 <span class="mono">MessageEvent</span> 与 <span class="mono">BasePlatformAdapter</span>，各平台的协议/能力/格式差异(连「有没有 typing 指示」)全沉到边缘适配器。加一个新平台 = 写一个 <span class="mono">plugins/platforms/&lt;name&gt;/adapter.py</span> 子类，核心网关<strong>主路径</strong>零改动。
 </div>
 
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>统一消息抽象 + 适配器边缘翻译 = 单进程跨 28+ 平台;平台差异在边缘(窄腰)</strong>。它主要治两条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——一个人的 agent 要随时随地能找到它:手机上发 Telegram、工位上发 Slack、群里发微信。统一抽象让<strong>一套核心服务所有平台</strong>,运维一个进程而非二十个;加平台不动核心。</p>
-  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——核心无全局会话状态,靠 MessageEvent 里的 <span class="mono">source</span> / session_key <strong>把每条消息路由到独立会话</strong>。同一进程里 Telegram 的张三和 Discord 的李四互不串台,全凭路由键区分。</p>
-  <p style="margin:.5rem 0 0">它也是<strong>窄腰</strong>(第 4 章)的极致体现:连 Telegram/Discord/Slack 这些主流平台的适配器都是<strong>边缘插件</strong>,核心网关主要通过 BasePlatformAdapter 抽象交互。(诚实地说,<span class="mono">base.py</span> 里仍残留极少数平台特例——如 Telegram 私聊话题回复锚点、Feishu 线程——但那是历史遗留的边角,不是主路径架构。)反模式:把每个平台的整套逻辑都堆进核心写成 <span class="mono">if platform == ...</span> 分支——那会让核心随平台数量爆炸膨胀。</p>
-  <p style="margin:.5rem 0 0">抽象的弹性还体现在<strong>「同一平台两种传输」</strong>:WhatsApp 同时挂着非官方 Baileys 桥(现已是插件 <span class="mono">plugins/platforms/whatsapp/adapter.py</span>)和内置的官方 Cloud API(<span class="mono">whatsapp_cloud.py</span>),二者共享 <span class="mono">WhatsAppBehaviorMixin</span>(<span class="mono">whatsapp_common.py</span>)里与协议无关的门控、提及解析、广播过滤与 markdown 转换,各自只管自己的传输,还各占一个 <span class="mono">Platform</span> 枚举值以便对不同号码同时运行(mixin 必须排在基类前,其 <span class="mono">format_message</span> 才能盖过默认实现)。不是复制两份逻辑,而是<strong>抽象基类 + 行为 mixin</strong>——抽象在「一个平台内部」也照样省重复。</p>
-  <p style="margin:.5rem 0 0">最后回到根:这套统一抽象之所以值得,落点还是<strong>单进程</strong>。一个进程才能共享同一份记忆、技能、cron 与配置状态,也才能让每会话的提示词缓存(项目铁律)长活;若二十个平台各起一个进程,共享状态、统一运维与缓存复用都无从谈起。窄腰把「平台数量」这条增长轴彻底挡在核心之外,核心的复杂度只跟「能力种类」走、不跟「平台个数」走——这才是单进程托管 20+ 平台在工程上真正成立的原因。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——一个人的 agent 要随时随地能找到它：手机上发 Telegram、工位上发 Slack、群里发微信。统一抽象让<strong>一套核心服务所有平台</strong>，运维一个进程而非二十个;加平台不动核心。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——核心无全局会话状态，靠 MessageEvent 里的 <span class="mono">source</span> / session_key <strong>把每条消息路由到独立会话</strong>。同一进程里 Telegram 的张三和 Discord 的李四互不串台，全凭路由键区分。</p>
+  <p style="margin:.5rem 0 0">它也是<strong>窄腰</strong>(第 4 章)的极致体现：连 Telegram/Discord/Slack 这些主流平台的适配器都是<strong>边缘插件</strong>，核心网关主要通过 BasePlatformAdapter 抽象交互。(诚实地说,<span class="mono">base.py</span> 里仍残留极少数平台特例——如 Telegram 私聊话题回复锚点、Feishu 线程——但那是历史遗留的边角，不是主路径架构。)反模式：把每个平台的整套逻辑都堆进核心写成 <span class="mono">if platform == ...</span> 分支——那会让核心随平台数量爆炸膨胀。</p>
+  <p style="margin:.5rem 0 0">抽象的弹性还体现在<strong>「同一平台两种传输」</strong>:WhatsApp 同时挂着非官方 Baileys 桥(现已是插件 <span class="mono">plugins/platforms/whatsapp/adapter.py</span>)和内置的官方 Cloud API(<span class="mono">whatsapp_cloud.py</span>)，二者共享 <span class="mono">WhatsAppBehaviorMixin</span>(<span class="mono">whatsapp_common.py</span>)里与协议无关的门控、提及解析、广播过滤与 markdown 转换，各自只管自己的传输，还各占一个 <span class="mono">Platform</span> 枚举值以便对不同号码同时运行(mixin 必须排在基类前，其 <span class="mono">format_message</span> 才能盖过默认实现)。不是复制两份逻辑，而是<strong>抽象基类 + 行为 mixin</strong>——抽象在「一个平台内部」也照样省重复。</p>
+  <p style="margin:.5rem 0 0">最后回到根：这套统一抽象之所以值得，落点还是<strong>单进程</strong>。一个进程才能共享同一份记忆、技能、cron 与配置状态，也才能让每会话的提示词缓存(项目铁律)长活;若二十个平台各起一个进程，共享状态、统一运维与缓存复用都无从谈起。窄腰把「平台数量」这条增长轴彻底挡在核心之外，核心的复杂度只跟「能力种类」走、不跟「平台个数」走——这才是单进程托管 20+ 平台在工程上真正成立的原因。</p>
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 392" role="img" aria-label="实例图:一行真实 IRC 文本沿 adapter 逐字段翻成统一 MessageEvent。输入帧 :alice!~a@host PRIVMSG #ops :hermes: deploy staging。① 原生帧拆出 prefix command params;② 解析寻址得 sender_nick alice、target #ops、is_channel True 因井号、chat_type group,频道须被 @ 故剥 hermes: 前缀得 text deploy staging,未寻址则 return 丢弃;③ build_source 造出 SessionSource;④ MessageEvent 实例 text 等于 deploy staging、message_type 等于 MessageType.TEXT、message_id 等于 str int time 乘 1000;⑤ build_session_key 受 group_sessions_per_user True 与 thread_sessions_per_user False 调制路由;⑥ IRC 无 typing,send_typing 在边缘 no-op 吸收。">
-  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:一行 IRC 文本 → 统一 MessageEvent</text>
+<svg viewBox="0 0 680 392" role="img" aria-label="实例图：一行真实 IRC 文本沿 adapter 逐字段翻成统一 MessageEvent。输入帧 :alice!~a@host PRIVMSG #ops :hermes: deploy staging。① 原生帧拆出 prefix command params;② 解析寻址得 sender_nick alice、target #ops、is_channel True 因井号、chat_type group，频道须被 @ 故剥 hermes: 前缀得 text deploy staging，未寻址则 return 丢弃;③ build_source 造出 SessionSource;④ MessageEvent 实例 text 等于 deploy staging、message_type 等于 MessageType.TEXT、message_id 等于 str int time 乘 1000;⑤ build_session_key 受 group_sessions_per_user True 与 thread_sessions_per_user False 调制路由;⑥ IRC 无 typing,send_typing 在边缘 no-op 吸收。">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例：一行 IRC 文本 → 统一 MessageEvent</text>
   <text x="20" y="44" font-size="10" fill="var(--muted)">输入帧 :alice!~a@host PRIVMSG #ops :hermes: deploy staging</text>
   <text x="644" y="33" text-anchor="middle" font-size="22">🛰️</text>
 
@@ -275,21 +275,21 @@ LESSON_17 = {
   <rect x="348" y="284" width="322" height="62" rx="8" fill="var(--panel)" stroke="var(--line)"/>
   <text x="358" y="303" font-size="10" font-weight="700" fill="var(--ink)">⑥ 能力降级 · adapter.py:281</text>
   <text x="358" y="321" font-size="9" font-family="monospace" fill="var(--ink)">send_typing(chat_id) → pass</text>
-  <text x="358" y="335" font-size="9" fill="var(--muted)">IRC 无 typing 指示,边缘 no-op 吸收</text>
+  <text x="358" y="335" font-size="9" fill="var(--muted)">IRC 无 typing 指示，边缘 no-op 吸收</text>
 
-  <text x="20" y="368" font-size="9.5" fill="var(--muted)">读这张图:一行平台原生文本止步于 adapter;核心只见统一 MessageEvent + session_key,从不认识 IRC 帧。</text>
+  <text x="20" y="368" font-size="9.5" fill="var(--muted)">读这张图：一行平台原生文本止步于 adapter;核心只见统一 MessageEvent + session_key，从不认识 IRC 帧。</text>
 </svg>
-<div class="fig-cap"><b>实例:一行 IRC 文本 → MessageEvent</b>:拿真实帧 <span class="mono">:alice!~a@host PRIVMSG #ops :hermes: deploy staging</span> 走一遍——① 拆 <span class="mono">prefix/command/params</span>;② <span class="mono">_extract_nick</span> 得 <span class="mono">sender_nick=&quot;alice&quot;</span>、<span class="mono">target=&quot;#ops&quot;</span>、<span class="mono">is_channel=True</span>(<span class="mono">#</span>)→<span class="mono">chat_type=&quot;group&quot;</span>,频道须被 @ 故剥 <span class="mono">hermes:</span> 前缀得 <span class="mono">text=&quot;deploy staging&quot;</span>,未寻址直接 <span class="mono">return</span> 丢弃;③ <span class="mono">build_source</span> 造 <span class="mono">SessionSource</span>;④ <span class="mono">MessageEvent</span> 真实实例(<span class="mono">message_id=str(int(time*1000))</span>);⑤ <span class="mono">build_session_key</span> 受 <span class="mono">group_sessions_per_user=True</span>/<span class="mono">thread_sessions_per_user=False</span> 调制;⑥ IRC 无 typing,<span class="mono">send_typing</span> 在边缘 <span class="mono">pass</span>。每个值都能在 <span class="mono">irc/adapter.py</span> 与 <span class="mono">base.py</span> 对应行找到。</div>
+<div class="fig-cap"><b>实例：一行 IRC 文本 → MessageEvent</b>：拿真实帧 <span class="mono">:alice!~a@host PRIVMSG #ops :hermes: deploy staging</span> 走一遍——① 拆 <span class="mono">prefix/command/params</span>;② <span class="mono">_extract_nick</span> 得 <span class="mono">sender_nick=&quot;alice&quot;</span>、<span class="mono">target=&quot;#ops&quot;</span>、<span class="mono">is_channel=True</span>(<span class="mono">#</span>)→<span class="mono">chat_type=&quot;group&quot;</span>，频道须被 @ 故剥 <span class="mono">hermes:</span> 前缀得 <span class="mono">text=&quot;deploy staging&quot;</span>，未寻址直接 <span class="mono">return</span> 丢弃;③ <span class="mono">build_source</span> 造 <span class="mono">SessionSource</span>;④ <span class="mono">MessageEvent</span> 真实实例(<span class="mono">message_id=str(int(time*1000))</span>);⑤ <span class="mono">build_session_key</span> 受 <span class="mono">group_sessions_per_user=True</span>/<span class="mono">thread_sessions_per_user=False</span> 调制;⑥ IRC 无 typing,<span class="mono">send_typing</span> 在边缘 <span class="mono">pass</span>。每个值都能在 <span class="mono">irc/adapter.py</span> 与 <span class="mono">base.py</span> 对应行找到。</div>
 </div>
 
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
     <li><strong>两个统一抽象</strong>:<span class="mono">MessageEvent</span>(归一化消息,「所有适配器都产出它」)+ <span class="mono">BasePlatformAdapter</span>(connect/disconnect/send 契约)。</li>
-    <li><strong>适配器=翻译官</strong>:把平台原生消息翻成 MessageEvent 交 <span class="mono">handle_message</span>,把核心回复翻回平台格式;平台能力差异(如 IRC 无 typing)在边缘 no-op 吸收。</li>
-    <li><strong>单进程 28+ 平台</strong>:核心网关主路径无平台分支;主流平台(telegram/discord/slack/matrix……)都是 <span class="mono">plugins/platforms/</span> 边缘插件,少数内置在 <span class="mono">gateway/platforms/</span>,但都实现同一 BasePlatformAdapter。</li>
-    <li><strong>会话路由</strong>:核心无全局状态,靠 <span class="mono">source</span> / session_key 把消息分到独立会话(约束 B)。</li>
-    <li><strong>加平台零改核心</strong>:写一个 BasePlatformAdapter 子类即可——窄腰(第 4 章)在接入层的落地。</li>
+    <li><strong>适配器=翻译官</strong>：把平台原生消息翻成 MessageEvent 交 <span class="mono">handle_message</span>，把核心回复翻回平台格式;平台能力差异(如 IRC 无 typing)在边缘 no-op 吸收。</li>
+    <li><strong>单进程 28+ 平台</strong>：核心网关主路径无平台分支;主流平台(telegram/discord/slack/matrix……)都是 <span class="mono">plugins/platforms/</span> 边缘插件，少数内置在 <span class="mono">gateway/platforms/</span>，但都实现同一 BasePlatformAdapter。</li>
+    <li><strong>会话路由</strong>：核心无全局状态，靠 <span class="mono">source</span> / session_key 把消息分到独立会话(约束 B)。</li>
+    <li><strong>加平台零改核心</strong>：写一个 BasePlatformAdapter 子类即可——窄腰(第 4 章)在接入层的落地。</li>
   </ul>
 </div>
 """,
@@ -592,41 +592,41 @@ LESSON_17 = {
 
 LESSON_18 = {
     "zh": r"""
-<p class="lead">当 agent 正在跑一个长任务时,用户又发来一条消息——怎么办?默认<strong>排队</strong>,等 agent 结束再处理。但有几个命令绝不能排队:<span class="mono">/stop</span>(打断)、<span class="mono">/approve</span>(agent 正阻塞着等它批准)。它们若排队,要么<strong>泄漏成对话文本被丢弃</strong>,要么<strong>直接死锁</strong>。这就是网关「两道守卫 + 控制命令旁路」的由来。</p>
+<p class="lead">当 agent 正在跑一个长任务时，用户又发来一条消息——怎么办?默认<strong>排队</strong>，等 agent 结束再处理。但有几个命令绝不能排队:<span class="mono">/stop</span>(打断)、<span class="mono">/approve</span>(agent 正阻塞着等它批准)。它们若排队，要么<strong>泄漏成对话文本被丢弃</strong>，要么<strong>直接死锁</strong>。这就是网关「两道守卫 + 控制命令旁路」的由来。</p>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 急诊分诊台</div>
-  普通病人挂号排队(消息进 <span class="mono">_pending_messages</span>),等叫号。但「心脏骤停」(<span class="mono">/stop</span>)必须<strong>插队直达</strong>抢救;而「主治医生正等着的化验结果」(<span class="mono">/approve</span>)如果也去排队,医生就<strong>永远等不到、卡死在那</strong>。分诊台必须能识别这些「不能排队的」并放行。
+  普通病人挂号排队(消息进 <span class="mono">_pending_messages</span>)，等叫号。但「心脏骤停」(<span class="mono">/stop</span>)必须<strong>插队直达</strong>抢救;而「主治医生正等着的化验结果」(<span class="mono">/approve</span>)如果也去排队，医生就<strong>永远等不到、卡死在那</strong>。分诊台必须能识别这些「不能排队的」并放行。
 </div>
 
 <div class="card macro">
-  <div class="tag">🌍 宏观 · 两道顺序守卫,控制命令旁路</div>
-  agent 运行时,消息要过<strong>两道顺序守卫</strong>:① 适配器层(busy 就排队)、② 网关 runner 层(分派 slash 命令)。普通对话老老实实排队;但<strong>任何可解析的 slash 命令必须同时旁路两道、内联派发</strong>——否则被当对话文本丢弃(空响应)或死锁。
+  <div class="tag">🌍 宏观 · 两道顺序守卫，控制命令旁路</div>
+  agent 运行时，消息要过<strong>两道顺序守卫</strong>:① 适配器层(busy 就排队)、② 网关 runner 层(分派 slash 命令)。普通对话老老实实排队;但<strong>任何可解析的 slash 命令必须同时旁路两道、内联派发</strong>——否则被当对话文本丢弃(空响应)或死锁。
 </div>
 
-<h2>第一道守卫:适配器层的 busy 状态</h2>
-<p>每个适配器记三张表,追踪「这个会话是不是正忙」:</p>
+<h2>第一道守卫：适配器层的 busy 状态</h2>
+<p>每个适配器记三张表，追踪「这个会话是不是正忙」:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">2154-2162 · 节选</span></div>
   <pre><span class="cm"># _active_sessions 存每会话的中断 Event;_session_tasks 把</span>
 <span class="cm"># 会话映射到当前处理它的 Task,好让 /stop /new /reset 取消</span>
-<span class="cm"># 正确的任务、确定性地释放守卫。没有这张表,旧任务的 finally</span>
-<span class="cm"># 可能误删新任务的守卫,留下 stale busy 状态。</span>
+<span class="cm"># 正确的任务、确定性地释放守卫。没有这张表，旧任务的 finally</span>
+<span class="cm"># 可能误删新任务的守卫，留下 stale busy 状态。</span>
 self._active_sessions: Dict[str, asyncio.Event] = {}
 self._pending_messages: Dict[str, MessageEvent] = {}
 self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
 </div>
-<p><span class="mono">_active_sessions</span> 里有这个 key,就说明该会话<strong>正在跑 agent</strong>。这时新来的普通消息会被塞进 <span class="mono">_pending_messages</span> 排队,等当前回合结束再喂进去。<span class="mono">_session_tasks</span> 记下「谁在处理这个会话」,这样 <span class="mono">/stop</span> 能精准取消那个任务,而不会误删别人的守卫。</p>
+<p><span class="mono">_active_sessions</span> 里有这个 key，就说明该会话<strong>正在跑 agent</strong>。这时新来的普通消息会被塞进 <span class="mono">_pending_messages</span> 排队，等当前回合结束再喂进去。<span class="mono">_session_tasks</span> 记下「谁在处理这个会话」，这样 <span class="mono">/stop</span> 能精准取消那个任务，而不会误删别人的守卫。</p>
 
-<p>为什么要单独维护 <span class="mono">_session_tasks</span> 这张「会话→任务」映射?注释点破了根:没有它,旧任务结束时的 <span class="mono">finally</span> 可能误删新任务刚装上的守卫,留下 <strong>stale busy</strong> 状态。更糟的是「裂脑」——适配器还以为会话在跑、实际却没人处理,聊天会永远卡在「Interrupting current task...」直到重启网关。所以 <span class="mono">handle_message</span> 一进门就先调 <span class="mono">_heal_stale_session_lock</span>:若 owner task 已 done/cancelled 就判定锁失效,清掉三张表并放行(issue #11016)。这是<strong>运维约束 G</strong> 在会话层的自愈——宁可自己修,也绝不让用户卡死在永久 busy 里。</p>
+<p>为什么要单独维护 <span class="mono">_session_tasks</span> 这张「会话→任务」映射?注释点破了根：没有它，旧任务结束时的 <span class="mono">finally</span> 可能误删新任务刚装上的守卫，留下 <strong>stale busy</strong> 状态。更糟的是「裂脑」——适配器还以为会话在跑、实际却没人处理，聊天会永远卡在「Interrupting current task...」直到重启网关。所以 <span class="mono">handle_message</span> 一进门就先调 <span class="mono">_heal_stale_session_lock</span>：若 owner task 已 done/cancelled 就判定锁失效，清掉三张表并放行(issue #11016)。这是<strong>运维约束 G</strong> 在会话层的自愈——宁可自己修，也绝不让用户卡死在永久 busy 里。</p>
 
-<p>为什么 busy 状态按<strong>每会话</strong>记而不是开一把全局锁?<span class="mono">_active_sessions</span> 以 <span class="mono">session_key</span>(区分用户 / 群 / 线程)为键,不同会话各自独立排队、互不阻塞——一个用户的长任务绝不会冻住整个网关里其他人的对话。而且它存的不是布尔,是一个 <span class="mono">asyncio.Event</span>(中断信号):<span class="mono">/stop</span> 能 <span class="mono">set</span> 这个 Event,通知正在跑的回合「该停了」。这个中断会沿委派链<strong>级联到子代理</strong>(第 13 章),保证一声 <span class="mono">/stop</span> 整棵任务树都停,而不是只停最外层那一个。</p>
+<p>为什么 busy 状态按<strong>每会话</strong>记而不是开一把全局锁?<span class="mono">_active_sessions</span> 以 <span class="mono">session_key</span>(区分用户 / 群 / 线程)为键，不同会话各自独立排队、互不阻塞——一个用户的长任务绝不会冻住整个网关里其他人的对话。而且它存的不是布尔，是一个 <span class="mono">asyncio.Event</span>(中断信号):<span class="mono">/stop</span> 能 <span class="mono">set</span> 这个 Event，通知正在跑的回合「该停了」。这个中断会沿委派链<strong>级联到子代理</strong>(第 13 章)，保证一声 <span class="mono">/stop</span> 整棵任务树都停，而不是只停最外层那一个。</p>
 
-<p>顺带看排队本身的形状:<span class="mono">_pending_messages</span> 是 <span class="mono">Dict[str, MessageEvent]</span>——<strong>每会话只有一个槽位</strong>,而非无限堆积的列表。忙时连发的多条普通消息会经 <span class="mono">merge_pending_message_event</span> <strong>合并</strong>进同一槽:相册照片连拍归并成一条、Telegram 的连续文字补充被<strong>追加</strong>而非互相覆盖。这么设计是因为「等 agent 跑完再处理」时,用户真正想要的是「我攒的这一段完整意思」,而不是几十条割裂消息逐条回放;单槽 + 合并既防了消息洪水冲垮下一回合,又不会把多段同一思路<strong>悄悄截断</strong>成最后一句(这正是被修过的 bug)。</p>
+<p>顺带看排队本身的形状:<span class="mono">_pending_messages</span> 是 <span class="mono">Dict[str, MessageEvent]</span>——<strong>每会话只有一个槽位</strong>，而非无限堆积的列表。忙时连发的多条普通消息会经 <span class="mono">merge_pending_message_event</span> <strong>合并</strong>进同一槽：相册照片连拍归并成一条、Telegram 的连续文字补充被<strong>追加</strong>而非互相覆盖。这么设计是因为「等 agent 跑完再处理」时，用户真正想要的是「我攒的这一段完整意思」，而不是几十条割裂消息逐条回放;单槽 + 合并既防了消息洪水冲垮下一回合，又不会把多段同一思路<strong>悄悄截断</strong>成最后一句(这正是被修过的 bug)。</p>
 
-<h2>旁路:控制命令不能排队</h2>
-<p>会话忙时,先看这条消息是不是个该旁路的命令:</p>
+<h2>旁路：控制命令不能排队</h2>
+<p>会话忙时，先看这条消息是不是个该旁路的命令:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">4262-4298 · 简化</span></div>
@@ -644,7 +644,7 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
         <span class="cm"># 其清理会和正在跑的任务抢(见 PR #4926)</span>
         ...</pre>
 </div>
-<p>分两类:<span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> 要<strong>取消在途任务</strong>(走专门的交接路径,序列化「取消 + 回应 + 排空队列」);<span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> 等不取消任务、只需<strong>直接内联派发</strong>。注释点破一个坑:<strong>千万别走 <span class="mono">_process_message_background</span></strong>——它管会话生命周期,清理逻辑会和正在跑的任务发生竞争。</p>
+<p>分两类:<span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> 要<strong>取消在途任务</strong>(走专门的交接路径，序列化「取消 + 回应 + 排空队列」);<span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> 等不取消任务、只需<strong>直接内联派发</strong>。注释点破一个坑:<strong>千万别走 <span class="mono">_process_message_background</span></strong>——它管会话生命周期，清理逻辑会和正在跑的任务发生竞争。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 360" role="img" aria-label="agent 忙时消息要过两道守卫，控制命令必须同时旁路两道">
@@ -687,14 +687,14 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
   <text x="340" y="323" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">⚠ 审批类命令必须同时旁路两道守卫</text>
   <text x="340" y="341" text-anchor="middle" font-size="10" fill="var(--muted)">若排队：被兜底丢弃 = 空响应(zero-char)，或 /approve 等不到 → 死锁</text>
 </svg>
-<div class="fig-cap"><b>两道消息守卫 + 控制命令旁路</b>：agent 忙时,消息先过<b>守卫①</b>(适配器层 <span class="mono">base.py</span>)——普通对话进 <span class="mono">_pending_messages</span> 排队;<b>可解析 slash 命令则旁路守卫①</b>,再进<b>守卫②</b>(网关 runner <span class="mono">run.py</span>)按 <span class="mono">canonical</span> 名分派:<span class="mono">/stop /new /reset</span> 取消在途任务、<span class="mono">/approve /deny /status</span> 内联派发。<b>审批类命令必须同时旁路两道</b>,否则被兜底丢弃(空响应)或死锁。</div>
+<div class="fig-cap"><b>两道消息守卫 + 控制命令旁路</b>：agent 忙时，消息先过<b>守卫①</b>(适配器层 <span class="mono">base.py</span>)——普通对话进 <span class="mono">_pending_messages</span> 排队;<b>可解析 slash 命令则旁路守卫①</b>，再进<b>守卫②</b>(网关 runner <span class="mono">run.py</span>)按 <span class="mono">canonical</span> 名分派:<span class="mono">/stop /new /reset</span> 取消在途任务、<span class="mono">/approve /deny /status</span> 内联派发。<b>审批类命令必须同时旁路两道</b>，否则被兜底丢弃(空响应)或死锁。</div>
 </div>
 
-<p>为什么旁路还要再分「取消任务」和「内联派发」两类?<span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> 会动<strong>会话生命周期</strong>(要终止在途回合),必须走 <span class="mono">_dispatch_active_session_command</span> 这条把「取消 + 回应 + 排空队列」<strong>序列化</strong>的专路;否则旧任务的 <span class="mono">finally</span> 清理会和新命令的清理抢同一把守卫。而 <span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> 不碰生命周期,只发信号或只读状态,直接内联即可。注释之所以严禁走 <span class="mono">_process_message_background</span>,正因它会另起一个管生命周期的 task,清理逻辑和正在跑的任务<strong>赛跑</strong>(PR #4926)——这种竞态在压测下才偶发,极难复现,所以宁可从结构上堵死。</p>
+<p>为什么旁路还要再分「取消任务」和「内联派发」两类?<span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> 会动<strong>会话生命周期</strong>(要终止在途回合)，必须走 <span class="mono">_dispatch_active_session_command</span> 这条把「取消 + 回应 + 排空队列」<strong>序列化</strong>的专路;否则旧任务的 <span class="mono">finally</span> 清理会和新命令的清理抢同一把守卫。而 <span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> 不碰生命周期，只发信号或只读状态，直接内联即可。注释之所以严禁走 <span class="mono">_process_message_background</span>，正因它会另起一个管生命周期的 task，清理逻辑和正在跑的任务<strong>赛跑</strong>(PR #4926)——这种竞态在压测下才偶发，极难复现，所以宁可从结构上堵死。</p>
 
-<p>为什么 <span class="mono">/approve</span> 是死锁的重灾区?agent 此刻正阻塞在 <span class="mono">tools/approval.py</span> 里一个 <span class="mono">threading.Event.wait()</span> 上——而普通中断走的是 asyncio 路径,<strong>根本叫不醒</strong>一个卡在线程 Event 上的 agent。所以 runner 把 <span class="mono">/approve</span> <span class="mono">/deny</span> 直接路由到审批处理器去 <span class="mono">set</span> 那个 Event。若让它老实排队:agent 等审批放行、审批却在队列里等 agent 跑完,两边互锁、永久卡死。这正是第 24 章<strong>人在回路</strong>审批能在 agent 阻塞时仍然送达的底座——审批信号必须有一条不经 agent 主循环的旁路才能解锁它自己。</p>
+<p>为什么 <span class="mono">/approve</span> 是死锁的重灾区?agent 此刻正阻塞在 <span class="mono">tools/approval.py</span> 里一个 <span class="mono">threading.Event.wait()</span> 上——而普通中断走的是 asyncio 路径,<strong>根本叫不醒</strong>一个卡在线程 Event 上的 agent。所以 runner 把 <span class="mono">/approve</span> <span class="mono">/deny</span> 直接路由到审批处理器去 <span class="mono">set</span> 那个 Event。若让它老实排队:agent 等审批放行、审批却在队列里等 agent 跑完，两边互锁、永久卡死。这正是第 24 章<strong>人在回路</strong>审批能在 agent 阻塞时仍然送达的底座——审批信号必须有一条不经 agent 主循环的旁路才能解锁它自己。</p>
 
-<p>值得注意的是,runner 这一层的旁路并非「命令 = 一律放行」的二元开关,而是<strong>逐命令</strong>定细则。比如 <span class="mono">/background</span> 旁路守卫去开一个并行任务、绝不打断当前对话;<span class="mono">/kanban</span> 写的是与运行态无关的看板库,<span class="mono">/kanban unblock</span> 甚至常常是解救一个阻塞 worker 的唯一手段,所以必须能在跑动中送达;<span class="mono">/goal</span> 的 <span class="mono">status</span>/<span class="mono">pause</span>/<span class="mono">clear</span> 只读控制面、放行,但「<strong>设新目标</strong>」会和当前回合抢续写,于是被拒、提示先 <span class="mono">/stop</span>。这种细粒度恰恰说明:能否中途执行,取决于该命令<strong>碰不碰运行态</strong>,而不是它是不是命令。</p>
+<p>值得注意的是,runner 这一层的旁路并非「命令 = 一律放行」的二元开关，而是<strong>逐命令</strong>定细则。比如 <span class="mono">/background</span> 旁路守卫去开一个并行任务、绝不打断当前对话;<span class="mono">/kanban</span> 写的是与运行态无关的看板库,<span class="mono">/kanban unblock</span> 甚至常常是解救一个阻塞 worker 的唯一手段，所以必须能在跑动中送达;<span class="mono">/goal</span> 的 <span class="mono">status</span>/<span class="mono">pause</span>/<span class="mono">clear</span> 只读控制面、放行，但「<strong>设新目标</strong>」会和当前回合抢续写，于是被拒、提示先 <span class="mono">/stop</span>。这种细粒度恰恰说明：能否中途执行，取决于该命令<strong>碰不碰运行态</strong>，而不是它是不是命令。</p>
 
 <h2>为什么排队就出事:zero-char 响应</h2>
 <p>旁路判定函数的 docstring 把后果讲透了:</p>
@@ -710,9 +710,9 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
 <span class="cm">    response.&quot;&quot;&quot;</span>
     <span class="kw">return</span> resolve_command(command_name) <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span> <span class="kw">if</span> command_name <span class="kw">else</span> <span class="kw">False</span></pre>
 </div>
-<p>道理很硬:网关 runner 有个兜底,会<strong>丢弃任何漏进排队队列的命令文本</strong>。所以一条跑到一半发的 <span class="mono">/model</span>,若被排队,就会「<strong>既悄悄打断了 agent、又被丢弃</strong>」,用户收到一个<strong>空响应</strong>。结论:只要是能解析的 slash 命令,一律旁路、立即派发,绝不排队。这也正是<strong>缓存线</strong>要守住的危险:控制命令一旦混进对话历史、被当成用户文本,就可能让历史里冒出连续两条用户消息、破坏严格角色交替(第 7 章的不变量),进而动摇被缓存的前缀(第 6 章)。旁路让控制命令走<strong>控制通道</strong>、根本不进历史,正是从源头掐断这条危险。</p>
+<p>道理很硬：网关 runner 有个兜底，会<strong>丢弃任何漏进排队队列的命令文本</strong>。所以一条跑到一半发的 <span class="mono">/model</span>，若被排队，就会「<strong>既悄悄打断了 agent、又被丢弃</strong>」，用户收到一个<strong>空响应</strong>。结论：只要是能解析的 slash 命令，一律旁路、立即派发，绝不排队。这也正是<strong>缓存线</strong>要守住的危险：控制命令一旦混进对话历史、被当成用户文本，就可能让历史里冒出连续两条用户消息、破坏严格角色交替(第 7 章的不变量)，进而动摇被缓存的前缀(第 6 章)。旁路让控制命令走<strong>控制通道</strong>、根本不进历史，正是从源头掐断这条危险。</p>
 
-<p>为什么命令识别要用<strong>显式代码解析</strong>而不交给模型判断?<span class="mono">get_command()</span> 只做纯语法切分:取首词、剥掉 <span class="mono">/</span>、去掉 <span class="mono">@botname</span>、首词里含 <span class="mono">/</span> 的当文件路径直接拒掉;再由 <span class="mono">resolve_command()</span> 查中央 <span class="mono">COMMAND_REGISTRY</span> 的别名表确认。整条链零模型参与——因为模型分不清「这是给系统的指令还是要处理的数据」(约束 <strong>D</strong>)。一旦把判断权交给模型,一段精心构造的对话文本就能伪装成 <span class="mono">/stop</span> 骗它执行。把识别钉死在网关层,注入便没了入口。</p>
+<p>为什么命令识别要用<strong>显式代码解析</strong>而不交给模型判断?<span class="mono">get_command()</span> 只做纯语法切分：取首词、剥掉 <span class="mono">/</span>、去掉 <span class="mono">@botname</span>、首词里含 <span class="mono">/</span> 的当文件路径直接拒掉;再由 <span class="mono">resolve_command()</span> 查中央 <span class="mono">COMMAND_REGISTRY</span> 的别名表确认。整条链零模型参与——因为模型分不清「这是给系统的指令还是要处理的数据」(约束 <strong>D</strong>)。一旦把判断权交给模型，一段精心构造的对话文本就能伪装成 <span class="mono">/stop</span> 骗它执行。把识别钉死在网关层，注入便没了入口。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 322" role="img" aria-label="网关用显式代码解析识别控制命令，而非交给模型判断">
@@ -745,43 +745,43 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
   <text x="56" y="285" font-size="10" fill="var(--muted)">构造文本可伪装 /stop 触发执行（注入）；命令混入历史 → 历史出现连续两条 user</text>
   <text x="56" y="302" font-size="10" fill="var(--muted)">→ 破坏严格角色交替（第7章）→ 动摇被缓存前缀（第6章）。显式解析 = 从源头堵死。</text>
 </svg>
-<div class="fig-cap"><b>控制命令 vs 数据：显式解析</b>：网关用 <span class="mono">get_command()</span>/<span class="mono">resolve_command()</span> 纯代码识别命令(确定性、零模型)——能解析的走<b>控制通道</b>旁路派发、<b>永不进对话历史</b>;否则当<b>数据</b>进 <span class="mono">_pending_messages</span> 喂给模型。这正是治 <b>D·指令=数据</b>:不让模型判断,既挡注入(伪造指令进不来),又护住第 6 章缓存前缀与第 7 章角色交替。</div>
+<div class="fig-cap"><b>控制命令 vs 数据：显式解析</b>：网关用 <span class="mono">get_command()</span>/<span class="mono">resolve_command()</span> 纯代码识别命令(确定性、零模型)——能解析的走<b>控制通道</b>旁路派发、<b>永不进对话历史</b>;否则当<b>数据</b>进 <span class="mono">_pending_messages</span> 喂给模型。这正是治 <b>D·指令=数据</b>：不让模型判断，既挡注入(伪造指令进不来)，又护住第 6 章缓存前缀与第 7 章角色交替。</div>
 </div>
 
-<p>为什么旁路判据用「<strong>能否解析</strong>」而不是一张写死的白名单?<span class="mono">should_bypass_active_session</span> 直接返回 <span class="mono">resolve_command(cmd) is not None</span>——只要是注册过的 slash 命令一律旁路。<span class="mono">ACTIVE_SESSION_BYPASS_COMMANDS</span> 只是「有专属 Level-2 处理器」的子集;其余命令落到 runner 的 catch-all,回一句「Agent is running,wait or <span class="mono">/stop</span>」而不是被默默丢弃。这层兜底是一串事故堆出来的:<span class="mono">/model</span> <span class="mono">/reasoning</span> <span class="mono">/resume</span> <span class="mono">/undo</span> 等当年都漏过、变成空响应(#5057 #6252 #10370)。所以判据必须是<strong>全集</strong>覆盖,白名单一定会漏掉下一个新加的命令。</p>
+<p>为什么旁路判据用「<strong>能否解析</strong>」而不是一张写死的白名单?<span class="mono">should_bypass_active_session</span> 直接返回 <span class="mono">resolve_command(cmd) is not None</span>——只要是注册过的 slash 命令一律旁路。<span class="mono">ACTIVE_SESSION_BYPASS_COMMANDS</span> 只是「有专属 Level-2 处理器」的子集;其余命令落到 runner 的 catch-all，回一句「Agent is running,wait or <span class="mono">/stop</span>」而不是被默默丢弃。这层兜底是一串事故堆出来的:<span class="mono">/model</span> <span class="mono">/reasoning</span> <span class="mono">/resume</span> <span class="mono">/undo</span> 等当年都漏过、变成空响应(#5057 #6252 #10370)。所以判据必须是<strong>全集</strong>覆盖，白名单一定会漏掉下一个新加的命令。</p>
 
-<p>第二道守卫内部其实是个<strong>两级结构</strong>:有专属处理器的命令(<span class="mono">_DEDICATED_HANDLERS</span>,即 <span class="mono">ACTIVE_SESSION_BYPASS_COMMANDS</span>)被精确分派到 <span class="mono">_handle_approve_command</span>、<span class="mono">_handle_help_command</span> 这类函数;剩下所有「能解析但没专属处理器」的命令统一落到 catch-all,返回一句礼貌的「<span class="mono">/x</span> 不能中途跑,先 <span class="mono">/stop</span>」。关键在于:catch-all 是<strong>优雅拒绝</strong>而非「中断 + 丢弃」。少了它,这些命令会先<strong>悄悄打断</strong> agent、再被安全网吞掉,用户只看到空响应(#5057 #6252 #10370 正是补这个洞)。两级一起保证:认得的命令要么被正确处理,要么被明确告知,绝不静默吃掉。</p>
+<p>第二道守卫内部其实是个<strong>两级结构</strong>：有专属处理器的命令(<span class="mono">_DEDICATED_HANDLERS</span>，即 <span class="mono">ACTIVE_SESSION_BYPASS_COMMANDS</span>)被精确分派到 <span class="mono">_handle_approve_command</span>、<span class="mono">_handle_help_command</span> 这类函数;剩下所有「能解析但没专属处理器」的命令统一落到 catch-all，返回一句礼貌的「<span class="mono">/x</span> 不能中途跑，先 <span class="mono">/stop</span>」。关键在于:catch-all 是<strong>优雅拒绝</strong>而非「中断 + 丢弃」。少了它，这些命令会先<strong>悄悄打断</strong> agent、再被安全网吞掉，用户只看到空响应(#5057 #6252 #10370 正是补这个洞)。两级一起保证：认得的命令要么被正确处理，要么被明确告知，绝不静默吃掉。</p>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">消息到达,<span class="mono">session_key</span> 在 <span class="mono">_active_sessions</span> 里吗?(该会话正忙?)</span></div>
   <div class="step"><span class="num">2</span><span class="sc">不忙 → 正常处理;忙 → 取 <span class="mono">cmd = get_command()</span></span></div>
   <div class="step"><span class="num">3</span><span class="sc"><span class="mono">should_bypass_active_session(cmd)</span>?不是命令 → 进 <span class="mono">_pending_messages</span> 排队</span></div>
   <div class="step"><span class="num">4</span><span class="sc">是 <span class="mono">/stop /new /reset</span> → 取消在途任务 + 交接;是 <span class="mono">/approve</span> 等 → 直接内联派发</span></div>
-  <div class="step"><span class="num">5</span><span class="sc">旁路两道守卫,不经 <span class="mono">_process_message_background</span>(避免会话生命周期竞争)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">旁路两道守卫，不经 <span class="mono">_process_message_background</span>(避免会话生命周期竞争)</span></div>
 </div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「并发安全 + 不破缓存」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>_active_sessions</strong>(busy 状态)、<strong>_pending_messages</strong>(排队)、<strong>_session_tasks</strong>(会话→任务)、<strong>should_bypass_active_session</strong>(旁路判定)、<strong>第二道 runner 守卫</strong>(GATEWAY_KNOWN_COMMANDS 分派)。跨章节配合:消息先被适配器归一化成 <strong>MessageEvent</strong>(第 17 章)才进守卫;旁路保证控制命令不污染对话历史、维持严格角色交替=<strong>不破缓存</strong>(第 6 章);<span class="mono">/stop</span> 的中断会<strong>级联到子代理</strong>(第 13 章委派);<span class="mono">/approve</span> 是危险操作的<strong>人在回路审批</strong>(第 24 章安全)。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>_active_sessions</strong>(busy 状态)、<strong>_pending_messages</strong>(排队)、<strong>_session_tasks</strong>(会话→任务)、<strong>should_bypass_active_session</strong>(旁路判定)、<strong>第二道 runner 守卫</strong>(GATEWAY_KNOWN_COMMANDS 分派)。跨章节配合：消息先被适配器归一化成 <strong>MessageEvent</strong>(第 17 章)才进守卫;旁路保证控制命令不污染对话历史、维持严格角色交替=<strong>不破缓存</strong>(第 6 章);<span class="mono">/stop</span> 的中断会<strong>级联到子代理</strong>(第 13 章委派);<span class="mono">/approve</span> 是危险操作的<strong>人在回路审批</strong>(第 24 章安全)。
   <div class="collab-sub">② 数据流时序</div>
   MessageEvent → 第一道守卫(<span class="mono">session_key in _active_sessions</span>?) → <span class="mono">get_command()</span> + <span class="mono">should_bypass</span> → 旁路(<span class="mono">/stop</span> 取消任务 / <span class="mono">/approve</span> 内联派发)或排队(<span class="mono">_pending_messages</span>) → 第二道守卫(runner 按 <span class="mono">canonical</span> 分派)。
   <div class="collab-sub">③ 关键点</div>
-  两道守卫<strong>都必须</strong>放行控制命令;排队一个控制命令 = 被兜底丢弃(空响应)或死锁(<span class="mono">/approve</span> 等不到);旁路必须走<strong>内联派发</strong>而非 <span class="mono">_process_message_background</span>,后者管会话生命周期、清理会和在跑任务抢。
+  两道守卫<strong>都必须</strong>放行控制命令;排队一个控制命令 = 被兜底丢弃(空响应)或死锁(<span class="mono">/approve</span> 等不到);旁路必须走<strong>内联派发</strong>而非 <span class="mono">_process_message_background</span>，后者管会话生命周期、清理会和在跑任务抢。
 </div>
 
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>两道守卫拦截消息 + 控制命令旁路 = 并发安全 + 不破缓存</strong>。它主要治两条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">D·指令=数据</span>——模型分不清「这是给系统的指令」还是「这是对话内容」。网关不靠模型判断,而是用<strong>显式的 <span class="mono">get_command()</span> 解析 + 旁路通道</strong>,把 <span class="mono">/stop</span> <span class="mono">/approve</span> 这类<strong>指令</strong>从消息流里拎出来走控制通道,绝不当成对话<strong>数据</strong>喂给模型。这是 D 在网关层的工程对策。</p>
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——并发消息、会话生命周期、中断、审批,全是运维复杂度。两道守卫 + 旁路 + owner-task 映射,把「忙时谁能插队、谁该排队、怎么取消」管得确定、无竞争。</p>
-  <p style="margin:.5rem 0 0">反模式:把所有消息一视同仁排队——<span class="mono">/approve</span> 会死锁(agent 阻塞等审批,审批却在队列里等 agent),<span class="mono">/stop</span> 会丢失,跑到一半的 <span class="mono">/model</span> 变成空响应。</p>
-  <p style="margin:.5rem 0 0">把两道守卫连起来看为什么<strong>缺一不可</strong>:第一道(适配器)只管「忙时谁排队、谁旁路」,放行后命令还得有人接;第二道(runner)按 <span class="mono">canonical</span> 名把它精确分派给 <span class="mono">_handle_approve_command</span> 等专属处理器,并对没有处理器的命令兜底拒绝。两道职责正交——一道决定「<strong>要不要排队</strong>」,一道决定「<strong>派给谁</strong>」。少了第一道,<span class="mono">/approve</span> 进队列死锁;少了第二道,旁路出来的命令无人接、又被 catch-all 当文本丢弃,照样是空响应。</p>
-  <p style="margin:.5rem 0 0">为什么说这层就是第 24 章纵深防御里的「<strong>注入隔离</strong>」:控制通道和数据通道在网关就被<strong>物理分开</strong>——能解析的命令走代码识别 + 旁路,永不进对话历史;只有真正的对话才进 <span class="mono">_pending_messages</span> 喂给模型。这条「指令绝不当数据」的边界既挡注入(伪造指令进不了控制通道),又顺手护住第 6 章缓存与第 7 章角色交替:因为历史里<strong>永远不会</strong>冒出一条被误当用户文本的 <span class="mono">/stop</span>,缓存前缀和严格交替自然就稳了。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">D·指令=数据</span>——模型分不清「这是给系统的指令」还是「这是对话内容」。网关不靠模型判断，而是用<strong>显式的 <span class="mono">get_command()</span> 解析 + 旁路通道</strong>，把 <span class="mono">/stop</span> <span class="mono">/approve</span> 这类<strong>指令</strong>从消息流里拎出来走控制通道，绝不当成对话<strong>数据</strong>喂给模型。这是 D 在网关层的工程对策。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——并发消息、会话生命周期、中断、审批，全是运维复杂度。两道守卫 + 旁路 + owner-task 映射，把「忙时谁能插队、谁该排队、怎么取消」管得确定、无竞争。</p>
+  <p style="margin:.5rem 0 0">反模式：把所有消息一视同仁排队——<span class="mono">/approve</span> 会死锁(agent 阻塞等审批，审批却在队列里等 agent),<span class="mono">/stop</span> 会丢失，跑到一半的 <span class="mono">/model</span> 变成空响应。</p>
+  <p style="margin:.5rem 0 0">把两道守卫连起来看为什么<strong>缺一不可</strong>：第一道(适配器)只管「忙时谁排队、谁旁路」，放行后命令还得有人接;第二道(runner)按 <span class="mono">canonical</span> 名把它精确分派给 <span class="mono">_handle_approve_command</span> 等专属处理器，并对没有处理器的命令兜底拒绝。两道职责正交——一道决定「<strong>要不要排队</strong>」，一道决定「<strong>派给谁</strong>」。少了第一道,<span class="mono">/approve</span> 进队列死锁;少了第二道，旁路出来的命令无人接、又被 catch-all 当文本丢弃，照样是空响应。</p>
+  <p style="margin:.5rem 0 0">为什么说这层就是第 24 章纵深防御里的「<strong>注入隔离</strong>」：控制通道和数据通道在网关就被<strong>物理分开</strong>——能解析的命令走代码识别 + 旁路，永不进对话历史;只有真正的对话才进 <span class="mono">_pending_messages</span> 喂给模型。这条「指令绝不当数据」的边界既挡注入(伪造指令进不了控制通道)，又顺手护住第 6 章缓存与第 7 章角色交替：因为历史里<strong>永远不会</strong>冒出一条被误当用户文本的 <span class="mono">/stop</span>，缓存前缀和严格交替自然就稳了。</p>
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 400" role="img" aria-label="实例图:一条 /approve 在 agent 阻塞于 threading.Event.wait 时如何穿过两道守卫并 set 那个 Event。① agent 阻塞:_ApprovalEntry.event 等于 threading.Event,entry.event.wait 暂停,asyncio 中断叫不醒线程 Event;② 守卫① 适配器层 base.py,session_key in _active_sessions 为真,cmd 等于 event.get_command 得 approve;③ 旁路判定 commands.py,should_bypass_active_session approve 为真,且 cmd 不属于 stop new reset 集合,故内联派发,禁用 _process_message_background;④ 守卫② runner run.py,/approve 绕过 interrupt,直达 _handle_approve_command;⑤ 解锁 approval.py,resolve_gateway_approval 把 entry.result 设为 choice 并 entry.event.set,① 的 wait 返回 agent 续跑;⑥ 反事实红框:若当普通消息排进 _pending_messages,agent 永远阻塞,/approve 进不来形成死锁。">
+<svg viewBox="0 0 680 400" role="img" aria-label="实例图：一条 /approve 在 agent 阻塞于 threading.Event.wait 时如何穿过两道守卫并 set 那个 Event。① agent 阻塞:_ApprovalEntry.event 等于 threading.Event,entry.event.wait 暂停,asyncio 中断叫不醒线程 Event;② 守卫① 适配器层 base.py,session_key in _active_sessions 为真,cmd 等于 event.get_command 得 approve;③ 旁路判定 commands.py,should_bypass_active_session approve 为真，且 cmd 不属于 stop new reset 集合，故内联派发，禁用 _process_message_background;④ 守卫② runner run.py,/approve 绕过 interrupt，直达 _handle_approve_command;⑤ 解锁 approval.py,resolve_gateway_approval 把 entry.result 设为 choice 并 entry.event.set,① 的 wait 返回 agent 续跑;⑥ 反事实红框：若当普通消息排进 _pending_messages,agent 永远阻塞,/approve 进不来形成死锁。">
   <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:/approve 穿两道守卫 → set 那个 Event</text>
   <text x="20" y="44" font-size="10" fill="var(--muted)">agent 阻塞在 threading.Event.wait(),asyncio 中断叫不醒它</text>
   <text x="644" y="33" text-anchor="middle" font-size="22">🔓</text>
@@ -839,22 +839,22 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
   <path d="M434,241 C360,241 160,250 160,170 L160,150 M156,158 L160,150 L164,158" stroke="var(--accent)" stroke-width="1.6" fill="none" stroke-dasharray="3 3"/>
 
   <rect x="10" y="294" width="660" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
-  <text x="20" y="312" font-size="10" font-weight="700" fill="var(--red)">⑥ 反事实:若当普通消息排队进 _pending_messages</text>
+  <text x="20" y="312" font-size="10" font-weight="700" fill="var(--red)">⑥ 反事实：若当普通消息排队进 _pending_messages</text>
   <text x="20" y="329" font-size="9" fill="var(--red)">agent 永远阻塞在 wait();/approve 永远进不来 → 死锁(且兜底会把命令文本丢弃成空响应)。</text>
 
-  <text x="20" y="360" font-size="9.5" fill="var(--muted)">读这张图:审批命令必须同时旁路两道守卫并直达 runner,才能 set 那个线程 Event,把阻塞的 agent 解锁。</text>
+  <text x="20" y="360" font-size="9.5" fill="var(--muted)">读这张图：审批命令必须同时旁路两道守卫并直达 runner，才能 set 那个线程 Event，把阻塞的 agent 解锁。</text>
 </svg>
-<div class="fig-cap"><b>实例:一条 /approve 的真实解锁链</b>:agent 阻塞在 <span class="mono">_ApprovalEntry.event=threading.Event()</span> 的 <span class="mono">.wait()</span>(asyncio 中断叫不醒线程 Event)。① 阻塞;② <b>守卫①</b>(<span class="mono">base.py:4262</span>)<span class="mono">session_key in _active_sessions</span>→<span class="mono">cmd=&quot;approve&quot;</span>;③ <span class="mono">should_bypass_active_session(&quot;approve&quot;)→True</span> 且 <span class="mono">∉{stop,new,reset}</span>→<b>内联派发</b>(禁 <span class="mono">_process_message_background</span>);④ <b>守卫②</b> runner(<span class="mono">run.py:7764</span>)<span class="mono">/approve</span> 绕过 <span class="mono">interrupt</span>→<span class="mono">_handle_approve_command</span>;⑤ <span class="mono">resolve_gateway_approval</span>→<span class="mono">entry.event.set()</span>→<span class="mono">wait()</span> 返回、agent 续跑;⑥ 反事实:排队即死锁。这正解释了「审批必须同时旁路两道守卫」。</div>
+<div class="fig-cap"><b>实例：一条 /approve 的真实解锁链</b>:agent 阻塞在 <span class="mono">_ApprovalEntry.event=threading.Event()</span> 的 <span class="mono">.wait()</span>(asyncio 中断叫不醒线程 Event)。① 阻塞;② <b>守卫①</b>(<span class="mono">base.py:4262</span>)<span class="mono">session_key in _active_sessions</span>→<span class="mono">cmd=&quot;approve&quot;</span>;③ <span class="mono">should_bypass_active_session(&quot;approve&quot;)→True</span> 且 <span class="mono">∉{stop,new,reset}</span>→<b>内联派发</b>(禁 <span class="mono">_process_message_background</span>);④ <b>守卫②</b> runner(<span class="mono">run.py:7764</span>)<span class="mono">/approve</span> 绕过 <span class="mono">interrupt</span>→<span class="mono">_handle_approve_command</span>;⑤ <span class="mono">resolve_gateway_approval</span>→<span class="mono">entry.event.set()</span>→<span class="mono">wait()</span> 返回、agent 续跑;⑥ 反事实：排队即死锁。这正解释了「审批必须同时旁路两道守卫」。</div>
 </div>
 
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
-    <li><strong>两道守卫</strong>:适配器层(busy 排队 <span class="mono">_pending_messages</span>)+ 网关 runner 层(slash 命令分派)。控制命令必须<strong>同时旁路两道</strong>。</li>
+    <li><strong>两道守卫</strong>：适配器层(busy 排队 <span class="mono">_pending_messages</span>)+ 网关 runner 层(slash 命令分派)。控制命令必须<strong>同时旁路两道</strong>。</li>
     <li><strong>旁路两类</strong>:<span class="mono">/stop /new /reset</span> 取消在途任务;<span class="mono">/approve /deny /status</span> 等直接内联派发(不取消)。</li>
-    <li><strong>排队=出事</strong>:控制命令进队列会被兜底<strong>丢弃</strong>(zero-char 响应)或<strong>死锁</strong>(<span class="mono">/approve</span>)。</li>
-    <li><strong>不破缓存</strong>:控制命令走控制通道、不混进对话历史,维持严格角色交替(第 7 章)。</li>
-    <li><strong>避开竞争</strong>:旁路用内联派发,<strong>不走</strong> <span class="mono">_process_message_background</span>(它和会话生命周期清理抢)。</li>
+    <li><strong>排队=出事</strong>：控制命令进队列会被兜底<strong>丢弃</strong>(zero-char 响应)或<strong>死锁</strong>(<span class="mono">/approve</span>)。</li>
+    <li><strong>不破缓存</strong>：控制命令走控制通道、不混进对话历史，维持严格角色交替(第 7 章)。</li>
+    <li><strong>避开竞争</strong>：旁路用内联派发,<strong>不走</strong> <span class="mono">_process_message_background</span>(它和会话生命周期清理抢)。</li>
   </ul>
 </div>
 """,
@@ -1129,20 +1129,20 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
 
 LESSON_19 = {
     "zh": r"""
-<p class="lead">输入 <span class="mono">hermes --tui</span>,你看到一个漂亮的终端界面。它其实是<strong>两个进程</strong>:一个 Node(Ink/React)负责画屏幕,一个 Python(tui_gateway)负责跑 agent,两者靠 stdio 上<strong>换行分隔的 JSON-RPC</strong> 对话。更妙的是:网页版仪表盘的聊天页,<strong>不是重写一遍</strong>,而是把同一个 <span class="mono">hermes --tui</span> 经 PTY 投进浏览器。</p>
+<p class="lead">输入 <span class="mono">hermes --tui</span>，你看到一个漂亮的终端界面。它其实是<strong>两个进程</strong>：一个 Node(Ink/React)负责画屏幕，一个 Python(tui_gateway)负责跑 agent，两者靠 stdio 上<strong>换行分隔的 JSON-RPC</strong> 对话。更妙的是：网页版仪表盘的聊天页,<strong>不是重写一遍</strong>，而是把同一个 <span class="mono">hermes --tui</span> 经 PTY 投进浏览器。</p>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 剧院的后台与台前</div>
-  后台(Python)管演员、剧本、调度;台前(Ink)管灯光、布景、把戏呈现给观众。两边靠一根<strong>提词线</strong>(stdio 上的 JSON-RPC)协调:台前喊「观众提交了台词」(<span class="mono">prompt.submit</span>),后台一句句把演员的台词喂回来(<span class="mono">message.delta</span>)。换个剧场(浏览器)?<strong>不重排戏</strong>——直接把整台演出(<span class="mono">hermes --tui</span>)投影上去。
+  后台(Python)管演员、剧本、调度;台前(Ink)管灯光、布景、把戏呈现给观众。两边靠一根<strong>提词线</strong>(stdio 上的 JSON-RPC)协调：台前喊「观众提交了台词」(<span class="mono">prompt.submit</span>)，后台一句句把演员的台词喂回来(<span class="mono">message.delta</span>)。换个剧场(浏览器)?<strong>不重排戏</strong>——直接把整台演出(<span class="mono">hermes --tui</span>)投影上去。
 </div>
 
 <div class="card macro">
-  <div class="tag">🌍 宏观 · 一套核心,多个前端</div>
-  <strong>TypeScript 拥有屏幕,Python 拥有会话/工具/模型调用</strong>,中间是一层换行分隔的 JSON-RPC。同一个 Python 后端(就是 AIAgent 核心)既服务 Ink 终端界面、又服务浏览器里嵌入的 PTY、还服务 Electron 桌面 App。前端易变、迭代快;核心稳定。各用各的生态,互不拖累。
+  <div class="tag">🌍 宏观 · 一套核心，多个前端</div>
+  <strong>TypeScript 拥有屏幕,Python 拥有会话/工具/模型调用</strong>，中间是一层换行分隔的 JSON-RPC。同一个 Python 后端(就是 AIAgent 核心)既服务 Ink 终端界面、又服务浏览器里嵌入的 PTY、还服务 Electron 桌面 App。前端易变、迭代快;核心稳定。各用各的生态，互不拖累。
 </div>
 
-<h2>JSON-RPC:前后端的唯一桥</h2>
-<p>Python 侧用一个极简的装饰器把函数注册成「可远程调用的方法」,再统一分派:</p>
+<h2>JSON-RPC：前后端的唯一桥</h2>
+<p>Python 侧用一个极简的装饰器把函数注册成「可远程调用的方法」，再统一分派:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">tui_gateway/server.py</span><span class="ln">959-995 · 简化</span></div>
@@ -1159,9 +1159,9 @@ LESSON_19 = {
         <span class="kw">return</span> _err(rid, -32601, <span class="st">f"unknown method: {m}"</span>)
     <span class="kw">return</span> fn(rid, params)            <span class="cm"># 分派到注册的 handler</span></pre>
 </div>
-<p>每个能被前端调用的能力,只要挂一个 <span class="mono">@method("名字")</span>。<span class="mono">handle_request</span> 收到一帧 JSON-RPC,校验后按方法名查表、分派。错误也走标准的 JSON-RPC 错误信封(<span class="mono">-32601 unknown method</span>)——前端永远拿到结构化的 <span class="mono">result</span> 或 <span class="mono">error</span>,而不是去解析一段自由文本。</p>
+<p>每个能被前端调用的能力，只要挂一个 <span class="mono">@method("名字")</span>。<span class="mono">handle_request</span> 收到一帧 JSON-RPC，校验后按方法名查表、分派。错误也走标准的 JSON-RPC 错误信封(<span class="mono">-32601 unknown method</span>)——前端永远拿到结构化的 <span class="mono">result</span> 或 <span class="mono">error</span>，而不是去解析一段自由文本。</p>
 
-<p>为什么是 stdio 上的 JSON-RPC,而不是另起一个 HTTP/REST 服务?因为 Node 前端是<strong>父进程直接 spawn 出 Python 后端</strong>的,两者天生共享一对管道——无需监听端口、无需网络鉴权、无需穿越 TCP 协议栈。一帧请求就是<strong>一行 JSON</strong>,换行即分帧,解析成本几乎为零,延迟也最低。这条进程边界还划得格外干净:<strong>TypeScript 只负责屏幕</strong>(Ink 渲染 transcript、composer、审批弹窗、活动指示),<strong>Python 独占会话、工具、模型调用,乃至 slash 命令的解析与分派</strong>(<span class="mono">slash.exec</span> 跑在常驻的 <span class="mono">_SlashWorker</span> 子进程里)。前端永不碰业务逻辑,后端永不碰像素——职责一刀两断,各自才能用各自最顺手的生态独立迭代。</p>
+<p>为什么是 stdio 上的 JSON-RPC，而不是另起一个 HTTP/REST 服务?因为 Node 前端是<strong>父进程直接 spawn 出 Python 后端</strong>的，两者天生共享一对管道——无需监听端口、无需网络鉴权、无需穿越 TCP 协议栈。一帧请求就是<strong>一行 JSON</strong>，换行即分帧，解析成本几乎为零，延迟也最低。这条进程边界还划得格外干净:<strong>TypeScript 只负责屏幕</strong>(Ink 渲染 transcript、composer、审批弹窗、活动指示),<strong>Python 独占会话、工具、模型调用，乃至 slash 命令的解析与分派</strong>(<span class="mono">slash.exec</span> 跑在常驻的 <span class="mono">_SlashWorker</span> 子进程里)。前端永不碰业务逻辑，后端永不碰像素——职责一刀两断，各自才能用各自最顺手的生态独立迭代。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 336" role="img" aria-label="TUI 两进程模型：Node 管屏幕、Python 管核心，经 stdio JSON-RPC 双向通信">
@@ -1214,14 +1214,14 @@ LESSON_19 = {
 
   <text x="340" y="312" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--muted)">同一个 Python 后端＝同一个 AIAgent 核心，前端可换可崩，核心只维护一份</text>
 </svg>
-<div class="fig-cap"><b>TUI 两进程模型</b>:<b>hermes --tui</b> 实为两个进程——Node(Ink/React) 只渲染屏幕(transcript/composer/审批/活动),Python(tui_gateway) 独占会话/工具/模型/slash 并复用同一个 <b>AIAgent 核心</b>;两者经 stdio 上换行分隔的 JSON-RPC 通信:前端发 <b>prompt.submit</b> 等方法调用(→),后端回推 <b>message.delta/complete</b> 事件流(←)。<b>TS 管屏,Python 管核心</b>。</div>
+<div class="fig-cap"><b>TUI 两进程模型</b>:<b>hermes --tui</b> 实为两个进程——Node(Ink/React) 只渲染屏幕(transcript/composer/审批/活动),Python(tui_gateway) 独占会话/工具/模型/slash 并复用同一个 <b>AIAgent 核心</b>;两者经 stdio 上换行分隔的 JSON-RPC 通信：前端发 <b>prompt.submit</b> 等方法调用(→)，后端回推 <b>message.delta/complete</b> 事件流(←)。<b>TS 管屏,Python 管核心</b>。</div>
 </div>
 
-<p>为什么坚持走标准的 JSON-RPC 错误信封(<span class="mono">-32601 unknown method</span>、<span class="mono">4009 session busy</span>)而不是回一段错误文本?因为前端要<strong>程序化地</strong>区分「方法不存在」「会话忙」「参数非法」,据此决定重试、提示还是禁用按钮;自由文本只能给人读,机器得做脆弱的字符串匹配,后端一改措辞前端就崩。把 <span class="mono">result</span> 与 <span class="mono">error</span> 钉成契约,等于给两个独立演进的技术栈立了一份不随版本漂移的接口。而装饰器 <span class="mono">@method("名字")</span> + 全局 <span class="mono">_methods</span> 表,让「新增一个能力」退化成「挂一个名字」——分派器一行不改,新方法自动可被调用。这正是窄腰对扩展的友好:边界稳定,两端各自生长。</p>
+<p>为什么坚持走标准的 JSON-RPC 错误信封(<span class="mono">-32601 unknown method</span>、<span class="mono">4009 session busy</span>)而不是回一段错误文本?因为前端要<strong>程序化地</strong>区分「方法不存在」「会话忙」「参数非法」，据此决定重试、提示还是禁用按钮;自由文本只能给人读，机器得做脆弱的字符串匹配，后端一改措辞前端就崩。把 <span class="mono">result</span> 与 <span class="mono">error</span> 钉成契约，等于给两个独立演进的技术栈立了一份不随版本漂移的接口。而装饰器 <span class="mono">@method("名字")</span> + 全局 <span class="mono">_methods</span> 表，让「新增一个能力」退化成「挂一个名字」——分派器一行不改，新方法自动可被调用。这正是窄腰对扩展的友好：边界稳定，两端各自生长。</p>
 
-<p>这套「方法 + 事件」的二分,把每个交互面都摊成一张清晰的对应表:聊天流是 <span class="mono">prompt.submit</span> → <span class="mono">message.delta/complete</span>,对应 Ink 的 <span class="mono">app.tsx</span> + <span class="mono">messageLine.tsx</span>;工具活动是 <span class="mono">tool.start/progress/complete</span>,对应 <span class="mono">thinking.tsx</span>;审批是 <span class="mono">approval.request</span> ↔ <span class="mono">approval.respond</span>,对应 <span class="mono">prompts.tsx</span>;会话选择是 <span class="mono">session.list/resume</span> 对应 <span class="mono">activeSessionSwitcher.tsx</span>;补全走 <span class="mono">complete.slash/path</span>。每加一个交互面,只是再添一对「方法 ↔ 组件」,而不动既有任何一对——这种<strong>可叠加而不耦合</strong>的结构,正是窄腰接口能撑起越来越多前端功能的原因。</p>
+<p>这套「方法 + 事件」的二分，把每个交互面都摊成一张清晰的对应表：聊天流是 <span class="mono">prompt.submit</span> → <span class="mono">message.delta/complete</span>，对应 Ink 的 <span class="mono">app.tsx</span> + <span class="mono">messageLine.tsx</span>;工具活动是 <span class="mono">tool.start/progress/complete</span>，对应 <span class="mono">thinking.tsx</span>;审批是 <span class="mono">approval.request</span> ↔ <span class="mono">approval.respond</span>，对应 <span class="mono">prompts.tsx</span>;会话选择是 <span class="mono">session.list/resume</span> 对应 <span class="mono">activeSessionSwitcher.tsx</span>;补全走 <span class="mono">complete.slash/path</span>。每加一个交互面，只是再添一对「方法 ↔ 组件」，而不动既有任何一对——这种<strong>可叠加而不耦合</strong>的结构，正是窄腰接口能撑起越来越多前端功能的原因。</p>
 
-<h2>流式回推:一个 token 一个事件</h2>
+<h2>流式回推：一个 token 一个事件</h2>
 <p>用户提交后,agent 的回复要<strong>一边生成一边显示</strong>。这靠服务器主动推 <span class="mono">event</span> 帧:</p>
 
 <div class="codefile">
@@ -1242,14 +1242,14 @@ LESSON_19 = {
 </div>
 <p>请求/响应只是一半;另一半是<strong>服务器→前端的事件流</strong>。agent 每吐出一段文本(delta),Python 就 <span class="mono">_emit("message.delta")</span> 推一帧,Ink 收到后把它追加进 transcript——这就是你看到的「逐字蹦出来」。同一套事件机制还推 <span class="mono">tool.start/progress/complete</span>、审批请求等。</p>
 
-<p>为什么一次回复要推<strong>两种</strong>事件——<span class="mono">message.delta</span> 与 <span class="mono">message.complete</span>?delta 是「正在生成」的逐块流,只带文本,负责让你看到字一个个蹦出来;complete 是「这一轮定型」的收尾帧,带上 <span class="mono">usage</span>(token 用量)、<span class="mono">status</span>(complete / interrupted / error)甚至 <span class="mono">reasoning</span>。前者追实时,后者追完整与准确,两者缺一不可:只有 delta 你拿不到用量和最终状态,只有 complete 你就失去了逐字流式的临场感。关键是,<span class="mono">_stream</span> 是作为 <span class="mono">stream_callback</span> 传进 <span class="mono">run_conversation</span> 的——TUI 的流式不是前端轮询出来的,而是<strong>核心循环每吐一块就主动回调一次</strong>,和第 7 章那个同步 agent 循环是同一处血脉。</p>
+<p>为什么一次回复要推<strong>两种</strong>事件——<span class="mono">message.delta</span> 与 <span class="mono">message.complete</span>?delta 是「正在生成」的逐块流，只带文本，负责让你看到字一个个蹦出来;complete 是「这一轮定型」的收尾帧，带上 <span class="mono">usage</span>(token 用量)、<span class="mono">status</span>(complete / interrupted / error)甚至 <span class="mono">reasoning</span>。前者追实时，后者追完整与准确，两者缺一不可：只有 delta 你拿不到用量和最终状态，只有 complete 你就失去了逐字流式的临场感。关键是,<span class="mono">_stream</span> 是作为 <span class="mono">stream_callback</span> 传进 <span class="mono">run_conversation</span> 的——TUI 的流式不是前端轮询出来的，而是<strong>核心循环每吐一块就主动回调一次</strong>，和第 7 章那个同步 agent 循环是同一处血脉。</p>
 
-<p>流式收尾处还藏着一道防线:<span class="mono">prompt.submit</span> 写回结果前会校验 <span class="mono">history_version</span>,若这一轮跑的过程中会话历史被外部改过(压缩、撤销、重试、回滚),它<strong>拒绝覆盖</strong>,转而显式报「响应可见但未写入历史」,而不是默默丢弃或污染上下文。这背后是同一条铁律:<strong>对话历史不能在一轮中途被偷偷换掉</strong>。它既守住了提示缓存那条红线(第 6 章「除压缩外绝不改动过去上下文」),也保证了消息角色的严格交替不被打乱;当多个前端共享同一个后端会话时,这种并发保护尤其要紧——少了它,一次跨窗口的撤销就可能让本轮回复落到一段已经不存在的历史上。</p>
+<p>流式收尾处还藏着一道防线:<span class="mono">prompt.submit</span> 写回结果前会校验 <span class="mono">history_version</span>，若这一轮跑的过程中会话历史被外部改过(压缩、撤销、重试、回滚)，它<strong>拒绝覆盖</strong>，转而显式报「响应可见但未写入历史」，而不是默默丢弃或污染上下文。这背后是同一条铁律:<strong>对话历史不能在一轮中途被偷偷换掉</strong>。它既守住了提示缓存那条红线(第 6 章「除压缩外绝不改动过去上下文」)，也保证了消息角色的严格交替不被打乱;当多个前端共享同一个后端会话时，这种并发保护尤其要紧——少了它，一次跨窗口的撤销就可能让本轮回复落到一段已经不存在的历史上。</p>
 
-<p>同一条事件流不止推文本,也推<strong>工具活动</strong>(<span class="mono">tool.start/progress/complete</span>,在 Ink 里由 <span class="mono">thinking.tsx</span> 渲染成「正在做什么」)和<strong>审批请求</strong>(<span class="mono">approval.request</span>,弹给 <span class="mono">prompts.tsx</span>)。为什么把这些都走同一条回推通道?因为它们本质都是「agent 跑到一半,需要把状态或请求<strong>主动告诉前端</strong>」,共用一套机制就不必为每类信号各造一条管子。审批尤其关键:它必须能在 agent <strong>正阻塞等待</strong>时穿过去,这和第 18 章网关那条「审批/控制命令要绕过运行时守卫」的纪律同根同源——若审批也被「会话忙」挡下,agent 就会永远卡在等批准上。换句话说,流式回推不只是「让字蹦得好看」,它是<strong>会话运行期间前端与后端唯一的双向窗口</strong>:进度让你知道它没死,审批让你能在关键一步前喊停,二者都靠这条事件流活着。</p>
+<p>同一条事件流不止推文本，也推<strong>工具活动</strong>(<span class="mono">tool.start/progress/complete</span>，在 Ink 里由 <span class="mono">thinking.tsx</span> 渲染成「正在做什么」)和<strong>审批请求</strong>(<span class="mono">approval.request</span>，弹给 <span class="mono">prompts.tsx</span>)。为什么把这些都走同一条回推通道?因为它们本质都是「agent 跑到一半，需要把状态或请求<strong>主动告诉前端</strong>」，共用一套机制就不必为每类信号各造一条管子。审批尤其关键：它必须能在 agent <strong>正阻塞等待</strong>时穿过去，这和第 18 章网关那条「审批/控制命令要绕过运行时守卫」的纪律同根同源——若审批也被「会话忙」挡下,agent 就会永远卡在等批准上。换句话说，流式回推不只是「让字蹦得好看」，它是<strong>会话运行期间前端与后端唯一的双向窗口</strong>：进度让你知道它没死，审批让你能在关键一步前喊停，二者都靠这条事件流活着。</p>
 
-<h2>仪表盘:不重写,直接嵌</h2>
-<p>网页仪表盘的「聊天」页,没有用 React 重写一遍 transcript/输入框,而是把整个 <span class="mono">hermes --tui</span> 经 PTY 桥进浏览器:</p>
+<h2>仪表盘：不重写，直接嵌</h2>
+<p>网页仪表盘的「聊天」页，没有用 React 重写一遍 transcript/输入框，而是把整个 <span class="mono">hermes --tui</span> 经 PTY 桥进浏览器:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/web_server.py</span><span class="ln">11505-11625 · 简化</span></div>
@@ -1269,7 +1269,7 @@ LESSON_19 = {
         match = _RESIZE_RE.match(raw)       <span class="cm"># resize escape 本地拦截</span>
         ...                                 <span class="cm"># 否则原样写进 PTY</span></pre>
 </div>
-<p>浏览器端是 xterm.js,服务端 <span class="mono">spawn</span> 出和命令行<strong>一模一样</strong>的 <span class="mono">hermes --tui</span>,两个方向<strong>原样转发字节</strong>:PTY 输出 → <span class="mono">ws.send_bytes</span> → xterm.js 渲染;键盘输入 → PTY。只有 <span class="mono">\x1b[RESIZE:...]</span> 这样的尺寸转义在服务端本地拦截、用 <span class="mono">TIOCSWINSZ</span> 调整窗口。(PTY 桥本身也是窄腰:POSIX 用 <span class="mono">pty_bridge</span>(fcntl/termios)、Windows 用 <span class="mono">win_pty_bridge</span>(ConPTY),但 <span class="mono">spawn/read/write/resize/close</span> 是同一套公共接口,<span class="mono">/api/pty</span> handler 无需任何平台分支。)<strong>你给 Ink 加的任何新功能,仪表盘里自动就有了。</strong></p>
+<p>浏览器端是 xterm.js，服务端 <span class="mono">spawn</span> 出和命令行<strong>一模一样</strong>的 <span class="mono">hermes --tui</span>，两个方向<strong>原样转发字节</strong>:PTY 输出 → <span class="mono">ws.send_bytes</span> → xterm.js 渲染;键盘输入 → PTY。只有 <span class="mono">\x1b[RESIZE:...]</span> 这样的尺寸转义在服务端本地拦截、用 <span class="mono">TIOCSWINSZ</span> 调整窗口。(PTY 桥本身也是窄腰:POSIX 用 <span class="mono">pty_bridge</span>(fcntl/termios)、Windows 用 <span class="mono">win_pty_bridge</span>(ConPTY)，但 <span class="mono">spawn/read/write/resize/close</span> 是同一套公共接口,<span class="mono">/api/pty</span> handler 无需任何平台分支。)<strong>你给 Ink 加的任何新功能，仪表盘里自动就有了。</strong></p>
 
 <div class="figure">
 <svg viewBox="0 0 680 230" role="img" aria-label="仪表盘嵌入真实 TUI：浏览器 xterm.js 经 /api/pty 转发到真正的 hermes --tui 子进程">
@@ -1313,43 +1313,43 @@ LESSON_19 = {
   <text x="340" y="172" text-anchor="middle" font-size="11.5" fill="var(--accent-ink)">↔ 原始 PTY 字节·两个方向逐字转发；仅 RESIZE 转义在服务端拦截，用 TIOCSWINSZ 调窗口</text>
   <text x="340" y="196" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">★ 绝不在 React 重写 transcript/composer——给 Ink 加的新功能，dashboard 自动就有</text>
 </svg>
-<div class="fig-cap"><b>仪表盘嵌入真实 TUI,不是 React 重写</b>:浏览器里的 xterm.js 经 <b>/api/pty</b> WebSocket 连到 pty_bridge.py,后者 <b>spawn</b> 出与命令行一模一样的真实 <b>hermes --tui</b> 子进程(POSIX PTY);PTY 字节在两个方向原样转发,仅 RESIZE 这类尺寸转义在服务端拦截。于是聊天体验只在 Ink 实现一次——<b>给 Ink 加的新功能,dashboard 自动继承</b>。</div>
+<div class="fig-cap"><b>仪表盘嵌入真实 TUI，不是 React 重写</b>：浏览器里的 xterm.js 经 <b>/api/pty</b> WebSocket 连到 pty_bridge.py，后者 <b>spawn</b> 出与命令行一模一样的真实 <b>hermes --tui</b> 子进程(POSIX PTY);PTY 字节在两个方向原样转发，仅 RESIZE 这类尺寸转义在服务端拦截。于是聊天体验只在 Ink 实现一次——<b>给 Ink 加的新功能,dashboard 自动继承</b>。</div>
 </div>
 
-<p>为什么<strong>绝不</strong>用 React 把主聊天体验重写一遍?因为那等于让 transcript、composer、PTY 终端有<strong>两套实现</strong>,注定随时间漂移——给 Ink 修了个光标 bug、加了个审批弹窗,React 版却忘了跟,用户在命令行和浏览器里看到的就是两个 Hermes。嵌入同一个 <span class="mono">hermes --tui</span> 则只有<strong>一份真相</strong>:浏览器端 <span class="mono">ChatPage.tsx</span> 挂一个 xterm.js 终端,配上 <span class="mono">WebglAddon</span>(WebGL 渲染、吃大屏滚动)、<span class="mono">FitAddon</span>(随容器自适应列宽行高)、<span class="mono">Unicode11Addon</span>(现代宽字符宽度),只负责把后端原样吐来的 ANSI 字节<strong>画</strong>出来,而不重新发明任何聊天逻辑。AGENTS.md 因此立了硬规矩:发现自己在为仪表盘重建 transcript 或 composer,就停下来,去扩 Ink。</p>
+<p>为什么<strong>绝不</strong>用 React 把主聊天体验重写一遍?因为那等于让 transcript、composer、PTY 终端有<strong>两套实现</strong>，注定随时间漂移——给 Ink 修了个光标 bug、加了个审批弹窗,React 版却忘了跟，用户在命令行和浏览器里看到的就是两个 Hermes。嵌入同一个 <span class="mono">hermes --tui</span> 则只有<strong>一份真相</strong>：浏览器端 <span class="mono">ChatPage.tsx</span> 挂一个 xterm.js 终端，配上 <span class="mono">WebglAddon</span>(WebGL 渲染、吃大屏滚动)、<span class="mono">FitAddon</span>(随容器自适应列宽行高)、<span class="mono">Unicode11Addon</span>(现代宽字符宽度)，只负责把后端原样吐来的 ANSI 字节<strong>画</strong>出来，而不重新发明任何聊天逻辑。AGENTS.md 因此立了硬规矩：发现自己在为仪表盘重建 transcript 或 composer，就停下来，去扩 Ink。</p>
 
-<p>鉴权这一处的取舍也值得一看:<span class="mono">/api/pty</span> 的 WebSocket 用 <span class="mono">?token=&lt;session&gt;</span> 查询参数携带令牌,而不是放进 <span class="mono">Authorization</span> 头——因为浏览器在 WS 升级握手时<strong>根本无法设置自定义请求头</strong>,只能退而走 URL。令牌就是 REST 那套同一个临时 <span class="mono">_SESSION_TOKEN</span>,且整条通道<strong>默认只认本地回环</strong>,非 loopback 客户端默认一律拒绝(仅当显式启用鉴权或绑到 <span class="mono">0.0.0.0</span> 时才放行非回环),把「真 PTY 暴露给浏览器」的风险锁死在本机。服务端还用一把 <span class="mono">chat_argv_lock</span> 串行化 chat-argv 解析,让多个 <span class="mono">/api/pty</span> 连接并发时不会互相抢同一份启动参数。这些都是为了让「把命令行进程投进网页」这件事既能用、又不漏。</p>
+<p>鉴权这一处的取舍也值得一看:<span class="mono">/api/pty</span> 的 WebSocket 用 <span class="mono">?token=&lt;session&gt;</span> 查询参数携带令牌，而不是放进 <span class="mono">Authorization</span> 头——因为浏览器在 WS 升级握手时<strong>根本无法设置自定义请求头</strong>，只能退而走 URL。令牌就是 REST 那套同一个临时 <span class="mono">_SESSION_TOKEN</span>，且整条通道<strong>默认只认本地回环</strong>，非 loopback 客户端默认一律拒绝(仅当显式启用鉴权或绑到 <span class="mono">0.0.0.0</span> 时才放行非回环)，把「真 PTY 暴露给浏览器」的风险锁死在本机。服务端还用一把 <span class="mono">chat_argv_lock</span> 串行化 chat-argv 解析，让多个 <span class="mono">/api/pty</span> 连接并发时不会互相抢同一份启动参数。这些都是为了让「把命令行进程投进网页」这件事既能用、又不漏。</p>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">用户在 Ink 界面输入 → 前端发 <span class="mono">prompt.submit</span> JSON-RPC 帧</span></div>
   <div class="step"><span class="num">2</span><span class="sc">Python <span class="mono">handle_request</span> 查 <span class="mono">_methods</span> 表、分派到 handler</span></div>
-  <div class="step"><span class="num">3</span><span class="sc">handler 跑 AIAgent(第 7 章核心循环),逐 token <span class="mono">_emit("message.delta")</span></span></div>
-  <div class="step"><span class="num">4</span><span class="sc">Ink 收到事件流,追加进 transcript 渲染(逐字显示)</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">handler 跑 AIAgent(第 7 章核心循环)，逐 token <span class="mono">_emit("message.delta")</span></span></div>
+  <div class="step"><span class="num">4</span><span class="sc">Ink 收到事件流，追加进 transcript 渲染(逐字显示)</span></div>
   <div class="step"><span class="num">5</span><span class="sc">仪表盘:xterm.js ⟷ <span class="mono">/api/pty</span> WebSocket ⟷ PtyBridge ⟷ 同一个 <span class="mono">hermes --tui</span></span></div>
 </div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「一套核心多前端」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>method 装饰器</strong>(RPC 注册)、<strong>handle_request</strong>(分派)、<strong>_emit/write_json</strong>(事件回推)、<strong>PtyBridge</strong>(PTY 桥)。跨章节配合:JSON-RPC 后面跑的就是 <strong>AIAgent 核心循环</strong>(第 7 章)——TUI 只是它的一个前端;<span class="mono">prompt.submit</span> 的 busy 检查与<strong>网关守卫</strong>(第 18 章)同理(运行时拒新输入);仪表盘<strong>嵌入复用</strong>同一个 hermes --tui = 不重写 = <strong>窄腰</strong>(第 4 章);Electron 桌面 App 是<strong>另一个 JSON-RPC 前端</strong>(同一个 tui_gateway 后端,自带 composer)。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>method 装饰器</strong>(RPC 注册)、<strong>handle_request</strong>(分派)、<strong>_emit/write_json</strong>(事件回推)、<strong>PtyBridge</strong>(PTY 桥)。跨章节配合:JSON-RPC 后面跑的就是 <strong>AIAgent 核心循环</strong>(第 7 章)——TUI 只是它的一个前端;<span class="mono">prompt.submit</span> 的 busy 检查与<strong>网关守卫</strong>(第 18 章)同理(运行时拒新输入);仪表盘<strong>嵌入复用</strong>同一个 hermes --tui = 不重写 = <strong>窄腰</strong>(第 4 章);Electron 桌面 App 是<strong>另一个 JSON-RPC 前端</strong>(同一个 tui_gateway 后端，自带 composer)。
   <div class="collab-sub">② 数据流时序</div>
   Ink 输入 → JSON-RPC <span class="mono">prompt.submit</span> → <span class="mono">handle_request</span> 分派 → AIAgent 跑 → <span class="mono">_emit("message.delta")</span> 流式 → Ink 渲染。仪表盘旁路:xterm.js ⟷ WS <span class="mono">/api/pty</span> ⟷ <span class="mono">PtyBridge.spawn</span> ⟷ <span class="mono">hermes --tui</span> 子进程(原样转发字节)。
   <div class="collab-sub">③ 关键点</div>
-  一套 agent 核心(Python)+ 多个前端(Ink TUI / 浏览器 PTY / Electron 桌面)靠 <strong>stdio JSON-RPC</strong> 解耦;仪表盘<strong>嵌入</strong>同一个 hermes --tui 而非重写;前端易变、核心稳定,各自独立迭代。给 Ink 加功能,仪表盘自动继承。
+  一套 agent 核心(Python)+ 多个前端(Ink TUI / 浏览器 PTY / Electron 桌面)靠 <strong>stdio JSON-RPC</strong> 解耦;仪表盘<strong>嵌入</strong>同一个 hermes --tui 而非重写;前端易变、核心稳定，各自独立迭代。给 Ink 加功能，仪表盘自动继承。
 </div>
 
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>一套 agent 核心 + JSON-RPC 解耦多前端 + 嵌入复用 = 多端一致、不重复造轮子(窄腰)</strong>。它主要治一条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——同一个 agent 要在命令行、TUI、网关、桌面 App、网页仪表盘多端出现。把 agent 核心收进 Python 后端、用稳定的 JSON-RPC 信封暴露,前端就能<strong>各用各的技术栈独立演进</strong>(Ink 用 React、桌面用 Electron、仪表盘用 xterm.js),而核心只维护一份。Node 前端崩了不会拖垮 Python agent,反之亦然——<strong>进程隔离</strong>也是运维健壮性。</p>
-  <p style="margin:.5rem 0 0">它也是<strong>窄腰</strong>(第 4 章):聊天体验(transcript/输入/PTY 终端)只在 Ink 里实现<strong>一次</strong>,仪表盘靠 PTY 嵌入复用。反模式:为浏览器用 React <strong>重写一遍</strong> transcript 和 composer——两套实现注定漂移,改一个忘一个。AGENTS.md 为此立了硬规矩:「Do not re-implement the primary chat experience in React」。</p>
-  <p style="margin:.5rem 0 0">还有第三个前端值得单列:<strong>Electron 桌面 App</strong>(<span class="mono">apps/desktop/</span>)。它和仪表盘走的是<strong>相反</strong>的路——<strong>不嵌</strong> <span class="mono">hermes --tui</span>,而是用 <span class="mono">@assistant-ui/react</span> + nanostore 自建 composer、transcript 与 slash 管线,经同一套 JSON-RPC(<span class="mono">requestGateway</span>)连同一个 tui_gateway 后端。为什么这次允许「另起一套界面」?因为它不是终端、装不进 PTY,要的是富交互的原生桌面体验,这是一个<strong>独立的 chat surface</strong>,而非对终端体验的重复。但它的 slash 命令<strong>策展而不封杀</strong>:面板默认只摆约 28 个内置命令以免噪音,可技能、用户 quick_commands 这类<strong>扩展</strong>必须照常浮现——因为后端早已把它们一并暴露,藏的是噪音,不是用户激活的能力。</p>
-  <p style="margin:.5rem 0 0">把镜头拉到全书:本章其实是「<strong>窄腰</strong>」最直观的一次落地。同一个 AIAgent 核心(第 7 章)被<strong>四类外壳</strong>共用——经典 CLI、Ink TUI、桌面 App,以及第 17 章的消息网关——它们要么是 JSON-RPC 前端,要么是网关适配器,核心只维护一份。<span class="mono">prompt.submit</span> 那句 <span class="mono">session busy</span> 忙检查,和第 18 章网关「agent 运行时拒新输入」的守卫是<strong>同一个意思</strong>:一个会话同一时刻只跑一轮。而仪表盘嵌入复用、桌面共享后端、TUI 流式回推,合起来印证了那条贯穿全书的取舍——<strong>把易变的前端推到边缘,把稳定的能力收进窄腰</strong>:前端可以百花齐放、各用各的栈崩了也不连累核心,而 agent 的会话、工具、缓存纪律只在一处被定义、被守护。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——同一个 agent 要在命令行、TUI、网关、桌面 App、网页仪表盘多端出现。把 agent 核心收进 Python 后端、用稳定的 JSON-RPC 信封暴露，前端就能<strong>各用各的技术栈独立演进</strong>(Ink 用 React、桌面用 Electron、仪表盘用 xterm.js)，而核心只维护一份。Node 前端崩了不会拖垮 Python agent，反之亦然——<strong>进程隔离</strong>也是运维健壮性。</p>
+  <p style="margin:.5rem 0 0">它也是<strong>窄腰</strong>(第 4 章)：聊天体验(transcript/输入/PTY 终端)只在 Ink 里实现<strong>一次</strong>，仪表盘靠 PTY 嵌入复用。反模式：为浏览器用 React <strong>重写一遍</strong> transcript 和 composer——两套实现注定漂移，改一个忘一个。AGENTS.md 为此立了硬规矩:「Do not re-implement the primary chat experience in React」。</p>
+  <p style="margin:.5rem 0 0">还有第三个前端值得单列:<strong>Electron 桌面 App</strong>(<span class="mono">apps/desktop/</span>)。它和仪表盘走的是<strong>相反</strong>的路——<strong>不嵌</strong> <span class="mono">hermes --tui</span>，而是用 <span class="mono">@assistant-ui/react</span> + nanostore 自建 composer、transcript 与 slash 管线，经同一套 JSON-RPC(<span class="mono">requestGateway</span>)连同一个 tui_gateway 后端。为什么这次允许「另起一套界面」?因为它不是终端、装不进 PTY，要的是富交互的原生桌面体验，这是一个<strong>独立的 chat surface</strong>，而非对终端体验的重复。但它的 slash 命令<strong>策展而不封杀</strong>：面板默认只摆约 28 个内置命令以免噪音，可技能、用户 quick_commands 这类<strong>扩展</strong>必须照常浮现——因为后端早已把它们一并暴露，藏的是噪音，不是用户激活的能力。</p>
+  <p style="margin:.5rem 0 0">把镜头拉到全书：本章其实是「<strong>窄腰</strong>」最直观的一次落地。同一个 AIAgent 核心(第 7 章)被<strong>四类外壳</strong>共用——经典 CLI、Ink TUI、桌面 App，以及第 17 章的消息网关——它们要么是 JSON-RPC 前端，要么是网关适配器，核心只维护一份。<span class="mono">prompt.submit</span> 那句 <span class="mono">session busy</span> 忙检查，和第 18 章网关「agent 运行时拒新输入」的守卫是<strong>同一个意思</strong>：一个会话同一时刻只跑一轮。而仪表盘嵌入复用、桌面共享后端、TUI 流式回推，合起来印证了那条贯穿全书的取舍——<strong>把易变的前端推到边缘，把稳定的能力收进窄腰</strong>：前端可以百花齐放、各用各的栈崩了也不连累核心，而 agent 的会话、工具、缓存纪律只在一处被定义、被守护。</p>
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 408" role="img" aria-label="实例图:一次真实 prompt.submit 的 JSON-RPC 帧序列。① 前端 request,jsonrpc 2.0,id 1,method prompt.submit,params 含 session_id s1 与 text 列出本目录;② 后端立即响应 result status streaming,会话忙时回 error code 4009 session busy;③ 事件流,_emit message.delta sid 与 payload text delta,真实信封 method event,params 含 type message.delta、session_id、payload text delta,server.py 887 与 7222;④ 同一 event 信封管道还推 tool.start、tool.complete、approval.request;⑤ history_version 守门 server.py 7244,current_version 等于 history_version 才写历史,否则响应可见但未写历史;⑥ message.complete payload,text raw、usage、status 取 complete 或 interrupted 或 error,server.py 7305。">
-  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:一次 prompt.submit 的 JSON-RPC 帧序列</text>
+<svg viewBox="0 0 680 408" role="img" aria-label="实例图：一次真实 prompt.submit 的 JSON-RPC 帧序列。① 前端 request,jsonrpc 2.0,id 1,method prompt.submit,params 含 session_id s1 与 text 列出本目录;② 后端立即响应 result status streaming，会话忙时回 error code 4009 session busy;③ 事件流,_emit message.delta sid 与 payload text delta，真实信封 method event,params 含 type message.delta、session_id、payload text delta,server.py 887 与 7222;④ 同一 event 信封管道还推 tool.start、tool.complete、approval.request;⑤ history_version 守门 server.py 7244,current_version 等于 history_version 才写历史，否则响应可见但未写历史;⑥ message.complete payload,text raw、usage、status 取 complete 或 interrupted 或 error,server.py 7305。">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例：一次 prompt.submit 的 JSON-RPC 帧序列</text>
   <text x="20" y="44" font-size="10" fill="var(--muted)">前端 request → status:streaming → N×message.delta → message.complete</text>
   <text x="644" y="33" text-anchor="middle" font-size="22">🎞️</text>
 
@@ -1398,9 +1398,9 @@ LESSON_19 = {
   <text x="456" y="338" font-size="9" fill="var(--red)">  但未写历史(防 desync)</text>
   <text x="456" y="352" font-size="9" fill="var(--muted)">undo/compress 期间的护栏</text>
 
-  <text x="20" y="384" font-size="9.5" fill="var(--muted)">读这张图:一次 prompt.submit 的真实帧录像——同步 result 只说「开始流式」,真实内容全靠后续 event 信封逐帧推送。</text>
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">读这张图：一次 prompt.submit 的真实帧录像——同步 result 只说「开始流式」，真实内容全靠后续 event 信封逐帧推送。</text>
 </svg>
-<div class="fig-cap"><b>实例:一次 prompt.submit 的 JSON 帧录像</b>:① 前端发 <span class="mono">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,&quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;列出本目录&quot;}}</span>;② 后端立即 <span class="mono">_ok</span> 回 <span class="mono">{&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</span>(忙时 <span class="mono">_err code 4009</span>);③ 内容靠 <span class="mono">_emit</span> 的真实信封 <span class="mono">{&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:&quot;message.delta&quot;,&quot;session_id&quot;:sid,&quot;payload&quot;:{&quot;text&quot;:delta}}}</span> 逐帧推;④ <span class="mono">tool.start/complete</span>、<span class="mono">approval.request</span> 走同一管道;⑤ <span class="mono">history_version</span> 守门——不匹配则响应可见但不写历史;⑥ <span class="mono">message.complete</span> 的 <span class="mono">{text,usage,status}</span>,<span class="mono">status ∈ complete|interrupted|error</span>。每个字段都能在 <span class="mono">tui_gateway/server.py</span> 对应行找到。</div>
+<div class="fig-cap"><b>实例：一次 prompt.submit 的 JSON 帧录像</b>:① 前端发 <span class="mono">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,&quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;列出本目录&quot;}}</span>;② 后端立即 <span class="mono">_ok</span> 回 <span class="mono">{&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</span>(忙时 <span class="mono">_err code 4009</span>);③ 内容靠 <span class="mono">_emit</span> 的真实信封 <span class="mono">{&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:&quot;message.delta&quot;,&quot;session_id&quot;:sid,&quot;payload&quot;:{&quot;text&quot;:delta}}}</span> 逐帧推;④ <span class="mono">tool.start/complete</span>、<span class="mono">approval.request</span> 走同一管道;⑤ <span class="mono">history_version</span> 守门——不匹配则响应可见但不写历史;⑥ <span class="mono">message.complete</span> 的 <span class="mono">{text,usage,status}</span>,<span class="mono">status ∈ complete|interrupted|error</span>。每个字段都能在 <span class="mono">tui_gateway/server.py</span> 对应行找到。</div>
 </div>
 
 <div class="card key">
@@ -1409,8 +1409,8 @@ LESSON_19 = {
     <li><strong>两进程模型</strong>:Node(Ink 渲染屏幕)⟷ stdio JSON-RPC ⟷ Python(tui_gateway 跑 AIAgent)。TS 拥有屏幕,Python 拥有会话/工具/模型。</li>
     <li><strong>JSON-RPC 桥</strong>:<span class="mono">@method("名字")</span> 注册、<span class="mono">handle_request</span> 分派、标准 result/error 信封;前端拿结构化数据而非自由文本。</li>
     <li><strong>流式事件</strong>:<span class="mono">_emit("message.delta")</span> 逐 token 推回,Ink 追加 transcript(逐字显示);tool.start/complete 同机制。</li>
-    <li><strong>仪表盘嵌入</strong>:<span class="mono">/api/pty</span> WebSocket 把同一个 <span class="mono">hermes --tui</span> 经 PTY 投进 xterm.js,双向转发字节,resize 转义本地拦截。</li>
-    <li><strong>窄腰复用</strong>:聊天面只实现一次(Ink),仪表盘嵌入继承;<strong>不</strong>用 React 重写——给 Ink 加功能,仪表盘自动有(第 4 章)。</li>
+    <li><strong>仪表盘嵌入</strong>:<span class="mono">/api/pty</span> WebSocket 把同一个 <span class="mono">hermes --tui</span> 经 PTY 投进 xterm.js，双向转发字节,resize 转义本地拦截。</li>
+    <li><strong>窄腰复用</strong>：聊天面只实现一次(Ink)，仪表盘嵌入继承;<strong>不</strong>用 React 重写——给 Ink 加功能，仪表盘自动有(第 4 章)。</li>
   </ul>
 </div>
 """,
@@ -1705,16 +1705,16 @@ LESSON_19 = {
 
 LESSON_20 = {
     "zh": r"""
-<p class="lead">同一台机器上,你想跑两个完全独立的 Hermes:一个「工作号」、一个「私人号」,各有各的 API key、记忆、会话、技能、网关——互不串台。这就是 <strong>profile</strong>。它的全部魔法,浓缩成一句话:<strong>在任何模块 import 之前,抢先设好一个环境变量 <span class="mono">HERMES_HOME</span></strong>。</p>
+<p class="lead">同一台机器上，你想跑两个完全独立的 Hermes：一个「工作号」、一个「私人号」，各有各的 API key、记忆、会话、技能、网关——互不串台。这就是 <strong>profile</strong>。它的全部魔法，浓缩成一句话:<strong>在任何模块 import 之前，抢先设好一个环境变量 <span class="mono">HERMES_HOME</span></strong>。</p>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 连锁酒店的分店</div>
-  同一套管理系统(Hermes 代码),开了多家分店(profile)。每家分店有<strong>独立的钥匙、账本、客房</strong>(各自的 <span class="mono">HERMES_HOME</span> 目录)。你一进门,前台先确认「您是哪家分店的」(<span class="mono">_apply_profile_override</span> 抢先设 <span class="mono">HERMES_HOME</span>),之后你办的<strong>每一件事</strong>都自动用那家店的资源——不会刷错账本、拿错钥匙。
+  同一套管理系统(Hermes 代码)，开了多家分店(profile)。每家分店有<strong>独立的钥匙、账本、客房</strong>(各自的 <span class="mono">HERMES_HOME</span> 目录)。你一进门，前台先确认「您是哪家分店的」(<span class="mono">_apply_profile_override</span> 抢先设 <span class="mono">HERMES_HOME</span>)，之后你办的<strong>每一件事</strong>都自动用那家店的资源——不会刷错账本、拿错钥匙。
 </div>
 
 <div class="card macro">
   <div class="tag">🌍 宏观 · 一个环境变量决定一切</div>
-  profile 切换只做<strong>一件事</strong>:在 <span class="mono">main.py</span> 的<strong>模块顶层</strong>、其余 import 之前,把 <span class="mono">HERMES_HOME</span> 设成 <span class="mono">~/.hermes/profiles/&lt;名字&gt;</span>。之后全代码库唯一的路径入口 <span class="mono">get_hermes_home()</span> 自动指向那个目录,配置/密钥/记忆/会话/技能<strong>全部隔离</strong>。配置本身再分两层:行为设置进 <span class="mono">config.yaml</span>、密钥进 <span class="mono">.env</span>。
+  profile 切换只做<strong>一件事</strong>：在 <span class="mono">main.py</span> 的<strong>模块顶层</strong>、其余 import 之前，把 <span class="mono">HERMES_HOME</span> 设成 <span class="mono">~/.hermes/profiles/&lt;名字&gt;</span>。之后全代码库唯一的路径入口 <span class="mono">get_hermes_home()</span> 自动指向那个目录，配置/密钥/记忆/会话/技能<strong>全部隔离</strong>。配置本身再分两层：行为设置进 <span class="mono">config.yaml</span>、密钥进 <span class="mono">.env</span>。
 </div>
 
 <h2>抢跑:import 之前设 HERMES_HOME</h2>
@@ -1728,16 +1728,16 @@ LESSON_20 = {
     <span class="kw">if</span> profile_name <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span>:
         hermes_home = resolve_profile_env(profile_name)   <span class="cm"># → ~/.hermes/profiles/coder</span>
         os.environ[<span class="st">"HERMES_HOME"</span>] = hermes_home          <span class="cm"># 抢先设环境变量</span>
-        <span class="cm"># 再把 -p 标志从 argv 剥掉,免得后面 argparse 报错</span>
+        <span class="cm"># 再把 -p 标志从 argv 剥掉，免得后面 argparse 报错</span>
 
-_apply_profile_override()   <span class="cm"># 模块级:在其余 import 之前就执行</span></pre>
+_apply_profile_override()   <span class="cm"># 模块级：在其余 import 之前就执行</span></pre>
 </div>
-<p>注意最后那行 <span class="mono">_apply_profile_override()</span> 是<strong>模块级调用</strong>——在 <span class="mono">main.py</span> 顶层执行,<strong>早于</strong> <span class="mono">config</span>、<span class="mono">env_loader</span> 等会读取/缓存 <span class="mono">HERMES_HOME</span> 的落盘业务模块被 <span class="mono">import</span>。等到那些模块加载时去读 <span class="mono">HERMES_HOME</span>,看到的已经是 profile 的目录了。一个环境变量,把整棵依赖树重定向到了正确的实例。</p>
-<p>为什么非得在<strong>模块顶层、import 之前</strong>调用,而不是塞进某个 <span class="mono">main()</span> 函数里?因为 Python 的 import 只执行一次,很多落盘模块在被 import 的<strong>那一刻</strong>就用 <span class="mono">get_hermes_home()</span> 算出路径、缓存进模块级常量(这正是第 8 章自动发现「import 即注册」的同一性质)。只要 <span class="mono">config</span>、<span class="mono">env_loader</span> 里任意一个抢先 import 成功,它读到的就是默认 <span class="mono">~/.hermes</span>,profile 再设也晚了——缓存已被定死,无从更正。把 <span class="mono">_apply_profile_override()</span> 写成裸调用、且放在文件最顶端,等于用「import 顺序」这把唯一可靠的锁,保证环境变量永远先于第一个落盘模块就位。这也解释了它为何要自己手撸 argv 解析、而不用 <span class="mono">argparse</span>:后者得先 import 一堆模块,太晚了。</p>
-<p>这套抢跑机制还有两个常被忽视的收尾。其一,设好 <span class="mono">HERMES_HOME</span> 之后,<span class="mono">_apply_profile_override()</span> 会把 <span class="mono">-p/--profile</span> 标志从 <span class="mono">argv</span> 里剥掉,免得后面正式的 <span class="mono">argparse</span> 因不认识这个参数而报错——也就是说 profile 解析故意走在标准参数解析<strong>之前</strong>、独立成一套轻量逻辑。其二,源码里回退的「平台默认」并非写死的 <span class="mono">~/.hermes</span>:在 Windows 上 <span class="mono">_get_platform_default_hermes_home()</span> 会改用 <span class="mono">LOCALAPPDATA</span> 下的目录。所以这个「单一入口」不仅服务于 profile 隔离,也顺手把跨平台的路径差异一并收进了同一个函数,让所有调用方对此一律无感——这正是单一真相源在「可维护性」上的额外红利。</p>
+<p>注意最后那行 <span class="mono">_apply_profile_override()</span> 是<strong>模块级调用</strong>——在 <span class="mono">main.py</span> 顶层执行,<strong>早于</strong> <span class="mono">config</span>、<span class="mono">env_loader</span> 等会读取/缓存 <span class="mono">HERMES_HOME</span> 的落盘业务模块被 <span class="mono">import</span>。等到那些模块加载时去读 <span class="mono">HERMES_HOME</span>，看到的已经是 profile 的目录了。一个环境变量，把整棵依赖树重定向到了正确的实例。</p>
+<p>为什么非得在<strong>模块顶层、import 之前</strong>调用，而不是塞进某个 <span class="mono">main()</span> 函数里?因为 Python 的 import 只执行一次，很多落盘模块在被 import 的<strong>那一刻</strong>就用 <span class="mono">get_hermes_home()</span> 算出路径、缓存进模块级常量(这正是第 8 章自动发现「import 即注册」的同一性质)。只要 <span class="mono">config</span>、<span class="mono">env_loader</span> 里任意一个抢先 import 成功，它读到的就是默认 <span class="mono">~/.hermes</span>,profile 再设也晚了——缓存已被定死，无从更正。把 <span class="mono">_apply_profile_override()</span> 写成裸调用、且放在文件最顶端，等于用「import 顺序」这把唯一可靠的锁，保证环境变量永远先于第一个落盘模块就位。这也解释了它为何要自己手撸 argv 解析、而不用 <span class="mono">argparse</span>：后者得先 import 一堆模块，太晚了。</p>
+<p>这套抢跑机制还有两个常被忽视的收尾。其一，设好 <span class="mono">HERMES_HOME</span> 之后,<span class="mono">_apply_profile_override()</span> 会把 <span class="mono">-p/--profile</span> 标志从 <span class="mono">argv</span> 里剥掉，免得后面正式的 <span class="mono">argparse</span> 因不认识这个参数而报错——也就是说 profile 解析故意走在标准参数解析<strong>之前</strong>、独立成一套轻量逻辑。其二，源码里回退的「平台默认」并非写死的 <span class="mono">~/.hermes</span>：在 Windows 上 <span class="mono">_get_platform_default_hermes_home()</span> 会改用 <span class="mono">LOCALAPPDATA</span> 下的目录。所以这个「单一入口」不仅服务于 profile 隔离，也顺手把跨平台的路径差异一并收进了同一个函数，让所有调用方对此一律无感——这正是单一真相源在「可维护性」上的额外红利。</p>
 
-<h2>单一真相源:所有路径都问它</h2>
-<p>全代码库不准硬编码 <span class="mono">~/.hermes</span>,一律走这一个函数:</p>
+<h2>单一真相源：所有路径都问它</h2>
+<p>全代码库不准硬编码 <span class="mono">~/.hermes</span>，一律走这一个函数:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">hermes_constants.py</span><span class="ln">54-109 · 节选</span></div>
@@ -1752,12 +1752,12 @@ _apply_profile_override()   <span class="cm"># 模块级:在其余 import 之前
         <span class="kw">return</span> Path(val)                     <span class="cm"># ← profile 设的就是这个</span>
     <span class="kw">return</span> _get_platform_default_hermes_home()   <span class="cm"># 默认 ~/.hermes</span></pre>
 </div>
-<p><strong>「single source of truth — all other copies should import this」</strong>:全代码库 30+ 处要落盘的地方,都不自己拼 <span class="mono">~/.hermes</span>,而是调 <span class="mono">get_hermes_home()</span>。于是 profile 一旦在开头设好 <span class="mono">HERMES_HOME</span>,会话库、记忆、技能、网关日志……<strong>统统自动</strong>落到 profile 目录。反过来,任何一处硬编码 <span class="mono">Path.home()/".hermes"</span> 都会<strong>击穿隔离</strong>(PR #3575 一次就修了 5 个这种 bug)。</p>
-<p>为什么是一个<strong>函数</strong>而不是一个模块级常量?因为常量在 import 时就被求值、之后再也无法改变;而 profile、子代理、并发线程都可能要在运行期临时切换 home。<span class="mono">get_hermes_home()</span> 每次调用先看 <span class="mono">ContextVar</span> 覆盖——让同一进程内并发的子代理各认各的实例,呼应第 13 章委派的隔离——再看 <span class="mono">HERMES_HOME</span> 环境变量,最后才回退平台默认。源码还特意保留一段逻辑:当环境变量缺失、但 <span class="mono">active_profile</span> 文件指向一个非默认 profile 时,往 <span class="mono">stderr</span> 打一条响亮的一次性告警。为什么是告警而不是抛异常?因为这函数有 30+ 个模块级调用方在 import 期就会执行它,一旦抛异常会把它们全部弄崩,所以宁可告警、留下可诊断的线索,也绝不阻断启动。</p>
-<p>这个回退设计透露的工程哲学值得品味:<span class="mono">get_hermes_home()</span> 宁可在 <span class="mono">HERMES_HOME</span> 缺失时<strong>安静回退默认 + 留一条告警</strong>,也不肯把自己变成一个会抛异常的「严格守门人」。原因前面说过——它是被 30+ 个模块在 import 期同步调用的底座,任何会失败的底座都会让整个进程的启动变脆。把不确定性挡在 import 之外、用环境变量在最前面一次性定死,再让所有调用方无脑信任这唯一入口,正是「无状态内核 + 外部一个变量定乾坤」在路径层面的具体落地。也正因如此,子进程派生(<span class="mono">systemd</span> 模板、kanban 调度器)必须显式把 <span class="mono">HERMES_HOME</span> 透传下去,否则子进程读不到环境变量,会悄悄退回默认实例、写错 profile——这是分布式跑多实例时最隐蔽的一类污染源。</p>
+<p><strong>「single source of truth — all other copies should import this」</strong>：全代码库 30+ 处要落盘的地方，都不自己拼 <span class="mono">~/.hermes</span>，而是调 <span class="mono">get_hermes_home()</span>。于是 profile 一旦在开头设好 <span class="mono">HERMES_HOME</span>，会话库、记忆、技能、网关日志……<strong>统统自动</strong>落到 profile 目录。反过来，任何一处硬编码 <span class="mono">Path.home()/".hermes"</span> 都会<strong>击穿隔离</strong>(PR #3575 一次就修了 5 个这种 bug)。</p>
+<p>为什么是一个<strong>函数</strong>而不是一个模块级常量?因为常量在 import 时就被求值、之后再也无法改变;而 profile、子代理、并发线程都可能要在运行期临时切换 home。<span class="mono">get_hermes_home()</span> 每次调用先看 <span class="mono">ContextVar</span> 覆盖——让同一进程内并发的子代理各认各的实例，呼应第 13 章委派的隔离——再看 <span class="mono">HERMES_HOME</span> 环境变量，最后才回退平台默认。源码还特意保留一段逻辑：当环境变量缺失、但 <span class="mono">active_profile</span> 文件指向一个非默认 profile 时，往 <span class="mono">stderr</span> 打一条响亮的一次性告警。为什么是告警而不是抛异常?因为这函数有 30+ 个模块级调用方在 import 期就会执行它，一旦抛异常会把它们全部弄崩，所以宁可告警、留下可诊断的线索，也绝不阻断启动。</p>
+<p>这个回退设计透露的工程哲学值得品味:<span class="mono">get_hermes_home()</span> 宁可在 <span class="mono">HERMES_HOME</span> 缺失时<strong>安静回退默认 + 留一条告警</strong>，也不肯把自己变成一个会抛异常的「严格守门人」。原因前面说过——它是被 30+ 个模块在 import 期同步调用的底座，任何会失败的底座都会让整个进程的启动变脆。把不确定性挡在 import 之外、用环境变量在最前面一次性定死，再让所有调用方无脑信任这唯一入口，正是「无状态内核 + 外部一个变量定乾坤」在路径层面的具体落地。也正因如此，子进程派生(<span class="mono">systemd</span> 模板、kanban 调度器)必须显式把 <span class="mono">HERMES_HOME</span> 透传下去，否则子进程读不到环境变量，会悄悄退回默认实例、写错 profile——这是分布式跑多实例时最隐蔽的一类污染源。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 392" role="img" aria-label="Profiles 是独立的岛:每个 profile 有独立 HERMES_HOME,彼此完全隔离、不做实时继承">
+<svg viewBox="0 0 680 392" role="img" aria-label="Profiles 是独立的岛：每个 profile 有独立 HERMES_HOME，彼此完全隔离、不做实时继承">
   <rect x="20" y="20" width="300" height="46" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
   <text x="170" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">_apply_profile_override()</text>
   <text x="170" y="57" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">任何 import 之前 · 抢设 HERMES_HOME</text>
@@ -1771,7 +1771,7 @@ _apply_profile_override()   <span class="cm"># 模块级:在其余 import 之前
 
   <path d="M118 132 Q229 96 340 132" fill="none" stroke="var(--purple)" stroke-width="1.6" stroke-dasharray="5 4"/>
   <polygon points="335,123 343,134 329,132" fill="var(--purple)"/>
-  <text x="229" y="108" text-anchor="middle" font-size="10" fill="var(--purple)">--clone:创建时一次性拷贝(之后各走各路)</text>
+  <text x="229" y="108" text-anchor="middle" font-size="10" fill="var(--purple)">--clone：创建时一次性拷贝(之后各走各路)</text>
 
   <rect x="20" y="134" width="196" height="216" rx="12" fill="var(--panel-2)" stroke="var(--line)" stroke-width="1.5"/>
   <text x="118" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">default</text>
@@ -1819,11 +1819,11 @@ _apply_profile_override()   <span class="cm"># 模块级:在其余 import 之前
 
   <text x="340" y="378" text-anchor="middle" font-size="10.5" fill="var(--muted)"><tspan fill="var(--red)" font-weight="700">✕</tspan> 不做实时继承　·　硬编码 ~/.hermes 会击穿隔离(PR #3575)</text>
 </svg>
-<div class="fig-cap"><b>Profiles:独立的岛</b>:<span class="mono">_apply_profile_override()</span> 在任何 import 前抢设 <span class="mono">HERMES_HOME</span>,全代码库再走 <span class="mono">get_hermes_home()</span> 单一入口——于是每个 profile 的 config/密钥/记忆/会话/技能/网关<b>各落各的目录、完全隔离</b>。岛与岛之间<b>刻意不做实时继承</b>(避免改一处污染全体);要「从默认起步」就用创建时一次性拷贝的 <span class="mono">--clone</span>。</div>
+<div class="fig-cap"><b>Profiles：独立的岛</b>:<span class="mono">_apply_profile_override()</span> 在任何 import 前抢设 <span class="mono">HERMES_HOME</span>，全代码库再走 <span class="mono">get_hermes_home()</span> 单一入口——于是每个 profile 的 config/密钥/记忆/会话/技能/网关<b>各落各的目录、完全隔离</b>。岛与岛之间<b>刻意不做实时继承</b>(避免改一处污染全体);要「从默认起步」就用创建时一次性拷贝的 <span class="mono">--clone</span>。</div>
 </div>
 
-<h2>配置分层:行为进 yaml,密钥进 env</h2>
-<p>profile 隔离的是「存哪」;而「存什么」分两层,泾渭分明:</p>
+<h2>配置分层：行为进 yaml，密钥进 env</h2>
+<p>profile 隔离的是「存哪」;而「存什么」分两层，泾渭分明:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/config.py</span><span class="ln">883 / 2860 / 2885 · 简化</span></div>
@@ -1840,16 +1840,16 @@ OPTIONAL_ENV_VARS = {
     <span class="st">"TELEGRAM_BOT_TOKEN"</span>: {<span class="st">"password"</span>: <span class="kw">True</span>, <span class="st">"category"</span>: <span class="st">"messaging"</span>},
 }</pre>
 </div>
-<p>设计意图很明确:<strong><span class="mono">.env</span> 主要放凭据</strong>(密钥条目标 <span class="mono">password: True</span>、setup 向导掩码输入;<span class="mono">OPTIONAL_ENV_VARS</span> 里也有不少(实测 66 个)<span class="mono">password: False</span> 的非密连接项,如 base URL、代理);而超时、阈值、功能开关、显示偏好这些<strong>行为设置一律进 <span class="mono">config.yaml</span></strong>。所以「给 messaging 设个工作目录」绝不能塞进 <span class="mono">.env</span>(已废弃的 <span class="mono">MESSAGING_CWD</span> 就是反例),而要写 <span class="mono">terminal.cwd</span>。这条线让凭据独立成一个可单独保护、单独 gitignore 的文件。</p>
-<p>为什么一定要把密钥和行为设置劈成两个文件?因为它们的生命周期与信任级别天差地别:密钥绝不能进版本控制,<span class="mono">.env</span> 因此能被单独 <span class="mono">gitignore</span>、单独收紧权限;而 <span class="mono">config.yaml</span> 是可读、可 diff、可随项目迁移的行为快照,团队成员照着改也不怕泄密。这里还藏着一个工程红利:<span class="mono">DEFAULT_CONFIG</span> 与用户 yaml 走 <span class="mono">_deep_merge</span> 合并,<strong>新增一个键会被自动补全</strong>,所以只有改键名、改结构这种破坏性迁移才需要 bump <span class="mono">_config_version</span>。代价是配置读取分了三条路径——CLI 的 <span class="mono">load_cli_config</span>、子命令的 <span class="mono">load_config</span>、网关直读 yaml——加键时三条都得覆盖到,否则会出现「CLI 看得见、网关看不见」的诡异不一致。</p>
-<p>这里必须对「<span class="mono">.env</span> 里全是密钥」保持诚实:那是<strong>设计政策与理想</strong>,现实并不绝对。翻一翻 <span class="mono">OPTIONAL_ENV_VARS</span>,会看到不少标着 <span class="mono">password: False</span> 的非密项,例如 <span class="mono">NOUS_BASE_URL</span>、<span class="mono">GEMINI_BASE_URL</span>、<span class="mono">XAI_BASE_URL</span> 这类 base URL 覆盖——它们出于历史与兼容,至今仍寄居在 <span class="mono">.env</span> 里。所以准确的说法是:<strong>政策上 <span class="mono">.env</span> 应只放凭据,但历史包袱让它仍混着少量非密的连接项</strong>。判断一个新设置该放哪,标准很简单——看它是不是秘密:是 API key、token 就进 <span class="mono">.env</span>;是超时、阈值、开关、显示偏好就进 <span class="mono">config.yaml</span>,别被现存的反例带偏。</p>
-<p>把 <span class="mono">config.yaml</span> 单独拎出来还有个全局意义:它几乎是全书各章行为的<strong>总开关面板</strong>。一个 yaml 文件里,<span class="mono">model</span> 决定路由、<span class="mono">compression</span> 调压缩阈值、<span class="mono">delegation</span> 管子代理并发与深度(第 13 章)、<span class="mono">curator</span> 控技能生命周期(第 10 章)、<span class="mono">gateway</span> 配各平台网关(第 17 章)、<span class="mono">memory</span> 选记忆后端(第 11 章)。正因为这些行为设置全是可读、可 diff 的纯数据,profile 才能靠「复制一个目录」就连同<strong>整套行为策略</strong>一起克隆;若它们散落在代码常量或 <span class="mono">.env</span> 里,profile 隔离就只能隔离密钥、隔离不了行为,多实例的价值会大打折扣。配置分层与 profile 隔离,本质上是同一个「状态外置、目录即实例」理念的一体两面。</p>
+<p>设计意图很明确:<strong><span class="mono">.env</span> 主要放凭据</strong>(密钥条目标 <span class="mono">password: True</span>、setup 向导掩码输入;<span class="mono">OPTIONAL_ENV_VARS</span> 里也有不少(实测 66 个)<span class="mono">password: False</span> 的非密连接项，如 base URL、代理);而超时、阈值、功能开关、显示偏好这些<strong>行为设置一律进 <span class="mono">config.yaml</span></strong>。所以「给 messaging 设个工作目录」绝不能塞进 <span class="mono">.env</span>(已废弃的 <span class="mono">MESSAGING_CWD</span> 就是反例)，而要写 <span class="mono">terminal.cwd</span>。这条线让凭据独立成一个可单独保护、单独 gitignore 的文件。</p>
+<p>为什么一定要把密钥和行为设置劈成两个文件?因为它们的生命周期与信任级别天差地别：密钥绝不能进版本控制,<span class="mono">.env</span> 因此能被单独 <span class="mono">gitignore</span>、单独收紧权限;而 <span class="mono">config.yaml</span> 是可读、可 diff、可随项目迁移的行为快照，团队成员照着改也不怕泄密。这里还藏着一个工程红利:<span class="mono">DEFAULT_CONFIG</span> 与用户 yaml 走 <span class="mono">_deep_merge</span> 合并,<strong>新增一个键会被自动补全</strong>，所以只有改键名、改结构这种破坏性迁移才需要 bump <span class="mono">_config_version</span>。代价是配置读取分了三条路径——CLI 的 <span class="mono">load_cli_config</span>、子命令的 <span class="mono">load_config</span>、网关直读 yaml——加键时三条都得覆盖到，否则会出现「CLI 看得见、网关看不见」的诡异不一致。</p>
+<p>这里必须对「<span class="mono">.env</span> 里全是密钥」保持诚实：那是<strong>设计政策与理想</strong>，现实并不绝对。翻一翻 <span class="mono">OPTIONAL_ENV_VARS</span>，会看到不少标着 <span class="mono">password: False</span> 的非密项，例如 <span class="mono">NOUS_BASE_URL</span>、<span class="mono">GEMINI_BASE_URL</span>、<span class="mono">XAI_BASE_URL</span> 这类 base URL 覆盖——它们出于历史与兼容，至今仍寄居在 <span class="mono">.env</span> 里。所以准确的说法是:<strong>政策上 <span class="mono">.env</span> 应只放凭据，但历史包袱让它仍混着少量非密的连接项</strong>。判断一个新设置该放哪，标准很简单——看它是不是秘密：是 API key、token 就进 <span class="mono">.env</span>;是超时、阈值、开关、显示偏好就进 <span class="mono">config.yaml</span>，别被现存的反例带偏。</p>
+<p>把 <span class="mono">config.yaml</span> 单独拎出来还有个全局意义：它几乎是全书各章行为的<strong>总开关面板</strong>。一个 yaml 文件里,<span class="mono">model</span> 决定路由、<span class="mono">compression</span> 调压缩阈值、<span class="mono">delegation</span> 管子代理并发与深度(第 13 章)、<span class="mono">curator</span> 控技能生命周期(第 10 章)、<span class="mono">gateway</span> 配各平台网关(第 17 章)、<span class="mono">memory</span> 选记忆后端(第 11 章)。正因为这些行为设置全是可读、可 diff 的纯数据,profile 才能靠「复制一个目录」就连同<strong>整套行为策略</strong>一起克隆;若它们散落在代码常量或 <span class="mono">.env</span> 里,profile 隔离就只能隔离密钥、隔离不了行为，多实例的价值会大打折扣。配置分层与 profile 隔离，本质上是同一个「状态外置、目录即实例」理念的一体两面。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 348" role="img" aria-label="config.yaml 放行为设置、.env 放凭据的分工,以及 .env 里仍有少量非密项">
+<svg viewBox="0 0 680 348" role="img" aria-label="config.yaml 放行为设置、.env 放凭据的分工，以及 .env 里仍有少量非密项">
   <rect x="170" y="18" width="340" height="48" rx="10" fill="var(--panel-2)" stroke="var(--line)" stroke-width="1.5"/>
   <text x="340" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">新设置该放哪?</text>
-  <text x="340" y="58" text-anchor="middle" font-size="11" fill="var(--muted)">判断:它是秘密吗(API key / token)?</text>
+  <text x="340" y="58" text-anchor="middle" font-size="11" fill="var(--muted)">判断：它是秘密吗(API key / token)?</text>
 
   <line x1="250" y1="66" x2="172" y2="102" stroke="var(--blue)" stroke-width="1.8"/>
   <polygon points="168,94 170,106 179,99" fill="var(--blue)"/>
@@ -1884,23 +1884,23 @@ OPTIONAL_ENV_VARS = {
   <text x="374" y="255" font-size="10" fill="var(--ink)">仍混入不少(66 个)password:False 非密项:</text>
   <text x="374" y="273" font-size="10" fill="var(--muted)" font-family="monospace">NOUS_BASE_URL / GEMINI_BASE_URL</text>
   <text x="374" y="288" font-size="10" fill="var(--muted)" font-family="monospace">/ XAI_BASE_URL(base URL 覆盖)</text>
-  <text x="374" y="307" font-size="10" fill="var(--ink)">政策上应只放凭据,现实并不绝对。</text>
+  <text x="374" y="307" font-size="10" fill="var(--ink)">政策上应只放凭据，现实并不绝对。</text>
 </svg>
-<div class="fig-cap"><b>config.yaml vs .env 分工</b>:判断标准只有一句——<b>是不是秘密</b>。行为设置(超时/阈值/开关/显示)进 <span class="mono">config.yaml</span>(<span class="mono">DEFAULT_CONFIG</span>,<span class="mono">_deep_merge</span> 自动补键);凭据(API key/token)进 <span class="mono">.env</span>(<span class="mono">OPTIONAL_ENV_VARS</span>,密钥标 <span class="mono">password:True</span> 掩码输入)。但别把它绝对化:<span class="mono">OPTIONAL_ENV_VARS</span> 里至今仍混着不少(实测 66 个,甚至多于密钥项)<span class="mono">password:False</span> 的非密连接项(如各种 <span class="mono">*_BASE_URL</span>),是历史包袱而非理想。</div>
+<div class="fig-cap"><b>config.yaml vs .env 分工</b>：判断标准只有一句——<b>是不是秘密</b>。行为设置(超时/阈值/开关/显示)进 <span class="mono">config.yaml</span>(<span class="mono">DEFAULT_CONFIG</span>,<span class="mono">_deep_merge</span> 自动补键);凭据(API key/token)进 <span class="mono">.env</span>(<span class="mono">OPTIONAL_ENV_VARS</span>，密钥标 <span class="mono">password:True</span> 掩码输入)。但别把它绝对化:<span class="mono">OPTIONAL_ENV_VARS</span> 里至今仍混着不少(实测 66 个，甚至多于密钥项)<span class="mono">password:False</span> 的非密连接项(如各种 <span class="mono">*_BASE_URL</span>)，是历史包袱而非理想。</div>
 </div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><span class="mono">hermes -p coder ...</span> 启动</span></div>
   <div class="step"><span class="num">2</span><span class="sc"><span class="mono">main.py</span> 顶层 <span class="mono">_apply_profile_override()</span> 解析 <span class="mono">-p coder</span></span></div>
   <div class="step"><span class="num">3</span><span class="sc"><span class="mono">os.environ["HERMES_HOME"] = ~/.hermes/profiles/coder</span>(早于业务 import)</span></div>
-  <div class="step"><span class="num">4</span><span class="sc">其余模块加载,各自调 <span class="mono">get_hermes_home()</span> 读到 coder 目录</span></div>
-  <div class="step"><span class="num">5</span><span class="sc">config / .env / 记忆 / 会话 / 技能 / 网关日志 全落在 coder 实例,与 default 完全隔离</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">其余模块加载，各自调 <span class="mono">get_hermes_home()</span> 读到 coder 目录</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">config / .env / 记忆 / 会话 / 技能 / 网关日志 全落在 coder 实例，与 default 完全隔离</span></div>
 </div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「多实例完全隔离」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>_apply_profile_override</strong>(import 前抢设 env)、<strong>get_hermes_home</strong>(单一真相源)、<strong>DEFAULT_CONFIG / OPTIONAL_ENV_VARS</strong>(配置分层)。跨章节配合:<span class="mono">HERMES_HOME</span> 决定<strong>记忆</strong>(第 11 章)、<strong>技能</strong>(第 9 章)、<strong>Curator</strong>(第 10 章)、会话库、网关日志各自落哪个 profile;每个平台适配器用 <strong>token lock</strong> 防两个 profile 抢同一 bot 凭据(第 17 章);profile 之间是<strong>独立的岛</strong>——隔离本身就是设计,不做跨 profile 的实时配置继承。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>_apply_profile_override</strong>(import 前抢设 env)、<strong>get_hermes_home</strong>(单一真相源)、<strong>DEFAULT_CONFIG / OPTIONAL_ENV_VARS</strong>(配置分层)。跨章节配合:<span class="mono">HERMES_HOME</span> 决定<strong>记忆</strong>(第 11 章)、<strong>技能</strong>(第 9 章)、<strong>Curator</strong>(第 10 章)、会话库、网关日志各自落哪个 profile;每个平台适配器用 <strong>token lock</strong> 防两个 profile 抢同一 bot 凭据(第 17 章);profile 之间是<strong>独立的岛</strong>——隔离本身就是设计，不做跨 profile 的实时配置继承。
   <div class="collab-sub">② 数据流时序</div>
   <span class="mono">-p coder</span> → <span class="mono">_apply_profile_override()</span>(模块顶层,import 前)→ <span class="mono">HERMES_HOME=profiles/coder</span> → import 链铺开 → 30+ 处模块级 <span class="mono">get_hermes_home()</span> 把路径缓存成 coder → 该进程全程认 coder 实例。
   <div class="collab-sub">③ 关键点</div>
@@ -1910,23 +1910,23 @@ OPTIONAL_ENV_VARS = {
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>import 前抢设 HERMES_HOME + 单一真相源路径 = 完全隔离的多实例;配置再分层(密钥独立)</strong>。它主要治两条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——一个人要同时跑 work / personal / 各客户的多个 agent 实例,各自的密钥、记忆、会话、网关绝不能混。一个环境变量切换整套状态盘,运维上「开一个新实例」=「建一个新目录」,干净利落;<span class="mono">display_hermes_home()</span> 还让所有用户可见消息显示正确的 profile 路径。</p>
-  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——核心代码里<strong>没有</strong>全局的「当前是哪个实例」状态,全靠 <span class="mono">HERMES_HOME</span> 这一个外部变量 + <span class="mono">get_hermes_home()</span> 这一个入口推导。无状态内核 + 外部一个变量定乾坤,正是全书反复出现的母题。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——一个人要同时跑 work / personal / 各客户的多个 agent 实例，各自的密钥、记忆、会话、网关绝不能混。一个环境变量切换整套状态盘，运维上「开一个新实例」=「建一个新目录」，干净利落;<span class="mono">display_hermes_home()</span> 还让所有用户可见消息显示正确的 profile 路径。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——核心代码里<strong>没有</strong>全局的「当前是哪个实例」状态，全靠 <span class="mono">HERMES_HOME</span> 这一个外部变量 + <span class="mono">get_hermes_home()</span> 这一个入口推导。无状态内核 + 外部一个变量定乾坤，正是全书反复出现的母题。</p>
   <p style="margin:.5rem 0 0">反模式:① 在代码里硬编码 <span class="mono">Path.home()/".hermes"</span>——会无视 profile、把数据写错实例(PR #3575 修了 5 个);② 把超时/开关这类<strong>非密行为</strong>配置塞进 <span class="mono">.env</span>——污染了「.env 放凭据、行为设置进 config.yaml」的边界。</p>
-  <p style="margin:.5rem 0 0">为什么 profile 之间是<strong>独立的岛</strong>、刻意不做实时配置继承?因为耦合恰恰是隔离要防的东西:若 coder profile 实时继承 default 的 config,那改一下 default 就会悄悄改动所有 profile,跨实例污染卷土重来。需要「从我的默认起步」时,正确做法是创建时<strong>一次性拷贝</strong>——<span class="mono">hermes profile create coder --clone</span> 把 config、<span class="mono">.env</span>、技能等复制过去,此后两者各走各路、互不影响。还有个易忽略的细节:<span class="mono">_get_profiles_root()</span> 锚定在<strong>默认</strong> home 而非当前 <span class="mono">HERMES_HOME</span>,这样即便你正身处 coder 实例,<span class="mono">hermes -p coder profile list</span> 也照样能看见所有 profile,而不是只看见自己。</p>
-  <p style="margin:.5rem 0 0">隔离还要堵住一个跨实例陷阱:两个 profile 若用同一个 bot token 同时连 Telegram,平台会互踢、消息错乱。所以网关平台适配器在 <span class="mono">connect()</span> 里调 <span class="mono">acquire_scoped_lock()</span>(来自 <span class="mono">gateway.status</span>)按凭据上锁、在 <span class="mono">disconnect()</span> 时释放,确保同一凭据全局只有一个实例在用(详见第 17 章)。这条与 profile 目录隔离合起来,正是第 24 章安全防线的一环——要防的不只是外部攻击,也防你自己的多个实例互相串台、污染彼此的记忆与会话。</p>
-  <p style="margin:.5rem 0 0">最后一处易被忽略的对称:代码取路径用 <span class="mono">get_hermes_home()</span>,<strong>给人看</strong>路径却要用 <span class="mono">display_hermes_home()</span>。后者把绝对路径压成 <span class="mono">~/.hermes</span> 或 <span class="mono">~/.hermes/profiles/coder</span> 这样的友好写法,让 setup、日志、报错里印出的目录一眼就能认出「现在在哪个 profile」。若这里图省事硬编码 <span class="mono">~/.hermes</span>,profile 用户就会被「提示路径」与「真实路径」不一致坑到——这正是 PR #3575 那 5 个 bug 的同源教训:无论是写盘的代码还是给人读的文案,只要碰 home 路径,就得走 profile-aware 的那唯一一个入口。</p>
+  <p style="margin:.5rem 0 0">为什么 profile 之间是<strong>独立的岛</strong>、刻意不做实时配置继承?因为耦合恰恰是隔离要防的东西：若 coder profile 实时继承 default 的 config，那改一下 default 就会悄悄改动所有 profile，跨实例污染卷土重来。需要「从我的默认起步」时，正确做法是创建时<strong>一次性拷贝</strong>——<span class="mono">hermes profile create coder --clone</span> 把 config、<span class="mono">.env</span>、技能等复制过去，此后两者各走各路、互不影响。还有个易忽略的细节:<span class="mono">_get_profiles_root()</span> 锚定在<strong>默认</strong> home 而非当前 <span class="mono">HERMES_HOME</span>，这样即便你正身处 coder 实例,<span class="mono">hermes -p coder profile list</span> 也照样能看见所有 profile，而不是只看见自己。</p>
+  <p style="margin:.5rem 0 0">隔离还要堵住一个跨实例陷阱：两个 profile 若用同一个 bot token 同时连 Telegram，平台会互踢、消息错乱。所以网关平台适配器在 <span class="mono">connect()</span> 里调 <span class="mono">acquire_scoped_lock()</span>(来自 <span class="mono">gateway.status</span>)按凭据上锁、在 <span class="mono">disconnect()</span> 时释放，确保同一凭据全局只有一个实例在用(详见第 17 章)。这条与 profile 目录隔离合起来，正是第 24 章安全防线的一环——要防的不只是外部攻击，也防你自己的多个实例互相串台、污染彼此的记忆与会话。</p>
+  <p style="margin:.5rem 0 0">最后一处易被忽略的对称：代码取路径用 <span class="mono">get_hermes_home()</span>,<strong>给人看</strong>路径却要用 <span class="mono">display_hermes_home()</span>。后者把绝对路径压成 <span class="mono">~/.hermes</span> 或 <span class="mono">~/.hermes/profiles/coder</span> 这样的友好写法，让 setup、日志、报错里印出的目录一眼就能认出「现在在哪个 profile」。若这里图省事硬编码 <span class="mono">~/.hermes</span>,profile 用户就会被「提示路径」与「真实路径」不一致坑到——这正是 PR #3575 那 5 个 bug 的同源教训：无论是写盘的代码还是给人读的文案，只要碰 home 路径，就得走 profile-aware 的那唯一一个入口。</p>
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 420" role="img" aria-label="实例图:hermes -p coder chat 启动时,一个环境变量如何解析成真实路径与生效值。① _apply_profile_override 在 import 前裸调,扫 argv 得 profile_name coder 并剥掉 -p coder,main.py 336;② resolve_profile_env coder 解析出 ~/.hermes/profiles/coder 并写入 os.environ HERMES_HOME,profiles.py 1866;③ 业务 import 调 get_hermes_home,ContextVar override 为空,读 env 命中,返回 Path ~/.hermes/profiles/coder,hermes_constants.py 54 与 109;④ load_config 把 DEFAULT_CONFIG _config_version 30 与 coder 的 config.yaml 经 _deep_merge 合并,config.py 5366,用户写 agent.max_turns 40 覆盖默认 90 生效 40,未写的 gateway_timeout 保留 1800、terminal.cwd 保留点、compression.threshold 保留 0.50;⑤ 落盘隔离 profiles/coder 下各有 sessions memory logs,与 default 的 ~/.hermes/sessions 互不相干;⑥ 侧栏 display_hermes_home 给人看而 get_hermes_home 给代码,必须配对,PR 3575。">
+<svg viewBox="0 0 680 420" role="img" aria-label="实例图:hermes -p coder chat 启动时，一个环境变量如何解析成真实路径与生效值。① _apply_profile_override 在 import 前裸调，扫 argv 得 profile_name coder 并剥掉 -p coder,main.py 336;② resolve_profile_env coder 解析出 ~/.hermes/profiles/coder 并写入 os.environ HERMES_HOME,profiles.py 1866;③ 业务 import 调 get_hermes_home,ContextVar override 为空，读 env 命中，返回 Path ~/.hermes/profiles/coder,hermes_constants.py 54 与 109;④ load_config 把 DEFAULT_CONFIG _config_version 30 与 coder 的 config.yaml 经 _deep_merge 合并,config.py 5366，用户写 agent.max_turns 40 覆盖默认 90 生效 40，未写的 gateway_timeout 保留 1800、terminal.cwd 保留点、compression.threshold 保留 0.50;⑤ 落盘隔离 profiles/coder 下各有 sessions memory logs，与 default 的 ~/.hermes/sessions 互不相干;⑥ 侧栏 display_hermes_home 给人看而 get_hermes_home 给代码，必须配对,PR 3575。">
   <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:hermes -p coder chat 的解析链</text>
   <text x="20" y="44" font-size="10" fill="var(--muted)">一个 env var → 真实路径 → 合并后的生效值</text>
   <text x="644" y="33" text-anchor="middle" font-size="22">🧭</text>
 
   <rect x="10" y="56" width="304" height="64" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="20" y="74" font-size="10" font-weight="700" fill="var(--blue)">① _apply_profile_override() · main.py:336</text>
-  <text x="20" y="91" font-size="9" fill="var(--muted)">import 前裸调,扫 sys.argv</text>
+  <text x="20" y="91" font-size="9" fill="var(--muted)">import 前裸调，扫 sys.argv</text>
   <text x="20" y="109" font-size="9" font-family="monospace" fill="var(--purple)">profile_name=&quot;coder&quot;(剥掉 -p coder)</text>
 
   <path d="M162,120 L162,130 M158,126 L162,130 L166,126" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
@@ -1974,9 +1974,9 @@ OPTIONAL_ENV_VARS = {
   <text x="556" y="209" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
   <text x="616" y="209" font-size="9" font-family="monospace" fill="var(--accent-ink)">0.50 保留</text>
   <line x1="342" y1="217" x2="660" y2="217" stroke="var(--line)"/>
-  <text x="342" y="234" font-size="9" fill="var(--muted)">_deep_merge:用户键优先,未写键自动补默认</text>
+  <text x="342" y="234" font-size="9" fill="var(--muted)">_deep_merge：用户键优先，未写键自动补默认</text>
   <text x="342" y="252" font-size="9" fill="var(--muted)">(默认值见 config.py:887/900/1020/1265)</text>
-  <text x="342" y="272" font-size="9" fill="var(--ink)">同一进程内,这套生效值只属于 coder 这个岛</text>
+  <text x="342" y="272" font-size="9" fill="var(--ink)">同一进程内，这套生效值只属于 coder 这个岛</text>
 
   <rect x="10" y="298" width="304" height="60" rx="8" fill="var(--panel)" stroke="var(--line)"/>
   <text x="20" y="316" font-size="10" font-weight="700" fill="var(--ink)">⑤ 落盘隔离</text>
@@ -1984,24 +1984,24 @@ OPTIONAL_ENV_VARS = {
   <text x="20" y="349" font-size="9" font-family="monospace" fill="var(--muted)">vs default ~/.hermes/sessions(互不相干)</text>
 
   <rect x="332" y="298" width="338" height="60" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
-  <text x="342" y="316" font-size="10" font-weight="700" fill="var(--purple)">⑥ 给人看 vs 给代码,必须配对 · PR #3575</text>
+  <text x="342" y="316" font-size="10" font-weight="700" fill="var(--purple)">⑥ 给人看 vs 给代码，必须配对 · PR #3575</text>
   <text x="342" y="333" font-size="9" font-family="monospace" fill="var(--ink)">display_hermes_home() → ~/.hermes/profiles/coder</text>
   <text x="342" y="349" font-size="9" font-family="monospace" fill="var(--ink)">get_hermes_home()     → Path(给代码读写)</text>
 
-  <text x="20" y="384" font-size="9.5" fill="var(--muted)">读这张图:一个 -p coder 经裸调 → env var → 单一入口 → 深合并,落成一组真实路径与生效值,与 default 岛完全隔离。</text>
-  <text x="20" y="402" font-size="9.5" fill="var(--muted)">未写的键自动保留默认(1800 / &quot;.&quot; / 0.50),只有用户显式写的 max_turns:40 覆盖默认 90。</text>
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">读这张图：一个 -p coder 经裸调 → env var → 单一入口 → 深合并，落成一组真实路径与生效值，与 default 岛完全隔离。</text>
+  <text x="20" y="402" font-size="9.5" fill="var(--muted)">未写的键自动保留默认(1800 / &quot;.&quot; / 0.50)，只有用户显式写的 max_turns:40 覆盖默认 90。</text>
 </svg>
-<div class="fig-cap"><b>实例:hermes -p coder chat 的解析链</b>:① <span class="mono">_apply_profile_override()</span> 在 import 前裸调,扫 <span class="mono">argv</span> 得 <span class="mono">profile_name=&quot;coder&quot;</span> 并剥 <span class="mono">-p coder</span>;② <span class="mono">resolve_profile_env(&quot;coder&quot;)</span>→<span class="mono">~/.hermes/profiles/coder</span>→写 <span class="mono">os.environ[&quot;HERMES_HOME&quot;]</span>;③ 业务 <span class="mono">get_hermes_home()</span>:ContextVar 空→读 env→<span class="mono">Path(profiles/coder)</span>;④ <span class="mono">load_config()</span> 把 <span class="mono">DEFAULT_CONFIG(_config_version:30)</span> 与 coder 的 <span class="mono">config.yaml</span> 经 <span class="mono">_deep_merge</span> 合并:用户写 <span class="mono">agent.max_turns:40</span> 覆盖默认 <span class="mono">90</span>→生效 <span class="mono">40</span>;未写则 <span class="mono">gateway_timeout</span> 保留 <span class="mono">1800</span>、<span class="mono">terminal.cwd</span> 保留 <span class="mono">&quot;.&quot;</span>、<span class="mono">compression.threshold</span> 保留 <span class="mono">0.50</span>;⑤ <span class="mono">profiles/coder/{sessions,memory,logs}</span> 与 default 隔离;⑥ <span class="mono">display_hermes_home()</span>(给人看)与 <span class="mono">get_hermes_home()</span>(给代码)必须配对(PR #3575)。</div>
+<div class="fig-cap"><b>实例:hermes -p coder chat 的解析链</b>:① <span class="mono">_apply_profile_override()</span> 在 import 前裸调，扫 <span class="mono">argv</span> 得 <span class="mono">profile_name=&quot;coder&quot;</span> 并剥 <span class="mono">-p coder</span>;② <span class="mono">resolve_profile_env(&quot;coder&quot;)</span>→<span class="mono">~/.hermes/profiles/coder</span>→写 <span class="mono">os.environ[&quot;HERMES_HOME&quot;]</span>;③ 业务 <span class="mono">get_hermes_home()</span>:ContextVar 空→读 env→<span class="mono">Path(profiles/coder)</span>;④ <span class="mono">load_config()</span> 把 <span class="mono">DEFAULT_CONFIG(_config_version:30)</span> 与 coder 的 <span class="mono">config.yaml</span> 经 <span class="mono">_deep_merge</span> 合并：用户写 <span class="mono">agent.max_turns:40</span> 覆盖默认 <span class="mono">90</span>→生效 <span class="mono">40</span>;未写则 <span class="mono">gateway_timeout</span> 保留 <span class="mono">1800</span>、<span class="mono">terminal.cwd</span> 保留 <span class="mono">&quot;.&quot;</span>、<span class="mono">compression.threshold</span> 保留 <span class="mono">0.50</span>;⑤ <span class="mono">profiles/coder/{sessions,memory,logs}</span> 与 default 隔离;⑥ <span class="mono">display_hermes_home()</span>(给人看)与 <span class="mono">get_hermes_home()</span>(给代码)必须配对(PR #3575)。</div>
 </div>
 
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
-    <li><strong>一个环境变量</strong>:profile = 在任何 import 之前把 <span class="mono">HERMES_HOME</span> 设成 <span class="mono">~/.hermes/profiles/&lt;名字&gt;</span>;<span class="mono">_apply_profile_override()</span> 是模块级调用,抢在最前。</li>
-    <li><strong>单一真相源</strong>:全代码库走 <span class="mono">get_hermes_home()</span> 读 <span class="mono">HERMES_HOME</span>;<strong>禁止</strong>硬编码 <span class="mono">~/.hermes</span>(否则击穿隔离,PR #3575)。</li>
-    <li><strong>配置分层</strong>:行为设置(超时/阈值/开关)进 <span class="mono">config.yaml</span>(<span class="mono">DEFAULT_CONFIG</span>);凭据进 <span class="mono">.env</span>(<span class="mono">OPTIONAL_ENV_VARS</span>,密钥标 <span class="mono">password: True</span> 掩码输入)。</li>
-    <li><strong>完全隔离</strong>:每个 profile 的 config / 密钥 / 记忆 / 会话 / 技能 / 网关全独立;profile 之间是独立的岛,不做实时配置继承。</li>
-    <li><strong>用户可见路径</strong>:打印/日志用 <span class="mono">display_hermes_home()</span>(default 显示 <span class="mono">~/.hermes</span>、profile 显示 <span class="mono">~/.hermes/profiles/coder</span>)。</li>
+    <li><strong>一个环境变量</strong>:profile = 在任何 import 之前把 <span class="mono">HERMES_HOME</span> 设成 <span class="mono">~/.hermes/profiles/&lt;名字&gt;</span>;<span class="mono">_apply_profile_override()</span> 是模块级调用，抢在最前。</li>
+    <li><strong>单一真相源</strong>：全代码库走 <span class="mono">get_hermes_home()</span> 读 <span class="mono">HERMES_HOME</span>;<strong>禁止</strong>硬编码 <span class="mono">~/.hermes</span>(否则击穿隔离,PR #3575)。</li>
+    <li><strong>配置分层</strong>：行为设置(超时/阈值/开关)进 <span class="mono">config.yaml</span>(<span class="mono">DEFAULT_CONFIG</span>);凭据进 <span class="mono">.env</span>(<span class="mono">OPTIONAL_ENV_VARS</span>，密钥标 <span class="mono">password: True</span> 掩码输入)。</li>
+    <li><strong>完全隔离</strong>：每个 profile 的 config / 密钥 / 记忆 / 会话 / 技能 / 网关全独立;profile 之间是独立的岛，不做实时配置继承。</li>
+    <li><strong>用户可见路径</strong>：打印/日志用 <span class="mono">display_hermes_home()</span>(default 显示 <span class="mono">~/.hermes</span>、profile 显示 <span class="mono">~/.hermes/profiles/coder</span>)。</li>
   </ul>
 </div>
 """,

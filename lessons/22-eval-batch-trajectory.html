@@ -371,21 +371,21 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <h1><span class="lang-zh">评测、批量与轨迹</span><span class="lang-en">Eval, batch &amp; trajectory</span></h1>
   </div>
   <div class="lang-zh">
-<p class="lead">Hermes 不只是个产品,它是 Nous Research 的<strong>研究工具</strong>:要批量跑成千上万条 prompt、把每次对话的<strong>完整轨迹</strong>(含推理、工具调用)落盘成训练数据,还要在「模型每周都在变」的现实里写出<strong>不会天天挂掉</strong>的测试。这一章讲三件相关的事:批量、轨迹、评测哲学。</p>
+<p class="lead">Hermes 不只是个产品，它是 Nous Research 的<strong>研究工具</strong>：要批量跑成千上万条 prompt、把每次对话的<strong>完整轨迹</strong>(含推理、工具调用)落盘成训练数据，还要在「模型每周都在变」的现实里写出<strong>不会天天挂掉</strong>的测试。这一章讲三件相关的事：批量、轨迹、评测哲学。</p>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 工厂的质检流水线</div>
-  把一堆原料(prompt)送上<strong>多条并行产线</strong>(batch workers),每件产品记录<strong>完整工序</strong>(trajectory:每步推理 + 每次工具调用)。出厂前<strong>质检</strong>:不合格的(比如全程零推理)直接剔除,不混进成品库(训练集)。而质检标准看的是「<strong>是否符合规格</strong>」(不变量),不是「<strong>是否和上一批一模一样</strong>」(快照)——因为配方本来就会升级。
+  把一堆原料(prompt)送上<strong>多条并行产线</strong>(batch workers)，每件产品记录<strong>完整工序</strong>(trajectory：每步推理 + 每次工具调用)。出厂前<strong>质检</strong>：不合格的(比如全程零推理)直接剔除，不混进成品库(训练集)。而质检标准看的是「<strong>是否符合规格</strong>」(不变量)，不是「<strong>是否和上一批一模一样</strong>」(快照)——因为配方本来就会升级。
 </div>
 
 <div class="card macro">
   <div class="tag">🌍 宏观 · 数据流水线 + 抗漂移测试</div>
-  <strong>批量</strong>:多 worker 并行跑 AIAgent,每条 prompt 独立。<strong>轨迹</strong>:把对话转成 JSONL 训练样本,带 <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>,并<strong>过滤低质</strong>(零推理样本丢弃)。<strong>评测</strong>:测试锁<strong>行为不变量</strong>而非数据快照——模型目录、config 版本天天变,锁快照只会让 CI 天天红。
+  <strong>批量</strong>：多 worker 并行跑 AIAgent，每条 prompt 独立。<strong>轨迹</strong>：把对话转成 JSONL 训练样本，带 <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>，并<strong>过滤低质</strong>(零推理样本丢弃)。<strong>评测</strong>：测试锁<strong>行为不变量</strong>而非数据快照——模型目录、config 版本天天变，锁快照只会让 CI 天天红。
 </div>
 
-<h2>批量:并行 worker + 轨迹落盘</h2>
-<p>批处理把 prompt 分批,每个 worker 跑完一条就质检、落盘:</p>
-<p>为什么非要<strong>并行 + 可续跑</strong>?这是大规模数据生成绕不开的工程现实。批量入口用 <span class="mono">multiprocessing.Pool</span> 起 <span class="mono">num_workers</span>(默认 4)个进程,把每个 batch 当一个任务分出去(<span class="mono">batch_runner.py:917</span>),batch 内部的 prompt 则<strong>顺序</strong>跑。一条 prompt 往往是几十轮工具调用、要好几分钟,成千上万条若串行得跑上几天;更要命的是中途崩一次,没有续跑就前功尽弃。所以 <span class="mono">resume</span> 不是锦上添花,而是规模化的<strong>必需品</strong>——少了它,「跑一个大数据集」这件事在工程上根本不成立。这也正是约束 B(无状态)再次发力:worker 各跑各的、互不依赖,才敢这样横向铺开。</p>
+<h2>批量：并行 worker + 轨迹落盘</h2>
+<p>批处理把 prompt 分批，每个 worker 跑完一条就质检、落盘:</p>
+<p>为什么非要<strong>并行 + 可续跑</strong>?这是大规模数据生成绕不开的工程现实。批量入口用 <span class="mono">multiprocessing.Pool</span> 起 <span class="mono">num_workers</span>(默认 4)个进程，把每个 batch 当一个任务分出去(<span class="mono">batch_runner.py:917</span>),batch 内部的 prompt 则<strong>顺序</strong>跑。一条 prompt 往往是几十轮工具调用、要好几分钟，成千上万条若串行得跑上几天;更要命的是中途崩一次，没有续跑就前功尽弃。所以 <span class="mono">resume</span> 不是锦上添花，而是规模化的<strong>必需品</strong>——少了它,「跑一个大数据集」这件事在工程上根本不成立。这也正是约束 B(无状态)再次发力:worker 各跑各的、互不依赖，才敢这样横向铺开。</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">batch_runner.py</span><span class="ln">400-487 · 简化</span></div>
@@ -403,8 +403,8 @@ html[data-lang="zh"] .lang-en { display: none !important; }
         }
         f.write(json.dumps(trajectory_entry, ensure_ascii=<span class="kw">False</span>) + <span class="st">"\n"</span>)  <span class="cm"># 追加 JSONL</span></pre>
 </div>
-<p>三个要点:① <strong>并行</strong>——多 worker 各跑各的 prompt,互不依赖(无状态,约束 B 又一次发力);② <strong>质量过滤</strong>——<span class="mono">has_any_reasoning</span> 为假就 <span class="mono">continue</span> 丢弃,训练集只收有推理的样本;③ <strong>JSONL 追加</strong>——每条样本一行,带 <span class="mono">tool_stats</span> 等元数据,是标准的 RL/SFT 训练格式。</p>
-<p>落盘的方式也透着「为崩溃而设计」的味道。每个 worker 跑完<strong>一条</strong>就立刻把 <span class="mono">trajectory_entry</span> 追加进自己那个 <span class="mono">batch_&lt;N&gt;.jsonl</span>(<span class="mono">batch_runner.py:416</span>),而不是攒到最后一次性写——这样即便进程中途挂掉,已完成的样本也<strong>已经躺在磁盘上</strong>,续跑时按内容直接跳过。等所有 batch 跑完,再把目录里全部 <span class="mono">batch_*.jsonl</span> 合并成<strong>单个</strong> <span class="mono">trajectories.jsonl</span>(<span class="mono">:1026</span>),顺手滤掉工具名非法的脏条目。注意轨迹是<strong>按 batch 分文件、最后聚合成一个</strong>的,<span class="mono">model</span> 只是每条样本里的一个 metadata 字段,并不会按模型拆成多份。<strong>增量写保命、末尾合并出干净训练文件</strong>,两个目标各取所需。</p>
+<p>三个要点:① <strong>并行</strong>——多 worker 各跑各的 prompt，互不依赖(无状态，约束 B 又一次发力);② <strong>质量过滤</strong>——<span class="mono">has_any_reasoning</span> 为假就 <span class="mono">continue</span> 丢弃，训练集只收有推理的样本;③ <strong>JSONL 追加</strong>——每条样本一行，带 <span class="mono">tool_stats</span> 等元数据，是标准的 RL/SFT 训练格式。</p>
+<p>落盘的方式也透着「为崩溃而设计」的味道。每个 worker 跑完<strong>一条</strong>就立刻把 <span class="mono">trajectory_entry</span> 追加进自己那个 <span class="mono">batch_&lt;N&gt;.jsonl</span>(<span class="mono">batch_runner.py:416</span>)，而不是攒到最后一次性写——这样即便进程中途挂掉，已完成的样本也<strong>已经躺在磁盘上</strong>，续跑时按内容直接跳过。等所有 batch 跑完，再把目录里全部 <span class="mono">batch_*.jsonl</span> 合并成<strong>单个</strong> <span class="mono">trajectories.jsonl</span>(<span class="mono">:1026</span>)，顺手滤掉工具名非法的脏条目。注意轨迹是<strong>按 batch 分文件、最后聚合成一个</strong>的,<span class="mono">model</span> 只是每条样本里的一个 metadata 字段，并不会按模型拆成多份。<strong>增量写保命、末尾合并出干净训练文件</strong>，两个目标各取所需。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 410" role="img" aria-label="批量并行处理与轨迹按 batch 增量落盘、末尾合并成单一文件">
@@ -417,7 +417,7 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 
   <rect x="14" y="54" width="92" height="180" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="60" y="72" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">dataset</text>
-  <g font-size="8.5" text-anchor="middle" fill="var(--muted)">
+  <g font-size="9" text-anchor="middle" fill="var(--muted)">
     <rect x="24" y="80"  width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="94">prompt 1</text>
     <rect x="24" y="104" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="118">prompt 2</text>
     <rect x="24" y="128" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="142">prompt 3</text>
@@ -435,13 +435,13 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <line x1="106" y1="209" x2="130" y2="209" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
 
     <rect x="132" y="60"  width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="76"  fill="var(--ink)">worker 1</text><text x="184" y="89" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="76"  fill="var(--ink)">worker 1</text><text x="184" y="89" font-size="9" fill="var(--muted)">AIAgent</text>
     <rect x="132" y="104" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="120" fill="var(--ink)">worker 2</text><text x="184" y="133" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="120" fill="var(--ink)">worker 2</text><text x="184" y="133" font-size="9" fill="var(--muted)">AIAgent</text>
     <rect x="132" y="148" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="164" fill="var(--ink)">worker 3</text><text x="184" y="177" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="164" fill="var(--ink)">worker 3</text><text x="184" y="177" font-size="9" fill="var(--muted)">AIAgent</text>
     <rect x="132" y="192" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="208" fill="var(--ink)">worker 4</text><text x="184" y="221" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="208" fill="var(--ink)">worker 4</text><text x="184" y="221" font-size="9" fill="var(--muted)">AIAgent</text>
   </g>
 
   <g font-size="9.5" text-anchor="middle">
@@ -463,13 +463,13 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <line x1="290" y1="209" x2="310" y2="209" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
 
     <rect x="310" y="60"  width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="76"  font-size="10" fill="var(--ink)">batch_0.jsonl</text><text x="374" y="88" font-size="8" fill="var(--muted)">增量追加</text>
+    <text x="374" y="76"  font-size="10" fill="var(--ink)">batch_0.jsonl</text><text x="374" y="88" font-size="9" fill="var(--muted)">增量追加</text>
     <rect x="310" y="104" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="120" font-size="10" fill="var(--ink)">batch_1.jsonl</text><text x="374" y="132" font-size="8" fill="var(--muted)">增量追加</text>
+    <text x="374" y="120" font-size="10" fill="var(--ink)">batch_1.jsonl</text><text x="374" y="132" font-size="9" fill="var(--muted)">增量追加</text>
     <rect x="310" y="148" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="164" font-size="10" fill="var(--ink)">batch_2.jsonl</text><text x="374" y="176" font-size="8" fill="var(--muted)">增量追加</text>
+    <text x="374" y="164" font-size="10" fill="var(--ink)">batch_2.jsonl</text><text x="374" y="176" font-size="9" fill="var(--muted)">增量追加</text>
     <rect x="310" y="192" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="208" font-size="10" fill="var(--ink)">batch_3.jsonl</text><text x="374" y="220" font-size="8" fill="var(--muted)">增量追加</text>
+    <text x="374" y="208" font-size="10" fill="var(--ink)">batch_3.jsonl</text><text x="374" y="220" font-size="9" fill="var(--muted)">增量追加</text>
   </g>
 
   <line x1="438" y1="77"  x2="452" y2="77"  stroke="var(--accent)" marker-end="url(#bz1arr)"/>
@@ -501,27 +501,27 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 </svg>
 <div class="fig-cap"><b>批量并行 + 轨迹增量落盘</b>：dataset 切批后由 <b>Pool(num_workers=4)</b> 起多个 worker 各跑一个 AIAgent；每跑完一条就<b>质检</b>后<b>增量追加</b>进自己的 batch_&lt;N&gt;.jsonl（崩溃不丢、resume 可续）。零推理样本被丢弃但<b>仍标记完成</b>（resume 不重试）；真正失败的<b>不另存 failed 文件</b>，留待 resume 重跑。所有 batch 跑完后合并成<b>单一</b> trajectories.jsonl（含 conversations / tool_stats / metadata）——<b>model 只是每条样本的 metadata 字段，不按模型拆文件</b>。<b>注</b>：这是<b>批量</b> <span class="mono">batch_runner</span> 路径；本章下文讲的 <span class="mono">_save_trajectory</span> 是<b>单次会话</b>的另一条路径，按成功/失败分写 <span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span>——两条路径并存、各管各的。</div>
 </div>
-<p>顺带说,<span class="mono">trajectory_entry</span> 里那些字段不是凑数的。除了 <span class="mono">conversations</span>,它还按工具记下 <span class="mono">tool_stats</span>(count/success/failure)、单列每个工具失败数的 <span class="mono">tool_error_counts</span>,以及 <span class="mono">api_calls</span>、<span class="mono">toolsets_used</span>、<span class="mono">partial</span>(因非法工具调用提前停)等。为什么要存这么细?因为训练和分析都要吃这些信号:哪个工具老失败、一条轨迹烧了几次 API、是不是中途被截断,既能用来筛样本质量,也能反过来诊断 agent 的薄弱环节。轨迹因此不只是「对话录像」,而是带<strong>结构化质量标签</strong>的研究样本——这也是它配得上「资产」二字的原因。换句话说,落盘时多记的这几个字段,后续在训练与诊断两头都会连本带利地还回来。</p>
+<p>顺带说,<span class="mono">trajectory_entry</span> 里那些字段不是凑数的。除了 <span class="mono">conversations</span>，它还按工具记下 <span class="mono">tool_stats</span>(count/success/failure)、单列每个工具失败数的 <span class="mono">tool_error_counts</span>，以及 <span class="mono">api_calls</span>、<span class="mono">toolsets_used</span>、<span class="mono">partial</span>(因非法工具调用提前停)等。为什么要存这么细?因为训练和分析都要吃这些信号：哪个工具老失败、一条轨迹烧了几次 API、是不是中途被截断，既能用来筛样本质量，也能反过来诊断 agent 的薄弱环节。轨迹因此不只是「对话录像」，而是带<strong>结构化质量标签</strong>的研究样本——这也是它配得上「资产」二字的原因。换句话说，落盘时多记的这几个字段，后续在训练与诊断两头都会连本带利地还回来。</p>
 
-<h2>轨迹:一次对话变一条训练样本</h2>
-<p>单次运行也能存轨迹,由一个开关控制:</p>
-<p>为什么 Hermes 要不厌其烦地存轨迹?因为它是 Nous Research 的<strong>研究资产</strong>。一条轨迹 = <span class="mono">conversations</span>(完整多轮对话)+ <span class="mono">tool_stats</span>(工具调用统计)+ <span class="mono">metadata</span>,这恰好是 SFT / RL 训练的原料。Hermes 长在一家研究实验室里,它的<strong>真实 agent 运行</strong>不是用完即弃的日志,而是<strong>下一代模型的训练燃料</strong>:今天 agent 怎么推理、怎么调工具、在哪一步卡住,明天就被喂回模型去学。轨迹里那段 reasoning 正来自第 5 章那个核心循环存进 <span class="mono">messages</span> 的内容——产品侧的每一次对话,顺手就变成了研究侧的数据,这是「研究工具」一鱼两吃的底气。</p>
+<h2>轨迹：一次对话变一条训练样本</h2>
+<p>单次运行也能存轨迹，由一个开关控制:</p>
+<p>为什么 Hermes 要不厌其烦地存轨迹?因为它是 Nous Research 的<strong>研究资产</strong>。一条轨迹 = <span class="mono">conversations</span>(完整多轮对话)+ <span class="mono">tool_stats</span>(工具调用统计)+ <span class="mono">metadata</span>，这恰好是 SFT / RL 训练的原料。Hermes 长在一家研究实验室里，它的<strong>真实 agent 运行</strong>不是用完即弃的日志，而是<strong>下一代模型的训练燃料</strong>：今天 agent 怎么推理、怎么调工具、在哪一步卡住，明天就被喂回模型去学。轨迹里那段 reasoning 正来自第 5 章那个核心循环存进 <span class="mono">messages</span> 的内容——产品侧的每一次对话，顺手就变成了研究侧的数据，这是「研究工具」一鱼两吃的底气。</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">run_agent.py</span><span class="ln">1716-1729 · 节选</span></div>
   <pre><span class="kw">def</span> <span class="fn">_save_trajectory</span>(self, messages, user_query, completed):
     <span class="cm">&quot;&quot;&quot;Save conversation trajectory to JSONL file.&quot;&quot;&quot;</span>
-    <span class="kw">if</span> <span class="kw">not</span> self.save_trajectories:    <span class="cm"># 开关:默认关</span>
+    <span class="kw">if</span> <span class="kw">not</span> self.save_trajectories:    <span class="cm"># 开关：默认关</span>
         <span class="kw">return</span>
     trajectory = self._convert_to_trajectory_format(messages, user_query, completed)
     _save_trajectory_to_file(trajectory, self.model, completed)</pre>
 </div>
-<p><span class="mono">save_trajectories</span> 默认关(生产对话不留痕),研究时打开。<span class="mono">_convert_to_trajectory_format</span> 把内部的 <span class="mono">messages</span>(system/user/assistant/tool 四类角色 + reasoning)转成训练用的轨迹格式,落盘成 JSONL(成功样本进 <span class="mono">trajectory_samples.jsonl</span>、失败的进 <span class="mono">failed_trajectories.jsonl</span>;<span class="mono">model</span> 记进每条样本的元数据)。<strong>同一个 agent 核心,既服务真实对话,又顺手产出研究数据</strong>——这正是「研究工具」的一鱼两吃。</p>
-<p>「零推理样本丢弃」这一刀为什么必须砍?因为没有推理过程的样本<strong>教不会模型思考</strong>——把它喂进训练,轻则稀释信号,重则训出一个「跳过推理直接作答」的坏习惯,和「要训练一个<strong>会推理的 agent</strong>」这个初衷背道而驰。所以 <span class="mono">has_any_reasoning</span> 为假就 <span class="mono">continue</span> 丢掉(<span class="mono">batch_runner.py:454</span>)。它和「失败」是两码事:被丢弃的低质样本仍标记为<strong>已完成</strong>,续跑不再重试;而真正失败(根本没产出轨迹)的 prompt <strong>不会单独存成某个 failed 文件</strong>,而是留待 <span class="mono">resume</span> 时重新跑一遍(<span class="mono">:506-512</span>)。低质要剔除、失败要重试,两条处理路径泾渭分明,别混为一谈。</p>
+<p><span class="mono">save_trajectories</span> 默认关(生产对话不留痕)，研究时打开。<span class="mono">_convert_to_trajectory_format</span> 把内部的 <span class="mono">messages</span>(system/user/assistant/tool 四类角色 + reasoning)转成训练用的轨迹格式，落盘成 JSONL(成功样本进 <span class="mono">trajectory_samples.jsonl</span>、失败的进 <span class="mono">failed_trajectories.jsonl</span>;<span class="mono">model</span> 记进每条样本的元数据)。<strong>同一个 agent 核心，既服务真实对话，又顺手产出研究数据</strong>——这正是「研究工具」的一鱼两吃。</p>
+<p>「零推理样本丢弃」这一刀为什么必须砍?因为没有推理过程的样本<strong>教不会模型思考</strong>——把它喂进训练，轻则稀释信号，重则训出一个「跳过推理直接作答」的坏习惯，和「要训练一个<strong>会推理的 agent</strong>」这个初衷背道而驰。所以 <span class="mono">has_any_reasoning</span> 为假就 <span class="mono">continue</span> 丢掉(<span class="mono">batch_runner.py:454</span>)。它和「失败」是两码事：被丢弃的低质样本仍标记为<strong>已完成</strong>，续跑不再重试;而真正失败(根本没产出轨迹)的 prompt <strong>不会单独存成某个 failed 文件</strong>，而是留待 <span class="mono">resume</span> 时重新跑一遍(<span class="mono">:506-512</span>)。低质要剔除、失败要重试，两条处理路径泾渭分明，别混为一谈。</p>
 
-<h2>评测:锁不变量,别锁快照</h2>
-<p>研究项目最容易踩的测试坑——把「当前数据」写死进断言。模型每周都在变,这种测试天天挂:</p>
-<p>为什么 change-detector 测试在<strong>研究项目</strong>里格外致命?因为这里的「数据」本就被<strong>设计成天天变</strong>:模型目录每周加新模型、config 版本随结构升级而 bump,产品在边缘上还在激进扩张。把这些当前值写死进断言,等于把 CI 的健康<strong>绑死在例行数据更新上</strong>——发一个模型、改一行配置,测试就集体变红。工程师于是被迫花时间「修测试」而不是修真正的 bug;更糟的是,天天误报会让团队<strong>不再信任</strong>这套测试,最终把它关掉或无视——到那一步,测试就彻底失去了存在的意义。锁快照看似严格,实则在系统性地侵蚀测试的可信度。</p>
+<h2>评测：锁不变量，别锁快照</h2>
+<p>研究项目最容易踩的测试坑——把「当前数据」写死进断言。模型每周都在变，这种测试天天挂:</p>
+<p>为什么 change-detector 测试在<strong>研究项目</strong>里格外致命?因为这里的「数据」本就被<strong>设计成天天变</strong>：模型目录每周加新模型、config 版本随结构升级而 bump，产品在边缘上还在激进扩张。把这些当前值写死进断言，等于把 CI 的健康<strong>绑死在例行数据更新上</strong>——发一个模型、改一行配置，测试就集体变红。工程师于是被迫花时间「修测试」而不是修真正的 bug;更糟的是，天天误报会让团队<strong>不再信任</strong>这套测试，最终把它关掉或无视——到那一步，测试就彻底失去了存在的意义。锁快照看似严格，实则在系统性地侵蚀测试的可信度。</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">AGENTS.md · 测试规约(项目纪律)</span><span class="ln">Don't write change-detector tests</span></div>
@@ -529,14 +529,14 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 <span class="kw">assert</span> <span class="st">"gemini-2.5-pro"</span> <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"gemini"</span>]
 <span class="kw">assert</span> DEFAULT_CONFIG[<span class="st">"_config_version"</span>] == 21
 
-<span class="cm"># ✅ 行为契约/不变量:锁「关系」,不锁「快照」</span>
+<span class="cm"># ✅ 行为契约/不变量：锁「关系」,不锁「快照」</span>
 <span class="kw">assert</span> <span class="st">"gemini"</span> <span class="kw">in</span> _PROVIDER_MODELS
 <span class="kw">assert</span> len(_PROVIDER_MODELS[<span class="st">"gemini"</span>]) &gt;= 1
 <span class="kw">assert</span> raw[<span class="st">"_config_version"</span>] == DEFAULT_CONFIG[<span class="st">"_config_version"</span>]
 <span class="kw">for</span> m <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"huggingface"</span>]:
     <span class="kw">assert</span> m.lower() <span class="kw">in</span> DEFAULT_CONTEXT_LENGTHS_LOWER</pre>
 </div>
-<p>规则一句话:<strong>测试若读起来像「当前数据的快照」,删掉;若读起来像「两份数据必须如何关联」的契约,留下。</strong>「gemini 目录里必须有 gemini-2.5-pro」是快照(下个模型发布就错);「gemini 目录至少有一个模型」「每个模型都有对应的上下文长度」是<strong>不变量</strong>——数据怎么更新都不破。这让测试<strong>抗模型/数据漂移</strong>,routine 更新不再天天红 CI。</p>
+<p>规则一句话:<strong>测试若读起来像「当前数据的快照」，删掉;若读起来像「两份数据必须如何关联」的契约，留下。</strong>「gemini 目录里必须有 gemini-2.5-pro」是快照(下个模型发布就错);「gemini 目录至少有一个模型」「每个模型都有对应的上下文长度」是<strong>不变量</strong>——数据怎么更新都不破。这让测试<strong>抗模型/数据漂移</strong>,routine 更新不再天天红 CI。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 240" role="img" aria-label="评测对比：锁数据快照导致 CI 天天红，锁行为不变量则随系统演化">
@@ -574,11 +574,11 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 </svg>
 <div class="fig-cap"><b>锁不变量，不锁快照</b>：左边把「当前数据」冻进断言——具体模型名 gemini-2.5-pro、config 版本号 21；模型每周发布、config 升级，CI 就<b>天天变红</b>，逼工程师去「修测试」。右边只断言两份数据<b>必须成立的关系</b>（目录至少有一个模型、每个模型都有 context length），数据怎么更新都不破，测试<b>随系统一起演化</b>。</div>
 </div>
-<p>锁不变量换来的是什么?是<strong>能跟着系统一起演化</strong>的测试。「gemini 目录里至少有一个模型」「每个模型都有对应的上下文长度」这类断言,锁的是两份数据之间<strong>必须成立的关系</strong>,数据怎么更新都不破。这恰好和「窄腰」哲学互为表里:核心的契约越稳、越少,系统就越<strong>好测</strong>;反过来,正因为腰部的不变量被牢牢锁住,边缘才敢放心地快速扩张新平台、新模型、新 provider(参见讲工具集与约束的那几章)。所以评测在这里不是给代码拍快照,而是<strong>守护整个系统在持续迭代中的正确性</strong>——它和窄腰一道,让「核心稳、边缘野蛮生长」这件事在工程上可持续。</p>
-<p>再往深一层看,评测的本职其实是<strong>量化误差累积</strong>(约束 F)。agent 在多轮自主里,一个小判断失误会顺着后续步骤滚成雪球;不变量测试守住的,正是「这些必须成立的关系别在迭代里悄悄被破坏」。把它和轨迹的质量门槛并排看会更清楚:质量门槛挡住低质数据流进训练、免得把误差<strong>固化进下一代模型</strong>;不变量测试挡住回归在一次次提交中慢慢累积。一个在数据入口把关、一个在代码演化时把关,前后两道闸,都是在跟<strong>误差累积</strong>这条 LLM 固有约束较劲——这也是本章三件事(批量、轨迹、评测)其实围着同一个根在转的原因。</p>
+<p>锁不变量换来的是什么?是<strong>能跟着系统一起演化</strong>的测试。「gemini 目录里至少有一个模型」「每个模型都有对应的上下文长度」这类断言，锁的是两份数据之间<strong>必须成立的关系</strong>，数据怎么更新都不破。这恰好和「窄腰」哲学互为表里：核心的契约越稳、越少，系统就越<strong>好测</strong>;反过来，正因为腰部的不变量被牢牢锁住，边缘才敢放心地快速扩张新平台、新模型、新 provider(参见讲工具集与约束的那几章)。所以评测在这里不是给代码拍快照，而是<strong>守护整个系统在持续迭代中的正确性</strong>——它和窄腰一道，让「核心稳、边缘野蛮生长」这件事在工程上可持续。</p>
+<p>再往深一层看，评测的本职其实是<strong>量化误差累积</strong>(约束 F)。agent 在多轮自主里，一个小判断失误会顺着后续步骤滚成雪球;不变量测试守住的，正是「这些必须成立的关系别在迭代里悄悄被破坏」。把它和轨迹的质量门槛并排看会更清楚：质量门槛挡住低质数据流进训练、免得把误差<strong>固化进下一代模型</strong>;不变量测试挡住回归在一次次提交中慢慢累积。一个在数据入口把关、一个在代码演化时把关，前后两道闸，都是在跟<strong>误差累积</strong>这条 LLM 固有约束较劲——这也是本章三件事(批量、轨迹、评测)其实围着同一个根在转的原因。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 452" role="img" aria-label="一条真实对话转成一条 ShareGPT 训练样本:用户 prompt 统计当前目录有多少 py 文件,跑两个 API 调用;convert_to_trajectory_format 产出 conversations 数组,依次是 from system 带 tools 标签、from human 原始 prompt、from gpt 带 think 推理块和 tool_call 调用 terminal、from tool 带 tool_response 返回 7;外层 batch_runner 落盘记录含 tool_stats terminal count 1 success 1 failure 0、metadata batch_num 0、api_calls 2;底部质检闸 has_any_reasoning 为真就追加进 jsonl,全程空 think 则 continue 丢弃但仍标记完成">
+<svg viewBox="0 0 680 452" role="img" aria-label="一条真实对话转成一条 ShareGPT 训练样本：用户 prompt 统计当前目录有多少 py 文件，跑两个 API 调用;convert_to_trajectory_format 产出 conversations 数组，依次是 from system 带 tools 标签、from human 原始 prompt、from gpt 带 think 推理块和 tool_call 调用 terminal、from tool 带 tool_response 返回 7;外层 batch_runner 落盘记录含 tool_stats terminal count 1 success 1 failure 0、metadata batch_num 0、api_calls 2;底部质检闸 has_any_reasoning 为真就追加进 jsonl，全程空 think 则 continue 丢弃但仍标记完成">
   <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="26" y="30" font-size="11" fill="var(--ink)">输入对话:user prompt <tspan class="mono" font-weight="700" fill="var(--blue)">"统计当前目录有多少 .py 文件"</tspan> · 跑 2 个 API 调用 → 转 ShareGPT 样本</text>
 
@@ -638,46 +638,46 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <text x="438" y="394" font-size="10" fill="var(--red)">全程空 &lt;think&gt; → <tspan class="mono">=False</tspan></text>
   <text x="438" y="411" font-size="10" font-weight="700" fill="var(--red)">→ continue 丢弃(仍标记完成)</text>
 
-  <text x="16" y="440" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图:一条对话被改写成 {from,value} 的 ShareGPT 帧序列 —— 这是训练样本格式,不是推理时的 OpenAI role。</text>
+  <text x="16" y="440" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图：一条对话被改写成 {from,value} 的 ShareGPT 帧序列 —— 这是训练样本格式，不是推理时的 OpenAI role。</text>
 </svg>
-<div class="fig-cap"><b>一条对话 → 一条 ShareGPT 样本</b>:<span class="mono">convert_to_trajectory_format</span> 把内部 messages 改写成 <span class="mono">conversations[]</span>——<span class="mono">{from:"system"}</span> 带 <span class="mono">&lt;tools&gt;</span>、<span class="mono">{from:"human"}</span> 原始 prompt、<span class="mono">{from:"gpt"}</span> 带 <span class="mono">&lt;think&gt;</span>+<span class="mono">&lt;tool_call&gt;</span>、<span class="mono">{from:"tool"}</span> 带 <span class="mono">&lt;tool_response&gt;</span>。外层 <span class="mono">batch_runner</span> 落盘记录附 <span class="mono">tool_stats={"terminal":{count:1,success:1,failure:0}}</span>、<span class="mono">metadata.batch_num=0</span>、<span class="mono">api_calls=2</span>;质检闸只在 <b>有 <span class="mono">&lt;think&gt;</span> 推理</b>时写盘,空推理 <span class="mono">continue</span> 丢弃。注意是 <b><span class="mono">{from,value}</span> 而非 OpenAI role/content</b>。</div>
+<div class="fig-cap"><b>一条对话 → 一条 ShareGPT 样本</b>:<span class="mono">convert_to_trajectory_format</span> 把内部 messages 改写成 <span class="mono">conversations[]</span>——<span class="mono">{from:"system"}</span> 带 <span class="mono">&lt;tools&gt;</span>、<span class="mono">{from:"human"}</span> 原始 prompt、<span class="mono">{from:"gpt"}</span> 带 <span class="mono">&lt;think&gt;</span>+<span class="mono">&lt;tool_call&gt;</span>、<span class="mono">{from:"tool"}</span> 带 <span class="mono">&lt;tool_response&gt;</span>。外层 <span class="mono">batch_runner</span> 落盘记录附 <span class="mono">tool_stats={"terminal":{count:1,success:1,failure:0}}</span>、<span class="mono">metadata.batch_num=0</span>、<span class="mono">api_calls=2</span>;质检闸只在 <b>有 <span class="mono">&lt;think&gt;</span> 推理</b>时写盘，空推理 <span class="mono">continue</span> 丢弃。注意是 <b><span class="mono">{from,value}</span> 而非 OpenAI role/content</b>。</div>
 </div>
 
 <div class="vflow">
-  <div class="step"><span class="num">1</span><span class="sc">一批 prompt 切分,丢给多个 <span class="mono">_process_batch_worker</span> 并行</span></div>
-  <div class="step"><span class="num">2</span><span class="sc">每个 worker 独立跑 AIAgent(第 7 章核心循环),产出 trajectory</span></div>
-  <div class="step"><span class="num">3</span><span class="sc">质量过滤:零推理样本 <span class="mono">continue</span> 丢弃</span></div>
+  <div class="step"><span class="num">1</span><span class="sc">一批 prompt 切分，丢给多个 <span class="mono">_process_batch_worker</span> 并行</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">每个 worker 独立跑 AIAgent(第 7 章核心循环)，产出 trajectory</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">质量过滤：零推理样本 <span class="mono">continue</span> 丢弃</span></div>
   <div class="step"><span class="num">4</span><span class="sc"><span class="mono">trajectory_entry</span>(conversations + tool_stats + metadata)写 JSONL 一行</span></div>
-  <div class="step"><span class="num">5</span><span class="sc">评测/回归用<strong>不变量</strong>断言(非快照),抗模型漂移</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">评测/回归用<strong>不变量</strong>断言(非快照)，抗模型漂移</span></div>
 </div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「研究数据流水线 + 抗漂移评测」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>_process_batch_worker</strong>(并行批量)、<strong>_save_trajectory</strong>(轨迹落盘)、<strong>trajectory_entry</strong>(JSONL schema)、<strong>不变量测试</strong>(评测哲学)。跨章节配合:批量跑的是 <strong>AIAgent 核心循环</strong>(第 7 章),轨迹里存的 reasoning 也来自那里;<span class="mono">tool_stats</span> 统计的是<strong>工具</strong>(第 8 章)调用;并行 worker 各自<strong>无状态独立</strong>(约束 B,第 2 章);轨迹按完成状态写 JSONL(<span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span>),批量则落进 <span class="mono">data/&lt;run&gt;/</span>。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>_process_batch_worker</strong>(并行批量)、<strong>_save_trajectory</strong>(轨迹落盘)、<strong>trajectory_entry</strong>(JSONL schema)、<strong>不变量测试</strong>(评测哲学)。跨章节配合：批量跑的是 <strong>AIAgent 核心循环</strong>(第 7 章)，轨迹里存的 reasoning 也来自那里;<span class="mono">tool_stats</span> 统计的是<strong>工具</strong>(第 8 章)调用;并行 worker 各自<strong>无状态独立</strong>(约束 B，第 2 章);轨迹按完成状态写 JSONL(<span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span>)，批量则落进 <span class="mono">data/&lt;run&gt;/</span>。
   <div class="collab-sub">② 数据流时序</div>
-  prompts 切批 → 多 <span class="mono">_process_batch_worker</span> 并行(各跑 AIAgent)→ 质量过滤(零推理丢弃)→ <span class="mono">trajectory_entry</span> 写 JSONL → 聚合 <span class="mono">tool_stats</span>;评测侧:不变量断言抗数据漂移。
+  prompts 切批 → 多 <span class="mono">_process_batch_worker</span> 并行(各跑 AIAgent)→ 质量过滤(零推理丢弃)→ <span class="mono">trajectory_entry</span> 写 JSONL → 聚合 <span class="mono">tool_stats</span>;评测侧：不变量断言抗数据漂移。
   <div class="collab-sub">③ 关键点</div>
-  研究数据流水线 = <strong>并行批量 + 完整轨迹 + 质量过滤</strong>;同一个 agent 核心既服务真实对话又产出训练数据。评测的工程纪律 = <strong>锁行为不变量、不锁数据快照</strong>,让「模型/数据天天变」不再天天破测试。
+  研究数据流水线 = <strong>并行批量 + 完整轨迹 + 质量过滤</strong>;同一个 agent 核心既服务真实对话又产出训练数据。评测的工程纪律 = <strong>锁行为不变量、不锁数据快照</strong>，让「模型/数据天天变」不再天天破测试。
 </div>
 
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>并行批量 + 完整轨迹 + 质量过滤 + 行为契约测试 = 可规模化的研究数据流水线 + 抗漂移评测</strong>。它主要治两条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——研究要规模:成千上万条 prompt 得并行跑、轨迹得标准化落盘、CI 得在「模型每周变」下还能维护。批量 worker、JSONL 轨迹、不变量测试,把「做研究」做成可规模化、低维护的基础设施。</p>
-  <p style="margin:.5rem 0 0"><span class="badge constraint">F·误差累积</span>——评测的本职就是<strong>量化 agent 在多轮自主里误差累积到什么程度</strong>;轨迹的质量门槛(必须有推理)<strong>剔除低质样本</strong>,免得垃圾数据喂进训练、把误差固化进下一代模型。不变量测试也防回归在迭代中悄悄累积。</p>
-  <p style="margin:.5rem 0 0">反模式:写 <strong>change-detector 测试</strong>——把模型目录、config 版本号、枚举数量写死进断言。模型一发布、配置一升级,这些测试就<strong>集体变红</strong>,逼工程师花时间「修测试」而非修 bug。锁不变量,不锁快照。</p>
-  <p style="margin:.5rem 0 0">还有个易被忽略的取舍:批量轨迹落在<strong>运行目录</strong> <span class="mono">data/&lt;run_name&gt;/</span> 下(<span class="mono">batch_runner.py:611</span>),<strong>不走</strong> profile 的 <span class="mono">HERMES_HOME</span> 隔离——因为它是一次<strong>研究运行</strong>的产物,天然以「这一次跑」为单位组织,而非以「哪个用户 profile」为单位,和分布在各 profile 下的会话/记忆是两套语境。续跑机制也做得很务实:不死磕 prompt 的下标,而是按 <strong>prompt 文本内容</strong>扫描已完成项(<span class="mono">_scan_completed_prompts_by_content</span>),即便数据集顺序变了也能稳稳认出哪些跑过。规模化的工程,处处是这种「为真实世界的混乱兜底」的小取舍。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——研究要规模：成千上万条 prompt 得并行跑、轨迹得标准化落盘、CI 得在「模型每周变」下还能维护。批量 worker、JSONL 轨迹、不变量测试，把「做研究」做成可规模化、低维护的基础设施。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·误差累积</span>——评测的本职就是<strong>量化 agent 在多轮自主里误差累积到什么程度</strong>;轨迹的质量门槛(必须有推理)<strong>剔除低质样本</strong>，免得垃圾数据喂进训练、把误差固化进下一代模型。不变量测试也防回归在迭代中悄悄累积。</p>
+  <p style="margin:.5rem 0 0">反模式：写 <strong>change-detector 测试</strong>——把模型目录、config 版本号、枚举数量写死进断言。模型一发布、配置一升级，这些测试就<strong>集体变红</strong>，逼工程师花时间「修测试」而非修 bug。锁不变量，不锁快照。</p>
+  <p style="margin:.5rem 0 0">还有个易被忽略的取舍：批量轨迹落在<strong>运行目录</strong> <span class="mono">data/&lt;run_name&gt;/</span> 下(<span class="mono">batch_runner.py:611</span>),<strong>不走</strong> profile 的 <span class="mono">HERMES_HOME</span> 隔离——因为它是一次<strong>研究运行</strong>的产物，天然以「这一次跑」为单位组织，而非以「哪个用户 profile」为单位，和分布在各 profile 下的会话/记忆是两套语境。续跑机制也做得很务实：不死磕 prompt 的下标，而是按 <strong>prompt 文本内容</strong>扫描已完成项(<span class="mono">_scan_completed_prompts_by_content</span>)，即便数据集顺序变了也能稳稳认出哪些跑过。规模化的工程，处处是这种「为真实世界的混乱兜底」的小取舍。</p>
 </div>
 
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
-    <li><strong>并行批量</strong>:<span class="mono">_process_batch_worker</span> 多 worker 各跑独立 prompt(无状态,约束 B),规模化生成数据。</li>
-    <li><strong>完整轨迹</strong>:对话转 JSONL 训练样本,带 <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>;<span class="mono">save_trajectories</span> 开关默认关。</li>
-    <li><strong>质量过滤</strong>:零推理样本 <span class="mono">continue</span> 丢弃,训练集只收有推理的高质数据。</li>
-    <li><strong>一鱼两吃</strong>:同一个 AIAgent 核心,既服务真实对话、又顺手产出研究轨迹。</li>
-    <li><strong>抗漂移评测</strong>:测试锁<strong>行为不变量</strong>(关系)而非<strong>数据快照</strong>(具体值);不写 change-detector,免得模型/config 一变就全红。</li>
+    <li><strong>并行批量</strong>:<span class="mono">_process_batch_worker</span> 多 worker 各跑独立 prompt(无状态，约束 B)，规模化生成数据。</li>
+    <li><strong>完整轨迹</strong>：对话转 JSONL 训练样本，带 <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>;<span class="mono">save_trajectories</span> 开关默认关。</li>
+    <li><strong>质量过滤</strong>：零推理样本 <span class="mono">continue</span> 丢弃，训练集只收有推理的高质数据。</li>
+    <li><strong>一鱼两吃</strong>：同一个 AIAgent 核心，既服务真实对话、又顺手产出研究轨迹。</li>
+    <li><strong>抗漂移评测</strong>：测试锁<strong>行为不变量</strong>(关系)而非<strong>数据快照</strong>(具体值);不写 change-detector，免得模型/config 一变就全红。</li>
   </ul>
 </div>
 <div class="selftest">
@@ -762,7 +762,7 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 
   <rect x="14" y="54" width="92" height="180" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="60" y="72" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">dataset</text>
-  <g font-size="8.5" text-anchor="middle" fill="var(--muted)">
+  <g font-size="9" text-anchor="middle" fill="var(--muted)">
     <rect x="24" y="80"  width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="94">prompt 1</text>
     <rect x="24" y="104" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="118">prompt 2</text>
     <rect x="24" y="128" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="142">prompt 3</text>
@@ -780,13 +780,13 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <line x1="106" y1="209" x2="130" y2="209" stroke="var(--faint)" marker-end="url(#be1arr)"/>
 
     <rect x="132" y="60"  width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="76"  fill="var(--ink)">worker 1</text><text x="184" y="89" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="76"  fill="var(--ink)">worker 1</text><text x="184" y="89" font-size="9" fill="var(--muted)">AIAgent</text>
     <rect x="132" y="104" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="120" fill="var(--ink)">worker 2</text><text x="184" y="133" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="120" fill="var(--ink)">worker 2</text><text x="184" y="133" font-size="9" fill="var(--muted)">AIAgent</text>
     <rect x="132" y="148" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="164" fill="var(--ink)">worker 3</text><text x="184" y="177" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="164" fill="var(--ink)">worker 3</text><text x="184" y="177" font-size="9" fill="var(--muted)">AIAgent</text>
     <rect x="132" y="192" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="208" fill="var(--ink)">worker 4</text><text x="184" y="221" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="208" fill="var(--ink)">worker 4</text><text x="184" y="221" font-size="9" fill="var(--muted)">AIAgent</text>
   </g>
 
   <g font-size="9.5" text-anchor="middle">
@@ -808,13 +808,13 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <line x1="290" y1="209" x2="310" y2="209" stroke="var(--faint)" marker-end="url(#be1arr)"/>
 
     <rect x="310" y="60"  width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="76"  font-size="10" fill="var(--ink)">batch_0.jsonl</text><text x="374" y="88" font-size="8" fill="var(--muted)">append</text>
+    <text x="374" y="76"  font-size="10" fill="var(--ink)">batch_0.jsonl</text><text x="374" y="88" font-size="9" fill="var(--muted)">append</text>
     <rect x="310" y="104" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="120" font-size="10" fill="var(--ink)">batch_1.jsonl</text><text x="374" y="132" font-size="8" fill="var(--muted)">append</text>
+    <text x="374" y="120" font-size="10" fill="var(--ink)">batch_1.jsonl</text><text x="374" y="132" font-size="9" fill="var(--muted)">append</text>
     <rect x="310" y="148" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="164" font-size="10" fill="var(--ink)">batch_2.jsonl</text><text x="374" y="176" font-size="8" fill="var(--muted)">append</text>
+    <text x="374" y="164" font-size="10" fill="var(--ink)">batch_2.jsonl</text><text x="374" y="176" font-size="9" fill="var(--muted)">append</text>
     <rect x="310" y="192" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="208" font-size="10" fill="var(--ink)">batch_3.jsonl</text><text x="374" y="220" font-size="8" fill="var(--muted)">append</text>
+    <text x="374" y="208" font-size="10" fill="var(--ink)">batch_3.jsonl</text><text x="374" y="220" font-size="9" fill="var(--muted)">append</text>
   </g>
 
   <line x1="438" y1="77"  x2="452" y2="77"  stroke="var(--accent)" marker-end="url(#be1arr)"/>
@@ -837,7 +837,7 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 
   <rect x="14" y="252" width="270" height="140" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="28" y="274" font-size="10.5" font-weight="700" fill="var(--ink)">QC &amp; resume rules</text>
-  <g font-size="8.5">
+  <g font-size="9">
     <text x="28" y="300" fill="var(--accent-ink)">✓ has reasoning → append to batch_&lt;N&gt;.jsonl</text>
     <text x="28" y="326" fill="var(--red)">✗ zero reasoning → dropped, still marked done</text>
     <text x="28" y="352" fill="var(--red)">✗ failed → no separate failed file,</text>

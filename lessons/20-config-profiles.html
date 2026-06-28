@@ -371,16 +371,16 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <h1><span class="lang-zh">配置与 Profiles</span><span class="lang-en">Config &amp; Profiles</span></h1>
   </div>
   <div class="lang-zh">
-<p class="lead">同一台机器上,你想跑两个完全独立的 Hermes:一个「工作号」、一个「私人号」,各有各的 API key、记忆、会话、技能、网关——互不串台。这就是 <strong>profile</strong>。它的全部魔法,浓缩成一句话:<strong>在任何模块 import 之前,抢先设好一个环境变量 <span class="mono">HERMES_HOME</span></strong>。</p>
+<p class="lead">同一台机器上，你想跑两个完全独立的 Hermes：一个「工作号」、一个「私人号」，各有各的 API key、记忆、会话、技能、网关——互不串台。这就是 <strong>profile</strong>。它的全部魔法，浓缩成一句话:<strong>在任何模块 import 之前，抢先设好一个环境变量 <span class="mono">HERMES_HOME</span></strong>。</p>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 连锁酒店的分店</div>
-  同一套管理系统(Hermes 代码),开了多家分店(profile)。每家分店有<strong>独立的钥匙、账本、客房</strong>(各自的 <span class="mono">HERMES_HOME</span> 目录)。你一进门,前台先确认「您是哪家分店的」(<span class="mono">_apply_profile_override</span> 抢先设 <span class="mono">HERMES_HOME</span>),之后你办的<strong>每一件事</strong>都自动用那家店的资源——不会刷错账本、拿错钥匙。
+  同一套管理系统(Hermes 代码)，开了多家分店(profile)。每家分店有<strong>独立的钥匙、账本、客房</strong>(各自的 <span class="mono">HERMES_HOME</span> 目录)。你一进门，前台先确认「您是哪家分店的」(<span class="mono">_apply_profile_override</span> 抢先设 <span class="mono">HERMES_HOME</span>)，之后你办的<strong>每一件事</strong>都自动用那家店的资源——不会刷错账本、拿错钥匙。
 </div>
 
 <div class="card macro">
   <div class="tag">🌍 宏观 · 一个环境变量决定一切</div>
-  profile 切换只做<strong>一件事</strong>:在 <span class="mono">main.py</span> 的<strong>模块顶层</strong>、其余 import 之前,把 <span class="mono">HERMES_HOME</span> 设成 <span class="mono">~/.hermes/profiles/&lt;名字&gt;</span>。之后全代码库唯一的路径入口 <span class="mono">get_hermes_home()</span> 自动指向那个目录,配置/密钥/记忆/会话/技能<strong>全部隔离</strong>。配置本身再分两层:行为设置进 <span class="mono">config.yaml</span>、密钥进 <span class="mono">.env</span>。
+  profile 切换只做<strong>一件事</strong>：在 <span class="mono">main.py</span> 的<strong>模块顶层</strong>、其余 import 之前，把 <span class="mono">HERMES_HOME</span> 设成 <span class="mono">~/.hermes/profiles/&lt;名字&gt;</span>。之后全代码库唯一的路径入口 <span class="mono">get_hermes_home()</span> 自动指向那个目录，配置/密钥/记忆/会话/技能<strong>全部隔离</strong>。配置本身再分两层：行为设置进 <span class="mono">config.yaml</span>、密钥进 <span class="mono">.env</span>。
 </div>
 
 <h2>抢跑:import 之前设 HERMES_HOME</h2>
@@ -394,16 +394,16 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <span class="kw">if</span> profile_name <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span>:
         hermes_home = resolve_profile_env(profile_name)   <span class="cm"># → ~/.hermes/profiles/coder</span>
         os.environ[<span class="st">"HERMES_HOME"</span>] = hermes_home          <span class="cm"># 抢先设环境变量</span>
-        <span class="cm"># 再把 -p 标志从 argv 剥掉,免得后面 argparse 报错</span>
+        <span class="cm"># 再把 -p 标志从 argv 剥掉，免得后面 argparse 报错</span>
 
-_apply_profile_override()   <span class="cm"># 模块级:在其余 import 之前就执行</span></pre>
+_apply_profile_override()   <span class="cm"># 模块级：在其余 import 之前就执行</span></pre>
 </div>
-<p>注意最后那行 <span class="mono">_apply_profile_override()</span> 是<strong>模块级调用</strong>——在 <span class="mono">main.py</span> 顶层执行,<strong>早于</strong> <span class="mono">config</span>、<span class="mono">env_loader</span> 等会读取/缓存 <span class="mono">HERMES_HOME</span> 的落盘业务模块被 <span class="mono">import</span>。等到那些模块加载时去读 <span class="mono">HERMES_HOME</span>,看到的已经是 profile 的目录了。一个环境变量,把整棵依赖树重定向到了正确的实例。</p>
-<p>为什么非得在<strong>模块顶层、import 之前</strong>调用,而不是塞进某个 <span class="mono">main()</span> 函数里?因为 Python 的 import 只执行一次,很多落盘模块在被 import 的<strong>那一刻</strong>就用 <span class="mono">get_hermes_home()</span> 算出路径、缓存进模块级常量(这正是第 8 章自动发现「import 即注册」的同一性质)。只要 <span class="mono">config</span>、<span class="mono">env_loader</span> 里任意一个抢先 import 成功,它读到的就是默认 <span class="mono">~/.hermes</span>,profile 再设也晚了——缓存已被定死,无从更正。把 <span class="mono">_apply_profile_override()</span> 写成裸调用、且放在文件最顶端,等于用「import 顺序」这把唯一可靠的锁,保证环境变量永远先于第一个落盘模块就位。这也解释了它为何要自己手撸 argv 解析、而不用 <span class="mono">argparse</span>:后者得先 import 一堆模块,太晚了。</p>
-<p>这套抢跑机制还有两个常被忽视的收尾。其一,设好 <span class="mono">HERMES_HOME</span> 之后,<span class="mono">_apply_profile_override()</span> 会把 <span class="mono">-p/--profile</span> 标志从 <span class="mono">argv</span> 里剥掉,免得后面正式的 <span class="mono">argparse</span> 因不认识这个参数而报错——也就是说 profile 解析故意走在标准参数解析<strong>之前</strong>、独立成一套轻量逻辑。其二,源码里回退的「平台默认」并非写死的 <span class="mono">~/.hermes</span>:在 Windows 上 <span class="mono">_get_platform_default_hermes_home()</span> 会改用 <span class="mono">LOCALAPPDATA</span> 下的目录。所以这个「单一入口」不仅服务于 profile 隔离,也顺手把跨平台的路径差异一并收进了同一个函数,让所有调用方对此一律无感——这正是单一真相源在「可维护性」上的额外红利。</p>
+<p>注意最后那行 <span class="mono">_apply_profile_override()</span> 是<strong>模块级调用</strong>——在 <span class="mono">main.py</span> 顶层执行,<strong>早于</strong> <span class="mono">config</span>、<span class="mono">env_loader</span> 等会读取/缓存 <span class="mono">HERMES_HOME</span> 的落盘业务模块被 <span class="mono">import</span>。等到那些模块加载时去读 <span class="mono">HERMES_HOME</span>，看到的已经是 profile 的目录了。一个环境变量，把整棵依赖树重定向到了正确的实例。</p>
+<p>为什么非得在<strong>模块顶层、import 之前</strong>调用，而不是塞进某个 <span class="mono">main()</span> 函数里?因为 Python 的 import 只执行一次，很多落盘模块在被 import 的<strong>那一刻</strong>就用 <span class="mono">get_hermes_home()</span> 算出路径、缓存进模块级常量(这正是第 8 章自动发现「import 即注册」的同一性质)。只要 <span class="mono">config</span>、<span class="mono">env_loader</span> 里任意一个抢先 import 成功，它读到的就是默认 <span class="mono">~/.hermes</span>,profile 再设也晚了——缓存已被定死，无从更正。把 <span class="mono">_apply_profile_override()</span> 写成裸调用、且放在文件最顶端，等于用「import 顺序」这把唯一可靠的锁，保证环境变量永远先于第一个落盘模块就位。这也解释了它为何要自己手撸 argv 解析、而不用 <span class="mono">argparse</span>：后者得先 import 一堆模块，太晚了。</p>
+<p>这套抢跑机制还有两个常被忽视的收尾。其一，设好 <span class="mono">HERMES_HOME</span> 之后,<span class="mono">_apply_profile_override()</span> 会把 <span class="mono">-p/--profile</span> 标志从 <span class="mono">argv</span> 里剥掉，免得后面正式的 <span class="mono">argparse</span> 因不认识这个参数而报错——也就是说 profile 解析故意走在标准参数解析<strong>之前</strong>、独立成一套轻量逻辑。其二，源码里回退的「平台默认」并非写死的 <span class="mono">~/.hermes</span>：在 Windows 上 <span class="mono">_get_platform_default_hermes_home()</span> 会改用 <span class="mono">LOCALAPPDATA</span> 下的目录。所以这个「单一入口」不仅服务于 profile 隔离，也顺手把跨平台的路径差异一并收进了同一个函数，让所有调用方对此一律无感——这正是单一真相源在「可维护性」上的额外红利。</p>
 
-<h2>单一真相源:所有路径都问它</h2>
-<p>全代码库不准硬编码 <span class="mono">~/.hermes</span>,一律走这一个函数:</p>
+<h2>单一真相源：所有路径都问它</h2>
+<p>全代码库不准硬编码 <span class="mono">~/.hermes</span>，一律走这一个函数:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">hermes_constants.py</span><span class="ln">54-109 · 节选</span></div>
@@ -418,12 +418,12 @@ _apply_profile_override()   <span class="cm"># 模块级:在其余 import 之前
         <span class="kw">return</span> Path(val)                     <span class="cm"># ← profile 设的就是这个</span>
     <span class="kw">return</span> _get_platform_default_hermes_home()   <span class="cm"># 默认 ~/.hermes</span></pre>
 </div>
-<p><strong>「single source of truth — all other copies should import this」</strong>:全代码库 30+ 处要落盘的地方,都不自己拼 <span class="mono">~/.hermes</span>,而是调 <span class="mono">get_hermes_home()</span>。于是 profile 一旦在开头设好 <span class="mono">HERMES_HOME</span>,会话库、记忆、技能、网关日志……<strong>统统自动</strong>落到 profile 目录。反过来,任何一处硬编码 <span class="mono">Path.home()/".hermes"</span> 都会<strong>击穿隔离</strong>(PR #3575 一次就修了 5 个这种 bug)。</p>
-<p>为什么是一个<strong>函数</strong>而不是一个模块级常量?因为常量在 import 时就被求值、之后再也无法改变;而 profile、子代理、并发线程都可能要在运行期临时切换 home。<span class="mono">get_hermes_home()</span> 每次调用先看 <span class="mono">ContextVar</span> 覆盖——让同一进程内并发的子代理各认各的实例,呼应第 13 章委派的隔离——再看 <span class="mono">HERMES_HOME</span> 环境变量,最后才回退平台默认。源码还特意保留一段逻辑:当环境变量缺失、但 <span class="mono">active_profile</span> 文件指向一个非默认 profile 时,往 <span class="mono">stderr</span> 打一条响亮的一次性告警。为什么是告警而不是抛异常?因为这函数有 30+ 个模块级调用方在 import 期就会执行它,一旦抛异常会把它们全部弄崩,所以宁可告警、留下可诊断的线索,也绝不阻断启动。</p>
-<p>这个回退设计透露的工程哲学值得品味:<span class="mono">get_hermes_home()</span> 宁可在 <span class="mono">HERMES_HOME</span> 缺失时<strong>安静回退默认 + 留一条告警</strong>,也不肯把自己变成一个会抛异常的「严格守门人」。原因前面说过——它是被 30+ 个模块在 import 期同步调用的底座,任何会失败的底座都会让整个进程的启动变脆。把不确定性挡在 import 之外、用环境变量在最前面一次性定死,再让所有调用方无脑信任这唯一入口,正是「无状态内核 + 外部一个变量定乾坤」在路径层面的具体落地。也正因如此,子进程派生(<span class="mono">systemd</span> 模板、kanban 调度器)必须显式把 <span class="mono">HERMES_HOME</span> 透传下去,否则子进程读不到环境变量,会悄悄退回默认实例、写错 profile——这是分布式跑多实例时最隐蔽的一类污染源。</p>
+<p><strong>「single source of truth — all other copies should import this」</strong>：全代码库 30+ 处要落盘的地方，都不自己拼 <span class="mono">~/.hermes</span>，而是调 <span class="mono">get_hermes_home()</span>。于是 profile 一旦在开头设好 <span class="mono">HERMES_HOME</span>，会话库、记忆、技能、网关日志……<strong>统统自动</strong>落到 profile 目录。反过来，任何一处硬编码 <span class="mono">Path.home()/".hermes"</span> 都会<strong>击穿隔离</strong>(PR #3575 一次就修了 5 个这种 bug)。</p>
+<p>为什么是一个<strong>函数</strong>而不是一个模块级常量?因为常量在 import 时就被求值、之后再也无法改变;而 profile、子代理、并发线程都可能要在运行期临时切换 home。<span class="mono">get_hermes_home()</span> 每次调用先看 <span class="mono">ContextVar</span> 覆盖——让同一进程内并发的子代理各认各的实例，呼应第 13 章委派的隔离——再看 <span class="mono">HERMES_HOME</span> 环境变量，最后才回退平台默认。源码还特意保留一段逻辑：当环境变量缺失、但 <span class="mono">active_profile</span> 文件指向一个非默认 profile 时，往 <span class="mono">stderr</span> 打一条响亮的一次性告警。为什么是告警而不是抛异常?因为这函数有 30+ 个模块级调用方在 import 期就会执行它，一旦抛异常会把它们全部弄崩，所以宁可告警、留下可诊断的线索，也绝不阻断启动。</p>
+<p>这个回退设计透露的工程哲学值得品味:<span class="mono">get_hermes_home()</span> 宁可在 <span class="mono">HERMES_HOME</span> 缺失时<strong>安静回退默认 + 留一条告警</strong>，也不肯把自己变成一个会抛异常的「严格守门人」。原因前面说过——它是被 30+ 个模块在 import 期同步调用的底座，任何会失败的底座都会让整个进程的启动变脆。把不确定性挡在 import 之外、用环境变量在最前面一次性定死，再让所有调用方无脑信任这唯一入口，正是「无状态内核 + 外部一个变量定乾坤」在路径层面的具体落地。也正因如此，子进程派生(<span class="mono">systemd</span> 模板、kanban 调度器)必须显式把 <span class="mono">HERMES_HOME</span> 透传下去，否则子进程读不到环境变量，会悄悄退回默认实例、写错 profile——这是分布式跑多实例时最隐蔽的一类污染源。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 392" role="img" aria-label="Profiles 是独立的岛:每个 profile 有独立 HERMES_HOME,彼此完全隔离、不做实时继承">
+<svg viewBox="0 0 680 392" role="img" aria-label="Profiles 是独立的岛：每个 profile 有独立 HERMES_HOME，彼此完全隔离、不做实时继承">
   <rect x="20" y="20" width="300" height="46" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
   <text x="170" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">_apply_profile_override()</text>
   <text x="170" y="57" text-anchor="middle" font-size="10.5" fill="var(--accent-ink)">任何 import 之前 · 抢设 HERMES_HOME</text>
@@ -437,7 +437,7 @@ _apply_profile_override()   <span class="cm"># 模块级:在其余 import 之前
 
   <path d="M118 132 Q229 96 340 132" fill="none" stroke="var(--purple)" stroke-width="1.6" stroke-dasharray="5 4"/>
   <polygon points="335,123 343,134 329,132" fill="var(--purple)"/>
-  <text x="229" y="108" text-anchor="middle" font-size="10" fill="var(--purple)">--clone:创建时一次性拷贝(之后各走各路)</text>
+  <text x="229" y="108" text-anchor="middle" font-size="10" fill="var(--purple)">--clone：创建时一次性拷贝(之后各走各路)</text>
 
   <rect x="20" y="134" width="196" height="216" rx="12" fill="var(--panel-2)" stroke="var(--line)" stroke-width="1.5"/>
   <text x="118" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">default</text>
@@ -485,11 +485,11 @@ _apply_profile_override()   <span class="cm"># 模块级:在其余 import 之前
 
   <text x="340" y="378" text-anchor="middle" font-size="10.5" fill="var(--muted)"><tspan fill="var(--red)" font-weight="700">✕</tspan> 不做实时继承　·　硬编码 ~/.hermes 会击穿隔离(PR #3575)</text>
 </svg>
-<div class="fig-cap"><b>Profiles:独立的岛</b>:<span class="mono">_apply_profile_override()</span> 在任何 import 前抢设 <span class="mono">HERMES_HOME</span>,全代码库再走 <span class="mono">get_hermes_home()</span> 单一入口——于是每个 profile 的 config/密钥/记忆/会话/技能/网关<b>各落各的目录、完全隔离</b>。岛与岛之间<b>刻意不做实时继承</b>(避免改一处污染全体);要「从默认起步」就用创建时一次性拷贝的 <span class="mono">--clone</span>。</div>
+<div class="fig-cap"><b>Profiles：独立的岛</b>:<span class="mono">_apply_profile_override()</span> 在任何 import 前抢设 <span class="mono">HERMES_HOME</span>，全代码库再走 <span class="mono">get_hermes_home()</span> 单一入口——于是每个 profile 的 config/密钥/记忆/会话/技能/网关<b>各落各的目录、完全隔离</b>。岛与岛之间<b>刻意不做实时继承</b>(避免改一处污染全体);要「从默认起步」就用创建时一次性拷贝的 <span class="mono">--clone</span>。</div>
 </div>
 
-<h2>配置分层:行为进 yaml,密钥进 env</h2>
-<p>profile 隔离的是「存哪」;而「存什么」分两层,泾渭分明:</p>
+<h2>配置分层：行为进 yaml，密钥进 env</h2>
+<p>profile 隔离的是「存哪」;而「存什么」分两层，泾渭分明:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/config.py</span><span class="ln">883 / 2860 / 2885 · 简化</span></div>
@@ -506,16 +506,16 @@ OPTIONAL_ENV_VARS = {
     <span class="st">"TELEGRAM_BOT_TOKEN"</span>: {<span class="st">"password"</span>: <span class="kw">True</span>, <span class="st">"category"</span>: <span class="st">"messaging"</span>},
 }</pre>
 </div>
-<p>设计意图很明确:<strong><span class="mono">.env</span> 主要放凭据</strong>(密钥条目标 <span class="mono">password: True</span>、setup 向导掩码输入;<span class="mono">OPTIONAL_ENV_VARS</span> 里也有不少(实测 66 个)<span class="mono">password: False</span> 的非密连接项,如 base URL、代理);而超时、阈值、功能开关、显示偏好这些<strong>行为设置一律进 <span class="mono">config.yaml</span></strong>。所以「给 messaging 设个工作目录」绝不能塞进 <span class="mono">.env</span>(已废弃的 <span class="mono">MESSAGING_CWD</span> 就是反例),而要写 <span class="mono">terminal.cwd</span>。这条线让凭据独立成一个可单独保护、单独 gitignore 的文件。</p>
-<p>为什么一定要把密钥和行为设置劈成两个文件?因为它们的生命周期与信任级别天差地别:密钥绝不能进版本控制,<span class="mono">.env</span> 因此能被单独 <span class="mono">gitignore</span>、单独收紧权限;而 <span class="mono">config.yaml</span> 是可读、可 diff、可随项目迁移的行为快照,团队成员照着改也不怕泄密。这里还藏着一个工程红利:<span class="mono">DEFAULT_CONFIG</span> 与用户 yaml 走 <span class="mono">_deep_merge</span> 合并,<strong>新增一个键会被自动补全</strong>,所以只有改键名、改结构这种破坏性迁移才需要 bump <span class="mono">_config_version</span>。代价是配置读取分了三条路径——CLI 的 <span class="mono">load_cli_config</span>、子命令的 <span class="mono">load_config</span>、网关直读 yaml——加键时三条都得覆盖到,否则会出现「CLI 看得见、网关看不见」的诡异不一致。</p>
-<p>这里必须对「<span class="mono">.env</span> 里全是密钥」保持诚实:那是<strong>设计政策与理想</strong>,现实并不绝对。翻一翻 <span class="mono">OPTIONAL_ENV_VARS</span>,会看到不少标着 <span class="mono">password: False</span> 的非密项,例如 <span class="mono">NOUS_BASE_URL</span>、<span class="mono">GEMINI_BASE_URL</span>、<span class="mono">XAI_BASE_URL</span> 这类 base URL 覆盖——它们出于历史与兼容,至今仍寄居在 <span class="mono">.env</span> 里。所以准确的说法是:<strong>政策上 <span class="mono">.env</span> 应只放凭据,但历史包袱让它仍混着少量非密的连接项</strong>。判断一个新设置该放哪,标准很简单——看它是不是秘密:是 API key、token 就进 <span class="mono">.env</span>;是超时、阈值、开关、显示偏好就进 <span class="mono">config.yaml</span>,别被现存的反例带偏。</p>
-<p>把 <span class="mono">config.yaml</span> 单独拎出来还有个全局意义:它几乎是全书各章行为的<strong>总开关面板</strong>。一个 yaml 文件里,<span class="mono">model</span> 决定路由、<span class="mono">compression</span> 调压缩阈值、<span class="mono">delegation</span> 管子代理并发与深度(第 13 章)、<span class="mono">curator</span> 控技能生命周期(第 10 章)、<span class="mono">gateway</span> 配各平台网关(第 17 章)、<span class="mono">memory</span> 选记忆后端(第 11 章)。正因为这些行为设置全是可读、可 diff 的纯数据,profile 才能靠「复制一个目录」就连同<strong>整套行为策略</strong>一起克隆;若它们散落在代码常量或 <span class="mono">.env</span> 里,profile 隔离就只能隔离密钥、隔离不了行为,多实例的价值会大打折扣。配置分层与 profile 隔离,本质上是同一个「状态外置、目录即实例」理念的一体两面。</p>
+<p>设计意图很明确:<strong><span class="mono">.env</span> 主要放凭据</strong>(密钥条目标 <span class="mono">password: True</span>、setup 向导掩码输入;<span class="mono">OPTIONAL_ENV_VARS</span> 里也有不少(实测 66 个)<span class="mono">password: False</span> 的非密连接项，如 base URL、代理);而超时、阈值、功能开关、显示偏好这些<strong>行为设置一律进 <span class="mono">config.yaml</span></strong>。所以「给 messaging 设个工作目录」绝不能塞进 <span class="mono">.env</span>(已废弃的 <span class="mono">MESSAGING_CWD</span> 就是反例)，而要写 <span class="mono">terminal.cwd</span>。这条线让凭据独立成一个可单独保护、单独 gitignore 的文件。</p>
+<p>为什么一定要把密钥和行为设置劈成两个文件?因为它们的生命周期与信任级别天差地别：密钥绝不能进版本控制,<span class="mono">.env</span> 因此能被单独 <span class="mono">gitignore</span>、单独收紧权限;而 <span class="mono">config.yaml</span> 是可读、可 diff、可随项目迁移的行为快照，团队成员照着改也不怕泄密。这里还藏着一个工程红利:<span class="mono">DEFAULT_CONFIG</span> 与用户 yaml 走 <span class="mono">_deep_merge</span> 合并,<strong>新增一个键会被自动补全</strong>，所以只有改键名、改结构这种破坏性迁移才需要 bump <span class="mono">_config_version</span>。代价是配置读取分了三条路径——CLI 的 <span class="mono">load_cli_config</span>、子命令的 <span class="mono">load_config</span>、网关直读 yaml——加键时三条都得覆盖到，否则会出现「CLI 看得见、网关看不见」的诡异不一致。</p>
+<p>这里必须对「<span class="mono">.env</span> 里全是密钥」保持诚实：那是<strong>设计政策与理想</strong>，现实并不绝对。翻一翻 <span class="mono">OPTIONAL_ENV_VARS</span>，会看到不少标着 <span class="mono">password: False</span> 的非密项，例如 <span class="mono">NOUS_BASE_URL</span>、<span class="mono">GEMINI_BASE_URL</span>、<span class="mono">XAI_BASE_URL</span> 这类 base URL 覆盖——它们出于历史与兼容，至今仍寄居在 <span class="mono">.env</span> 里。所以准确的说法是:<strong>政策上 <span class="mono">.env</span> 应只放凭据，但历史包袱让它仍混着少量非密的连接项</strong>。判断一个新设置该放哪，标准很简单——看它是不是秘密：是 API key、token 就进 <span class="mono">.env</span>;是超时、阈值、开关、显示偏好就进 <span class="mono">config.yaml</span>，别被现存的反例带偏。</p>
+<p>把 <span class="mono">config.yaml</span> 单独拎出来还有个全局意义：它几乎是全书各章行为的<strong>总开关面板</strong>。一个 yaml 文件里,<span class="mono">model</span> 决定路由、<span class="mono">compression</span> 调压缩阈值、<span class="mono">delegation</span> 管子代理并发与深度(第 13 章)、<span class="mono">curator</span> 控技能生命周期(第 10 章)、<span class="mono">gateway</span> 配各平台网关(第 17 章)、<span class="mono">memory</span> 选记忆后端(第 11 章)。正因为这些行为设置全是可读、可 diff 的纯数据,profile 才能靠「复制一个目录」就连同<strong>整套行为策略</strong>一起克隆;若它们散落在代码常量或 <span class="mono">.env</span> 里,profile 隔离就只能隔离密钥、隔离不了行为，多实例的价值会大打折扣。配置分层与 profile 隔离，本质上是同一个「状态外置、目录即实例」理念的一体两面。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 348" role="img" aria-label="config.yaml 放行为设置、.env 放凭据的分工,以及 .env 里仍有少量非密项">
+<svg viewBox="0 0 680 348" role="img" aria-label="config.yaml 放行为设置、.env 放凭据的分工，以及 .env 里仍有少量非密项">
   <rect x="170" y="18" width="340" height="48" rx="10" fill="var(--panel-2)" stroke="var(--line)" stroke-width="1.5"/>
   <text x="340" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">新设置该放哪?</text>
-  <text x="340" y="58" text-anchor="middle" font-size="11" fill="var(--muted)">判断:它是秘密吗(API key / token)?</text>
+  <text x="340" y="58" text-anchor="middle" font-size="11" fill="var(--muted)">判断：它是秘密吗(API key / token)?</text>
 
   <line x1="250" y1="66" x2="172" y2="102" stroke="var(--blue)" stroke-width="1.8"/>
   <polygon points="168,94 170,106 179,99" fill="var(--blue)"/>
@@ -550,23 +550,23 @@ OPTIONAL_ENV_VARS = {
   <text x="374" y="255" font-size="10" fill="var(--ink)">仍混入不少(66 个)password:False 非密项:</text>
   <text x="374" y="273" font-size="10" fill="var(--muted)" font-family="monospace">NOUS_BASE_URL / GEMINI_BASE_URL</text>
   <text x="374" y="288" font-size="10" fill="var(--muted)" font-family="monospace">/ XAI_BASE_URL(base URL 覆盖)</text>
-  <text x="374" y="307" font-size="10" fill="var(--ink)">政策上应只放凭据,现实并不绝对。</text>
+  <text x="374" y="307" font-size="10" fill="var(--ink)">政策上应只放凭据，现实并不绝对。</text>
 </svg>
-<div class="fig-cap"><b>config.yaml vs .env 分工</b>:判断标准只有一句——<b>是不是秘密</b>。行为设置(超时/阈值/开关/显示)进 <span class="mono">config.yaml</span>(<span class="mono">DEFAULT_CONFIG</span>,<span class="mono">_deep_merge</span> 自动补键);凭据(API key/token)进 <span class="mono">.env</span>(<span class="mono">OPTIONAL_ENV_VARS</span>,密钥标 <span class="mono">password:True</span> 掩码输入)。但别把它绝对化:<span class="mono">OPTIONAL_ENV_VARS</span> 里至今仍混着不少(实测 66 个,甚至多于密钥项)<span class="mono">password:False</span> 的非密连接项(如各种 <span class="mono">*_BASE_URL</span>),是历史包袱而非理想。</div>
+<div class="fig-cap"><b>config.yaml vs .env 分工</b>：判断标准只有一句——<b>是不是秘密</b>。行为设置(超时/阈值/开关/显示)进 <span class="mono">config.yaml</span>(<span class="mono">DEFAULT_CONFIG</span>,<span class="mono">_deep_merge</span> 自动补键);凭据(API key/token)进 <span class="mono">.env</span>(<span class="mono">OPTIONAL_ENV_VARS</span>，密钥标 <span class="mono">password:True</span> 掩码输入)。但别把它绝对化:<span class="mono">OPTIONAL_ENV_VARS</span> 里至今仍混着不少(实测 66 个，甚至多于密钥项)<span class="mono">password:False</span> 的非密连接项(如各种 <span class="mono">*_BASE_URL</span>)，是历史包袱而非理想。</div>
 </div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><span class="mono">hermes -p coder ...</span> 启动</span></div>
   <div class="step"><span class="num">2</span><span class="sc"><span class="mono">main.py</span> 顶层 <span class="mono">_apply_profile_override()</span> 解析 <span class="mono">-p coder</span></span></div>
   <div class="step"><span class="num">3</span><span class="sc"><span class="mono">os.environ["HERMES_HOME"] = ~/.hermes/profiles/coder</span>(早于业务 import)</span></div>
-  <div class="step"><span class="num">4</span><span class="sc">其余模块加载,各自调 <span class="mono">get_hermes_home()</span> 读到 coder 目录</span></div>
-  <div class="step"><span class="num">5</span><span class="sc">config / .env / 记忆 / 会话 / 技能 / 网关日志 全落在 coder 实例,与 default 完全隔离</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">其余模块加载，各自调 <span class="mono">get_hermes_home()</span> 读到 coder 目录</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">config / .env / 记忆 / 会话 / 技能 / 网关日志 全落在 coder 实例，与 default 完全隔离</span></div>
 </div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「多实例完全隔离」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>_apply_profile_override</strong>(import 前抢设 env)、<strong>get_hermes_home</strong>(单一真相源)、<strong>DEFAULT_CONFIG / OPTIONAL_ENV_VARS</strong>(配置分层)。跨章节配合:<span class="mono">HERMES_HOME</span> 决定<strong>记忆</strong>(第 11 章)、<strong>技能</strong>(第 9 章)、<strong>Curator</strong>(第 10 章)、会话库、网关日志各自落哪个 profile;每个平台适配器用 <strong>token lock</strong> 防两个 profile 抢同一 bot 凭据(第 17 章);profile 之间是<strong>独立的岛</strong>——隔离本身就是设计,不做跨 profile 的实时配置继承。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>_apply_profile_override</strong>(import 前抢设 env)、<strong>get_hermes_home</strong>(单一真相源)、<strong>DEFAULT_CONFIG / OPTIONAL_ENV_VARS</strong>(配置分层)。跨章节配合:<span class="mono">HERMES_HOME</span> 决定<strong>记忆</strong>(第 11 章)、<strong>技能</strong>(第 9 章)、<strong>Curator</strong>(第 10 章)、会话库、网关日志各自落哪个 profile;每个平台适配器用 <strong>token lock</strong> 防两个 profile 抢同一 bot 凭据(第 17 章);profile 之间是<strong>独立的岛</strong>——隔离本身就是设计，不做跨 profile 的实时配置继承。
   <div class="collab-sub">② 数据流时序</div>
   <span class="mono">-p coder</span> → <span class="mono">_apply_profile_override()</span>(模块顶层,import 前)→ <span class="mono">HERMES_HOME=profiles/coder</span> → import 链铺开 → 30+ 处模块级 <span class="mono">get_hermes_home()</span> 把路径缓存成 coder → 该进程全程认 coder 实例。
   <div class="collab-sub">③ 关键点</div>
@@ -576,23 +576,23 @@ OPTIONAL_ENV_VARS = {
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>import 前抢设 HERMES_HOME + 单一真相源路径 = 完全隔离的多实例;配置再分层(密钥独立)</strong>。它主要治两条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——一个人要同时跑 work / personal / 各客户的多个 agent 实例,各自的密钥、记忆、会话、网关绝不能混。一个环境变量切换整套状态盘,运维上「开一个新实例」=「建一个新目录」,干净利落;<span class="mono">display_hermes_home()</span> 还让所有用户可见消息显示正确的 profile 路径。</p>
-  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——核心代码里<strong>没有</strong>全局的「当前是哪个实例」状态,全靠 <span class="mono">HERMES_HOME</span> 这一个外部变量 + <span class="mono">get_hermes_home()</span> 这一个入口推导。无状态内核 + 外部一个变量定乾坤,正是全书反复出现的母题。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——一个人要同时跑 work / personal / 各客户的多个 agent 实例，各自的密钥、记忆、会话、网关绝不能混。一个环境变量切换整套状态盘，运维上「开一个新实例」=「建一个新目录」，干净利落;<span class="mono">display_hermes_home()</span> 还让所有用户可见消息显示正确的 profile 路径。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——核心代码里<strong>没有</strong>全局的「当前是哪个实例」状态，全靠 <span class="mono">HERMES_HOME</span> 这一个外部变量 + <span class="mono">get_hermes_home()</span> 这一个入口推导。无状态内核 + 外部一个变量定乾坤，正是全书反复出现的母题。</p>
   <p style="margin:.5rem 0 0">反模式:① 在代码里硬编码 <span class="mono">Path.home()/".hermes"</span>——会无视 profile、把数据写错实例(PR #3575 修了 5 个);② 把超时/开关这类<strong>非密行为</strong>配置塞进 <span class="mono">.env</span>——污染了「.env 放凭据、行为设置进 config.yaml」的边界。</p>
-  <p style="margin:.5rem 0 0">为什么 profile 之间是<strong>独立的岛</strong>、刻意不做实时配置继承?因为耦合恰恰是隔离要防的东西:若 coder profile 实时继承 default 的 config,那改一下 default 就会悄悄改动所有 profile,跨实例污染卷土重来。需要「从我的默认起步」时,正确做法是创建时<strong>一次性拷贝</strong>——<span class="mono">hermes profile create coder --clone</span> 把 config、<span class="mono">.env</span>、技能等复制过去,此后两者各走各路、互不影响。还有个易忽略的细节:<span class="mono">_get_profiles_root()</span> 锚定在<strong>默认</strong> home 而非当前 <span class="mono">HERMES_HOME</span>,这样即便你正身处 coder 实例,<span class="mono">hermes -p coder profile list</span> 也照样能看见所有 profile,而不是只看见自己。</p>
-  <p style="margin:.5rem 0 0">隔离还要堵住一个跨实例陷阱:两个 profile 若用同一个 bot token 同时连 Telegram,平台会互踢、消息错乱。所以网关平台适配器在 <span class="mono">connect()</span> 里调 <span class="mono">acquire_scoped_lock()</span>(来自 <span class="mono">gateway.status</span>)按凭据上锁、在 <span class="mono">disconnect()</span> 时释放,确保同一凭据全局只有一个实例在用(详见第 17 章)。这条与 profile 目录隔离合起来,正是第 24 章安全防线的一环——要防的不只是外部攻击,也防你自己的多个实例互相串台、污染彼此的记忆与会话。</p>
-  <p style="margin:.5rem 0 0">最后一处易被忽略的对称:代码取路径用 <span class="mono">get_hermes_home()</span>,<strong>给人看</strong>路径却要用 <span class="mono">display_hermes_home()</span>。后者把绝对路径压成 <span class="mono">~/.hermes</span> 或 <span class="mono">~/.hermes/profiles/coder</span> 这样的友好写法,让 setup、日志、报错里印出的目录一眼就能认出「现在在哪个 profile」。若这里图省事硬编码 <span class="mono">~/.hermes</span>,profile 用户就会被「提示路径」与「真实路径」不一致坑到——这正是 PR #3575 那 5 个 bug 的同源教训:无论是写盘的代码还是给人读的文案,只要碰 home 路径,就得走 profile-aware 的那唯一一个入口。</p>
+  <p style="margin:.5rem 0 0">为什么 profile 之间是<strong>独立的岛</strong>、刻意不做实时配置继承?因为耦合恰恰是隔离要防的东西：若 coder profile 实时继承 default 的 config，那改一下 default 就会悄悄改动所有 profile，跨实例污染卷土重来。需要「从我的默认起步」时，正确做法是创建时<strong>一次性拷贝</strong>——<span class="mono">hermes profile create coder --clone</span> 把 config、<span class="mono">.env</span>、技能等复制过去，此后两者各走各路、互不影响。还有个易忽略的细节:<span class="mono">_get_profiles_root()</span> 锚定在<strong>默认</strong> home 而非当前 <span class="mono">HERMES_HOME</span>，这样即便你正身处 coder 实例,<span class="mono">hermes -p coder profile list</span> 也照样能看见所有 profile，而不是只看见自己。</p>
+  <p style="margin:.5rem 0 0">隔离还要堵住一个跨实例陷阱：两个 profile 若用同一个 bot token 同时连 Telegram，平台会互踢、消息错乱。所以网关平台适配器在 <span class="mono">connect()</span> 里调 <span class="mono">acquire_scoped_lock()</span>(来自 <span class="mono">gateway.status</span>)按凭据上锁、在 <span class="mono">disconnect()</span> 时释放，确保同一凭据全局只有一个实例在用(详见第 17 章)。这条与 profile 目录隔离合起来，正是第 24 章安全防线的一环——要防的不只是外部攻击，也防你自己的多个实例互相串台、污染彼此的记忆与会话。</p>
+  <p style="margin:.5rem 0 0">最后一处易被忽略的对称：代码取路径用 <span class="mono">get_hermes_home()</span>,<strong>给人看</strong>路径却要用 <span class="mono">display_hermes_home()</span>。后者把绝对路径压成 <span class="mono">~/.hermes</span> 或 <span class="mono">~/.hermes/profiles/coder</span> 这样的友好写法，让 setup、日志、报错里印出的目录一眼就能认出「现在在哪个 profile」。若这里图省事硬编码 <span class="mono">~/.hermes</span>,profile 用户就会被「提示路径」与「真实路径」不一致坑到——这正是 PR #3575 那 5 个 bug 的同源教训：无论是写盘的代码还是给人读的文案，只要碰 home 路径，就得走 profile-aware 的那唯一一个入口。</p>
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 420" role="img" aria-label="实例图:hermes -p coder chat 启动时,一个环境变量如何解析成真实路径与生效值。① _apply_profile_override 在 import 前裸调,扫 argv 得 profile_name coder 并剥掉 -p coder,main.py 336;② resolve_profile_env coder 解析出 ~/.hermes/profiles/coder 并写入 os.environ HERMES_HOME,profiles.py 1866;③ 业务 import 调 get_hermes_home,ContextVar override 为空,读 env 命中,返回 Path ~/.hermes/profiles/coder,hermes_constants.py 54 与 109;④ load_config 把 DEFAULT_CONFIG _config_version 30 与 coder 的 config.yaml 经 _deep_merge 合并,config.py 5366,用户写 agent.max_turns 40 覆盖默认 90 生效 40,未写的 gateway_timeout 保留 1800、terminal.cwd 保留点、compression.threshold 保留 0.50;⑤ 落盘隔离 profiles/coder 下各有 sessions memory logs,与 default 的 ~/.hermes/sessions 互不相干;⑥ 侧栏 display_hermes_home 给人看而 get_hermes_home 给代码,必须配对,PR 3575。">
+<svg viewBox="0 0 680 420" role="img" aria-label="实例图:hermes -p coder chat 启动时，一个环境变量如何解析成真实路径与生效值。① _apply_profile_override 在 import 前裸调，扫 argv 得 profile_name coder 并剥掉 -p coder,main.py 336;② resolve_profile_env coder 解析出 ~/.hermes/profiles/coder 并写入 os.environ HERMES_HOME,profiles.py 1866;③ 业务 import 调 get_hermes_home,ContextVar override 为空，读 env 命中，返回 Path ~/.hermes/profiles/coder,hermes_constants.py 54 与 109;④ load_config 把 DEFAULT_CONFIG _config_version 30 与 coder 的 config.yaml 经 _deep_merge 合并,config.py 5366，用户写 agent.max_turns 40 覆盖默认 90 生效 40，未写的 gateway_timeout 保留 1800、terminal.cwd 保留点、compression.threshold 保留 0.50;⑤ 落盘隔离 profiles/coder 下各有 sessions memory logs，与 default 的 ~/.hermes/sessions 互不相干;⑥ 侧栏 display_hermes_home 给人看而 get_hermes_home 给代码，必须配对,PR 3575。">
   <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:hermes -p coder chat 的解析链</text>
   <text x="20" y="44" font-size="10" fill="var(--muted)">一个 env var → 真实路径 → 合并后的生效值</text>
   <text x="644" y="33" text-anchor="middle" font-size="22">🧭</text>
 
   <rect x="10" y="56" width="304" height="64" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="20" y="74" font-size="10" font-weight="700" fill="var(--blue)">① _apply_profile_override() · main.py:336</text>
-  <text x="20" y="91" font-size="9" fill="var(--muted)">import 前裸调,扫 sys.argv</text>
+  <text x="20" y="91" font-size="9" fill="var(--muted)">import 前裸调，扫 sys.argv</text>
   <text x="20" y="109" font-size="9" font-family="monospace" fill="var(--purple)">profile_name=&quot;coder&quot;(剥掉 -p coder)</text>
 
   <path d="M162,120 L162,130 M158,126 L162,130 L166,126" stroke="var(--faint)" stroke-width="1.6" fill="none"/>
@@ -640,9 +640,9 @@ OPTIONAL_ENV_VARS = {
   <text x="556" y="209" font-size="9" font-family="monospace" fill="var(--muted)">—</text>
   <text x="616" y="209" font-size="9" font-family="monospace" fill="var(--accent-ink)">0.50 保留</text>
   <line x1="342" y1="217" x2="660" y2="217" stroke="var(--line)"/>
-  <text x="342" y="234" font-size="9" fill="var(--muted)">_deep_merge:用户键优先,未写键自动补默认</text>
+  <text x="342" y="234" font-size="9" fill="var(--muted)">_deep_merge：用户键优先，未写键自动补默认</text>
   <text x="342" y="252" font-size="9" fill="var(--muted)">(默认值见 config.py:887/900/1020/1265)</text>
-  <text x="342" y="272" font-size="9" fill="var(--ink)">同一进程内,这套生效值只属于 coder 这个岛</text>
+  <text x="342" y="272" font-size="9" fill="var(--ink)">同一进程内，这套生效值只属于 coder 这个岛</text>
 
   <rect x="10" y="298" width="304" height="60" rx="8" fill="var(--panel)" stroke="var(--line)"/>
   <text x="20" y="316" font-size="10" font-weight="700" fill="var(--ink)">⑤ 落盘隔离</text>
@@ -650,24 +650,24 @@ OPTIONAL_ENV_VARS = {
   <text x="20" y="349" font-size="9" font-family="monospace" fill="var(--muted)">vs default ~/.hermes/sessions(互不相干)</text>
 
   <rect x="332" y="298" width="338" height="60" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
-  <text x="342" y="316" font-size="10" font-weight="700" fill="var(--purple)">⑥ 给人看 vs 给代码,必须配对 · PR #3575</text>
+  <text x="342" y="316" font-size="10" font-weight="700" fill="var(--purple)">⑥ 给人看 vs 给代码，必须配对 · PR #3575</text>
   <text x="342" y="333" font-size="9" font-family="monospace" fill="var(--ink)">display_hermes_home() → ~/.hermes/profiles/coder</text>
   <text x="342" y="349" font-size="9" font-family="monospace" fill="var(--ink)">get_hermes_home()     → Path(给代码读写)</text>
 
-  <text x="20" y="384" font-size="9.5" fill="var(--muted)">读这张图:一个 -p coder 经裸调 → env var → 单一入口 → 深合并,落成一组真实路径与生效值,与 default 岛完全隔离。</text>
-  <text x="20" y="402" font-size="9.5" fill="var(--muted)">未写的键自动保留默认(1800 / &quot;.&quot; / 0.50),只有用户显式写的 max_turns:40 覆盖默认 90。</text>
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">读这张图：一个 -p coder 经裸调 → env var → 单一入口 → 深合并，落成一组真实路径与生效值，与 default 岛完全隔离。</text>
+  <text x="20" y="402" font-size="9.5" fill="var(--muted)">未写的键自动保留默认(1800 / &quot;.&quot; / 0.50)，只有用户显式写的 max_turns:40 覆盖默认 90。</text>
 </svg>
-<div class="fig-cap"><b>实例:hermes -p coder chat 的解析链</b>:① <span class="mono">_apply_profile_override()</span> 在 import 前裸调,扫 <span class="mono">argv</span> 得 <span class="mono">profile_name=&quot;coder&quot;</span> 并剥 <span class="mono">-p coder</span>;② <span class="mono">resolve_profile_env(&quot;coder&quot;)</span>→<span class="mono">~/.hermes/profiles/coder</span>→写 <span class="mono">os.environ[&quot;HERMES_HOME&quot;]</span>;③ 业务 <span class="mono">get_hermes_home()</span>:ContextVar 空→读 env→<span class="mono">Path(profiles/coder)</span>;④ <span class="mono">load_config()</span> 把 <span class="mono">DEFAULT_CONFIG(_config_version:30)</span> 与 coder 的 <span class="mono">config.yaml</span> 经 <span class="mono">_deep_merge</span> 合并:用户写 <span class="mono">agent.max_turns:40</span> 覆盖默认 <span class="mono">90</span>→生效 <span class="mono">40</span>;未写则 <span class="mono">gateway_timeout</span> 保留 <span class="mono">1800</span>、<span class="mono">terminal.cwd</span> 保留 <span class="mono">&quot;.&quot;</span>、<span class="mono">compression.threshold</span> 保留 <span class="mono">0.50</span>;⑤ <span class="mono">profiles/coder/{sessions,memory,logs}</span> 与 default 隔离;⑥ <span class="mono">display_hermes_home()</span>(给人看)与 <span class="mono">get_hermes_home()</span>(给代码)必须配对(PR #3575)。</div>
+<div class="fig-cap"><b>实例:hermes -p coder chat 的解析链</b>:① <span class="mono">_apply_profile_override()</span> 在 import 前裸调，扫 <span class="mono">argv</span> 得 <span class="mono">profile_name=&quot;coder&quot;</span> 并剥 <span class="mono">-p coder</span>;② <span class="mono">resolve_profile_env(&quot;coder&quot;)</span>→<span class="mono">~/.hermes/profiles/coder</span>→写 <span class="mono">os.environ[&quot;HERMES_HOME&quot;]</span>;③ 业务 <span class="mono">get_hermes_home()</span>:ContextVar 空→读 env→<span class="mono">Path(profiles/coder)</span>;④ <span class="mono">load_config()</span> 把 <span class="mono">DEFAULT_CONFIG(_config_version:30)</span> 与 coder 的 <span class="mono">config.yaml</span> 经 <span class="mono">_deep_merge</span> 合并：用户写 <span class="mono">agent.max_turns:40</span> 覆盖默认 <span class="mono">90</span>→生效 <span class="mono">40</span>;未写则 <span class="mono">gateway_timeout</span> 保留 <span class="mono">1800</span>、<span class="mono">terminal.cwd</span> 保留 <span class="mono">&quot;.&quot;</span>、<span class="mono">compression.threshold</span> 保留 <span class="mono">0.50</span>;⑤ <span class="mono">profiles/coder/{sessions,memory,logs}</span> 与 default 隔离;⑥ <span class="mono">display_hermes_home()</span>(给人看)与 <span class="mono">get_hermes_home()</span>(给代码)必须配对(PR #3575)。</div>
 </div>
 
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
-    <li><strong>一个环境变量</strong>:profile = 在任何 import 之前把 <span class="mono">HERMES_HOME</span> 设成 <span class="mono">~/.hermes/profiles/&lt;名字&gt;</span>;<span class="mono">_apply_profile_override()</span> 是模块级调用,抢在最前。</li>
-    <li><strong>单一真相源</strong>:全代码库走 <span class="mono">get_hermes_home()</span> 读 <span class="mono">HERMES_HOME</span>;<strong>禁止</strong>硬编码 <span class="mono">~/.hermes</span>(否则击穿隔离,PR #3575)。</li>
-    <li><strong>配置分层</strong>:行为设置(超时/阈值/开关)进 <span class="mono">config.yaml</span>(<span class="mono">DEFAULT_CONFIG</span>);凭据进 <span class="mono">.env</span>(<span class="mono">OPTIONAL_ENV_VARS</span>,密钥标 <span class="mono">password: True</span> 掩码输入)。</li>
-    <li><strong>完全隔离</strong>:每个 profile 的 config / 密钥 / 记忆 / 会话 / 技能 / 网关全独立;profile 之间是独立的岛,不做实时配置继承。</li>
-    <li><strong>用户可见路径</strong>:打印/日志用 <span class="mono">display_hermes_home()</span>(default 显示 <span class="mono">~/.hermes</span>、profile 显示 <span class="mono">~/.hermes/profiles/coder</span>)。</li>
+    <li><strong>一个环境变量</strong>:profile = 在任何 import 之前把 <span class="mono">HERMES_HOME</span> 设成 <span class="mono">~/.hermes/profiles/&lt;名字&gt;</span>;<span class="mono">_apply_profile_override()</span> 是模块级调用，抢在最前。</li>
+    <li><strong>单一真相源</strong>：全代码库走 <span class="mono">get_hermes_home()</span> 读 <span class="mono">HERMES_HOME</span>;<strong>禁止</strong>硬编码 <span class="mono">~/.hermes</span>(否则击穿隔离,PR #3575)。</li>
+    <li><strong>配置分层</strong>：行为设置(超时/阈值/开关)进 <span class="mono">config.yaml</span>(<span class="mono">DEFAULT_CONFIG</span>);凭据进 <span class="mono">.env</span>(<span class="mono">OPTIONAL_ENV_VARS</span>，密钥标 <span class="mono">password: True</span> 掩码输入)。</li>
+    <li><strong>完全隔离</strong>：每个 profile 的 config / 密钥 / 记忆 / 会话 / 技能 / 网关全独立;profile 之间是独立的岛，不做实时配置继承。</li>
+    <li><strong>用户可见路径</strong>：打印/日志用 <span class="mono">display_hermes_home()</span>(default 显示 <span class="mono">~/.hermes</span>、profile 显示 <span class="mono">~/.hermes/profiles/coder</span>)。</li>
   </ul>
 </div>
 <div class="selftest">

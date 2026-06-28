@@ -371,19 +371,19 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <h1><span class="lang-zh">Cron 与 Kanban</span><span class="lang-en">Cron &amp; Kanban</span></h1>
   </div>
   <div class="lang-zh">
-<p class="lead">你让 Hermes「每天早 9 点把今天的会议汇总发我」。它得在后台<strong>定时</strong>醒来、跑完、投递——但这件事绝不能<strong>污染你正在进行的对话</strong>:不能把自动任务塞进聊天历史、不能把它记进你的「个人记忆」、更不能因为某个 job 跑飞了就卡死整个调度器。这就是 cron 的设计重心:<strong>后台自动化,但不破缓存、不污染</strong>。</p>
+<p class="lead">你让 Hermes「每天早 9 点把今天的会议汇总发我」。它得在后台<strong>定时</strong>醒来、跑完、投递——但这件事绝不能<strong>污染你正在进行的对话</strong>：不能把自动任务塞进聊天历史、不能把它记进你的「个人记忆」、更不能因为某个 job 跑飞了就卡死整个调度器。这就是 cron 的设计重心:<strong>后台自动化，但不破缓存、不污染</strong>。</p>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 公司的自动化助理</div>
-  你雇了个助理(cron)做定时杂活:每天剪报、每周备份。他在<strong>独立的工位</strong>(独立会话)干活,干完把结果<strong>放你桌上</strong>(投递),但<strong>不会插进你正在开的会</strong>(不混进主对话),也<strong>不会把这些杂活写进你的人事档案</strong>(skip_memory)。万一他某个活卡住了,有个<strong>不活动闹钟</strong>(默认空转 10 分钟没动静就中断)把他叫停,不耽误下一件。
+  你雇了个助理(cron)做定时杂活：每天剪报、每周备份。他在<strong>独立的工位</strong>(独立会话)干活，干完把结果<strong>放你桌上</strong>(投递)，但<strong>不会插进你正在开的会</strong>(不混进主对话)，也<strong>不会把这些杂活写进你的人事档案</strong>(skip_memory)。万一他某个活卡住了，有个<strong>不活动闹钟</strong>(默认空转 10 分钟没动静就中断)把他叫停，不耽误下一件。
 </div>
 
 <div class="card macro">
   <div class="tag">🌍 宏观 · 调度 + 独立会话 + 安全阀</div>
-  cron 由 <span class="mono">tick</span> 循环驱动(文件锁防重复),按 <span class="mono">parse_schedule</span> 解析的时刻扫到期任务。每个任务起一个<strong>独立的 cron 会话</strong>(<span class="mono">platform="cron"</span>、<span class="mono">skip_memory=True</span>),跑完把结果<strong>带框投递</strong>、<strong>不镜像进主对话</strong>。再加不活动超时(默认 600s)、半周期 catchup 窗口——安全地后台自动化。kanban 则是配套的多 agent 工作队列,workers 用零足迹工具集领活。
+  cron 由 <span class="mono">tick</span> 循环驱动(文件锁防重复)，按 <span class="mono">parse_schedule</span> 解析的时刻扫到期任务。每个任务起一个<strong>独立的 cron 会话</strong>(<span class="mono">platform="cron"</span>、<span class="mono">skip_memory=True</span>)，跑完把结果<strong>带框投递</strong>、<strong>不镜像进主对话</strong>。再加不活动超时(默认 600s)、半周期 catchup 窗口——安全地后台自动化。kanban 则是配套的多 agent 工作队列,workers 用零足迹工具集领活。
 </div>
 
-<h2>调度格式:四种写法</h2>
+<h2>调度格式：四种写法</h2>
 <p>agent 或用户都能排期,<span class="mono">parse_schedule</span> 把字符串解析成结构:</p>
 
 <div class="codefile">
@@ -400,14 +400,14 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <span class="kw">if</span> <span class="st">"T"</span> <span class="kw">in</span> schedule:                  <span class="cm"># ISO 时间戳 → 一次性</span>
         <span class="kw">return</span> {<span class="st">"kind"</span>: <span class="st">"once"</span>, <span class="st">"run_at"</span>: ...}</pre>
 </div>
-<p>四种写法覆盖几乎所有需求:<span class="mono">"30m"</span>(30 分钟后一次)、<span class="mono">"every 2h"</span>(每 2 小时)、<span class="mono">"0 9 * * *"</span>(标准 cron,每天 9 点)、<span class="mono">"2026-02-03T14:00"</span>(指定时刻一次)。解析成 <span class="mono">once</span>/<span class="mono">interval</span>/<span class="mono">cron</span> 三类,调度器据此算下次触发。</p>
+<p>四种写法覆盖几乎所有需求:<span class="mono">"30m"</span>(30 分钟后一次)、<span class="mono">"every 2h"</span>(每 2 小时)、<span class="mono">"0 9 * * *"</span>(标准 cron，每天 9 点)、<span class="mono">"2026-02-03T14:00"</span>(指定时刻一次)。解析成 <span class="mono">once</span>/<span class="mono">interval</span>/<span class="mono">cron</span> 三类，调度器据此算下次触发。</p>
 
-<p>为什么要支持四种写法、又统一折叠到 once/interval/cron 三类?因为排期需求天然只有两种语义:<strong>一次性</strong>(<span class="mono">30m</span>、ISO 时间戳)和<strong>周期性</strong>(<span class="mono">every 2h</span>、5 段 cron 表达式),而 <span class="mono">parse_schedule</span> 把多样的<strong>书写形式</strong>归一成同一套<strong>结构</strong>,调度器只需对三种 kind 算「下次触发」,不必为每种语法各写一套分支。代价是解析层要做格式嗅探(以 <span class="mono">every </span> 前缀、5 段正则、是否含 <span class="mono">T</span> 来区分),但换来调度核心的极简。若不在入口归一化,<span class="mono">tick</span> 循环每次扫描都得重复判断语法细节,既慢又容易在边角写错。把复杂性收在一处解析,是这一层最划算的取舍。</p>
+<p>为什么要支持四种写法、又统一折叠到 once/interval/cron 三类?因为排期需求天然只有两种语义:<strong>一次性</strong>(<span class="mono">30m</span>、ISO 时间戳)和<strong>周期性</strong>(<span class="mono">every 2h</span>、5 段 cron 表达式)，而 <span class="mono">parse_schedule</span> 把多样的<strong>书写形式</strong>归一成同一套<strong>结构</strong>，调度器只需对三种 kind 算「下次触发」，不必为每种语法各写一套分支。代价是解析层要做格式嗅探(以 <span class="mono">every </span> 前缀、5 段正则、是否含 <span class="mono">T</span> 来区分)，但换来调度核心的极简。若不在入口归一化,<span class="mono">tick</span> 循环每次扫描都得重复判断语法细节，既慢又容易在边角写错。把复杂性收在一处解析，是这一层最划算的取舍。</p>
 
-<p>谁来排期也呼应了 Hermes 的一贯主张:同一个 <span class="mono">parse_schedule</span> 既服务用户(<span class="mono">hermes cron add</span> 或 <span class="mono">/cron</span> 斜杠命令),也服务 agent 自己——agent 通过 <span class="mono">cronjob</span> <strong>工具</strong>(第 8 章)把「明早 9 点提醒我」这类意图直接落成一条持久 job。这正是「能力长在边缘」的体现:排期不是写死在核心循环里的特殊分支,而是一个能被模型调用、也能被 CLI 驱动的普通子系统。于是「让 agent 自我安排未来的活」无需改动核心,只是多挂了一个工具入口;反过来,持久化的 job 又能在网关重启后被 tick 重新扫到,把一次性的口头意图变成长期稳定生效的承诺。</p>
+<p>谁来排期也呼应了 Hermes 的一贯主张：同一个 <span class="mono">parse_schedule</span> 既服务用户(<span class="mono">hermes cron add</span> 或 <span class="mono">/cron</span> 斜杠命令)，也服务 agent 自己——agent 通过 <span class="mono">cronjob</span> <strong>工具</strong>(第 8 章)把「明早 9 点提醒我」这类意图直接落成一条持久 job。这正是「能力长在边缘」的体现：排期不是写死在核心循环里的特殊分支，而是一个能被模型调用、也能被 CLI 驱动的普通子系统。于是「让 agent 自我安排未来的活」无需改动核心，只是多挂了一个工具入口;反过来，持久化的 job 又能在网关重启后被 tick 重新扫到，把一次性的口头意图变成长期稳定生效的承诺。</p>
 
-<h2>独立会话:不污染主对话(★缓存线)</h2>
-<p>关键一步——cron 任务<strong>不</strong>在你的主会话里跑,而是起一个独立的 agent:</p>
+<h2>独立会话：不污染主对话(★缓存线)</h2>
+<p>关键一步——cron 任务<strong>不</strong>在你的主会话里跑，而是起一个独立的 agent:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">cron/scheduler.py</span><span class="ln">2050-2081 · 节选</span></div>
@@ -420,12 +420,12 @@ agent = AIAgent(
     session_id=_cron_session_id,            <span class="cm"># 独立 session,不混进 gateway</span>
 )</pre>
 </div>
-<p>两个设计守住缓存线:① <span class="mono">skip_memory=True</span>——cron 的系统提示若进了 memory,会<strong>污染对用户的画像</strong>(注释原话),所以 cron 默认不跑记忆;② <strong>独立 <span class="mono">session_id</span> + <span class="mono">platform="cron"</span></strong>——结果带 header/footer 框单独投递,<strong>不镜像进 gateway 主会话</strong>。于是主对话的严格<strong>角色交替</strong>(第 7 章)不被后台任务搅乱,被缓存的前缀(第 6 章)纹丝不动。后台自动化与主对话<strong>井水不犯河水</strong>。</p>
+<p>两个设计守住缓存线:① <span class="mono">skip_memory=True</span>——cron 的系统提示若进了 memory，会<strong>污染对用户的画像</strong>(注释原话)，所以 cron 默认不跑记忆;② <strong>独立 <span class="mono">session_id</span> + <span class="mono">platform="cron"</span></strong>——结果带 header/footer 框单独投递,<strong>不镜像进 gateway 主会话</strong>。于是主对话的严格<strong>角色交替</strong>(第 7 章)不被后台任务搅乱，被缓存的前缀(第 6 章)纹丝不动。后台自动化与主对话<strong>井水不犯河水</strong>。</p>
 
-<p>为什么非得起<strong>独立会话</strong>、而不是图省事把结果追加到主对话?根子在第 6 章的缓存模型:一个长寿命会话每轮都复用被缓存的前缀,任何<strong>中途改写历史</strong>都会击穿缓存,让后续每一轮都按全价重算 token。而 cron 是<strong>异步</strong>触发的——它醒来的时刻与你说话的时刻毫不相干,若把它的输出硬塞进主对话,既可能在两条同角色消息之间插入第三条(破坏第 7 章的严格角色交替),又会改变下次用户轮所缓存的前缀字节。独立 <span class="mono">session_id</span> 让后台任务拥有自己的状态盘,主对话被缓存的前缀<strong>一字不动</strong>——这是「缓存神圣」在自动化层最直接的落地。</p>
+<p>为什么非得起<strong>独立会话</strong>、而不是图省事把结果追加到主对话?根子在第 6 章的缓存模型：一个长寿命会话每轮都复用被缓存的前缀，任何<strong>中途改写历史</strong>都会击穿缓存，让后续每一轮都按全价重算 token。而 cron 是<strong>异步</strong>触发的——它醒来的时刻与你说话的时刻毫不相干，若把它的输出硬塞进主对话，既可能在两条同角色消息之间插入第三条(破坏第 7 章的严格角色交替)，又会改变下次用户轮所缓存的前缀字节。独立 <span class="mono">session_id</span> 让后台任务拥有自己的状态盘，主对话被缓存的前缀<strong>一字不动</strong>——这是「缓存神圣」在自动化层最直接的落地。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 270" role="img" aria-label="cron 起独立会话,结果不镜像进主对话,两条会话互不干扰缓存与角色交替">
+<svg viewBox="0 0 680 270" role="img" aria-label="cron 起独立会话，结果不镜像进主对话，两条会话互不干扰缓存与角色交替">
   <text x="34" y="22" font-size="13.5" font-weight="700" fill="var(--accent-ink)">主对话会话(长寿命 · 缓存前缀稳定)</text>
   <rect x="34" y="34" width="438" height="54" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="253" y="58" text-anchor="middle" font-size="12" fill="var(--accent-ink)">🔒 神圣前缀(system + 历史)逐字节不动</text>
@@ -451,13 +451,13 @@ agent = AIAgent(
   <text x="587" y="213" text-anchor="middle" font-size="11" fill="var(--ink)">footer 帧</text>
   <text x="587" y="230" text-anchor="middle" font-size="10" fill="var(--muted)">结果投递</text>
 </svg>
-<div class="fig-cap"><b>cron 不搅扰主对话</b>:上＝长寿命主对话,神圣缓存前缀逐字节不动、严格角色交替;下＝cron 起的<b>独立会话</b>(<span class="mono">platform="cron"</span> · <span class="mono">skip_memory</span> · 独立 <span class="mono">session_id</span>),结果带 header/footer 框单独投递,<b>不镜像进主对话</b>。两条会话井水不犯河水——缓存前缀与角色交替都不被后台任务搅乱。</div>
+<div class="fig-cap"><b>cron 不搅扰主对话</b>：上＝长寿命主对话，神圣缓存前缀逐字节不动、严格角色交替;下＝cron 起的<b>独立会话</b>(<span class="mono">platform="cron"</span> · <span class="mono">skip_memory</span> · 独立 <span class="mono">session_id</span>)，结果带 header/footer 框单独投递,<b>不镜像进主对话</b>。两条会话井水不犯河水——缓存前缀与角色交替都不被后台任务搅乱。</div>
 </div>
 
-<p><span class="mono">skip_memory=True</span> 治的是另一种污染。记忆(第 11 章)的职责,是从对话里提炼「关于这个用户」的画像;但 cron 跑的是<strong>系统派给的杂活</strong>,并非用户当下的真实意图。若让记忆把「每天 9 点生成会议汇总」这类系统提示也学进画像,用户表征就会被自动任务的噪声带偏——注释原话正是 <span class="mono">Cron system prompts would corrupt user representations</span>。所以 cron 默认 <span class="mono">skip_memory</span>,既省下记忆同步的开销,也守住画像的纯净。这是一个「默认安全」的选择:要让某个 job 反过来写记忆,得显式开启,而不是不小心就污染了用户档案。</p>
+<p><span class="mono">skip_memory=True</span> 治的是另一种污染。记忆(第 11 章)的职责，是从对话里提炼「关于这个用户」的画像;但 cron 跑的是<strong>系统派给的杂活</strong>，并非用户当下的真实意图。若让记忆把「每天 9 点生成会议汇总」这类系统提示也学进画像，用户表征就会被自动任务的噪声带偏——注释原话正是 <span class="mono">Cron system prompts would corrupt user representations</span>。所以 cron 默认 <span class="mono">skip_memory</span>，既省下记忆同步的开销，也守住画像的纯净。这是一个「默认安全」的选择：要让某个 job 反过来写记忆，得显式开启，而不是不小心就污染了用户档案。</p>
 
 <h2>安全阀:catchup 与不活动超时</h2>
-<p>定时系统怕两件事:错过了拼命补跑、跑飞了卡死。cron 各有一个阀:</p>
+<p>定时系统怕两件事：错过了拼命补跑、跑飞了卡死。cron 各有一个阀:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">cron/jobs.py</span><span class="ln">475-490 · 简化</span></div>
@@ -468,12 +468,12 @@ agent = AIAgent(
         period = schedule[<span class="st">"minutes"</span>] * 60
         <span class="kw">return</span> max(MIN_GRACE, min(period // 2, MAX_GRACE))</pre>
 </div>
-<p><strong>catchup 窗口 = 半个周期</strong>(clamp 在 120 秒到 2 小时):错过得不久就补跑一次,错过太久就<strong>快进</strong>、不堆积补跑(免得开机时把积压的几十次一股脑全跑了)。另一头,cron 会话用<strong>不活动超时</strong>兜底:默认空转 <strong>600 秒(10 分钟)</strong>无动静(无工具调用、无流式 token)就 <span class="mono">agent.interrupt("Cron job timed out (inactivity)")</span> 中断(<span class="mono">HERMES_CRON_TIMEOUT</span> 可调;<strong>活跃干活时可跑数小时</strong>)。这样失控空转的 agent <strong>独占不了</strong>调度器,而正常长任务不会被误杀。再加 <span class="mono">.tick.lock</span> 文件锁,多个进程也不会重复 tick。</p>
+<p><strong>catchup 窗口 = 半个周期</strong>(clamp 在 120 秒到 2 小时)：错过得不久就补跑一次，错过太久就<strong>快进</strong>、不堆积补跑(免得开机时把积压的几十次一股脑全跑了)。另一头,cron 会话用<strong>不活动超时</strong>兜底：默认空转 <strong>600 秒(10 分钟)</strong>无动静(无工具调用、无流式 token)就 <span class="mono">agent.interrupt("Cron job timed out (inactivity)")</span> 中断(<span class="mono">HERMES_CRON_TIMEOUT</span> 可调;<strong>活跃干活时可跑数小时</strong>)。这样失控空转的 agent <strong>独占不了</strong>调度器，而正常长任务不会被误杀。再加 <span class="mono">.tick.lock</span> 文件锁，多个进程也不会重复 tick。</p>
 
-<p>为什么超时要做成<strong>不活动</strong>判定、而不是一刀切的硬上限?因为合法后台任务的时长差异极大:一次抓取可能 10 秒,一次跨库迁移可能要跑几小时。若用固定硬上限,要么把它设得很大(失控空转也得耗满才被发现),要么设得很小(误杀正常长任务),两头都不讨好。<strong>不活动超时</strong>绕开了这个两难:它盯的是「还在不在干活」——只要还有工具调用、API 调用或流式 token,计时器就被 <span class="mono">_touch_activity()</span> 重置;只有连续 <strong>600 秒(默认)</strong>毫无动静,才判定为卡死并 <span class="mono">agent.interrupt()</span>。于是活跃的长任务能安心跑数小时,而真正空转的 agent 独占不了调度器。这正是本指南早先纠正过的关键点:它是一套基于「有没有在干活」的不活动判定,而不是某些文档里误传的「固定几分钟就一刀切硬砍」。两者天差地别:前者对正常长任务零误伤,后者会把跑了几分钟的合法迁移直接腰斩。</p>
+<p>为什么超时要做成<strong>不活动</strong>判定、而不是一刀切的硬上限?因为合法后台任务的时长差异极大：一次抓取可能 10 秒，一次跨库迁移可能要跑几小时。若用固定硬上限，要么把它设得很大(失控空转也得耗满才被发现)，要么设得很小(误杀正常长任务)，两头都不讨好。<strong>不活动超时</strong>绕开了这个两难：它盯的是「还在不在干活」——只要还有工具调用、API 调用或流式 token，计时器就被 <span class="mono">_touch_activity()</span> 重置;只有连续 <strong>600 秒(默认)</strong>毫无动静，才判定为卡死并 <span class="mono">agent.interrupt()</span>。于是活跃的长任务能安心跑数小时，而真正空转的 agent 独占不了调度器。这正是本指南早先纠正过的关键点：它是一套基于「有没有在干活」的不活动判定，而不是某些文档里误传的「固定几分钟就一刀切硬砍」。两者天差地别：前者对正常长任务零误伤，后者会把跑了几分钟的合法迁移直接腰斩。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 258" role="img" aria-label="不活动超时:有输出就一直跑,持续无输出超过600秒才被中断,而非固定硬中断">
+<svg viewBox="0 0 680 258" role="img" aria-label="不活动超时：有输出就一直跑，持续无输出超过600秒才被中断，而非固定硬中断">
   <text x="34" y="24" font-size="13" font-weight="700" fill="var(--blue)">① 活跃 job · 持续有输出 → 一直跑</text>
   <rect x="34" y="38" width="520" height="42" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <g fill="var(--blue)">
@@ -495,15 +495,15 @@ agent = AIAgent(
   <rect x="524" y="160" width="122" height="42" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="585" y="179" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✕ kill</text>
   <text x="585" y="194" text-anchor="middle" font-size="9" fill="var(--red)">agent.interrupt()</text>
-  <text x="34" y="238" font-size="11" font-weight="700" fill="var(--muted)">⚠ 这是「不活动超时」(盯有没有在干活),不是固定几分钟的「硬中断」。</text>
+  <text x="34" y="238" font-size="11" font-weight="700" fill="var(--muted)">⚠ 这是「不活动超时」(盯有没有在干活)，不是固定几分钟的「硬中断」。</text>
 </svg>
-<div class="fig-cap"><b>不活动超时闸</b>:① 只要持续有工具调用 / 流式 token,<span class="mono">_touch_activity()</span> 就把计时器清零,活跃 job 可跑<b>数小时</b>;② 只有<b>持续无输出超过 600s</b>(<span class="mono">HERMES_CRON_TIMEOUT</span> 可调,<span class="mono">0=unlimited</span>)才被 <span class="mono">agent.interrupt()</span> 中断。它是一套基于「还在不在干活」的<b>不活动判定</b>,而不是固定几分钟就一刀切的<b>硬中断</b>——只要持续有输出,对正常长任务零误伤(真静默超 600s 仍会中断)。</div>
+<div class="fig-cap"><b>不活动超时闸</b>:① 只要持续有工具调用 / 流式 token,<span class="mono">_touch_activity()</span> 就把计时器清零，活跃 job 可跑<b>数小时</b>;② 只有<b>持续无输出超过 600s</b>(<span class="mono">HERMES_CRON_TIMEOUT</span> 可调,<span class="mono">0=unlimited</span>)才被 <span class="mono">agent.interrupt()</span> 中断。它是一套基于「还在不在干活」的<b>不活动判定</b>，而不是固定几分钟就一刀切的<b>硬中断</b>——只要持续有输出，对正常长任务零误伤(真静默超 600s 仍会中断)。</div>
 </div>
 
-<p>另一头的 catchup 是同样的「防雪崩」思路。设想笔记本合盖一整晚,开机时若把积压的几十次「每 5 分钟」补跑一股脑全发,既刷屏又烧钱。<span class="mono">_compute_grace_seconds</span> 把容忍窗口设为<strong>半个周期</strong>(clamp 在 120s–2h):错过得不久就补跑一次,错过太久就把 <span class="mono">next_run_at</span> <strong>快进</strong>到下一个整点、丢弃积压。而 <span class="mono">.tick.lock</span> 文件锁(底层是 <span class="mono">fcntl.flock</span>)保证哪怕网关与独立调度器同时在跑,同一时刻也只有一个 tick 真正推进任务。三个阀各管一类失控——不活动超时管「跑飞」、catchup 管「错过」、文件锁管「重复」——合起来把「定时」从玩具做成可托付的基础设施。值得一提的是,这套阀门的设计取向与第 13 章委派的「中断级联」同源:都不追求绝对掐死,而是给失控留一个<strong>可预期、可恢复</strong>的兜底,让正常路径丝毫不受影响、异常路径也能优雅止损。</p>
+<p>另一头的 catchup 是同样的「防雪崩」思路。设想笔记本合盖一整晚，开机时若把积压的几十次「每 5 分钟」补跑一股脑全发，既刷屏又烧钱。<span class="mono">_compute_grace_seconds</span> 把容忍窗口设为<strong>半个周期</strong>(clamp 在 120s–2h)：错过得不久就补跑一次，错过太久就把 <span class="mono">next_run_at</span> <strong>快进</strong>到下一个整点、丢弃积压。而 <span class="mono">.tick.lock</span> 文件锁(底层是 <span class="mono">fcntl.flock</span>)保证哪怕网关与独立调度器同时在跑，同一时刻也只有一个 tick 真正推进任务。三个阀各管一类失控——不活动超时管「跑飞」、catchup 管「错过」、文件锁管「重复」——合起来把「定时」从玩具做成可托付的基础设施。值得一提的是，这套阀门的设计取向与第 13 章委派的「中断级联」同源：都不追求绝对掐死，而是给失控留一个<strong>可预期、可恢复</strong>的兜底，让正常路径丝毫不受影响、异常路径也能优雅止损。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 404" role="img" aria-label="三条真实调度表达式跑一遍:基准 now 为 2026-06-27T19:35;0 9 星号 经 parse_schedule 解析成 kind cron,croniter 算出 2026-06-28T09:00,grace 用 86400 除 2 等 43200 被 clamp 到 MAX 7200 秒;every 5m 解析成 kind interval minutes 5,下次触发 19:40,grace 300 除 2 等 150 秒;2026-06-28T14:00 解析成 kind once,下次触发即该时刻,grace 取 MIN 120 秒;底部 catchup 判定错过不超过 grace 就补跑一次,超过就快进丢弃积压">
+<svg viewBox="0 0 680 404" role="img" aria-label="三条真实调度表达式跑一遍：基准 now 为 2026-06-27T19:35;0 9 星号 经 parse_schedule 解析成 kind cron,croniter 算出 2026-06-28T09:00,grace 用 86400 除 2 等 43200 被 clamp 到 MAX 7200 秒;every 5m 解析成 kind interval minutes 5，下次触发 19:40,grace 300 除 2 等 150 秒;2026-06-28T14:00 解析成 kind once，下次触发即该时刻,grace 取 MIN 120 秒;底部 catchup 判定错过不超过 grace 就补跑一次，超过就快进丢弃积压">
   <rect x="14" y="12" width="652" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
   <text x="26" y="31" font-size="11.5" fill="var(--ink)">⏱ 基准 <tspan class="mono" font-weight="700" fill="var(--purple)">now = 2026-06-27T19:35</tspan> · grace 规则 = period//2 再 clamp(MIN 120s, MAX 7200s)</text>
 
@@ -566,28 +566,28 @@ agent = AIAgent(
   <text x="16" y="306" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ catchup 判定 · tick 醒来时距应跑时刻已过 Δ</text>
   <rect x="14" y="312" width="324" height="46" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="26" y="332" font-size="10.5" fill="var(--accent-ink)">Δ ≤ grace → <tspan font-weight="700">补跑一次</tspan>(catch up)</text>
-  <text x="26" y="350" font-size="9" fill="var(--muted)">错过不久,该跑的那次仍要补上</text>
+  <text x="26" y="350" font-size="9" fill="var(--muted)">错过不久，该跑的那次仍要补上</text>
   <rect x="346" y="312" width="320" height="46" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="358" y="332" font-size="10.5" fill="var(--red)">Δ &gt; grace → <tspan font-weight="700">快进 next_run · 丢积压</tspan></text>
   <text x="358" y="350" font-size="9" fill="var(--muted)">免得开机把几十次堆积一股脑全跑</text>
 
-  <text x="16" y="380" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图:三条表达式各撞一个 clamp 边界 —— cron 撞 MAX 7200、interval 落区间内、once 撞 MIN 120。</text>
+  <text x="16" y="380" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图：三条表达式各撞一个 clamp 边界 —— cron 撞 MAX 7200、interval 落区间内、once 撞 MIN 120。</text>
 </svg>
-<div class="fig-cap"><b>三条调度表达式跑一遍</b>:同一基准 <span class="mono">now=2026-06-27T19:35</span>,<span class="mono">parse_schedule</span> 把三种写法归一成 <span class="mono">cron/interval/once</span>,<span class="mono">compute_next_run</span> 算出各自下次触发,<span class="mono">_compute_grace_seconds</span> 用 <span class="mono">period//2</span> 再 clamp 出 grace:<b>cron 的 43200s 撞上 MAX 7200</b>、<b>interval 的 150s 落在区间内</b>、<b>once 直接取 MIN 120</b>。三条各演示一个边界,catchup 据 grace 决定补跑还是快进。</div>
+<div class="fig-cap"><b>三条调度表达式跑一遍</b>：同一基准 <span class="mono">now=2026-06-27T19:35</span>,<span class="mono">parse_schedule</span> 把三种写法归一成 <span class="mono">cron/interval/once</span>,<span class="mono">compute_next_run</span> 算出各自下次触发,<span class="mono">_compute_grace_seconds</span> 用 <span class="mono">period//2</span> 再 clamp 出 grace:<b>cron 的 43200s 撞上 MAX 7200</b>、<b>interval 的 150s 落在区间内</b>、<b>once 直接取 MIN 120</b>。三条各演示一个边界,catchup 据 grace 决定补跑还是快进。</div>
 </div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><span class="mono">tick</span> 循环(<span class="mono">.tick.lock</span> 文件锁防重复)扫描到期任务</span></div>
   <div class="step"><span class="num">2</span><span class="sc">按 <span class="mono">parse_schedule</span> 的结构算下次触发;过了 catchup 窗口就快进</span></div>
   <div class="step"><span class="num">3</span><span class="sc">起独立 cron 会话:<span class="mono">platform="cron"</span> + <span class="mono">skip_memory=True</span> + 独立 <span class="mono">session_id</span></span></div>
-  <div class="step"><span class="num">4</span><span class="sc">AIAgent 跑(不活动超时兜底,默认空转 600s 无动静才中断)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">AIAgent 跑(不活动超时兜底，默认空转 600s 无动静才中断)</span></div>
   <div class="step"><span class="num">5</span><span class="sc">结果带 header/footer 框投递,<strong>不镜像进 gateway 主会话</strong></span></div>
 </div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「不破缓存的后台自动化」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>parse_schedule</strong>(调度格式)、<strong>tick</strong>(循环+文件锁)、<strong>cron 独立会话</strong>(skip_memory)、<strong>_compute_grace_seconds</strong>(catchup)。跨章节配合:cron 起的是一个 <strong>AIAgent 核心循环</strong>(第 7 章),只是 <span class="mono">skip_memory</span> 让<strong>记忆</strong>(第 11 章)不跑;独立会话不镜像进主对话=维持角色交替<strong>不破缓存</strong>(第 6 章);<span class="mono">cronjob</span> 与 <span class="mono">kanban</span> 是<strong>工具</strong>(第 8 章),让 agent 自己排期、领多 agent 队列的活;不活动超时的中断与委派的<strong>中断级联</strong>(第 13 章)同源。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>parse_schedule</strong>(调度格式)、<strong>tick</strong>(循环+文件锁)、<strong>cron 独立会话</strong>(skip_memory)、<strong>_compute_grace_seconds</strong>(catchup)。跨章节配合:cron 起的是一个 <strong>AIAgent 核心循环</strong>(第 7 章)，只是 <span class="mono">skip_memory</span> 让<strong>记忆</strong>(第 11 章)不跑;独立会话不镜像进主对话=维持角色交替<strong>不破缓存</strong>(第 6 章);<span class="mono">cronjob</span> 与 <span class="mono">kanban</span> 是<strong>工具</strong>(第 8 章)，让 agent 自己排期、领多 agent 队列的活;不活动超时的中断与委派的<strong>中断级联</strong>(第 13 章)同源。
   <div class="collab-sub">② 数据流时序</div>
   <span class="mono">tick</span>(<span class="mono">.tick.lock</span>) → 到期任务 → catchup 判定(<span class="mono">grace=period//2</span>) → 独立 cron 会话(<span class="mono">skip_memory</span>/<span class="mono">platform=cron</span>) → AIAgent 跑(不活动超时 600s) → header/footer 框投递(不进主会话)。
   <div class="collab-sub">③ 关键点</div>
@@ -597,21 +597,21 @@ agent = AIAgent(
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>独立会话 + skip_memory + 不镜像主对话 = 后台自动化既不破缓存、也不污染</strong>。它主要治两条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——定时任务、批量、多 agent 队列是真实运维刚需,但要<strong>安全</strong>:不活动超时(默认 600s,可调)防失控空转 agent 独占调度器、<span class="mono">.tick.lock</span> 防多进程重复 tick、半周期 catchup 防积压补跑雪崩。把「自动化」做成可控的基础设施。</p>
-  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——cron 会话是<strong>独立</strong>的,不依赖、也不污染主会话的状态盘。它<strong>不镜像进 gateway session</strong>,所以主对话的角色交替/缓存前缀完全不受后台任务影响——这正是「缓存神圣」在自动化层的落地。</p>
-  <p style="margin:.5rem 0 0">反模式:把 cron 结果<strong>直接灌进主会话历史</strong>——会破坏严格角色交替、击穿缓存前缀,还会让自动任务<strong>污染用户记忆画像</strong>。Hermes 用「独立会话 + skip_memory + 带框投递」从根上避开。</p>
-  <p style="margin:.5rem 0 0">还有一条贯穿全书的<strong>持久性</strong>线在这里收口。第 13 章的 background <span class="mono">delegate_task</span> 虽与当前轮解耦,却仍是<strong>进程内</strong>的——网关一重启,在途的后台委派就没了。要让一件活<strong>跨进程重启</strong>也能照常醒来,正确答案是 cron(或 <span class="mono">terminal(background=True, notify_on_complete=True)</span>):job 落在磁盘的 <span class="mono">jobs.json</span> 里,<span class="mono">tick</span> 循环每次启动都会重新扫描。所以「短时并行」找委派、「跨重启的定时」找 cron——两端各司其职,AGENTS.md 把这条界线明确写成了 durability 规则,别拿进程内的委派去扛需要持久的活。</p>
-  <p style="margin:.5rem 0 0">Kanban 把同样的「隔离哲学」推到多 agent 协作上,用两层边界划清责任:<strong>board 是硬隔离</strong>——worker 被 spawn 时环境里钉死 <span class="mono">HERMES_KANBAN_BOARD</span>,根本看不到别的板;<strong>tenant 是软命名空间</strong>——同一支专家 worker 队列可在一块板内,靠工作区路径与记忆键的隔离同时服务多个业务。dispatcher 默认<strong>跑在网关里</strong>(<span class="mono">dispatch_in_gateway: true</span>),定期回收过期认领、推进就绪任务;同一任务连续失败到 <span class="mono">kanban.failure_limit</span>(默认 2)次就自动 block,避免在坏活上空转打转。worker 领活则用零足迹的 <span class="mono">kanban_*</span> 工具集(第 8 章),不在板上时一点 schema 都不占——又一次「能力长在边缘、核心保持窄腰」。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——定时任务、批量、多 agent 队列是真实运维刚需，但要<strong>安全</strong>：不活动超时(默认 600s，可调)防失控空转 agent 独占调度器、<span class="mono">.tick.lock</span> 防多进程重复 tick、半周期 catchup 防积压补跑雪崩。把「自动化」做成可控的基础设施。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——cron 会话是<strong>独立</strong>的，不依赖、也不污染主会话的状态盘。它<strong>不镜像进 gateway session</strong>，所以主对话的角色交替/缓存前缀完全不受后台任务影响——这正是「缓存神圣」在自动化层的落地。</p>
+  <p style="margin:.5rem 0 0">反模式：把 cron 结果<strong>直接灌进主会话历史</strong>——会破坏严格角色交替、击穿缓存前缀，还会让自动任务<strong>污染用户记忆画像</strong>。Hermes 用「独立会话 + skip_memory + 带框投递」从根上避开。</p>
+  <p style="margin:.5rem 0 0">还有一条贯穿全书的<strong>持久性</strong>线在这里收口。第 13 章的 background <span class="mono">delegate_task</span> 虽与当前轮解耦，却仍是<strong>进程内</strong>的——网关一重启，在途的后台委派就没了。要让一件活<strong>跨进程重启</strong>也能照常醒来，正确答案是 cron(或 <span class="mono">terminal(background=True, notify_on_complete=True)</span>):job 落在磁盘的 <span class="mono">jobs.json</span> 里,<span class="mono">tick</span> 循环每次启动都会重新扫描。所以「短时并行」找委派、「跨重启的定时」找 cron——两端各司其职,AGENTS.md 把这条界线明确写成了 durability 规则，别拿进程内的委派去扛需要持久的活。</p>
+  <p style="margin:.5rem 0 0">Kanban 把同样的「隔离哲学」推到多 agent 协作上，用两层边界划清责任:<strong>board 是硬隔离</strong>——worker 被 spawn 时环境里钉死 <span class="mono">HERMES_KANBAN_BOARD</span>，根本看不到别的板;<strong>tenant 是软命名空间</strong>——同一支专家 worker 队列可在一块板内，靠工作区路径与记忆键的隔离同时服务多个业务。dispatcher 默认<strong>跑在网关里</strong>(<span class="mono">dispatch_in_gateway: true</span>)，定期回收过期认领、推进就绪任务;同一任务连续失败到 <span class="mono">kanban.failure_limit</span>(默认 2)次就自动 block，避免在坏活上空转打转。worker 领活则用零足迹的 <span class="mono">kanban_*</span> 工具集(第 8 章)，不在板上时一点 schema 都不占——又一次「能力长在边缘、核心保持窄腰」。</p>
 </div>
 
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
-    <li><strong>四种调度</strong>:<span class="mono">parse_schedule</span> 认 duration(<span class="mono">30m</span>)、every(<span class="mono">every 2h</span>)、cron(<span class="mono">0 9 * * *</span>)、ISO 时间戳,归为 once/interval/cron。</li>
-    <li><strong>独立会话(★缓存线)</strong>:cron 任务起独立 <span class="mono">session_id</span> + <span class="mono">platform="cron"</span>,结果带框投递、<strong>不镜像进主对话</strong>,角色交替(第 7 章)/缓存(第 6 章)不受扰。</li>
-    <li><strong>skip_memory</strong>:cron 默认不跑记忆,免得自动任务<strong>污染用户画像</strong>(第 11 章)。</li>
-    <li><strong>安全阀</strong>:不活动超时(默认 600s、可调,活跃时可跑数小时)防失控空转;<span class="mono">.tick.lock</span> 防重复 tick;半周期 catchup(120s–2h)防积压补跑。</li>
-    <li><strong>kanban</strong>:多 agent 工作队列,worker 用零足迹 <span class="mono">kanban_*</span> 工具集(第 8 章)领活、回报。</li>
+    <li><strong>四种调度</strong>:<span class="mono">parse_schedule</span> 认 duration(<span class="mono">30m</span>)、every(<span class="mono">every 2h</span>)、cron(<span class="mono">0 9 * * *</span>)、ISO 时间戳，归为 once/interval/cron。</li>
+    <li><strong>独立会话(★缓存线)</strong>:cron 任务起独立 <span class="mono">session_id</span> + <span class="mono">platform="cron"</span>，结果带框投递、<strong>不镜像进主对话</strong>，角色交替(第 7 章)/缓存(第 6 章)不受扰。</li>
+    <li><strong>skip_memory</strong>:cron 默认不跑记忆，免得自动任务<strong>污染用户画像</strong>(第 11 章)。</li>
+    <li><strong>安全阀</strong>：不活动超时(默认 600s、可调，活跃时可跑数小时)防失控空转;<span class="mono">.tick.lock</span> 防重复 tick;半周期 catchup(120s–2h)防积压补跑。</li>
+    <li><strong>kanban</strong>：多 agent 工作队列,worker 用零足迹 <span class="mono">kanban_*</span> 工具集(第 8 章)领活、回报。</li>
   </ul>
 </div>
 <div class="selftest">

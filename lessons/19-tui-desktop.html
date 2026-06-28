@@ -371,20 +371,20 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <h1><span class="lang-zh">TUI 与桌面</span><span class="lang-en">TUI &amp; desktop</span></h1>
   </div>
   <div class="lang-zh">
-<p class="lead">输入 <span class="mono">hermes --tui</span>,你看到一个漂亮的终端界面。它其实是<strong>两个进程</strong>:一个 Node(Ink/React)负责画屏幕,一个 Python(tui_gateway)负责跑 agent,两者靠 stdio 上<strong>换行分隔的 JSON-RPC</strong> 对话。更妙的是:网页版仪表盘的聊天页,<strong>不是重写一遍</strong>,而是把同一个 <span class="mono">hermes --tui</span> 经 PTY 投进浏览器。</p>
+<p class="lead">输入 <span class="mono">hermes --tui</span>，你看到一个漂亮的终端界面。它其实是<strong>两个进程</strong>：一个 Node(Ink/React)负责画屏幕，一个 Python(tui_gateway)负责跑 agent，两者靠 stdio 上<strong>换行分隔的 JSON-RPC</strong> 对话。更妙的是：网页版仪表盘的聊天页,<strong>不是重写一遍</strong>，而是把同一个 <span class="mono">hermes --tui</span> 经 PTY 投进浏览器。</p>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 剧院的后台与台前</div>
-  后台(Python)管演员、剧本、调度;台前(Ink)管灯光、布景、把戏呈现给观众。两边靠一根<strong>提词线</strong>(stdio 上的 JSON-RPC)协调:台前喊「观众提交了台词」(<span class="mono">prompt.submit</span>),后台一句句把演员的台词喂回来(<span class="mono">message.delta</span>)。换个剧场(浏览器)?<strong>不重排戏</strong>——直接把整台演出(<span class="mono">hermes --tui</span>)投影上去。
+  后台(Python)管演员、剧本、调度;台前(Ink)管灯光、布景、把戏呈现给观众。两边靠一根<strong>提词线</strong>(stdio 上的 JSON-RPC)协调：台前喊「观众提交了台词」(<span class="mono">prompt.submit</span>)，后台一句句把演员的台词喂回来(<span class="mono">message.delta</span>)。换个剧场(浏览器)?<strong>不重排戏</strong>——直接把整台演出(<span class="mono">hermes --tui</span>)投影上去。
 </div>
 
 <div class="card macro">
-  <div class="tag">🌍 宏观 · 一套核心,多个前端</div>
-  <strong>TypeScript 拥有屏幕,Python 拥有会话/工具/模型调用</strong>,中间是一层换行分隔的 JSON-RPC。同一个 Python 后端(就是 AIAgent 核心)既服务 Ink 终端界面、又服务浏览器里嵌入的 PTY、还服务 Electron 桌面 App。前端易变、迭代快;核心稳定。各用各的生态,互不拖累。
+  <div class="tag">🌍 宏观 · 一套核心，多个前端</div>
+  <strong>TypeScript 拥有屏幕,Python 拥有会话/工具/模型调用</strong>，中间是一层换行分隔的 JSON-RPC。同一个 Python 后端(就是 AIAgent 核心)既服务 Ink 终端界面、又服务浏览器里嵌入的 PTY、还服务 Electron 桌面 App。前端易变、迭代快;核心稳定。各用各的生态，互不拖累。
 </div>
 
-<h2>JSON-RPC:前后端的唯一桥</h2>
-<p>Python 侧用一个极简的装饰器把函数注册成「可远程调用的方法」,再统一分派:</p>
+<h2>JSON-RPC：前后端的唯一桥</h2>
+<p>Python 侧用一个极简的装饰器把函数注册成「可远程调用的方法」，再统一分派:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">tui_gateway/server.py</span><span class="ln">959-995 · 简化</span></div>
@@ -401,9 +401,9 @@ html[data-lang="zh"] .lang-en { display: none !important; }
         <span class="kw">return</span> _err(rid, -32601, <span class="st">f"unknown method: {m}"</span>)
     <span class="kw">return</span> fn(rid, params)            <span class="cm"># 分派到注册的 handler</span></pre>
 </div>
-<p>每个能被前端调用的能力,只要挂一个 <span class="mono">@method("名字")</span>。<span class="mono">handle_request</span> 收到一帧 JSON-RPC,校验后按方法名查表、分派。错误也走标准的 JSON-RPC 错误信封(<span class="mono">-32601 unknown method</span>)——前端永远拿到结构化的 <span class="mono">result</span> 或 <span class="mono">error</span>,而不是去解析一段自由文本。</p>
+<p>每个能被前端调用的能力，只要挂一个 <span class="mono">@method("名字")</span>。<span class="mono">handle_request</span> 收到一帧 JSON-RPC，校验后按方法名查表、分派。错误也走标准的 JSON-RPC 错误信封(<span class="mono">-32601 unknown method</span>)——前端永远拿到结构化的 <span class="mono">result</span> 或 <span class="mono">error</span>，而不是去解析一段自由文本。</p>
 
-<p>为什么是 stdio 上的 JSON-RPC,而不是另起一个 HTTP/REST 服务?因为 Node 前端是<strong>父进程直接 spawn 出 Python 后端</strong>的,两者天生共享一对管道——无需监听端口、无需网络鉴权、无需穿越 TCP 协议栈。一帧请求就是<strong>一行 JSON</strong>,换行即分帧,解析成本几乎为零,延迟也最低。这条进程边界还划得格外干净:<strong>TypeScript 只负责屏幕</strong>(Ink 渲染 transcript、composer、审批弹窗、活动指示),<strong>Python 独占会话、工具、模型调用,乃至 slash 命令的解析与分派</strong>(<span class="mono">slash.exec</span> 跑在常驻的 <span class="mono">_SlashWorker</span> 子进程里)。前端永不碰业务逻辑,后端永不碰像素——职责一刀两断,各自才能用各自最顺手的生态独立迭代。</p>
+<p>为什么是 stdio 上的 JSON-RPC，而不是另起一个 HTTP/REST 服务?因为 Node 前端是<strong>父进程直接 spawn 出 Python 后端</strong>的，两者天生共享一对管道——无需监听端口、无需网络鉴权、无需穿越 TCP 协议栈。一帧请求就是<strong>一行 JSON</strong>，换行即分帧，解析成本几乎为零，延迟也最低。这条进程边界还划得格外干净:<strong>TypeScript 只负责屏幕</strong>(Ink 渲染 transcript、composer、审批弹窗、活动指示),<strong>Python 独占会话、工具、模型调用，乃至 slash 命令的解析与分派</strong>(<span class="mono">slash.exec</span> 跑在常驻的 <span class="mono">_SlashWorker</span> 子进程里)。前端永不碰业务逻辑，后端永不碰像素——职责一刀两断，各自才能用各自最顺手的生态独立迭代。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 336" role="img" aria-label="TUI 两进程模型：Node 管屏幕、Python 管核心，经 stdio JSON-RPC 双向通信">
@@ -456,14 +456,14 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 
   <text x="340" y="312" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--muted)">同一个 Python 后端＝同一个 AIAgent 核心，前端可换可崩，核心只维护一份</text>
 </svg>
-<div class="fig-cap"><b>TUI 两进程模型</b>:<b>hermes --tui</b> 实为两个进程——Node(Ink/React) 只渲染屏幕(transcript/composer/审批/活动),Python(tui_gateway) 独占会话/工具/模型/slash 并复用同一个 <b>AIAgent 核心</b>;两者经 stdio 上换行分隔的 JSON-RPC 通信:前端发 <b>prompt.submit</b> 等方法调用(→),后端回推 <b>message.delta/complete</b> 事件流(←)。<b>TS 管屏,Python 管核心</b>。</div>
+<div class="fig-cap"><b>TUI 两进程模型</b>:<b>hermes --tui</b> 实为两个进程——Node(Ink/React) 只渲染屏幕(transcript/composer/审批/活动),Python(tui_gateway) 独占会话/工具/模型/slash 并复用同一个 <b>AIAgent 核心</b>;两者经 stdio 上换行分隔的 JSON-RPC 通信：前端发 <b>prompt.submit</b> 等方法调用(→)，后端回推 <b>message.delta/complete</b> 事件流(←)。<b>TS 管屏,Python 管核心</b>。</div>
 </div>
 
-<p>为什么坚持走标准的 JSON-RPC 错误信封(<span class="mono">-32601 unknown method</span>、<span class="mono">4009 session busy</span>)而不是回一段错误文本?因为前端要<strong>程序化地</strong>区分「方法不存在」「会话忙」「参数非法」,据此决定重试、提示还是禁用按钮;自由文本只能给人读,机器得做脆弱的字符串匹配,后端一改措辞前端就崩。把 <span class="mono">result</span> 与 <span class="mono">error</span> 钉成契约,等于给两个独立演进的技术栈立了一份不随版本漂移的接口。而装饰器 <span class="mono">@method("名字")</span> + 全局 <span class="mono">_methods</span> 表,让「新增一个能力」退化成「挂一个名字」——分派器一行不改,新方法自动可被调用。这正是窄腰对扩展的友好:边界稳定,两端各自生长。</p>
+<p>为什么坚持走标准的 JSON-RPC 错误信封(<span class="mono">-32601 unknown method</span>、<span class="mono">4009 session busy</span>)而不是回一段错误文本?因为前端要<strong>程序化地</strong>区分「方法不存在」「会话忙」「参数非法」，据此决定重试、提示还是禁用按钮;自由文本只能给人读，机器得做脆弱的字符串匹配，后端一改措辞前端就崩。把 <span class="mono">result</span> 与 <span class="mono">error</span> 钉成契约，等于给两个独立演进的技术栈立了一份不随版本漂移的接口。而装饰器 <span class="mono">@method("名字")</span> + 全局 <span class="mono">_methods</span> 表，让「新增一个能力」退化成「挂一个名字」——分派器一行不改，新方法自动可被调用。这正是窄腰对扩展的友好：边界稳定，两端各自生长。</p>
 
-<p>这套「方法 + 事件」的二分,把每个交互面都摊成一张清晰的对应表:聊天流是 <span class="mono">prompt.submit</span> → <span class="mono">message.delta/complete</span>,对应 Ink 的 <span class="mono">app.tsx</span> + <span class="mono">messageLine.tsx</span>;工具活动是 <span class="mono">tool.start/progress/complete</span>,对应 <span class="mono">thinking.tsx</span>;审批是 <span class="mono">approval.request</span> ↔ <span class="mono">approval.respond</span>,对应 <span class="mono">prompts.tsx</span>;会话选择是 <span class="mono">session.list/resume</span> 对应 <span class="mono">activeSessionSwitcher.tsx</span>;补全走 <span class="mono">complete.slash/path</span>。每加一个交互面,只是再添一对「方法 ↔ 组件」,而不动既有任何一对——这种<strong>可叠加而不耦合</strong>的结构,正是窄腰接口能撑起越来越多前端功能的原因。</p>
+<p>这套「方法 + 事件」的二分，把每个交互面都摊成一张清晰的对应表：聊天流是 <span class="mono">prompt.submit</span> → <span class="mono">message.delta/complete</span>，对应 Ink 的 <span class="mono">app.tsx</span> + <span class="mono">messageLine.tsx</span>;工具活动是 <span class="mono">tool.start/progress/complete</span>，对应 <span class="mono">thinking.tsx</span>;审批是 <span class="mono">approval.request</span> ↔ <span class="mono">approval.respond</span>，对应 <span class="mono">prompts.tsx</span>;会话选择是 <span class="mono">session.list/resume</span> 对应 <span class="mono">activeSessionSwitcher.tsx</span>;补全走 <span class="mono">complete.slash/path</span>。每加一个交互面，只是再添一对「方法 ↔ 组件」，而不动既有任何一对——这种<strong>可叠加而不耦合</strong>的结构，正是窄腰接口能撑起越来越多前端功能的原因。</p>
 
-<h2>流式回推:一个 token 一个事件</h2>
+<h2>流式回推：一个 token 一个事件</h2>
 <p>用户提交后,agent 的回复要<strong>一边生成一边显示</strong>。这靠服务器主动推 <span class="mono">event</span> 帧:</p>
 
 <div class="codefile">
@@ -484,14 +484,14 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 </div>
 <p>请求/响应只是一半;另一半是<strong>服务器→前端的事件流</strong>。agent 每吐出一段文本(delta),Python 就 <span class="mono">_emit("message.delta")</span> 推一帧,Ink 收到后把它追加进 transcript——这就是你看到的「逐字蹦出来」。同一套事件机制还推 <span class="mono">tool.start/progress/complete</span>、审批请求等。</p>
 
-<p>为什么一次回复要推<strong>两种</strong>事件——<span class="mono">message.delta</span> 与 <span class="mono">message.complete</span>?delta 是「正在生成」的逐块流,只带文本,负责让你看到字一个个蹦出来;complete 是「这一轮定型」的收尾帧,带上 <span class="mono">usage</span>(token 用量)、<span class="mono">status</span>(complete / interrupted / error)甚至 <span class="mono">reasoning</span>。前者追实时,后者追完整与准确,两者缺一不可:只有 delta 你拿不到用量和最终状态,只有 complete 你就失去了逐字流式的临场感。关键是,<span class="mono">_stream</span> 是作为 <span class="mono">stream_callback</span> 传进 <span class="mono">run_conversation</span> 的——TUI 的流式不是前端轮询出来的,而是<strong>核心循环每吐一块就主动回调一次</strong>,和第 7 章那个同步 agent 循环是同一处血脉。</p>
+<p>为什么一次回复要推<strong>两种</strong>事件——<span class="mono">message.delta</span> 与 <span class="mono">message.complete</span>?delta 是「正在生成」的逐块流，只带文本，负责让你看到字一个个蹦出来;complete 是「这一轮定型」的收尾帧，带上 <span class="mono">usage</span>(token 用量)、<span class="mono">status</span>(complete / interrupted / error)甚至 <span class="mono">reasoning</span>。前者追实时，后者追完整与准确，两者缺一不可：只有 delta 你拿不到用量和最终状态，只有 complete 你就失去了逐字流式的临场感。关键是,<span class="mono">_stream</span> 是作为 <span class="mono">stream_callback</span> 传进 <span class="mono">run_conversation</span> 的——TUI 的流式不是前端轮询出来的，而是<strong>核心循环每吐一块就主动回调一次</strong>，和第 7 章那个同步 agent 循环是同一处血脉。</p>
 
-<p>流式收尾处还藏着一道防线:<span class="mono">prompt.submit</span> 写回结果前会校验 <span class="mono">history_version</span>,若这一轮跑的过程中会话历史被外部改过(压缩、撤销、重试、回滚),它<strong>拒绝覆盖</strong>,转而显式报「响应可见但未写入历史」,而不是默默丢弃或污染上下文。这背后是同一条铁律:<strong>对话历史不能在一轮中途被偷偷换掉</strong>。它既守住了提示缓存那条红线(第 6 章「除压缩外绝不改动过去上下文」),也保证了消息角色的严格交替不被打乱;当多个前端共享同一个后端会话时,这种并发保护尤其要紧——少了它,一次跨窗口的撤销就可能让本轮回复落到一段已经不存在的历史上。</p>
+<p>流式收尾处还藏着一道防线:<span class="mono">prompt.submit</span> 写回结果前会校验 <span class="mono">history_version</span>，若这一轮跑的过程中会话历史被外部改过(压缩、撤销、重试、回滚)，它<strong>拒绝覆盖</strong>，转而显式报「响应可见但未写入历史」，而不是默默丢弃或污染上下文。这背后是同一条铁律:<strong>对话历史不能在一轮中途被偷偷换掉</strong>。它既守住了提示缓存那条红线(第 6 章「除压缩外绝不改动过去上下文」)，也保证了消息角色的严格交替不被打乱;当多个前端共享同一个后端会话时，这种并发保护尤其要紧——少了它，一次跨窗口的撤销就可能让本轮回复落到一段已经不存在的历史上。</p>
 
-<p>同一条事件流不止推文本,也推<strong>工具活动</strong>(<span class="mono">tool.start/progress/complete</span>,在 Ink 里由 <span class="mono">thinking.tsx</span> 渲染成「正在做什么」)和<strong>审批请求</strong>(<span class="mono">approval.request</span>,弹给 <span class="mono">prompts.tsx</span>)。为什么把这些都走同一条回推通道?因为它们本质都是「agent 跑到一半,需要把状态或请求<strong>主动告诉前端</strong>」,共用一套机制就不必为每类信号各造一条管子。审批尤其关键:它必须能在 agent <strong>正阻塞等待</strong>时穿过去,这和第 18 章网关那条「审批/控制命令要绕过运行时守卫」的纪律同根同源——若审批也被「会话忙」挡下,agent 就会永远卡在等批准上。换句话说,流式回推不只是「让字蹦得好看」,它是<strong>会话运行期间前端与后端唯一的双向窗口</strong>:进度让你知道它没死,审批让你能在关键一步前喊停,二者都靠这条事件流活着。</p>
+<p>同一条事件流不止推文本，也推<strong>工具活动</strong>(<span class="mono">tool.start/progress/complete</span>，在 Ink 里由 <span class="mono">thinking.tsx</span> 渲染成「正在做什么」)和<strong>审批请求</strong>(<span class="mono">approval.request</span>，弹给 <span class="mono">prompts.tsx</span>)。为什么把这些都走同一条回推通道?因为它们本质都是「agent 跑到一半，需要把状态或请求<strong>主动告诉前端</strong>」，共用一套机制就不必为每类信号各造一条管子。审批尤其关键：它必须能在 agent <strong>正阻塞等待</strong>时穿过去，这和第 18 章网关那条「审批/控制命令要绕过运行时守卫」的纪律同根同源——若审批也被「会话忙」挡下,agent 就会永远卡在等批准上。换句话说，流式回推不只是「让字蹦得好看」，它是<strong>会话运行期间前端与后端唯一的双向窗口</strong>：进度让你知道它没死，审批让你能在关键一步前喊停，二者都靠这条事件流活着。</p>
 
-<h2>仪表盘:不重写,直接嵌</h2>
-<p>网页仪表盘的「聊天」页,没有用 React 重写一遍 transcript/输入框,而是把整个 <span class="mono">hermes --tui</span> 经 PTY 桥进浏览器:</p>
+<h2>仪表盘：不重写，直接嵌</h2>
+<p>网页仪表盘的「聊天」页，没有用 React 重写一遍 transcript/输入框，而是把整个 <span class="mono">hermes --tui</span> 经 PTY 桥进浏览器:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/web_server.py</span><span class="ln">11505-11625 · 简化</span></div>
@@ -511,7 +511,7 @@ html[data-lang="zh"] .lang-en { display: none !important; }
         match = _RESIZE_RE.match(raw)       <span class="cm"># resize escape 本地拦截</span>
         ...                                 <span class="cm"># 否则原样写进 PTY</span></pre>
 </div>
-<p>浏览器端是 xterm.js,服务端 <span class="mono">spawn</span> 出和命令行<strong>一模一样</strong>的 <span class="mono">hermes --tui</span>,两个方向<strong>原样转发字节</strong>:PTY 输出 → <span class="mono">ws.send_bytes</span> → xterm.js 渲染;键盘输入 → PTY。只有 <span class="mono">\x1b[RESIZE:...]</span> 这样的尺寸转义在服务端本地拦截、用 <span class="mono">TIOCSWINSZ</span> 调整窗口。(PTY 桥本身也是窄腰:POSIX 用 <span class="mono">pty_bridge</span>(fcntl/termios)、Windows 用 <span class="mono">win_pty_bridge</span>(ConPTY),但 <span class="mono">spawn/read/write/resize/close</span> 是同一套公共接口,<span class="mono">/api/pty</span> handler 无需任何平台分支。)<strong>你给 Ink 加的任何新功能,仪表盘里自动就有了。</strong></p>
+<p>浏览器端是 xterm.js，服务端 <span class="mono">spawn</span> 出和命令行<strong>一模一样</strong>的 <span class="mono">hermes --tui</span>，两个方向<strong>原样转发字节</strong>:PTY 输出 → <span class="mono">ws.send_bytes</span> → xterm.js 渲染;键盘输入 → PTY。只有 <span class="mono">\x1b[RESIZE:...]</span> 这样的尺寸转义在服务端本地拦截、用 <span class="mono">TIOCSWINSZ</span> 调整窗口。(PTY 桥本身也是窄腰:POSIX 用 <span class="mono">pty_bridge</span>(fcntl/termios)、Windows 用 <span class="mono">win_pty_bridge</span>(ConPTY)，但 <span class="mono">spawn/read/write/resize/close</span> 是同一套公共接口,<span class="mono">/api/pty</span> handler 无需任何平台分支。)<strong>你给 Ink 加的任何新功能，仪表盘里自动就有了。</strong></p>
 
 <div class="figure">
 <svg viewBox="0 0 680 230" role="img" aria-label="仪表盘嵌入真实 TUI：浏览器 xterm.js 经 /api/pty 转发到真正的 hermes --tui 子进程">
@@ -555,43 +555,43 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <text x="340" y="172" text-anchor="middle" font-size="11.5" fill="var(--accent-ink)">↔ 原始 PTY 字节·两个方向逐字转发；仅 RESIZE 转义在服务端拦截，用 TIOCSWINSZ 调窗口</text>
   <text x="340" y="196" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent-ink)">★ 绝不在 React 重写 transcript/composer——给 Ink 加的新功能，dashboard 自动就有</text>
 </svg>
-<div class="fig-cap"><b>仪表盘嵌入真实 TUI,不是 React 重写</b>:浏览器里的 xterm.js 经 <b>/api/pty</b> WebSocket 连到 pty_bridge.py,后者 <b>spawn</b> 出与命令行一模一样的真实 <b>hermes --tui</b> 子进程(POSIX PTY);PTY 字节在两个方向原样转发,仅 RESIZE 这类尺寸转义在服务端拦截。于是聊天体验只在 Ink 实现一次——<b>给 Ink 加的新功能,dashboard 自动继承</b>。</div>
+<div class="fig-cap"><b>仪表盘嵌入真实 TUI，不是 React 重写</b>：浏览器里的 xterm.js 经 <b>/api/pty</b> WebSocket 连到 pty_bridge.py，后者 <b>spawn</b> 出与命令行一模一样的真实 <b>hermes --tui</b> 子进程(POSIX PTY);PTY 字节在两个方向原样转发，仅 RESIZE 这类尺寸转义在服务端拦截。于是聊天体验只在 Ink 实现一次——<b>给 Ink 加的新功能,dashboard 自动继承</b>。</div>
 </div>
 
-<p>为什么<strong>绝不</strong>用 React 把主聊天体验重写一遍?因为那等于让 transcript、composer、PTY 终端有<strong>两套实现</strong>,注定随时间漂移——给 Ink 修了个光标 bug、加了个审批弹窗,React 版却忘了跟,用户在命令行和浏览器里看到的就是两个 Hermes。嵌入同一个 <span class="mono">hermes --tui</span> 则只有<strong>一份真相</strong>:浏览器端 <span class="mono">ChatPage.tsx</span> 挂一个 xterm.js 终端,配上 <span class="mono">WebglAddon</span>(WebGL 渲染、吃大屏滚动)、<span class="mono">FitAddon</span>(随容器自适应列宽行高)、<span class="mono">Unicode11Addon</span>(现代宽字符宽度),只负责把后端原样吐来的 ANSI 字节<strong>画</strong>出来,而不重新发明任何聊天逻辑。AGENTS.md 因此立了硬规矩:发现自己在为仪表盘重建 transcript 或 composer,就停下来,去扩 Ink。</p>
+<p>为什么<strong>绝不</strong>用 React 把主聊天体验重写一遍?因为那等于让 transcript、composer、PTY 终端有<strong>两套实现</strong>，注定随时间漂移——给 Ink 修了个光标 bug、加了个审批弹窗,React 版却忘了跟，用户在命令行和浏览器里看到的就是两个 Hermes。嵌入同一个 <span class="mono">hermes --tui</span> 则只有<strong>一份真相</strong>：浏览器端 <span class="mono">ChatPage.tsx</span> 挂一个 xterm.js 终端，配上 <span class="mono">WebglAddon</span>(WebGL 渲染、吃大屏滚动)、<span class="mono">FitAddon</span>(随容器自适应列宽行高)、<span class="mono">Unicode11Addon</span>(现代宽字符宽度)，只负责把后端原样吐来的 ANSI 字节<strong>画</strong>出来，而不重新发明任何聊天逻辑。AGENTS.md 因此立了硬规矩：发现自己在为仪表盘重建 transcript 或 composer，就停下来，去扩 Ink。</p>
 
-<p>鉴权这一处的取舍也值得一看:<span class="mono">/api/pty</span> 的 WebSocket 用 <span class="mono">?token=&lt;session&gt;</span> 查询参数携带令牌,而不是放进 <span class="mono">Authorization</span> 头——因为浏览器在 WS 升级握手时<strong>根本无法设置自定义请求头</strong>,只能退而走 URL。令牌就是 REST 那套同一个临时 <span class="mono">_SESSION_TOKEN</span>,且整条通道<strong>默认只认本地回环</strong>,非 loopback 客户端默认一律拒绝(仅当显式启用鉴权或绑到 <span class="mono">0.0.0.0</span> 时才放行非回环),把「真 PTY 暴露给浏览器」的风险锁死在本机。服务端还用一把 <span class="mono">chat_argv_lock</span> 串行化 chat-argv 解析,让多个 <span class="mono">/api/pty</span> 连接并发时不会互相抢同一份启动参数。这些都是为了让「把命令行进程投进网页」这件事既能用、又不漏。</p>
+<p>鉴权这一处的取舍也值得一看:<span class="mono">/api/pty</span> 的 WebSocket 用 <span class="mono">?token=&lt;session&gt;</span> 查询参数携带令牌，而不是放进 <span class="mono">Authorization</span> 头——因为浏览器在 WS 升级握手时<strong>根本无法设置自定义请求头</strong>，只能退而走 URL。令牌就是 REST 那套同一个临时 <span class="mono">_SESSION_TOKEN</span>，且整条通道<strong>默认只认本地回环</strong>，非 loopback 客户端默认一律拒绝(仅当显式启用鉴权或绑到 <span class="mono">0.0.0.0</span> 时才放行非回环)，把「真 PTY 暴露给浏览器」的风险锁死在本机。服务端还用一把 <span class="mono">chat_argv_lock</span> 串行化 chat-argv 解析，让多个 <span class="mono">/api/pty</span> 连接并发时不会互相抢同一份启动参数。这些都是为了让「把命令行进程投进网页」这件事既能用、又不漏。</p>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">用户在 Ink 界面输入 → 前端发 <span class="mono">prompt.submit</span> JSON-RPC 帧</span></div>
   <div class="step"><span class="num">2</span><span class="sc">Python <span class="mono">handle_request</span> 查 <span class="mono">_methods</span> 表、分派到 handler</span></div>
-  <div class="step"><span class="num">3</span><span class="sc">handler 跑 AIAgent(第 7 章核心循环),逐 token <span class="mono">_emit("message.delta")</span></span></div>
-  <div class="step"><span class="num">4</span><span class="sc">Ink 收到事件流,追加进 transcript 渲染(逐字显示)</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">handler 跑 AIAgent(第 7 章核心循环)，逐 token <span class="mono">_emit("message.delta")</span></span></div>
+  <div class="step"><span class="num">4</span><span class="sc">Ink 收到事件流，追加进 transcript 渲染(逐字显示)</span></div>
   <div class="step"><span class="num">5</span><span class="sc">仪表盘:xterm.js ⟷ <span class="mono">/api/pty</span> WebSocket ⟷ PtyBridge ⟷ 同一个 <span class="mono">hermes --tui</span></span></div>
 </div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「一套核心多前端」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>method 装饰器</strong>(RPC 注册)、<strong>handle_request</strong>(分派)、<strong>_emit/write_json</strong>(事件回推)、<strong>PtyBridge</strong>(PTY 桥)。跨章节配合:JSON-RPC 后面跑的就是 <strong>AIAgent 核心循环</strong>(第 7 章)——TUI 只是它的一个前端;<span class="mono">prompt.submit</span> 的 busy 检查与<strong>网关守卫</strong>(第 18 章)同理(运行时拒新输入);仪表盘<strong>嵌入复用</strong>同一个 hermes --tui = 不重写 = <strong>窄腰</strong>(第 4 章);Electron 桌面 App 是<strong>另一个 JSON-RPC 前端</strong>(同一个 tui_gateway 后端,自带 composer)。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>method 装饰器</strong>(RPC 注册)、<strong>handle_request</strong>(分派)、<strong>_emit/write_json</strong>(事件回推)、<strong>PtyBridge</strong>(PTY 桥)。跨章节配合:JSON-RPC 后面跑的就是 <strong>AIAgent 核心循环</strong>(第 7 章)——TUI 只是它的一个前端;<span class="mono">prompt.submit</span> 的 busy 检查与<strong>网关守卫</strong>(第 18 章)同理(运行时拒新输入);仪表盘<strong>嵌入复用</strong>同一个 hermes --tui = 不重写 = <strong>窄腰</strong>(第 4 章);Electron 桌面 App 是<strong>另一个 JSON-RPC 前端</strong>(同一个 tui_gateway 后端，自带 composer)。
   <div class="collab-sub">② 数据流时序</div>
   Ink 输入 → JSON-RPC <span class="mono">prompt.submit</span> → <span class="mono">handle_request</span> 分派 → AIAgent 跑 → <span class="mono">_emit("message.delta")</span> 流式 → Ink 渲染。仪表盘旁路:xterm.js ⟷ WS <span class="mono">/api/pty</span> ⟷ <span class="mono">PtyBridge.spawn</span> ⟷ <span class="mono">hermes --tui</span> 子进程(原样转发字节)。
   <div class="collab-sub">③ 关键点</div>
-  一套 agent 核心(Python)+ 多个前端(Ink TUI / 浏览器 PTY / Electron 桌面)靠 <strong>stdio JSON-RPC</strong> 解耦;仪表盘<strong>嵌入</strong>同一个 hermes --tui 而非重写;前端易变、核心稳定,各自独立迭代。给 Ink 加功能,仪表盘自动继承。
+  一套 agent 核心(Python)+ 多个前端(Ink TUI / 浏览器 PTY / Electron 桌面)靠 <strong>stdio JSON-RPC</strong> 解耦;仪表盘<strong>嵌入</strong>同一个 hermes --tui 而非重写;前端易变、核心稳定，各自独立迭代。给 Ink 加功能，仪表盘自动继承。
 </div>
 
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>一套 agent 核心 + JSON-RPC 解耦多前端 + 嵌入复用 = 多端一致、不重复造轮子(窄腰)</strong>。它主要治一条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——同一个 agent 要在命令行、TUI、网关、桌面 App、网页仪表盘多端出现。把 agent 核心收进 Python 后端、用稳定的 JSON-RPC 信封暴露,前端就能<strong>各用各的技术栈独立演进</strong>(Ink 用 React、桌面用 Electron、仪表盘用 xterm.js),而核心只维护一份。Node 前端崩了不会拖垮 Python agent,反之亦然——<strong>进程隔离</strong>也是运维健壮性。</p>
-  <p style="margin:.5rem 0 0">它也是<strong>窄腰</strong>(第 4 章):聊天体验(transcript/输入/PTY 终端)只在 Ink 里实现<strong>一次</strong>,仪表盘靠 PTY 嵌入复用。反模式:为浏览器用 React <strong>重写一遍</strong> transcript 和 composer——两套实现注定漂移,改一个忘一个。AGENTS.md 为此立了硬规矩:「Do not re-implement the primary chat experience in React」。</p>
-  <p style="margin:.5rem 0 0">还有第三个前端值得单列:<strong>Electron 桌面 App</strong>(<span class="mono">apps/desktop/</span>)。它和仪表盘走的是<strong>相反</strong>的路——<strong>不嵌</strong> <span class="mono">hermes --tui</span>,而是用 <span class="mono">@assistant-ui/react</span> + nanostore 自建 composer、transcript 与 slash 管线,经同一套 JSON-RPC(<span class="mono">requestGateway</span>)连同一个 tui_gateway 后端。为什么这次允许「另起一套界面」?因为它不是终端、装不进 PTY,要的是富交互的原生桌面体验,这是一个<strong>独立的 chat surface</strong>,而非对终端体验的重复。但它的 slash 命令<strong>策展而不封杀</strong>:面板默认只摆约 28 个内置命令以免噪音,可技能、用户 quick_commands 这类<strong>扩展</strong>必须照常浮现——因为后端早已把它们一并暴露,藏的是噪音,不是用户激活的能力。</p>
-  <p style="margin:.5rem 0 0">把镜头拉到全书:本章其实是「<strong>窄腰</strong>」最直观的一次落地。同一个 AIAgent 核心(第 7 章)被<strong>四类外壳</strong>共用——经典 CLI、Ink TUI、桌面 App,以及第 17 章的消息网关——它们要么是 JSON-RPC 前端,要么是网关适配器,核心只维护一份。<span class="mono">prompt.submit</span> 那句 <span class="mono">session busy</span> 忙检查,和第 18 章网关「agent 运行时拒新输入」的守卫是<strong>同一个意思</strong>:一个会话同一时刻只跑一轮。而仪表盘嵌入复用、桌面共享后端、TUI 流式回推,合起来印证了那条贯穿全书的取舍——<strong>把易变的前端推到边缘,把稳定的能力收进窄腰</strong>:前端可以百花齐放、各用各的栈崩了也不连累核心,而 agent 的会话、工具、缓存纪律只在一处被定义、被守护。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——同一个 agent 要在命令行、TUI、网关、桌面 App、网页仪表盘多端出现。把 agent 核心收进 Python 后端、用稳定的 JSON-RPC 信封暴露，前端就能<strong>各用各的技术栈独立演进</strong>(Ink 用 React、桌面用 Electron、仪表盘用 xterm.js)，而核心只维护一份。Node 前端崩了不会拖垮 Python agent，反之亦然——<strong>进程隔离</strong>也是运维健壮性。</p>
+  <p style="margin:.5rem 0 0">它也是<strong>窄腰</strong>(第 4 章)：聊天体验(transcript/输入/PTY 终端)只在 Ink 里实现<strong>一次</strong>，仪表盘靠 PTY 嵌入复用。反模式：为浏览器用 React <strong>重写一遍</strong> transcript 和 composer——两套实现注定漂移，改一个忘一个。AGENTS.md 为此立了硬规矩:「Do not re-implement the primary chat experience in React」。</p>
+  <p style="margin:.5rem 0 0">还有第三个前端值得单列:<strong>Electron 桌面 App</strong>(<span class="mono">apps/desktop/</span>)。它和仪表盘走的是<strong>相反</strong>的路——<strong>不嵌</strong> <span class="mono">hermes --tui</span>，而是用 <span class="mono">@assistant-ui/react</span> + nanostore 自建 composer、transcript 与 slash 管线，经同一套 JSON-RPC(<span class="mono">requestGateway</span>)连同一个 tui_gateway 后端。为什么这次允许「另起一套界面」?因为它不是终端、装不进 PTY，要的是富交互的原生桌面体验，这是一个<strong>独立的 chat surface</strong>，而非对终端体验的重复。但它的 slash 命令<strong>策展而不封杀</strong>：面板默认只摆约 28 个内置命令以免噪音，可技能、用户 quick_commands 这类<strong>扩展</strong>必须照常浮现——因为后端早已把它们一并暴露，藏的是噪音，不是用户激活的能力。</p>
+  <p style="margin:.5rem 0 0">把镜头拉到全书：本章其实是「<strong>窄腰</strong>」最直观的一次落地。同一个 AIAgent 核心(第 7 章)被<strong>四类外壳</strong>共用——经典 CLI、Ink TUI、桌面 App，以及第 17 章的消息网关——它们要么是 JSON-RPC 前端，要么是网关适配器，核心只维护一份。<span class="mono">prompt.submit</span> 那句 <span class="mono">session busy</span> 忙检查，和第 18 章网关「agent 运行时拒新输入」的守卫是<strong>同一个意思</strong>：一个会话同一时刻只跑一轮。而仪表盘嵌入复用、桌面共享后端、TUI 流式回推，合起来印证了那条贯穿全书的取舍——<strong>把易变的前端推到边缘，把稳定的能力收进窄腰</strong>：前端可以百花齐放、各用各的栈崩了也不连累核心，而 agent 的会话、工具、缓存纪律只在一处被定义、被守护。</p>
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 408" role="img" aria-label="实例图:一次真实 prompt.submit 的 JSON-RPC 帧序列。① 前端 request,jsonrpc 2.0,id 1,method prompt.submit,params 含 session_id s1 与 text 列出本目录;② 后端立即响应 result status streaming,会话忙时回 error code 4009 session busy;③ 事件流,_emit message.delta sid 与 payload text delta,真实信封 method event,params 含 type message.delta、session_id、payload text delta,server.py 887 与 7222;④ 同一 event 信封管道还推 tool.start、tool.complete、approval.request;⑤ history_version 守门 server.py 7244,current_version 等于 history_version 才写历史,否则响应可见但未写历史;⑥ message.complete payload,text raw、usage、status 取 complete 或 interrupted 或 error,server.py 7305。">
-  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:一次 prompt.submit 的 JSON-RPC 帧序列</text>
+<svg viewBox="0 0 680 408" role="img" aria-label="实例图：一次真实 prompt.submit 的 JSON-RPC 帧序列。① 前端 request,jsonrpc 2.0,id 1,method prompt.submit,params 含 session_id s1 与 text 列出本目录;② 后端立即响应 result status streaming，会话忙时回 error code 4009 session busy;③ 事件流,_emit message.delta sid 与 payload text delta，真实信封 method event,params 含 type message.delta、session_id、payload text delta,server.py 887 与 7222;④ 同一 event 信封管道还推 tool.start、tool.complete、approval.request;⑤ history_version 守门 server.py 7244,current_version 等于 history_version 才写历史，否则响应可见但未写历史;⑥ message.complete payload,text raw、usage、status 取 complete 或 interrupted 或 error,server.py 7305。">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例：一次 prompt.submit 的 JSON-RPC 帧序列</text>
   <text x="20" y="44" font-size="10" fill="var(--muted)">前端 request → status:streaming → N×message.delta → message.complete</text>
   <text x="644" y="33" text-anchor="middle" font-size="22">🎞️</text>
 
@@ -640,9 +640,9 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <text x="456" y="338" font-size="9" fill="var(--red)">  但未写历史(防 desync)</text>
   <text x="456" y="352" font-size="9" fill="var(--muted)">undo/compress 期间的护栏</text>
 
-  <text x="20" y="384" font-size="9.5" fill="var(--muted)">读这张图:一次 prompt.submit 的真实帧录像——同步 result 只说「开始流式」,真实内容全靠后续 event 信封逐帧推送。</text>
+  <text x="20" y="384" font-size="9.5" fill="var(--muted)">读这张图：一次 prompt.submit 的真实帧录像——同步 result 只说「开始流式」，真实内容全靠后续 event 信封逐帧推送。</text>
 </svg>
-<div class="fig-cap"><b>实例:一次 prompt.submit 的 JSON 帧录像</b>:① 前端发 <span class="mono">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,&quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;列出本目录&quot;}}</span>;② 后端立即 <span class="mono">_ok</span> 回 <span class="mono">{&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</span>(忙时 <span class="mono">_err code 4009</span>);③ 内容靠 <span class="mono">_emit</span> 的真实信封 <span class="mono">{&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:&quot;message.delta&quot;,&quot;session_id&quot;:sid,&quot;payload&quot;:{&quot;text&quot;:delta}}}</span> 逐帧推;④ <span class="mono">tool.start/complete</span>、<span class="mono">approval.request</span> 走同一管道;⑤ <span class="mono">history_version</span> 守门——不匹配则响应可见但不写历史;⑥ <span class="mono">message.complete</span> 的 <span class="mono">{text,usage,status}</span>,<span class="mono">status ∈ complete|interrupted|error</span>。每个字段都能在 <span class="mono">tui_gateway/server.py</span> 对应行找到。</div>
+<div class="fig-cap"><b>实例：一次 prompt.submit 的 JSON 帧录像</b>:① 前端发 <span class="mono">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;prompt.submit&quot;,&quot;params&quot;:{&quot;session_id&quot;:&quot;s1&quot;,&quot;text&quot;:&quot;列出本目录&quot;}}</span>;② 后端立即 <span class="mono">_ok</span> 回 <span class="mono">{&quot;result&quot;:{&quot;status&quot;:&quot;streaming&quot;}}</span>(忙时 <span class="mono">_err code 4009</span>);③ 内容靠 <span class="mono">_emit</span> 的真实信封 <span class="mono">{&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{&quot;type&quot;:&quot;message.delta&quot;,&quot;session_id&quot;:sid,&quot;payload&quot;:{&quot;text&quot;:delta}}}</span> 逐帧推;④ <span class="mono">tool.start/complete</span>、<span class="mono">approval.request</span> 走同一管道;⑤ <span class="mono">history_version</span> 守门——不匹配则响应可见但不写历史;⑥ <span class="mono">message.complete</span> 的 <span class="mono">{text,usage,status}</span>,<span class="mono">status ∈ complete|interrupted|error</span>。每个字段都能在 <span class="mono">tui_gateway/server.py</span> 对应行找到。</div>
 </div>
 
 <div class="card key">
@@ -651,8 +651,8 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <li><strong>两进程模型</strong>:Node(Ink 渲染屏幕)⟷ stdio JSON-RPC ⟷ Python(tui_gateway 跑 AIAgent)。TS 拥有屏幕,Python 拥有会话/工具/模型。</li>
     <li><strong>JSON-RPC 桥</strong>:<span class="mono">@method("名字")</span> 注册、<span class="mono">handle_request</span> 分派、标准 result/error 信封;前端拿结构化数据而非自由文本。</li>
     <li><strong>流式事件</strong>:<span class="mono">_emit("message.delta")</span> 逐 token 推回,Ink 追加 transcript(逐字显示);tool.start/complete 同机制。</li>
-    <li><strong>仪表盘嵌入</strong>:<span class="mono">/api/pty</span> WebSocket 把同一个 <span class="mono">hermes --tui</span> 经 PTY 投进 xterm.js,双向转发字节,resize 转义本地拦截。</li>
-    <li><strong>窄腰复用</strong>:聊天面只实现一次(Ink),仪表盘嵌入继承;<strong>不</strong>用 React 重写——给 Ink 加功能,仪表盘自动有(第 4 章)。</li>
+    <li><strong>仪表盘嵌入</strong>:<span class="mono">/api/pty</span> WebSocket 把同一个 <span class="mono">hermes --tui</span> 经 PTY 投进 xterm.js，双向转发字节,resize 转义本地拦截。</li>
+    <li><strong>窄腰复用</strong>：聊天面只实现一次(Ink)，仪表盘嵌入继承;<strong>不</strong>用 React 重写——给 Ink 加功能，仪表盘自动有(第 4 章)。</li>
   </ul>
 </div>
 <div class="selftest">

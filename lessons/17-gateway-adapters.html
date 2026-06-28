@@ -371,20 +371,20 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <h1><span class="lang-zh">网关与多平台适配器</span><span class="lang-en">Gateway &amp; platform adapters</span></h1>
   </div>
   <div class="lang-zh">
-<p class="lead">一个 Hermes 进程能同时在 Telegram、Discord、Slack、Matrix、飞书、微信……二十多个平台上收发消息。怎么做到的?核心只认<strong>一种</strong>消息——每个平台派一个「翻译官」(适配器),把五花八门的协议都翻译成同一种统一事件,核心网关的<strong>主路径几乎不碰任何具体平台</strong>。</p>
+<p class="lead">一个 Hermes 进程能同时在 Telegram、Discord、Slack、Matrix、飞书、微信……二十多个平台上收发消息。怎么做到的?核心只认<strong>一种</strong>消息——每个平台派一个「翻译官」(适配器)，把五花八门的协议都翻译成同一种统一事件，核心网关的<strong>主路径几乎不碰任何具体平台</strong>。</p>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 联合国同声传译</div>
-  各国代表说着不同语言(Telegram 的 Update、Discord 的 Gateway 事件、IRC 的一行文本……),但会场只用<strong>一种工作语言</strong>开会。每个语种配一名同传(适配器),把本国语翻成工作语言、再把决议翻回去。主持人(核心网关)<strong>只需听懂工作语言</strong>,完全不必会二十几国语言。
+  各国代表说着不同语言(Telegram 的 Update、Discord 的 Gateway 事件、IRC 的一行文本……)，但会场只用<strong>一种工作语言</strong>开会。每个语种配一名同传(适配器)，把本国语翻成工作语言、再把决议翻回去。主持人(核心网关)<strong>只需听懂工作语言</strong>，完全不必会二十几国语言。
 </div>
 
 <div class="card macro">
-  <div class="tag">🌍 宏观 · 统一抽象,平台差异在边缘</div>
-  核心定义两个统一抽象:<strong>MessageEvent</strong>(归一化的「一条消息」)和 <strong>BasePlatformAdapter</strong>(适配器契约)。约 28+ 个平台各写一个适配器子类,把平台原生消息翻成 MessageEvent 交给核心,再把核心的回复翻回平台格式。差异全沉在边缘,<strong>核心保持平台无关</strong>。
+  <div class="tag">🌍 宏观 · 统一抽象，平台差异在边缘</div>
+  核心定义两个统一抽象:<strong>MessageEvent</strong>(归一化的「一条消息」)和 <strong>BasePlatformAdapter</strong>(适配器契约)。约 28+ 个平台各写一个适配器子类，把平台原生消息翻成 MessageEvent 交给核心，再把核心的回复翻回平台格式。差异全沉在边缘,<strong>核心保持平台无关</strong>。
 </div>
 
 <h2>统一消息:MessageEvent</h2>
-<p>不管消息来自哪个平台,进核心前都被归一化成同一个数据结构:</p>
+<p>不管消息来自哪个平台，进核心前都被归一化成同一个数据结构:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">1599-1632 · 节选</span></div>
@@ -399,12 +399,12 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     media_urls: List[str] = field(default_factory=list)
     reply_to_message_id: Optional[str] = None</pre>
 </div>
-<p>点睛在那句 docstring:<strong>「Normalized representation that all adapters produce」——所有适配器都产出这一种归一化表示</strong>。Telegram 的富文本、Discord 的嵌入、IRC 的纯文本,进核心前统统被压成同一个 <span class="mono">MessageEvent</span>。核心的 agent 循环(第 7 章)<strong>只见过 MessageEvent,从不认识任何平台的原生格式</strong>。<span class="mono">source</span> 字段携带会话标识,核心据此把消息路由到正确的会话(每会话独立 = 约束 B)。</p>
+<p>点睛在那句 docstring:<strong>「Normalized representation that all adapters produce」——所有适配器都产出这一种归一化表示</strong>。Telegram 的富文本、Discord 的嵌入、IRC 的纯文本，进核心前统统被压成同一个 <span class="mono">MessageEvent</span>。核心的 agent 循环(第 7 章)<strong>只见过 MessageEvent，从不认识任何平台的原生格式</strong>。<span class="mono">source</span> 字段携带会话标识，核心据此把消息路由到正确的会话(每会话独立 = 约束 B)。</p>
 
-<p>为什么非要先归一化成一种结构?因为<strong>下游消费者太多</strong>:会话路由、两道守卫(第 18 章)、agent 核心循环(第 7 章消息流)、定时任务投递(cron)、审批与中断——若它们各自都要认 Telegram、Discord、微信……二十多种原生格式,复杂度就是「消费者数 × 平台数」的乘积,加一个平台得改一圈下游。在<strong>入口处翻译一次</strong>,把这层乘法塌缩成加法:平台只管产出 <span class="mono">MessageEvent</span>,下游只管消费它,两端各自演化、互不牵连。<span class="mono">raw_message</span> 仍留着平台原始对象做「留底」,真要平台专属细节时回查得到,但<strong>主路径只碰那几个归一化字段</strong>——这正是第 4 章「窄腰」在数据结构层面的投影:把宽阔的多样性收束成一道窄接口。</p>
+<p>为什么非要先归一化成一种结构?因为<strong>下游消费者太多</strong>：会话路由、两道守卫(第 18 章)、agent 核心循环(第 7 章消息流)、定时任务投递(cron)、审批与中断——若它们各自都要认 Telegram、Discord、微信……二十多种原生格式，复杂度就是「消费者数 × 平台数」的乘积，加一个平台得改一圈下游。在<strong>入口处翻译一次</strong>，把这层乘法塌缩成加法：平台只管产出 <span class="mono">MessageEvent</span>，下游只管消费它，两端各自演化、互不牵连。<span class="mono">raw_message</span> 仍留着平台原始对象做「留底」，真要平台专属细节时回查得到，但<strong>主路径只碰那几个归一化字段</strong>——这正是第 4 章「窄腰」在数据结构层面的投影：把宽阔的多样性收束成一道窄接口。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 352" role="img" aria-label="多平台归一化漏斗:各平台经各自适配器翻成统一 MessageEvent,再进单一 agent 核心">
+<svg viewBox="0 0 680 352" role="img" aria-label="多平台归一化漏斗：各平台经各自适配器翻成统一 MessageEvent，再进单一 agent 核心">
   <text x="340" y="20" text-anchor="middle" font-size="13" font-weight="700" fill="var(--blue)">▲ 协议各异 · 每个平台一种原生格式</text>
   <g font-size="11.5" text-anchor="middle">
     <rect x="15"  y="34" width="100" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
@@ -453,13 +453,13 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <text x="340" y="306" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">agent 核心</text>
   <text x="340" y="323" text-anchor="middle" font-size="10" fill="var(--muted)">只认这一种抽象</text>
 </svg>
-<div class="fig-cap"><b>多平台归一化漏斗</b>:二十多个平台各说各的协议(Telegram Update / Discord 事件 / IRC 文本行……),但每个平台派一个 <b>adapter</b> 把它翻成<b>同一个 MessageEvent</b>——漏斗在这里收口。核心 agent 只认这唯一一种抽象,从不认识任何平台的原生格式;加一个平台只是多接一条入水管,漏斗口与下游<b>纹丝不动</b>。这正是第 4 章「窄腰」在多端接入上的投影。(诚实地说,核心仍残留极少数平台特例,如 Telegram 私聊话题、Feishu 线程,但不在主路径上。)</div>
+<div class="fig-cap"><b>多平台归一化漏斗</b>：二十多个平台各说各的协议(Telegram Update / Discord 事件 / IRC 文本行……)，但每个平台派一个 <b>adapter</b> 把它翻成<b>同一个 MessageEvent</b>——漏斗在这里收口。核心 agent 只认这唯一一种抽象，从不认识任何平台的原生格式;加一个平台只是多接一条入水管，漏斗口与下游<b>纹丝不动</b>。这正是第 4 章「窄腰」在多端接入上的投影。(诚实地说，核心仍残留极少数平台特例，如 Telegram 私聊话题、Feishu 线程，但不在主路径上。)</div>
 </div>
 
-<p>诚实地说,<span class="mono">MessageEvent</span> 并非「纯净到不含一点平台味」:它身上挂着若干<strong>只有部分平台才填</strong>的可选字段——<span class="mono">platform_update_id</span>(Telegram 的 <span class="mono">update_id</span>,供 <span class="mono">/restart</span> 推进偏移、避免同一条更新被处理两次)、<span class="mono">reply_to_message_id</span> / <span class="mono">reply_to_author_id</span>(回复上下文)、<span class="mono">auto_skill</span>(Telegram 私聊话题、Discord 频道绑定时自动加载的技能)。设计上并不强求「完美纯净」,而是让这些字段<strong>默认 None、绝大多数平台直接忽略</strong>。务实地容纳少数平台的特性,好过为抽象洁癖把能力削平——抽象是为复用服务的,不是为教条服务的。这一点也提醒读者:窄腰不等于绝对零特例,而是把特例压到最小、且不让它们污染主路径。</p>
+<p>诚实地说,<span class="mono">MessageEvent</span> 并非「纯净到不含一点平台味」：它身上挂着若干<strong>只有部分平台才填</strong>的可选字段——<span class="mono">platform_update_id</span>(Telegram 的 <span class="mono">update_id</span>，供 <span class="mono">/restart</span> 推进偏移、避免同一条更新被处理两次)、<span class="mono">reply_to_message_id</span> / <span class="mono">reply_to_author_id</span>(回复上下文)、<span class="mono">auto_skill</span>(Telegram 私聊话题、Discord 频道绑定时自动加载的技能)。设计上并不强求「完美纯净」，而是让这些字段<strong>默认 None、绝大多数平台直接忽略</strong>。务实地容纳少数平台的特性，好过为抽象洁癖把能力削平——抽象是为复用服务的，不是为教条服务的。这一点也提醒读者：窄腰不等于绝对零特例，而是把特例压到最小、且不让它们污染主路径。</p>
 
 <h2>适配器契约:BasePlatformAdapter</h2>
-<p>「翻译官」要做的事被固化成一个抽象基类,每个平台子类只填平台专属的洞:</p>
+<p>「翻译官」要做的事被固化成一个抽象基类，每个平台子类只填平台专属的洞:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">2082-2620 · 节选</span></div>
@@ -481,14 +481,14 @@ html[data-lang="zh"] .lang-en { display: none !important; }
         <span class="cm"># 把核心回复翻回平台格式发出</span>
         ...</pre>
 </div>
-<p><span class="mono">connect()</span> / <span class="mono">disconnect()</span> / <span class="mono">send()</span> 是每个适配器<strong>必须</strong>实现的抽象方法(另含 <span class="mono">get_chat_info</span>)——这是核心与平台之间的核心契约面。网关启动时把所有启用的适配器 <span class="mono">connect()</span> 起来,然后<strong>统一</strong>等它们产出 MessageEvent,根本不关心底层是长轮询、WebSocket 还是 IRC socket。</p>
+<p><span class="mono">connect()</span> / <span class="mono">disconnect()</span> / <span class="mono">send()</span> 是每个适配器<strong>必须</strong>实现的抽象方法(另含 <span class="mono">get_chat_info</span>)——这是核心与平台之间的核心契约面。网关启动时把所有启用的适配器 <span class="mono">connect()</span> 起来，然后<strong>统一</strong>等它们产出 MessageEvent，根本不关心底层是长轮询、WebSocket 还是 IRC socket。</p>
 
-<p>为什么把契约固化成 <span class="mono">ABC</span> + <span class="mono">@abstractmethod</span>,而不是写个普通基类靠口头约定?因为 abstractmethod 让<strong>「没实现 connect/send 就根本实例化不了」</strong>——契约从「文档里的君子协定」升级成「导入期的硬约束」,谁也没法只写半个适配器就硬上线。更要害的是<strong>职责切分</strong>:基类独占所有<strong>共性机器</strong>——会话路由、消息排队、<span class="mono">_active_sessions</span> 中断锁、审批、typing 心跳;子类只补<strong>传输层</strong>那点平台专属逻辑(怎么连、怎么收、怎么发)。若没有这层 ABC,每个平台都得重造一遍会话与守卫机制,bug 会在二十多份实现里各自分叉,一个修复要复制二十遍,根本无从统一收口。</p>
+<p>为什么把契约固化成 <span class="mono">ABC</span> + <span class="mono">@abstractmethod</span>，而不是写个普通基类靠口头约定?因为 abstractmethod 让<strong>「没实现 connect/send 就根本实例化不了」</strong>——契约从「文档里的君子协定」升级成「导入期的硬约束」，谁也没法只写半个适配器就硬上线。更要害的是<strong>职责切分</strong>：基类独占所有<strong>共性机器</strong>——会话路由、消息排队、<span class="mono">_active_sessions</span> 中断锁、审批、typing 心跳;子类只补<strong>传输层</strong>那点平台专属逻辑(怎么连、怎么收、怎么发)。若没有这层 ABC，每个平台都得重造一遍会话与守卫机制,bug 会在二十多份实现里各自分叉，一个修复要复制二十遍，根本无从统一收口。</p>
 
-<p>加一个平台有两条路(见 <span class="mono">ADDING_A_PLATFORM.md</span>):<strong>插件路</strong>(推荐)——在 <span class="mono">plugins/platforms/&lt;name&gt;/</span> 写 <span class="mono">adapter.py</span> 继承 <span class="mono">BasePlatformAdapter</span>,用 <span class="mono">ctx.register_platform()</span> 注册,<strong>零改核心</strong>,插件框架自动接管配置解析、用户授权、cron 投递、状态展示与网关装配;<strong>内置路</strong>仅留给核心贡献者。连 <span class="mono">Platform</span> 枚举都用 <span class="mono">_missing_()</span> 钩子为插件平台动态造成员,<span class="mono">Platform("irc")</span> 不改枚举即可成立(且身份稳定)。另外,凡用唯一凭据(如 bot token)连接的适配器,启动时都会 <span class="mono">acquire_scoped_lock</span> 抢一把<strong>令牌锁</strong>,防止两个 profile(第 20 章)拿同一个 token 同时上线、互相顶号——这是「单进程多实例」与「跨平台」必须同时成立时的安全护栏。</p>
+<p>加一个平台有两条路(见 <span class="mono">ADDING_A_PLATFORM.md</span>):<strong>插件路</strong>(推荐)——在 <span class="mono">plugins/platforms/&lt;name&gt;/</span> 写 <span class="mono">adapter.py</span> 继承 <span class="mono">BasePlatformAdapter</span>，用 <span class="mono">ctx.register_platform()</span> 注册,<strong>零改核心</strong>，插件框架自动接管配置解析、用户授权、cron 投递、状态展示与网关装配;<strong>内置路</strong>仅留给核心贡献者。连 <span class="mono">Platform</span> 枚举都用 <span class="mono">_missing_()</span> 钩子为插件平台动态造成员,<span class="mono">Platform("irc")</span> 不改枚举即可成立(且身份稳定)。另外，凡用唯一凭据(如 bot token)连接的适配器，启动时都会 <span class="mono">acquire_scoped_lock</span> 抢一把<strong>令牌锁</strong>，防止两个 profile(第 20 章)拿同一个 token 同时上线、互相顶号——这是「单进程多实例」与「跨平台」必须同时成立时的安全护栏。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 300" role="img" aria-label="加平台两条路:插件路零改核心,内置路改动核心仓库,但都继承同一 BasePlatformAdapter 契约">
+<svg viewBox="0 0 680 300" role="img" aria-label="加平台两条路：插件路零改核心，内置路改动核心仓库，但都继承同一 BasePlatformAdapter 契约">
   <text x="340" y="20" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">加一个平台的两条路</text>
   <rect x="25"  y="36" width="300" height="30" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
   <text x="175" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-ink)">✅ 插件路(推荐)</text>
@@ -517,7 +517,7 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <text x="340" y="250" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">都继承同一 BasePlatformAdapter 契约</text>
   <text x="340" y="268" text-anchor="middle" font-size="10.5" fill="var(--muted)">→ 核心网关主路径只认这一个抽象</text>
 </svg>
-<div class="fig-cap"><b>加平台两条路</b>:推荐的<b>插件路</b>在 <span class="mono">plugins/platforms/&lt;name&gt;/</span> 写一个子类、用 <span class="mono">ctx.register_platform()</span> 注册,<b>零改核心</b>,框架自动接管配置、授权、cron 投递与网关装配;<b>内置路</b>留给核心贡献者,要动核心仓库。两条路殊途同归——都继承同一个 <span class="mono">BasePlatformAdapter</span> 契约,核心网关主路径始终只认这一个抽象。绝大多数主流平台(telegram/discord/slack……)其实都走插件路。</div>
+<div class="fig-cap"><b>加平台两条路</b>：推荐的<b>插件路</b>在 <span class="mono">plugins/platforms/&lt;name&gt;/</span> 写一个子类、用 <span class="mono">ctx.register_platform()</span> 注册,<b>零改核心</b>，框架自动接管配置、授权、cron 投递与网关装配;<b>内置路</b>留给核心贡献者，要动核心仓库。两条路殊途同归——都继承同一个 <span class="mono">BasePlatformAdapter</span> 契约，核心网关主路径始终只认这一个抽象。绝大多数主流平台(telegram/discord/slack……)其实都走插件路。</div>
 </div>
 
 <h2>一个真实的翻译官:IRCAdapter</h2>
@@ -539,15 +539,15 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 
     <span class="kw">async def</span> <span class="fn">send_typing</span>(self, chat_id, metadata=None):
         <span class="cm">&quot;&quot;&quot;IRC has no typing indicator — no-op.&quot;&quot;&quot;</span>
-        <span class="kw">pass</span>                               <span class="cm"># 平台没有的能力,在边缘吸收</span></pre>
+        <span class="kw">pass</span>                               <span class="cm"># 平台没有的能力，在边缘吸收</span></pre>
 </div>
-<p>两个细节道尽设计精髓:(1) <span class="mono">_dispatch_message</span> 把 IRC 文本包成 <span class="mono">MessageEvent</span> 后调 <span class="mono">handle_message</span>——<strong>翻译完就交给基类统一入口</strong>,后面的路由/排队/审批核心全包;(2) <span class="mono">send_typing</span> 是个 <strong>no-op</strong>:IRC 没有「正在输入」指示,这个平台能力差异<strong>在边缘适配器里被悄悄吸收</strong>,核心永远不知道、也不必知道某个平台缺这个能力。</p>
+<p>两个细节道尽设计精髓:(1) <span class="mono">_dispatch_message</span> 把 IRC 文本包成 <span class="mono">MessageEvent</span> 后调 <span class="mono">handle_message</span>——<strong>翻译完就交给基类统一入口</strong>，后面的路由/排队/审批核心全包;(2) <span class="mono">send_typing</span> 是个 <strong>no-op</strong>:IRC 没有「正在输入」指示，这个平台能力差异<strong>在边缘适配器里被悄悄吸收</strong>，核心永远不知道、也不必知道某个平台缺这个能力。</p>
 
-<p>把「平台没有的能力」在边缘 no-op 吸收,而不是让核心去判断「这个平台支不支持 typing」,差别在哪?若核心要判断,就得维护一张<strong>能力矩阵</strong>外加满地的 <span class="mono">if platform == ...</span> 分支,平台一多立刻爆炸。反过来,契约把 <span class="mono">send_typing</span> / <span class="mono">format_message</span> 等定义成<strong>所有平台能力的并集</strong>,谁缺哪个就在子类里<strong>优雅降级</strong>(返回 <span class="mono">pass</span>,或回退到默认 markdown 转换)。核心永远当「每个平台都会 typing」,照常调用即可,缺失被边缘悄悄咽掉。<strong>把差异关进边缘、让核心面对一张统一且完整的接口</strong>,正是窄腰让核心保持简单所付的代价——代价不是消失,而是被转移到了不会扩散的地方。</p>
+<p>把「平台没有的能力」在边缘 no-op 吸收，而不是让核心去判断「这个平台支不支持 typing」，差别在哪?若核心要判断，就得维护一张<strong>能力矩阵</strong>外加满地的 <span class="mono">if platform == ...</span> 分支，平台一多立刻爆炸。反过来，契约把 <span class="mono">send_typing</span> / <span class="mono">format_message</span> 等定义成<strong>所有平台能力的并集</strong>，谁缺哪个就在子类里<strong>优雅降级</strong>(返回 <span class="mono">pass</span>，或回退到默认 markdown 转换)。核心永远当「每个平台都会 typing」，照常调用即可，缺失被边缘悄悄咽掉。<strong>把差异关进边缘、让核心面对一张统一且完整的接口</strong>，正是窄腰让核心保持简单所付的代价——代价不是消失，而是被转移到了不会扩散的地方。</p>
 
-<p><span class="mono">handle_message</span> 的 docstring 写得直白:它<strong>「靠 spawn 后台任务快速返回」</strong>——这一句是整套中断能力的地基。适配器收到消息不会卡在 agent 那一长串推理上,而是开一个后台任务就立刻回头去收下一条;<span class="mono">_active_sessions</span> 存每会话的中断 <span class="mono">Event</span>,<span class="mono">_pending_messages</span> 暂存追问消息。正因为收发不被 agent 阻塞,用户才能在 agent 跑着时再发 <span class="mono">/stop</span> 把它打断、或让后续消息排队。第 18 章那两道守卫,正是<strong>架在这套异步基底之上</strong>的:基类入口先做 stale-lock 自愈、再判 <span class="mono">_active_sessions</span> 决定排队还是旁路。若 <span class="mono">handle_message</span> 改成同步阻塞,一轮长回答就会冻住整个平台的收信——异步是「边收边算」的前提。</p>
+<p><span class="mono">handle_message</span> 的 docstring 写得直白：它<strong>「靠 spawn 后台任务快速返回」</strong>——这一句是整套中断能力的地基。适配器收到消息不会卡在 agent 那一长串推理上，而是开一个后台任务就立刻回头去收下一条;<span class="mono">_active_sessions</span> 存每会话的中断 <span class="mono">Event</span>,<span class="mono">_pending_messages</span> 暂存追问消息。正因为收发不被 agent 阻塞，用户才能在 agent 跑着时再发 <span class="mono">/stop</span> 把它打断、或让后续消息排队。第 18 章那两道守卫，正是<strong>架在这套异步基底之上</strong>的：基类入口先做 stale-lock 自愈、再判 <span class="mono">_active_sessions</span> 决定排队还是旁路。若 <span class="mono">handle_message</span> 改成同步阻塞，一轮长回答就会冻住整个平台的收信——异步是「边收边算」的前提。</p>
 
-<p>那「路由到哪个会话」又靠什么?是 <span class="mono">build_session_key()</span> 从 <span class="mono">source</span> 算出的会话键,它把 <span class="mono">platform</span> + <span class="mono">chat_id</span> + 可选的 <span class="mono">user_id</span> / <span class="mono">thread_id</span> 组合起来,并受 <span class="mono">group_sessions_per_user</span>、<span class="mono">thread_sessions_per_user</span> 两个开关调制——是「整个群共享一个会话」还是「群里每人一条独立会话」,由配置说了算。正因为核心不持有任何全局会话状态(约束 B),同一进程里 Telegram 的张三、Discord 的李四、微信群里的两个人才能凭这把键各走各的上下文、互不串台。这把键也是第 18 章两道守卫的<strong>锁粒度</strong>:守卫正是按 session_key 判断「这条会话是否正忙」,从而决定旁路还是排队,这把键贯穿了接入层到守卫层的全程。</p>
+<p>那「路由到哪个会话」又靠什么?是 <span class="mono">build_session_key()</span> 从 <span class="mono">source</span> 算出的会话键，它把 <span class="mono">platform</span> + <span class="mono">chat_id</span> + 可选的 <span class="mono">user_id</span> / <span class="mono">thread_id</span> 组合起来，并受 <span class="mono">group_sessions_per_user</span>、<span class="mono">thread_sessions_per_user</span> 两个开关调制——是「整个群共享一个会话」还是「群里每人一条独立会话」，由配置说了算。正因为核心不持有任何全局会话状态(约束 B)，同一进程里 Telegram 的张三、Discord 的李四、微信群里的两个人才能凭这把键各走各的上下文、互不串台。这把键也是第 18 章两道守卫的<strong>锁粒度</strong>：守卫正是按 session_key 判断「这条会话是否正忙」，从而决定旁路还是排队，这把键贯穿了接入层到守卫层的全程。</p>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">平台原生事件到达(Telegram Update / Discord 事件 / IRC 文本行)</span></div>
@@ -559,27 +559,27 @@ html[data-lang="zh"] .lang-en { display: none !important; }
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「单进程跨多平台」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>MessageEvent</strong>(归一化消息)、<strong>BasePlatformAdapter</strong>(适配器契约)、<strong>handle_message</strong>(基类统一入口)、<strong>session_key 路由</strong>。跨章节配合:绝大多数适配器是 <span class="mono">plugins/platforms/</span> 下的<strong>边缘插件</strong>(第 23 章插件/技能/MCP),核心网关只认抽象——这正是<strong>窄腰</strong>(第 4 章);消息进来后先过<strong>两道守卫</strong>(第 18 章)才到 agent;统一的 MessageEvent 最终喂给 <strong>agent 核心循环</strong>(第 7 章消息流);每个平台的 bot 凭据用 <strong>token lock</strong> 防两个 profile 抢同一令牌(第 20 章 Profiles)。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>MessageEvent</strong>(归一化消息)、<strong>BasePlatformAdapter</strong>(适配器契约)、<strong>handle_message</strong>(基类统一入口)、<strong>session_key 路由</strong>。跨章节配合：绝大多数适配器是 <span class="mono">plugins/platforms/</span> 下的<strong>边缘插件</strong>(第 23 章插件/技能/MCP)，核心网关只认抽象——这正是<strong>窄腰</strong>(第 4 章);消息进来后先过<strong>两道守卫</strong>(第 18 章)才到 agent;统一的 MessageEvent 最终喂给 <strong>agent 核心循环</strong>(第 7 章消息流);每个平台的 bot 凭据用 <strong>token lock</strong> 防两个 profile 抢同一令牌(第 20 章 Profiles)。
   <div class="collab-sub">② 数据流时序</div>
   平台原生事件 → 适配器 <span class="mono">build_source()</span> + <span class="mono">MessageEvent(...)</span> → <span class="mono">handle_message()</span> → 按 session_key 路由到会话 → 两道守卫(第 18 章) → agent 循环 → <span class="mono">send()</span> 翻回平台格式。
   <div class="collab-sub">③ 关键点</div>
-  「单进程服务 28+ 平台」靠的是<strong>两个统一抽象 + 边缘翻译</strong>:核心只认 <span class="mono">MessageEvent</span> 与 <span class="mono">BasePlatformAdapter</span>,各平台的协议/能力/格式差异(连「有没有 typing 指示」)全沉到边缘适配器。加一个新平台 = 写一个 <span class="mono">plugins/platforms/&lt;name&gt;/adapter.py</span> 子类,核心网关<strong>主路径</strong>零改动。
+  「单进程服务 28+ 平台」靠的是<strong>两个统一抽象 + 边缘翻译</strong>：核心只认 <span class="mono">MessageEvent</span> 与 <span class="mono">BasePlatformAdapter</span>，各平台的协议/能力/格式差异(连「有没有 typing 指示」)全沉到边缘适配器。加一个新平台 = 写一个 <span class="mono">plugins/platforms/&lt;name&gt;/adapter.py</span> 子类，核心网关<strong>主路径</strong>零改动。
 </div>
 
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>统一消息抽象 + 适配器边缘翻译 = 单进程跨 28+ 平台;平台差异在边缘(窄腰)</strong>。它主要治两条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——一个人的 agent 要随时随地能找到它:手机上发 Telegram、工位上发 Slack、群里发微信。统一抽象让<strong>一套核心服务所有平台</strong>,运维一个进程而非二十个;加平台不动核心。</p>
-  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——核心无全局会话状态,靠 MessageEvent 里的 <span class="mono">source</span> / session_key <strong>把每条消息路由到独立会话</strong>。同一进程里 Telegram 的张三和 Discord 的李四互不串台,全凭路由键区分。</p>
-  <p style="margin:.5rem 0 0">它也是<strong>窄腰</strong>(第 4 章)的极致体现:连 Telegram/Discord/Slack 这些主流平台的适配器都是<strong>边缘插件</strong>,核心网关主要通过 BasePlatformAdapter 抽象交互。(诚实地说,<span class="mono">base.py</span> 里仍残留极少数平台特例——如 Telegram 私聊话题回复锚点、Feishu 线程——但那是历史遗留的边角,不是主路径架构。)反模式:把每个平台的整套逻辑都堆进核心写成 <span class="mono">if platform == ...</span> 分支——那会让核心随平台数量爆炸膨胀。</p>
-  <p style="margin:.5rem 0 0">抽象的弹性还体现在<strong>「同一平台两种传输」</strong>:WhatsApp 同时挂着非官方 Baileys 桥(现已是插件 <span class="mono">plugins/platforms/whatsapp/adapter.py</span>)和内置的官方 Cloud API(<span class="mono">whatsapp_cloud.py</span>),二者共享 <span class="mono">WhatsAppBehaviorMixin</span>(<span class="mono">whatsapp_common.py</span>)里与协议无关的门控、提及解析、广播过滤与 markdown 转换,各自只管自己的传输,还各占一个 <span class="mono">Platform</span> 枚举值以便对不同号码同时运行(mixin 必须排在基类前,其 <span class="mono">format_message</span> 才能盖过默认实现)。不是复制两份逻辑,而是<strong>抽象基类 + 行为 mixin</strong>——抽象在「一个平台内部」也照样省重复。</p>
-  <p style="margin:.5rem 0 0">最后回到根:这套统一抽象之所以值得,落点还是<strong>单进程</strong>。一个进程才能共享同一份记忆、技能、cron 与配置状态,也才能让每会话的提示词缓存(项目铁律)长活;若二十个平台各起一个进程,共享状态、统一运维与缓存复用都无从谈起。窄腰把「平台数量」这条增长轴彻底挡在核心之外,核心的复杂度只跟「能力种类」走、不跟「平台个数」走——这才是单进程托管 20+ 平台在工程上真正成立的原因。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——一个人的 agent 要随时随地能找到它：手机上发 Telegram、工位上发 Slack、群里发微信。统一抽象让<strong>一套核心服务所有平台</strong>，运维一个进程而非二十个;加平台不动核心。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——核心无全局会话状态，靠 MessageEvent 里的 <span class="mono">source</span> / session_key <strong>把每条消息路由到独立会话</strong>。同一进程里 Telegram 的张三和 Discord 的李四互不串台，全凭路由键区分。</p>
+  <p style="margin:.5rem 0 0">它也是<strong>窄腰</strong>(第 4 章)的极致体现：连 Telegram/Discord/Slack 这些主流平台的适配器都是<strong>边缘插件</strong>，核心网关主要通过 BasePlatformAdapter 抽象交互。(诚实地说,<span class="mono">base.py</span> 里仍残留极少数平台特例——如 Telegram 私聊话题回复锚点、Feishu 线程——但那是历史遗留的边角，不是主路径架构。)反模式：把每个平台的整套逻辑都堆进核心写成 <span class="mono">if platform == ...</span> 分支——那会让核心随平台数量爆炸膨胀。</p>
+  <p style="margin:.5rem 0 0">抽象的弹性还体现在<strong>「同一平台两种传输」</strong>:WhatsApp 同时挂着非官方 Baileys 桥(现已是插件 <span class="mono">plugins/platforms/whatsapp/adapter.py</span>)和内置的官方 Cloud API(<span class="mono">whatsapp_cloud.py</span>)，二者共享 <span class="mono">WhatsAppBehaviorMixin</span>(<span class="mono">whatsapp_common.py</span>)里与协议无关的门控、提及解析、广播过滤与 markdown 转换，各自只管自己的传输，还各占一个 <span class="mono">Platform</span> 枚举值以便对不同号码同时运行(mixin 必须排在基类前，其 <span class="mono">format_message</span> 才能盖过默认实现)。不是复制两份逻辑，而是<strong>抽象基类 + 行为 mixin</strong>——抽象在「一个平台内部」也照样省重复。</p>
+  <p style="margin:.5rem 0 0">最后回到根：这套统一抽象之所以值得，落点还是<strong>单进程</strong>。一个进程才能共享同一份记忆、技能、cron 与配置状态，也才能让每会话的提示词缓存(项目铁律)长活;若二十个平台各起一个进程，共享状态、统一运维与缓存复用都无从谈起。窄腰把「平台数量」这条增长轴彻底挡在核心之外，核心的复杂度只跟「能力种类」走、不跟「平台个数」走——这才是单进程托管 20+ 平台在工程上真正成立的原因。</p>
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 392" role="img" aria-label="实例图:一行真实 IRC 文本沿 adapter 逐字段翻成统一 MessageEvent。输入帧 :alice!~a@host PRIVMSG #ops :hermes: deploy staging。① 原生帧拆出 prefix command params;② 解析寻址得 sender_nick alice、target #ops、is_channel True 因井号、chat_type group,频道须被 @ 故剥 hermes: 前缀得 text deploy staging,未寻址则 return 丢弃;③ build_source 造出 SessionSource;④ MessageEvent 实例 text 等于 deploy staging、message_type 等于 MessageType.TEXT、message_id 等于 str int time 乘 1000;⑤ build_session_key 受 group_sessions_per_user True 与 thread_sessions_per_user False 调制路由;⑥ IRC 无 typing,send_typing 在边缘 no-op 吸收。">
-  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:一行 IRC 文本 → 统一 MessageEvent</text>
+<svg viewBox="0 0 680 392" role="img" aria-label="实例图：一行真实 IRC 文本沿 adapter 逐字段翻成统一 MessageEvent。输入帧 :alice!~a@host PRIVMSG #ops :hermes: deploy staging。① 原生帧拆出 prefix command params;② 解析寻址得 sender_nick alice、target #ops、is_channel True 因井号、chat_type group，频道须被 @ 故剥 hermes: 前缀得 text deploy staging，未寻址则 return 丢弃;③ build_source 造出 SessionSource;④ MessageEvent 实例 text 等于 deploy staging、message_type 等于 MessageType.TEXT、message_id 等于 str int time 乘 1000;⑤ build_session_key 受 group_sessions_per_user True 与 thread_sessions_per_user False 调制路由;⑥ IRC 无 typing,send_typing 在边缘 no-op 吸收。">
+  <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例：一行 IRC 文本 → 统一 MessageEvent</text>
   <text x="20" y="44" font-size="10" fill="var(--muted)">输入帧 :alice!~a@host PRIVMSG #ops :hermes: deploy staging</text>
   <text x="644" y="33" text-anchor="middle" font-size="22">🛰️</text>
 
@@ -646,21 +646,21 @@ html[data-lang="zh"] .lang-en { display: none !important; }
   <rect x="348" y="284" width="322" height="62" rx="8" fill="var(--panel)" stroke="var(--line)"/>
   <text x="358" y="303" font-size="10" font-weight="700" fill="var(--ink)">⑥ 能力降级 · adapter.py:281</text>
   <text x="358" y="321" font-size="9" font-family="monospace" fill="var(--ink)">send_typing(chat_id) → pass</text>
-  <text x="358" y="335" font-size="9" fill="var(--muted)">IRC 无 typing 指示,边缘 no-op 吸收</text>
+  <text x="358" y="335" font-size="9" fill="var(--muted)">IRC 无 typing 指示，边缘 no-op 吸收</text>
 
-  <text x="20" y="368" font-size="9.5" fill="var(--muted)">读这张图:一行平台原生文本止步于 adapter;核心只见统一 MessageEvent + session_key,从不认识 IRC 帧。</text>
+  <text x="20" y="368" font-size="9.5" fill="var(--muted)">读这张图：一行平台原生文本止步于 adapter;核心只见统一 MessageEvent + session_key，从不认识 IRC 帧。</text>
 </svg>
-<div class="fig-cap"><b>实例:一行 IRC 文本 → MessageEvent</b>:拿真实帧 <span class="mono">:alice!~a@host PRIVMSG #ops :hermes: deploy staging</span> 走一遍——① 拆 <span class="mono">prefix/command/params</span>;② <span class="mono">_extract_nick</span> 得 <span class="mono">sender_nick=&quot;alice&quot;</span>、<span class="mono">target=&quot;#ops&quot;</span>、<span class="mono">is_channel=True</span>(<span class="mono">#</span>)→<span class="mono">chat_type=&quot;group&quot;</span>,频道须被 @ 故剥 <span class="mono">hermes:</span> 前缀得 <span class="mono">text=&quot;deploy staging&quot;</span>,未寻址直接 <span class="mono">return</span> 丢弃;③ <span class="mono">build_source</span> 造 <span class="mono">SessionSource</span>;④ <span class="mono">MessageEvent</span> 真实实例(<span class="mono">message_id=str(int(time*1000))</span>);⑤ <span class="mono">build_session_key</span> 受 <span class="mono">group_sessions_per_user=True</span>/<span class="mono">thread_sessions_per_user=False</span> 调制;⑥ IRC 无 typing,<span class="mono">send_typing</span> 在边缘 <span class="mono">pass</span>。每个值都能在 <span class="mono">irc/adapter.py</span> 与 <span class="mono">base.py</span> 对应行找到。</div>
+<div class="fig-cap"><b>实例：一行 IRC 文本 → MessageEvent</b>：拿真实帧 <span class="mono">:alice!~a@host PRIVMSG #ops :hermes: deploy staging</span> 走一遍——① 拆 <span class="mono">prefix/command/params</span>;② <span class="mono">_extract_nick</span> 得 <span class="mono">sender_nick=&quot;alice&quot;</span>、<span class="mono">target=&quot;#ops&quot;</span>、<span class="mono">is_channel=True</span>(<span class="mono">#</span>)→<span class="mono">chat_type=&quot;group&quot;</span>，频道须被 @ 故剥 <span class="mono">hermes:</span> 前缀得 <span class="mono">text=&quot;deploy staging&quot;</span>，未寻址直接 <span class="mono">return</span> 丢弃;③ <span class="mono">build_source</span> 造 <span class="mono">SessionSource</span>;④ <span class="mono">MessageEvent</span> 真实实例(<span class="mono">message_id=str(int(time*1000))</span>);⑤ <span class="mono">build_session_key</span> 受 <span class="mono">group_sessions_per_user=True</span>/<span class="mono">thread_sessions_per_user=False</span> 调制;⑥ IRC 无 typing,<span class="mono">send_typing</span> 在边缘 <span class="mono">pass</span>。每个值都能在 <span class="mono">irc/adapter.py</span> 与 <span class="mono">base.py</span> 对应行找到。</div>
 </div>
 
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
     <li><strong>两个统一抽象</strong>:<span class="mono">MessageEvent</span>(归一化消息,「所有适配器都产出它」)+ <span class="mono">BasePlatformAdapter</span>(connect/disconnect/send 契约)。</li>
-    <li><strong>适配器=翻译官</strong>:把平台原生消息翻成 MessageEvent 交 <span class="mono">handle_message</span>,把核心回复翻回平台格式;平台能力差异(如 IRC 无 typing)在边缘 no-op 吸收。</li>
-    <li><strong>单进程 28+ 平台</strong>:核心网关主路径无平台分支;主流平台(telegram/discord/slack/matrix……)都是 <span class="mono">plugins/platforms/</span> 边缘插件,少数内置在 <span class="mono">gateway/platforms/</span>,但都实现同一 BasePlatformAdapter。</li>
-    <li><strong>会话路由</strong>:核心无全局状态,靠 <span class="mono">source</span> / session_key 把消息分到独立会话(约束 B)。</li>
-    <li><strong>加平台零改核心</strong>:写一个 BasePlatformAdapter 子类即可——窄腰(第 4 章)在接入层的落地。</li>
+    <li><strong>适配器=翻译官</strong>：把平台原生消息翻成 MessageEvent 交 <span class="mono">handle_message</span>，把核心回复翻回平台格式;平台能力差异(如 IRC 无 typing)在边缘 no-op 吸收。</li>
+    <li><strong>单进程 28+ 平台</strong>：核心网关主路径无平台分支;主流平台(telegram/discord/slack/matrix……)都是 <span class="mono">plugins/platforms/</span> 边缘插件，少数内置在 <span class="mono">gateway/platforms/</span>，但都实现同一 BasePlatformAdapter。</li>
+    <li><strong>会话路由</strong>：核心无全局状态，靠 <span class="mono">source</span> / session_key 把消息分到独立会话(约束 B)。</li>
+    <li><strong>加平台零改核心</strong>：写一个 BasePlatformAdapter 子类即可——窄腰(第 4 章)在接入层的落地。</li>
   </ul>
 </div>
 <div class="selftest">

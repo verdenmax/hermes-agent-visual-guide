@@ -1,18 +1,18 @@
 LESSON_21 = {
     "zh": r"""
-<p class="lead">你让 Hermes「每天早 9 点把今天的会议汇总发我」。它得在后台<strong>定时</strong>醒来、跑完、投递——但这件事绝不能<strong>污染你正在进行的对话</strong>:不能把自动任务塞进聊天历史、不能把它记进你的「个人记忆」、更不能因为某个 job 跑飞了就卡死整个调度器。这就是 cron 的设计重心:<strong>后台自动化,但不破缓存、不污染</strong>。</p>
+<p class="lead">你让 Hermes「每天早 9 点把今天的会议汇总发我」。它得在后台<strong>定时</strong>醒来、跑完、投递——但这件事绝不能<strong>污染你正在进行的对话</strong>：不能把自动任务塞进聊天历史、不能把它记进你的「个人记忆」、更不能因为某个 job 跑飞了就卡死整个调度器。这就是 cron 的设计重心:<strong>后台自动化，但不破缓存、不污染</strong>。</p>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 公司的自动化助理</div>
-  你雇了个助理(cron)做定时杂活:每天剪报、每周备份。他在<strong>独立的工位</strong>(独立会话)干活,干完把结果<strong>放你桌上</strong>(投递),但<strong>不会插进你正在开的会</strong>(不混进主对话),也<strong>不会把这些杂活写进你的人事档案</strong>(skip_memory)。万一他某个活卡住了,有个<strong>不活动闹钟</strong>(默认空转 10 分钟没动静就中断)把他叫停,不耽误下一件。
+  你雇了个助理(cron)做定时杂活：每天剪报、每周备份。他在<strong>独立的工位</strong>(独立会话)干活，干完把结果<strong>放你桌上</strong>(投递)，但<strong>不会插进你正在开的会</strong>(不混进主对话)，也<strong>不会把这些杂活写进你的人事档案</strong>(skip_memory)。万一他某个活卡住了，有个<strong>不活动闹钟</strong>(默认空转 10 分钟没动静就中断)把他叫停，不耽误下一件。
 </div>
 
 <div class="card macro">
   <div class="tag">🌍 宏观 · 调度 + 独立会话 + 安全阀</div>
-  cron 由 <span class="mono">tick</span> 循环驱动(文件锁防重复),按 <span class="mono">parse_schedule</span> 解析的时刻扫到期任务。每个任务起一个<strong>独立的 cron 会话</strong>(<span class="mono">platform="cron"</span>、<span class="mono">skip_memory=True</span>),跑完把结果<strong>带框投递</strong>、<strong>不镜像进主对话</strong>。再加不活动超时(默认 600s)、半周期 catchup 窗口——安全地后台自动化。kanban 则是配套的多 agent 工作队列,workers 用零足迹工具集领活。
+  cron 由 <span class="mono">tick</span> 循环驱动(文件锁防重复)，按 <span class="mono">parse_schedule</span> 解析的时刻扫到期任务。每个任务起一个<strong>独立的 cron 会话</strong>(<span class="mono">platform="cron"</span>、<span class="mono">skip_memory=True</span>)，跑完把结果<strong>带框投递</strong>、<strong>不镜像进主对话</strong>。再加不活动超时(默认 600s)、半周期 catchup 窗口——安全地后台自动化。kanban 则是配套的多 agent 工作队列,workers 用零足迹工具集领活。
 </div>
 
-<h2>调度格式:四种写法</h2>
+<h2>调度格式：四种写法</h2>
 <p>agent 或用户都能排期,<span class="mono">parse_schedule</span> 把字符串解析成结构:</p>
 
 <div class="codefile">
@@ -29,14 +29,14 @@ LESSON_21 = {
     <span class="kw">if</span> <span class="st">"T"</span> <span class="kw">in</span> schedule:                  <span class="cm"># ISO 时间戳 → 一次性</span>
         <span class="kw">return</span> {<span class="st">"kind"</span>: <span class="st">"once"</span>, <span class="st">"run_at"</span>: ...}</pre>
 </div>
-<p>四种写法覆盖几乎所有需求:<span class="mono">"30m"</span>(30 分钟后一次)、<span class="mono">"every 2h"</span>(每 2 小时)、<span class="mono">"0 9 * * *"</span>(标准 cron,每天 9 点)、<span class="mono">"2026-02-03T14:00"</span>(指定时刻一次)。解析成 <span class="mono">once</span>/<span class="mono">interval</span>/<span class="mono">cron</span> 三类,调度器据此算下次触发。</p>
+<p>四种写法覆盖几乎所有需求:<span class="mono">"30m"</span>(30 分钟后一次)、<span class="mono">"every 2h"</span>(每 2 小时)、<span class="mono">"0 9 * * *"</span>(标准 cron，每天 9 点)、<span class="mono">"2026-02-03T14:00"</span>(指定时刻一次)。解析成 <span class="mono">once</span>/<span class="mono">interval</span>/<span class="mono">cron</span> 三类，调度器据此算下次触发。</p>
 
-<p>为什么要支持四种写法、又统一折叠到 once/interval/cron 三类?因为排期需求天然只有两种语义:<strong>一次性</strong>(<span class="mono">30m</span>、ISO 时间戳)和<strong>周期性</strong>(<span class="mono">every 2h</span>、5 段 cron 表达式),而 <span class="mono">parse_schedule</span> 把多样的<strong>书写形式</strong>归一成同一套<strong>结构</strong>,调度器只需对三种 kind 算「下次触发」,不必为每种语法各写一套分支。代价是解析层要做格式嗅探(以 <span class="mono">every </span> 前缀、5 段正则、是否含 <span class="mono">T</span> 来区分),但换来调度核心的极简。若不在入口归一化,<span class="mono">tick</span> 循环每次扫描都得重复判断语法细节,既慢又容易在边角写错。把复杂性收在一处解析,是这一层最划算的取舍。</p>
+<p>为什么要支持四种写法、又统一折叠到 once/interval/cron 三类?因为排期需求天然只有两种语义:<strong>一次性</strong>(<span class="mono">30m</span>、ISO 时间戳)和<strong>周期性</strong>(<span class="mono">every 2h</span>、5 段 cron 表达式)，而 <span class="mono">parse_schedule</span> 把多样的<strong>书写形式</strong>归一成同一套<strong>结构</strong>，调度器只需对三种 kind 算「下次触发」，不必为每种语法各写一套分支。代价是解析层要做格式嗅探(以 <span class="mono">every </span> 前缀、5 段正则、是否含 <span class="mono">T</span> 来区分)，但换来调度核心的极简。若不在入口归一化,<span class="mono">tick</span> 循环每次扫描都得重复判断语法细节，既慢又容易在边角写错。把复杂性收在一处解析，是这一层最划算的取舍。</p>
 
-<p>谁来排期也呼应了 Hermes 的一贯主张:同一个 <span class="mono">parse_schedule</span> 既服务用户(<span class="mono">hermes cron add</span> 或 <span class="mono">/cron</span> 斜杠命令),也服务 agent 自己——agent 通过 <span class="mono">cronjob</span> <strong>工具</strong>(第 8 章)把「明早 9 点提醒我」这类意图直接落成一条持久 job。这正是「能力长在边缘」的体现:排期不是写死在核心循环里的特殊分支,而是一个能被模型调用、也能被 CLI 驱动的普通子系统。于是「让 agent 自我安排未来的活」无需改动核心,只是多挂了一个工具入口;反过来,持久化的 job 又能在网关重启后被 tick 重新扫到,把一次性的口头意图变成长期稳定生效的承诺。</p>
+<p>谁来排期也呼应了 Hermes 的一贯主张：同一个 <span class="mono">parse_schedule</span> 既服务用户(<span class="mono">hermes cron add</span> 或 <span class="mono">/cron</span> 斜杠命令)，也服务 agent 自己——agent 通过 <span class="mono">cronjob</span> <strong>工具</strong>(第 8 章)把「明早 9 点提醒我」这类意图直接落成一条持久 job。这正是「能力长在边缘」的体现：排期不是写死在核心循环里的特殊分支，而是一个能被模型调用、也能被 CLI 驱动的普通子系统。于是「让 agent 自我安排未来的活」无需改动核心，只是多挂了一个工具入口;反过来，持久化的 job 又能在网关重启后被 tick 重新扫到，把一次性的口头意图变成长期稳定生效的承诺。</p>
 
-<h2>独立会话:不污染主对话(★缓存线)</h2>
-<p>关键一步——cron 任务<strong>不</strong>在你的主会话里跑,而是起一个独立的 agent:</p>
+<h2>独立会话：不污染主对话(★缓存线)</h2>
+<p>关键一步——cron 任务<strong>不</strong>在你的主会话里跑，而是起一个独立的 agent:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">cron/scheduler.py</span><span class="ln">2050-2081 · 节选</span></div>
@@ -49,12 +49,12 @@ agent = AIAgent(
     session_id=_cron_session_id,            <span class="cm"># 独立 session,不混进 gateway</span>
 )</pre>
 </div>
-<p>两个设计守住缓存线:① <span class="mono">skip_memory=True</span>——cron 的系统提示若进了 memory,会<strong>污染对用户的画像</strong>(注释原话),所以 cron 默认不跑记忆;② <strong>独立 <span class="mono">session_id</span> + <span class="mono">platform="cron"</span></strong>——结果带 header/footer 框单独投递,<strong>不镜像进 gateway 主会话</strong>。于是主对话的严格<strong>角色交替</strong>(第 7 章)不被后台任务搅乱,被缓存的前缀(第 6 章)纹丝不动。后台自动化与主对话<strong>井水不犯河水</strong>。</p>
+<p>两个设计守住缓存线:① <span class="mono">skip_memory=True</span>——cron 的系统提示若进了 memory，会<strong>污染对用户的画像</strong>(注释原话)，所以 cron 默认不跑记忆;② <strong>独立 <span class="mono">session_id</span> + <span class="mono">platform="cron"</span></strong>——结果带 header/footer 框单独投递,<strong>不镜像进 gateway 主会话</strong>。于是主对话的严格<strong>角色交替</strong>(第 7 章)不被后台任务搅乱，被缓存的前缀(第 6 章)纹丝不动。后台自动化与主对话<strong>井水不犯河水</strong>。</p>
 
-<p>为什么非得起<strong>独立会话</strong>、而不是图省事把结果追加到主对话?根子在第 6 章的缓存模型:一个长寿命会话每轮都复用被缓存的前缀,任何<strong>中途改写历史</strong>都会击穿缓存,让后续每一轮都按全价重算 token。而 cron 是<strong>异步</strong>触发的——它醒来的时刻与你说话的时刻毫不相干,若把它的输出硬塞进主对话,既可能在两条同角色消息之间插入第三条(破坏第 7 章的严格角色交替),又会改变下次用户轮所缓存的前缀字节。独立 <span class="mono">session_id</span> 让后台任务拥有自己的状态盘,主对话被缓存的前缀<strong>一字不动</strong>——这是「缓存神圣」在自动化层最直接的落地。</p>
+<p>为什么非得起<strong>独立会话</strong>、而不是图省事把结果追加到主对话?根子在第 6 章的缓存模型：一个长寿命会话每轮都复用被缓存的前缀，任何<strong>中途改写历史</strong>都会击穿缓存，让后续每一轮都按全价重算 token。而 cron 是<strong>异步</strong>触发的——它醒来的时刻与你说话的时刻毫不相干，若把它的输出硬塞进主对话，既可能在两条同角色消息之间插入第三条(破坏第 7 章的严格角色交替)，又会改变下次用户轮所缓存的前缀字节。独立 <span class="mono">session_id</span> 让后台任务拥有自己的状态盘，主对话被缓存的前缀<strong>一字不动</strong>——这是「缓存神圣」在自动化层最直接的落地。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 270" role="img" aria-label="cron 起独立会话,结果不镜像进主对话,两条会话互不干扰缓存与角色交替">
+<svg viewBox="0 0 680 270" role="img" aria-label="cron 起独立会话，结果不镜像进主对话，两条会话互不干扰缓存与角色交替">
   <text x="34" y="22" font-size="13.5" font-weight="700" fill="var(--accent-ink)">主对话会话(长寿命 · 缓存前缀稳定)</text>
   <rect x="34" y="34" width="438" height="54" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="253" y="58" text-anchor="middle" font-size="12" fill="var(--accent-ink)">🔒 神圣前缀(system + 历史)逐字节不动</text>
@@ -80,13 +80,13 @@ agent = AIAgent(
   <text x="587" y="213" text-anchor="middle" font-size="11" fill="var(--ink)">footer 帧</text>
   <text x="587" y="230" text-anchor="middle" font-size="10" fill="var(--muted)">结果投递</text>
 </svg>
-<div class="fig-cap"><b>cron 不搅扰主对话</b>:上＝长寿命主对话,神圣缓存前缀逐字节不动、严格角色交替;下＝cron 起的<b>独立会话</b>(<span class="mono">platform="cron"</span> · <span class="mono">skip_memory</span> · 独立 <span class="mono">session_id</span>),结果带 header/footer 框单独投递,<b>不镜像进主对话</b>。两条会话井水不犯河水——缓存前缀与角色交替都不被后台任务搅乱。</div>
+<div class="fig-cap"><b>cron 不搅扰主对话</b>：上＝长寿命主对话，神圣缓存前缀逐字节不动、严格角色交替;下＝cron 起的<b>独立会话</b>(<span class="mono">platform="cron"</span> · <span class="mono">skip_memory</span> · 独立 <span class="mono">session_id</span>)，结果带 header/footer 框单独投递,<b>不镜像进主对话</b>。两条会话井水不犯河水——缓存前缀与角色交替都不被后台任务搅乱。</div>
 </div>
 
-<p><span class="mono">skip_memory=True</span> 治的是另一种污染。记忆(第 11 章)的职责,是从对话里提炼「关于这个用户」的画像;但 cron 跑的是<strong>系统派给的杂活</strong>,并非用户当下的真实意图。若让记忆把「每天 9 点生成会议汇总」这类系统提示也学进画像,用户表征就会被自动任务的噪声带偏——注释原话正是 <span class="mono">Cron system prompts would corrupt user representations</span>。所以 cron 默认 <span class="mono">skip_memory</span>,既省下记忆同步的开销,也守住画像的纯净。这是一个「默认安全」的选择:要让某个 job 反过来写记忆,得显式开启,而不是不小心就污染了用户档案。</p>
+<p><span class="mono">skip_memory=True</span> 治的是另一种污染。记忆(第 11 章)的职责，是从对话里提炼「关于这个用户」的画像;但 cron 跑的是<strong>系统派给的杂活</strong>，并非用户当下的真实意图。若让记忆把「每天 9 点生成会议汇总」这类系统提示也学进画像，用户表征就会被自动任务的噪声带偏——注释原话正是 <span class="mono">Cron system prompts would corrupt user representations</span>。所以 cron 默认 <span class="mono">skip_memory</span>，既省下记忆同步的开销，也守住画像的纯净。这是一个「默认安全」的选择：要让某个 job 反过来写记忆，得显式开启，而不是不小心就污染了用户档案。</p>
 
 <h2>安全阀:catchup 与不活动超时</h2>
-<p>定时系统怕两件事:错过了拼命补跑、跑飞了卡死。cron 各有一个阀:</p>
+<p>定时系统怕两件事：错过了拼命补跑、跑飞了卡死。cron 各有一个阀:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">cron/jobs.py</span><span class="ln">475-490 · 简化</span></div>
@@ -97,12 +97,12 @@ agent = AIAgent(
         period = schedule[<span class="st">"minutes"</span>] * 60
         <span class="kw">return</span> max(MIN_GRACE, min(period // 2, MAX_GRACE))</pre>
 </div>
-<p><strong>catchup 窗口 = 半个周期</strong>(clamp 在 120 秒到 2 小时):错过得不久就补跑一次,错过太久就<strong>快进</strong>、不堆积补跑(免得开机时把积压的几十次一股脑全跑了)。另一头,cron 会话用<strong>不活动超时</strong>兜底:默认空转 <strong>600 秒(10 分钟)</strong>无动静(无工具调用、无流式 token)就 <span class="mono">agent.interrupt("Cron job timed out (inactivity)")</span> 中断(<span class="mono">HERMES_CRON_TIMEOUT</span> 可调;<strong>活跃干活时可跑数小时</strong>)。这样失控空转的 agent <strong>独占不了</strong>调度器,而正常长任务不会被误杀。再加 <span class="mono">.tick.lock</span> 文件锁,多个进程也不会重复 tick。</p>
+<p><strong>catchup 窗口 = 半个周期</strong>(clamp 在 120 秒到 2 小时)：错过得不久就补跑一次，错过太久就<strong>快进</strong>、不堆积补跑(免得开机时把积压的几十次一股脑全跑了)。另一头,cron 会话用<strong>不活动超时</strong>兜底：默认空转 <strong>600 秒(10 分钟)</strong>无动静(无工具调用、无流式 token)就 <span class="mono">agent.interrupt("Cron job timed out (inactivity)")</span> 中断(<span class="mono">HERMES_CRON_TIMEOUT</span> 可调;<strong>活跃干活时可跑数小时</strong>)。这样失控空转的 agent <strong>独占不了</strong>调度器，而正常长任务不会被误杀。再加 <span class="mono">.tick.lock</span> 文件锁，多个进程也不会重复 tick。</p>
 
-<p>为什么超时要做成<strong>不活动</strong>判定、而不是一刀切的硬上限?因为合法后台任务的时长差异极大:一次抓取可能 10 秒,一次跨库迁移可能要跑几小时。若用固定硬上限,要么把它设得很大(失控空转也得耗满才被发现),要么设得很小(误杀正常长任务),两头都不讨好。<strong>不活动超时</strong>绕开了这个两难:它盯的是「还在不在干活」——只要还有工具调用、API 调用或流式 token,计时器就被 <span class="mono">_touch_activity()</span> 重置;只有连续 <strong>600 秒(默认)</strong>毫无动静,才判定为卡死并 <span class="mono">agent.interrupt()</span>。于是活跃的长任务能安心跑数小时,而真正空转的 agent 独占不了调度器。这正是本指南早先纠正过的关键点:它是一套基于「有没有在干活」的不活动判定,而不是某些文档里误传的「固定几分钟就一刀切硬砍」。两者天差地别:前者对正常长任务零误伤,后者会把跑了几分钟的合法迁移直接腰斩。</p>
+<p>为什么超时要做成<strong>不活动</strong>判定、而不是一刀切的硬上限?因为合法后台任务的时长差异极大：一次抓取可能 10 秒，一次跨库迁移可能要跑几小时。若用固定硬上限，要么把它设得很大(失控空转也得耗满才被发现)，要么设得很小(误杀正常长任务)，两头都不讨好。<strong>不活动超时</strong>绕开了这个两难：它盯的是「还在不在干活」——只要还有工具调用、API 调用或流式 token，计时器就被 <span class="mono">_touch_activity()</span> 重置;只有连续 <strong>600 秒(默认)</strong>毫无动静，才判定为卡死并 <span class="mono">agent.interrupt()</span>。于是活跃的长任务能安心跑数小时，而真正空转的 agent 独占不了调度器。这正是本指南早先纠正过的关键点：它是一套基于「有没有在干活」的不活动判定，而不是某些文档里误传的「固定几分钟就一刀切硬砍」。两者天差地别：前者对正常长任务零误伤，后者会把跑了几分钟的合法迁移直接腰斩。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 258" role="img" aria-label="不活动超时:有输出就一直跑,持续无输出超过600秒才被中断,而非固定硬中断">
+<svg viewBox="0 0 680 258" role="img" aria-label="不活动超时：有输出就一直跑，持续无输出超过600秒才被中断，而非固定硬中断">
   <text x="34" y="24" font-size="13" font-weight="700" fill="var(--blue)">① 活跃 job · 持续有输出 → 一直跑</text>
   <rect x="34" y="38" width="520" height="42" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <g fill="var(--blue)">
@@ -124,15 +124,15 @@ agent = AIAgent(
   <rect x="524" y="160" width="122" height="42" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="585" y="179" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">✕ kill</text>
   <text x="585" y="194" text-anchor="middle" font-size="9" fill="var(--red)">agent.interrupt()</text>
-  <text x="34" y="238" font-size="11" font-weight="700" fill="var(--muted)">⚠ 这是「不活动超时」(盯有没有在干活),不是固定几分钟的「硬中断」。</text>
+  <text x="34" y="238" font-size="11" font-weight="700" fill="var(--muted)">⚠ 这是「不活动超时」(盯有没有在干活)，不是固定几分钟的「硬中断」。</text>
 </svg>
-<div class="fig-cap"><b>不活动超时闸</b>:① 只要持续有工具调用 / 流式 token,<span class="mono">_touch_activity()</span> 就把计时器清零,活跃 job 可跑<b>数小时</b>;② 只有<b>持续无输出超过 600s</b>(<span class="mono">HERMES_CRON_TIMEOUT</span> 可调,<span class="mono">0=unlimited</span>)才被 <span class="mono">agent.interrupt()</span> 中断。它是一套基于「还在不在干活」的<b>不活动判定</b>,而不是固定几分钟就一刀切的<b>硬中断</b>——只要持续有输出,对正常长任务零误伤(真静默超 600s 仍会中断)。</div>
+<div class="fig-cap"><b>不活动超时闸</b>:① 只要持续有工具调用 / 流式 token,<span class="mono">_touch_activity()</span> 就把计时器清零，活跃 job 可跑<b>数小时</b>;② 只有<b>持续无输出超过 600s</b>(<span class="mono">HERMES_CRON_TIMEOUT</span> 可调,<span class="mono">0=unlimited</span>)才被 <span class="mono">agent.interrupt()</span> 中断。它是一套基于「还在不在干活」的<b>不活动判定</b>，而不是固定几分钟就一刀切的<b>硬中断</b>——只要持续有输出，对正常长任务零误伤(真静默超 600s 仍会中断)。</div>
 </div>
 
-<p>另一头的 catchup 是同样的「防雪崩」思路。设想笔记本合盖一整晚,开机时若把积压的几十次「每 5 分钟」补跑一股脑全发,既刷屏又烧钱。<span class="mono">_compute_grace_seconds</span> 把容忍窗口设为<strong>半个周期</strong>(clamp 在 120s–2h):错过得不久就补跑一次,错过太久就把 <span class="mono">next_run_at</span> <strong>快进</strong>到下一个整点、丢弃积压。而 <span class="mono">.tick.lock</span> 文件锁(底层是 <span class="mono">fcntl.flock</span>)保证哪怕网关与独立调度器同时在跑,同一时刻也只有一个 tick 真正推进任务。三个阀各管一类失控——不活动超时管「跑飞」、catchup 管「错过」、文件锁管「重复」——合起来把「定时」从玩具做成可托付的基础设施。值得一提的是,这套阀门的设计取向与第 13 章委派的「中断级联」同源:都不追求绝对掐死,而是给失控留一个<strong>可预期、可恢复</strong>的兜底,让正常路径丝毫不受影响、异常路径也能优雅止损。</p>
+<p>另一头的 catchup 是同样的「防雪崩」思路。设想笔记本合盖一整晚，开机时若把积压的几十次「每 5 分钟」补跑一股脑全发，既刷屏又烧钱。<span class="mono">_compute_grace_seconds</span> 把容忍窗口设为<strong>半个周期</strong>(clamp 在 120s–2h)：错过得不久就补跑一次，错过太久就把 <span class="mono">next_run_at</span> <strong>快进</strong>到下一个整点、丢弃积压。而 <span class="mono">.tick.lock</span> 文件锁(底层是 <span class="mono">fcntl.flock</span>)保证哪怕网关与独立调度器同时在跑，同一时刻也只有一个 tick 真正推进任务。三个阀各管一类失控——不活动超时管「跑飞」、catchup 管「错过」、文件锁管「重复」——合起来把「定时」从玩具做成可托付的基础设施。值得一提的是，这套阀门的设计取向与第 13 章委派的「中断级联」同源：都不追求绝对掐死，而是给失控留一个<strong>可预期、可恢复</strong>的兜底，让正常路径丝毫不受影响、异常路径也能优雅止损。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 404" role="img" aria-label="三条真实调度表达式跑一遍:基准 now 为 2026-06-27T19:35;0 9 星号 经 parse_schedule 解析成 kind cron,croniter 算出 2026-06-28T09:00,grace 用 86400 除 2 等 43200 被 clamp 到 MAX 7200 秒;every 5m 解析成 kind interval minutes 5,下次触发 19:40,grace 300 除 2 等 150 秒;2026-06-28T14:00 解析成 kind once,下次触发即该时刻,grace 取 MIN 120 秒;底部 catchup 判定错过不超过 grace 就补跑一次,超过就快进丢弃积压">
+<svg viewBox="0 0 680 404" role="img" aria-label="三条真实调度表达式跑一遍：基准 now 为 2026-06-27T19:35;0 9 星号 经 parse_schedule 解析成 kind cron,croniter 算出 2026-06-28T09:00,grace 用 86400 除 2 等 43200 被 clamp 到 MAX 7200 秒;every 5m 解析成 kind interval minutes 5，下次触发 19:40,grace 300 除 2 等 150 秒;2026-06-28T14:00 解析成 kind once，下次触发即该时刻,grace 取 MIN 120 秒;底部 catchup 判定错过不超过 grace 就补跑一次，超过就快进丢弃积压">
   <rect x="14" y="12" width="652" height="30" rx="7" fill="var(--purple-soft)" stroke="var(--purple)"/>
   <text x="26" y="31" font-size="11.5" fill="var(--ink)">⏱ 基准 <tspan class="mono" font-weight="700" fill="var(--purple)">now = 2026-06-27T19:35</tspan> · grace 规则 = period//2 再 clamp(MIN 120s, MAX 7200s)</text>
 
@@ -195,28 +195,28 @@ agent = AIAgent(
   <text x="16" y="306" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ catchup 判定 · tick 醒来时距应跑时刻已过 Δ</text>
   <rect x="14" y="312" width="324" height="46" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="26" y="332" font-size="10.5" fill="var(--accent-ink)">Δ ≤ grace → <tspan font-weight="700">补跑一次</tspan>(catch up)</text>
-  <text x="26" y="350" font-size="9" fill="var(--muted)">错过不久,该跑的那次仍要补上</text>
+  <text x="26" y="350" font-size="9" fill="var(--muted)">错过不久，该跑的那次仍要补上</text>
   <rect x="346" y="312" width="320" height="46" rx="7" fill="var(--red-soft)" stroke="var(--red)"/>
   <text x="358" y="332" font-size="10.5" fill="var(--red)">Δ &gt; grace → <tspan font-weight="700">快进 next_run · 丢积压</tspan></text>
   <text x="358" y="350" font-size="9" fill="var(--muted)">免得开机把几十次堆积一股脑全跑</text>
 
-  <text x="16" y="380" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图:三条表达式各撞一个 clamp 边界 —— cron 撞 MAX 7200、interval 落区间内、once 撞 MIN 120。</text>
+  <text x="16" y="380" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图：三条表达式各撞一个 clamp 边界 —— cron 撞 MAX 7200、interval 落区间内、once 撞 MIN 120。</text>
 </svg>
-<div class="fig-cap"><b>三条调度表达式跑一遍</b>:同一基准 <span class="mono">now=2026-06-27T19:35</span>,<span class="mono">parse_schedule</span> 把三种写法归一成 <span class="mono">cron/interval/once</span>,<span class="mono">compute_next_run</span> 算出各自下次触发,<span class="mono">_compute_grace_seconds</span> 用 <span class="mono">period//2</span> 再 clamp 出 grace:<b>cron 的 43200s 撞上 MAX 7200</b>、<b>interval 的 150s 落在区间内</b>、<b>once 直接取 MIN 120</b>。三条各演示一个边界,catchup 据 grace 决定补跑还是快进。</div>
+<div class="fig-cap"><b>三条调度表达式跑一遍</b>：同一基准 <span class="mono">now=2026-06-27T19:35</span>,<span class="mono">parse_schedule</span> 把三种写法归一成 <span class="mono">cron/interval/once</span>,<span class="mono">compute_next_run</span> 算出各自下次触发,<span class="mono">_compute_grace_seconds</span> 用 <span class="mono">period//2</span> 再 clamp 出 grace:<b>cron 的 43200s 撞上 MAX 7200</b>、<b>interval 的 150s 落在区间内</b>、<b>once 直接取 MIN 120</b>。三条各演示一个边界,catchup 据 grace 决定补跑还是快进。</div>
 </div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc"><span class="mono">tick</span> 循环(<span class="mono">.tick.lock</span> 文件锁防重复)扫描到期任务</span></div>
   <div class="step"><span class="num">2</span><span class="sc">按 <span class="mono">parse_schedule</span> 的结构算下次触发;过了 catchup 窗口就快进</span></div>
   <div class="step"><span class="num">3</span><span class="sc">起独立 cron 会话:<span class="mono">platform="cron"</span> + <span class="mono">skip_memory=True</span> + 独立 <span class="mono">session_id</span></span></div>
-  <div class="step"><span class="num">4</span><span class="sc">AIAgent 跑(不活动超时兜底,默认空转 600s 无动静才中断)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">AIAgent 跑(不活动超时兜底，默认空转 600s 无动静才中断)</span></div>
   <div class="step"><span class="num">5</span><span class="sc">结果带 header/footer 框投递,<strong>不镜像进 gateway 主会话</strong></span></div>
 </div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「不破缓存的后台自动化」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>parse_schedule</strong>(调度格式)、<strong>tick</strong>(循环+文件锁)、<strong>cron 独立会话</strong>(skip_memory)、<strong>_compute_grace_seconds</strong>(catchup)。跨章节配合:cron 起的是一个 <strong>AIAgent 核心循环</strong>(第 7 章),只是 <span class="mono">skip_memory</span> 让<strong>记忆</strong>(第 11 章)不跑;独立会话不镜像进主对话=维持角色交替<strong>不破缓存</strong>(第 6 章);<span class="mono">cronjob</span> 与 <span class="mono">kanban</span> 是<strong>工具</strong>(第 8 章),让 agent 自己排期、领多 agent 队列的活;不活动超时的中断与委派的<strong>中断级联</strong>(第 13 章)同源。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>parse_schedule</strong>(调度格式)、<strong>tick</strong>(循环+文件锁)、<strong>cron 独立会话</strong>(skip_memory)、<strong>_compute_grace_seconds</strong>(catchup)。跨章节配合:cron 起的是一个 <strong>AIAgent 核心循环</strong>(第 7 章)，只是 <span class="mono">skip_memory</span> 让<strong>记忆</strong>(第 11 章)不跑;独立会话不镜像进主对话=维持角色交替<strong>不破缓存</strong>(第 6 章);<span class="mono">cronjob</span> 与 <span class="mono">kanban</span> 是<strong>工具</strong>(第 8 章)，让 agent 自己排期、领多 agent 队列的活;不活动超时的中断与委派的<strong>中断级联</strong>(第 13 章)同源。
   <div class="collab-sub">② 数据流时序</div>
   <span class="mono">tick</span>(<span class="mono">.tick.lock</span>) → 到期任务 → catchup 判定(<span class="mono">grace=period//2</span>) → 独立 cron 会话(<span class="mono">skip_memory</span>/<span class="mono">platform=cron</span>) → AIAgent 跑(不活动超时 600s) → header/footer 框投递(不进主会话)。
   <div class="collab-sub">③ 关键点</div>
@@ -226,21 +226,21 @@ agent = AIAgent(
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>独立会话 + skip_memory + 不镜像主对话 = 后台自动化既不破缓存、也不污染</strong>。它主要治两条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——定时任务、批量、多 agent 队列是真实运维刚需,但要<strong>安全</strong>:不活动超时(默认 600s,可调)防失控空转 agent 独占调度器、<span class="mono">.tick.lock</span> 防多进程重复 tick、半周期 catchup 防积压补跑雪崩。把「自动化」做成可控的基础设施。</p>
-  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——cron 会话是<strong>独立</strong>的,不依赖、也不污染主会话的状态盘。它<strong>不镜像进 gateway session</strong>,所以主对话的角色交替/缓存前缀完全不受后台任务影响——这正是「缓存神圣」在自动化层的落地。</p>
-  <p style="margin:.5rem 0 0">反模式:把 cron 结果<strong>直接灌进主会话历史</strong>——会破坏严格角色交替、击穿缓存前缀,还会让自动任务<strong>污染用户记忆画像</strong>。Hermes 用「独立会话 + skip_memory + 带框投递」从根上避开。</p>
-  <p style="margin:.5rem 0 0">还有一条贯穿全书的<strong>持久性</strong>线在这里收口。第 13 章的 background <span class="mono">delegate_task</span> 虽与当前轮解耦,却仍是<strong>进程内</strong>的——网关一重启,在途的后台委派就没了。要让一件活<strong>跨进程重启</strong>也能照常醒来,正确答案是 cron(或 <span class="mono">terminal(background=True, notify_on_complete=True)</span>):job 落在磁盘的 <span class="mono">jobs.json</span> 里,<span class="mono">tick</span> 循环每次启动都会重新扫描。所以「短时并行」找委派、「跨重启的定时」找 cron——两端各司其职,AGENTS.md 把这条界线明确写成了 durability 规则,别拿进程内的委派去扛需要持久的活。</p>
-  <p style="margin:.5rem 0 0">Kanban 把同样的「隔离哲学」推到多 agent 协作上,用两层边界划清责任:<strong>board 是硬隔离</strong>——worker 被 spawn 时环境里钉死 <span class="mono">HERMES_KANBAN_BOARD</span>,根本看不到别的板;<strong>tenant 是软命名空间</strong>——同一支专家 worker 队列可在一块板内,靠工作区路径与记忆键的隔离同时服务多个业务。dispatcher 默认<strong>跑在网关里</strong>(<span class="mono">dispatch_in_gateway: true</span>),定期回收过期认领、推进就绪任务;同一任务连续失败到 <span class="mono">kanban.failure_limit</span>(默认 2)次就自动 block,避免在坏活上空转打转。worker 领活则用零足迹的 <span class="mono">kanban_*</span> 工具集(第 8 章),不在板上时一点 schema 都不占——又一次「能力长在边缘、核心保持窄腰」。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——定时任务、批量、多 agent 队列是真实运维刚需，但要<strong>安全</strong>：不活动超时(默认 600s，可调)防失控空转 agent 独占调度器、<span class="mono">.tick.lock</span> 防多进程重复 tick、半周期 catchup 防积压补跑雪崩。把「自动化」做成可控的基础设施。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——cron 会话是<strong>独立</strong>的，不依赖、也不污染主会话的状态盘。它<strong>不镜像进 gateway session</strong>，所以主对话的角色交替/缓存前缀完全不受后台任务影响——这正是「缓存神圣」在自动化层的落地。</p>
+  <p style="margin:.5rem 0 0">反模式：把 cron 结果<strong>直接灌进主会话历史</strong>——会破坏严格角色交替、击穿缓存前缀，还会让自动任务<strong>污染用户记忆画像</strong>。Hermes 用「独立会话 + skip_memory + 带框投递」从根上避开。</p>
+  <p style="margin:.5rem 0 0">还有一条贯穿全书的<strong>持久性</strong>线在这里收口。第 13 章的 background <span class="mono">delegate_task</span> 虽与当前轮解耦，却仍是<strong>进程内</strong>的——网关一重启，在途的后台委派就没了。要让一件活<strong>跨进程重启</strong>也能照常醒来，正确答案是 cron(或 <span class="mono">terminal(background=True, notify_on_complete=True)</span>):job 落在磁盘的 <span class="mono">jobs.json</span> 里,<span class="mono">tick</span> 循环每次启动都会重新扫描。所以「短时并行」找委派、「跨重启的定时」找 cron——两端各司其职,AGENTS.md 把这条界线明确写成了 durability 规则，别拿进程内的委派去扛需要持久的活。</p>
+  <p style="margin:.5rem 0 0">Kanban 把同样的「隔离哲学」推到多 agent 协作上，用两层边界划清责任:<strong>board 是硬隔离</strong>——worker 被 spawn 时环境里钉死 <span class="mono">HERMES_KANBAN_BOARD</span>，根本看不到别的板;<strong>tenant 是软命名空间</strong>——同一支专家 worker 队列可在一块板内，靠工作区路径与记忆键的隔离同时服务多个业务。dispatcher 默认<strong>跑在网关里</strong>(<span class="mono">dispatch_in_gateway: true</span>)，定期回收过期认领、推进就绪任务;同一任务连续失败到 <span class="mono">kanban.failure_limit</span>(默认 2)次就自动 block，避免在坏活上空转打转。worker 领活则用零足迹的 <span class="mono">kanban_*</span> 工具集(第 8 章)，不在板上时一点 schema 都不占——又一次「能力长在边缘、核心保持窄腰」。</p>
 </div>
 
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
-    <li><strong>四种调度</strong>:<span class="mono">parse_schedule</span> 认 duration(<span class="mono">30m</span>)、every(<span class="mono">every 2h</span>)、cron(<span class="mono">0 9 * * *</span>)、ISO 时间戳,归为 once/interval/cron。</li>
-    <li><strong>独立会话(★缓存线)</strong>:cron 任务起独立 <span class="mono">session_id</span> + <span class="mono">platform="cron"</span>,结果带框投递、<strong>不镜像进主对话</strong>,角色交替(第 7 章)/缓存(第 6 章)不受扰。</li>
-    <li><strong>skip_memory</strong>:cron 默认不跑记忆,免得自动任务<strong>污染用户画像</strong>(第 11 章)。</li>
-    <li><strong>安全阀</strong>:不活动超时(默认 600s、可调,活跃时可跑数小时)防失控空转;<span class="mono">.tick.lock</span> 防重复 tick;半周期 catchup(120s–2h)防积压补跑。</li>
-    <li><strong>kanban</strong>:多 agent 工作队列,worker 用零足迹 <span class="mono">kanban_*</span> 工具集(第 8 章)领活、回报。</li>
+    <li><strong>四种调度</strong>:<span class="mono">parse_schedule</span> 认 duration(<span class="mono">30m</span>)、every(<span class="mono">every 2h</span>)、cron(<span class="mono">0 9 * * *</span>)、ISO 时间戳，归为 once/interval/cron。</li>
+    <li><strong>独立会话(★缓存线)</strong>:cron 任务起独立 <span class="mono">session_id</span> + <span class="mono">platform="cron"</span>，结果带框投递、<strong>不镜像进主对话</strong>，角色交替(第 7 章)/缓存(第 6 章)不受扰。</li>
+    <li><strong>skip_memory</strong>:cron 默认不跑记忆，免得自动任务<strong>污染用户画像</strong>(第 11 章)。</li>
+    <li><strong>安全阀</strong>：不活动超时(默认 600s、可调，活跃时可跑数小时)防失控空转;<span class="mono">.tick.lock</span> 防重复 tick;半周期 catchup(120s–2h)防积压补跑。</li>
+    <li><strong>kanban</strong>：多 agent 工作队列,worker 用零足迹 <span class="mono">kanban_*</span> 工具集(第 8 章)领活、回报。</li>
   </ul>
 </div>
 """,
@@ -494,21 +494,21 @@ agent = AIAgent(
 
 LESSON_22 = {
     "zh": r"""
-<p class="lead">Hermes 不只是个产品,它是 Nous Research 的<strong>研究工具</strong>:要批量跑成千上万条 prompt、把每次对话的<strong>完整轨迹</strong>(含推理、工具调用)落盘成训练数据,还要在「模型每周都在变」的现实里写出<strong>不会天天挂掉</strong>的测试。这一章讲三件相关的事:批量、轨迹、评测哲学。</p>
+<p class="lead">Hermes 不只是个产品，它是 Nous Research 的<strong>研究工具</strong>：要批量跑成千上万条 prompt、把每次对话的<strong>完整轨迹</strong>(含推理、工具调用)落盘成训练数据，还要在「模型每周都在变」的现实里写出<strong>不会天天挂掉</strong>的测试。这一章讲三件相关的事：批量、轨迹、评测哲学。</p>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 工厂的质检流水线</div>
-  把一堆原料(prompt)送上<strong>多条并行产线</strong>(batch workers),每件产品记录<strong>完整工序</strong>(trajectory:每步推理 + 每次工具调用)。出厂前<strong>质检</strong>:不合格的(比如全程零推理)直接剔除,不混进成品库(训练集)。而质检标准看的是「<strong>是否符合规格</strong>」(不变量),不是「<strong>是否和上一批一模一样</strong>」(快照)——因为配方本来就会升级。
+  把一堆原料(prompt)送上<strong>多条并行产线</strong>(batch workers)，每件产品记录<strong>完整工序</strong>(trajectory：每步推理 + 每次工具调用)。出厂前<strong>质检</strong>：不合格的(比如全程零推理)直接剔除，不混进成品库(训练集)。而质检标准看的是「<strong>是否符合规格</strong>」(不变量)，不是「<strong>是否和上一批一模一样</strong>」(快照)——因为配方本来就会升级。
 </div>
 
 <div class="card macro">
   <div class="tag">🌍 宏观 · 数据流水线 + 抗漂移测试</div>
-  <strong>批量</strong>:多 worker 并行跑 AIAgent,每条 prompt 独立。<strong>轨迹</strong>:把对话转成 JSONL 训练样本,带 <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>,并<strong>过滤低质</strong>(零推理样本丢弃)。<strong>评测</strong>:测试锁<strong>行为不变量</strong>而非数据快照——模型目录、config 版本天天变,锁快照只会让 CI 天天红。
+  <strong>批量</strong>：多 worker 并行跑 AIAgent，每条 prompt 独立。<strong>轨迹</strong>：把对话转成 JSONL 训练样本，带 <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>，并<strong>过滤低质</strong>(零推理样本丢弃)。<strong>评测</strong>：测试锁<strong>行为不变量</strong>而非数据快照——模型目录、config 版本天天变，锁快照只会让 CI 天天红。
 </div>
 
-<h2>批量:并行 worker + 轨迹落盘</h2>
-<p>批处理把 prompt 分批,每个 worker 跑完一条就质检、落盘:</p>
-<p>为什么非要<strong>并行 + 可续跑</strong>?这是大规模数据生成绕不开的工程现实。批量入口用 <span class="mono">multiprocessing.Pool</span> 起 <span class="mono">num_workers</span>(默认 4)个进程,把每个 batch 当一个任务分出去(<span class="mono">batch_runner.py:917</span>),batch 内部的 prompt 则<strong>顺序</strong>跑。一条 prompt 往往是几十轮工具调用、要好几分钟,成千上万条若串行得跑上几天;更要命的是中途崩一次,没有续跑就前功尽弃。所以 <span class="mono">resume</span> 不是锦上添花,而是规模化的<strong>必需品</strong>——少了它,「跑一个大数据集」这件事在工程上根本不成立。这也正是约束 B(无状态)再次发力:worker 各跑各的、互不依赖,才敢这样横向铺开。</p>
+<h2>批量：并行 worker + 轨迹落盘</h2>
+<p>批处理把 prompt 分批，每个 worker 跑完一条就质检、落盘:</p>
+<p>为什么非要<strong>并行 + 可续跑</strong>?这是大规模数据生成绕不开的工程现实。批量入口用 <span class="mono">multiprocessing.Pool</span> 起 <span class="mono">num_workers</span>(默认 4)个进程，把每个 batch 当一个任务分出去(<span class="mono">batch_runner.py:917</span>),batch 内部的 prompt 则<strong>顺序</strong>跑。一条 prompt 往往是几十轮工具调用、要好几分钟，成千上万条若串行得跑上几天;更要命的是中途崩一次，没有续跑就前功尽弃。所以 <span class="mono">resume</span> 不是锦上添花，而是规模化的<strong>必需品</strong>——少了它,「跑一个大数据集」这件事在工程上根本不成立。这也正是约束 B(无状态)再次发力:worker 各跑各的、互不依赖，才敢这样横向铺开。</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">batch_runner.py</span><span class="ln">400-487 · 简化</span></div>
@@ -526,8 +526,8 @@ LESSON_22 = {
         }
         f.write(json.dumps(trajectory_entry, ensure_ascii=<span class="kw">False</span>) + <span class="st">"\n"</span>)  <span class="cm"># 追加 JSONL</span></pre>
 </div>
-<p>三个要点:① <strong>并行</strong>——多 worker 各跑各的 prompt,互不依赖(无状态,约束 B 又一次发力);② <strong>质量过滤</strong>——<span class="mono">has_any_reasoning</span> 为假就 <span class="mono">continue</span> 丢弃,训练集只收有推理的样本;③ <strong>JSONL 追加</strong>——每条样本一行,带 <span class="mono">tool_stats</span> 等元数据,是标准的 RL/SFT 训练格式。</p>
-<p>落盘的方式也透着「为崩溃而设计」的味道。每个 worker 跑完<strong>一条</strong>就立刻把 <span class="mono">trajectory_entry</span> 追加进自己那个 <span class="mono">batch_&lt;N&gt;.jsonl</span>(<span class="mono">batch_runner.py:416</span>),而不是攒到最后一次性写——这样即便进程中途挂掉,已完成的样本也<strong>已经躺在磁盘上</strong>,续跑时按内容直接跳过。等所有 batch 跑完,再把目录里全部 <span class="mono">batch_*.jsonl</span> 合并成<strong>单个</strong> <span class="mono">trajectories.jsonl</span>(<span class="mono">:1026</span>),顺手滤掉工具名非法的脏条目。注意轨迹是<strong>按 batch 分文件、最后聚合成一个</strong>的,<span class="mono">model</span> 只是每条样本里的一个 metadata 字段,并不会按模型拆成多份。<strong>增量写保命、末尾合并出干净训练文件</strong>,两个目标各取所需。</p>
+<p>三个要点:① <strong>并行</strong>——多 worker 各跑各的 prompt，互不依赖(无状态，约束 B 又一次发力);② <strong>质量过滤</strong>——<span class="mono">has_any_reasoning</span> 为假就 <span class="mono">continue</span> 丢弃，训练集只收有推理的样本;③ <strong>JSONL 追加</strong>——每条样本一行，带 <span class="mono">tool_stats</span> 等元数据，是标准的 RL/SFT 训练格式。</p>
+<p>落盘的方式也透着「为崩溃而设计」的味道。每个 worker 跑完<strong>一条</strong>就立刻把 <span class="mono">trajectory_entry</span> 追加进自己那个 <span class="mono">batch_&lt;N&gt;.jsonl</span>(<span class="mono">batch_runner.py:416</span>)，而不是攒到最后一次性写——这样即便进程中途挂掉，已完成的样本也<strong>已经躺在磁盘上</strong>，续跑时按内容直接跳过。等所有 batch 跑完，再把目录里全部 <span class="mono">batch_*.jsonl</span> 合并成<strong>单个</strong> <span class="mono">trajectories.jsonl</span>(<span class="mono">:1026</span>)，顺手滤掉工具名非法的脏条目。注意轨迹是<strong>按 batch 分文件、最后聚合成一个</strong>的,<span class="mono">model</span> 只是每条样本里的一个 metadata 字段，并不会按模型拆成多份。<strong>增量写保命、末尾合并出干净训练文件</strong>，两个目标各取所需。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 410" role="img" aria-label="批量并行处理与轨迹按 batch 增量落盘、末尾合并成单一文件">
@@ -540,7 +540,7 @@ LESSON_22 = {
 
   <rect x="14" y="54" width="92" height="180" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="60" y="72" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">dataset</text>
-  <g font-size="8.5" text-anchor="middle" fill="var(--muted)">
+  <g font-size="9" text-anchor="middle" fill="var(--muted)">
     <rect x="24" y="80"  width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="94">prompt 1</text>
     <rect x="24" y="104" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="118">prompt 2</text>
     <rect x="24" y="128" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="142">prompt 3</text>
@@ -558,13 +558,13 @@ LESSON_22 = {
     <line x1="106" y1="209" x2="130" y2="209" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
 
     <rect x="132" y="60"  width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="76"  fill="var(--ink)">worker 1</text><text x="184" y="89" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="76"  fill="var(--ink)">worker 1</text><text x="184" y="89" font-size="9" fill="var(--muted)">AIAgent</text>
     <rect x="132" y="104" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="120" fill="var(--ink)">worker 2</text><text x="184" y="133" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="120" fill="var(--ink)">worker 2</text><text x="184" y="133" font-size="9" fill="var(--muted)">AIAgent</text>
     <rect x="132" y="148" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="164" fill="var(--ink)">worker 3</text><text x="184" y="177" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="164" fill="var(--ink)">worker 3</text><text x="184" y="177" font-size="9" fill="var(--muted)">AIAgent</text>
     <rect x="132" y="192" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="208" fill="var(--ink)">worker 4</text><text x="184" y="221" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="208" fill="var(--ink)">worker 4</text><text x="184" y="221" font-size="9" fill="var(--muted)">AIAgent</text>
   </g>
 
   <g font-size="9.5" text-anchor="middle">
@@ -586,13 +586,13 @@ LESSON_22 = {
     <line x1="290" y1="209" x2="310" y2="209" stroke="var(--faint)" marker-end="url(#bz1arr)"/>
 
     <rect x="310" y="60"  width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="76"  font-size="10" fill="var(--ink)">batch_0.jsonl</text><text x="374" y="88" font-size="8" fill="var(--muted)">增量追加</text>
+    <text x="374" y="76"  font-size="10" fill="var(--ink)">batch_0.jsonl</text><text x="374" y="88" font-size="9" fill="var(--muted)">增量追加</text>
     <rect x="310" y="104" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="120" font-size="10" fill="var(--ink)">batch_1.jsonl</text><text x="374" y="132" font-size="8" fill="var(--muted)">增量追加</text>
+    <text x="374" y="120" font-size="10" fill="var(--ink)">batch_1.jsonl</text><text x="374" y="132" font-size="9" fill="var(--muted)">增量追加</text>
     <rect x="310" y="148" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="164" font-size="10" fill="var(--ink)">batch_2.jsonl</text><text x="374" y="176" font-size="8" fill="var(--muted)">增量追加</text>
+    <text x="374" y="164" font-size="10" fill="var(--ink)">batch_2.jsonl</text><text x="374" y="176" font-size="9" fill="var(--muted)">增量追加</text>
     <rect x="310" y="192" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="208" font-size="10" fill="var(--ink)">batch_3.jsonl</text><text x="374" y="220" font-size="8" fill="var(--muted)">增量追加</text>
+    <text x="374" y="208" font-size="10" fill="var(--ink)">batch_3.jsonl</text><text x="374" y="220" font-size="9" fill="var(--muted)">增量追加</text>
   </g>
 
   <line x1="438" y1="77"  x2="452" y2="77"  stroke="var(--accent)" marker-end="url(#bz1arr)"/>
@@ -624,27 +624,27 @@ LESSON_22 = {
 </svg>
 <div class="fig-cap"><b>批量并行 + 轨迹增量落盘</b>：dataset 切批后由 <b>Pool(num_workers=4)</b> 起多个 worker 各跑一个 AIAgent；每跑完一条就<b>质检</b>后<b>增量追加</b>进自己的 batch_&lt;N&gt;.jsonl（崩溃不丢、resume 可续）。零推理样本被丢弃但<b>仍标记完成</b>（resume 不重试）；真正失败的<b>不另存 failed 文件</b>，留待 resume 重跑。所有 batch 跑完后合并成<b>单一</b> trajectories.jsonl（含 conversations / tool_stats / metadata）——<b>model 只是每条样本的 metadata 字段，不按模型拆文件</b>。<b>注</b>：这是<b>批量</b> <span class="mono">batch_runner</span> 路径；本章下文讲的 <span class="mono">_save_trajectory</span> 是<b>单次会话</b>的另一条路径，按成功/失败分写 <span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span>——两条路径并存、各管各的。</div>
 </div>
-<p>顺带说,<span class="mono">trajectory_entry</span> 里那些字段不是凑数的。除了 <span class="mono">conversations</span>,它还按工具记下 <span class="mono">tool_stats</span>(count/success/failure)、单列每个工具失败数的 <span class="mono">tool_error_counts</span>,以及 <span class="mono">api_calls</span>、<span class="mono">toolsets_used</span>、<span class="mono">partial</span>(因非法工具调用提前停)等。为什么要存这么细?因为训练和分析都要吃这些信号:哪个工具老失败、一条轨迹烧了几次 API、是不是中途被截断,既能用来筛样本质量,也能反过来诊断 agent 的薄弱环节。轨迹因此不只是「对话录像」,而是带<strong>结构化质量标签</strong>的研究样本——这也是它配得上「资产」二字的原因。换句话说,落盘时多记的这几个字段,后续在训练与诊断两头都会连本带利地还回来。</p>
+<p>顺带说,<span class="mono">trajectory_entry</span> 里那些字段不是凑数的。除了 <span class="mono">conversations</span>，它还按工具记下 <span class="mono">tool_stats</span>(count/success/failure)、单列每个工具失败数的 <span class="mono">tool_error_counts</span>，以及 <span class="mono">api_calls</span>、<span class="mono">toolsets_used</span>、<span class="mono">partial</span>(因非法工具调用提前停)等。为什么要存这么细?因为训练和分析都要吃这些信号：哪个工具老失败、一条轨迹烧了几次 API、是不是中途被截断，既能用来筛样本质量，也能反过来诊断 agent 的薄弱环节。轨迹因此不只是「对话录像」，而是带<strong>结构化质量标签</strong>的研究样本——这也是它配得上「资产」二字的原因。换句话说，落盘时多记的这几个字段，后续在训练与诊断两头都会连本带利地还回来。</p>
 
-<h2>轨迹:一次对话变一条训练样本</h2>
-<p>单次运行也能存轨迹,由一个开关控制:</p>
-<p>为什么 Hermes 要不厌其烦地存轨迹?因为它是 Nous Research 的<strong>研究资产</strong>。一条轨迹 = <span class="mono">conversations</span>(完整多轮对话)+ <span class="mono">tool_stats</span>(工具调用统计)+ <span class="mono">metadata</span>,这恰好是 SFT / RL 训练的原料。Hermes 长在一家研究实验室里,它的<strong>真实 agent 运行</strong>不是用完即弃的日志,而是<strong>下一代模型的训练燃料</strong>:今天 agent 怎么推理、怎么调工具、在哪一步卡住,明天就被喂回模型去学。轨迹里那段 reasoning 正来自第 5 章那个核心循环存进 <span class="mono">messages</span> 的内容——产品侧的每一次对话,顺手就变成了研究侧的数据,这是「研究工具」一鱼两吃的底气。</p>
+<h2>轨迹：一次对话变一条训练样本</h2>
+<p>单次运行也能存轨迹，由一个开关控制:</p>
+<p>为什么 Hermes 要不厌其烦地存轨迹?因为它是 Nous Research 的<strong>研究资产</strong>。一条轨迹 = <span class="mono">conversations</span>(完整多轮对话)+ <span class="mono">tool_stats</span>(工具调用统计)+ <span class="mono">metadata</span>，这恰好是 SFT / RL 训练的原料。Hermes 长在一家研究实验室里，它的<strong>真实 agent 运行</strong>不是用完即弃的日志，而是<strong>下一代模型的训练燃料</strong>：今天 agent 怎么推理、怎么调工具、在哪一步卡住，明天就被喂回模型去学。轨迹里那段 reasoning 正来自第 5 章那个核心循环存进 <span class="mono">messages</span> 的内容——产品侧的每一次对话，顺手就变成了研究侧的数据，这是「研究工具」一鱼两吃的底气。</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">run_agent.py</span><span class="ln">1716-1729 · 节选</span></div>
   <pre><span class="kw">def</span> <span class="fn">_save_trajectory</span>(self, messages, user_query, completed):
     <span class="cm">&quot;&quot;&quot;Save conversation trajectory to JSONL file.&quot;&quot;&quot;</span>
-    <span class="kw">if</span> <span class="kw">not</span> self.save_trajectories:    <span class="cm"># 开关:默认关</span>
+    <span class="kw">if</span> <span class="kw">not</span> self.save_trajectories:    <span class="cm"># 开关：默认关</span>
         <span class="kw">return</span>
     trajectory = self._convert_to_trajectory_format(messages, user_query, completed)
     _save_trajectory_to_file(trajectory, self.model, completed)</pre>
 </div>
-<p><span class="mono">save_trajectories</span> 默认关(生产对话不留痕),研究时打开。<span class="mono">_convert_to_trajectory_format</span> 把内部的 <span class="mono">messages</span>(system/user/assistant/tool 四类角色 + reasoning)转成训练用的轨迹格式,落盘成 JSONL(成功样本进 <span class="mono">trajectory_samples.jsonl</span>、失败的进 <span class="mono">failed_trajectories.jsonl</span>;<span class="mono">model</span> 记进每条样本的元数据)。<strong>同一个 agent 核心,既服务真实对话,又顺手产出研究数据</strong>——这正是「研究工具」的一鱼两吃。</p>
-<p>「零推理样本丢弃」这一刀为什么必须砍?因为没有推理过程的样本<strong>教不会模型思考</strong>——把它喂进训练,轻则稀释信号,重则训出一个「跳过推理直接作答」的坏习惯,和「要训练一个<strong>会推理的 agent</strong>」这个初衷背道而驰。所以 <span class="mono">has_any_reasoning</span> 为假就 <span class="mono">continue</span> 丢掉(<span class="mono">batch_runner.py:454</span>)。它和「失败」是两码事:被丢弃的低质样本仍标记为<strong>已完成</strong>,续跑不再重试;而真正失败(根本没产出轨迹)的 prompt <strong>不会单独存成某个 failed 文件</strong>,而是留待 <span class="mono">resume</span> 时重新跑一遍(<span class="mono">:506-512</span>)。低质要剔除、失败要重试,两条处理路径泾渭分明,别混为一谈。</p>
+<p><span class="mono">save_trajectories</span> 默认关(生产对话不留痕)，研究时打开。<span class="mono">_convert_to_trajectory_format</span> 把内部的 <span class="mono">messages</span>(system/user/assistant/tool 四类角色 + reasoning)转成训练用的轨迹格式，落盘成 JSONL(成功样本进 <span class="mono">trajectory_samples.jsonl</span>、失败的进 <span class="mono">failed_trajectories.jsonl</span>;<span class="mono">model</span> 记进每条样本的元数据)。<strong>同一个 agent 核心，既服务真实对话，又顺手产出研究数据</strong>——这正是「研究工具」的一鱼两吃。</p>
+<p>「零推理样本丢弃」这一刀为什么必须砍?因为没有推理过程的样本<strong>教不会模型思考</strong>——把它喂进训练，轻则稀释信号，重则训出一个「跳过推理直接作答」的坏习惯，和「要训练一个<strong>会推理的 agent</strong>」这个初衷背道而驰。所以 <span class="mono">has_any_reasoning</span> 为假就 <span class="mono">continue</span> 丢掉(<span class="mono">batch_runner.py:454</span>)。它和「失败」是两码事：被丢弃的低质样本仍标记为<strong>已完成</strong>，续跑不再重试;而真正失败(根本没产出轨迹)的 prompt <strong>不会单独存成某个 failed 文件</strong>，而是留待 <span class="mono">resume</span> 时重新跑一遍(<span class="mono">:506-512</span>)。低质要剔除、失败要重试，两条处理路径泾渭分明，别混为一谈。</p>
 
-<h2>评测:锁不变量,别锁快照</h2>
-<p>研究项目最容易踩的测试坑——把「当前数据」写死进断言。模型每周都在变,这种测试天天挂:</p>
-<p>为什么 change-detector 测试在<strong>研究项目</strong>里格外致命?因为这里的「数据」本就被<strong>设计成天天变</strong>:模型目录每周加新模型、config 版本随结构升级而 bump,产品在边缘上还在激进扩张。把这些当前值写死进断言,等于把 CI 的健康<strong>绑死在例行数据更新上</strong>——发一个模型、改一行配置,测试就集体变红。工程师于是被迫花时间「修测试」而不是修真正的 bug;更糟的是,天天误报会让团队<strong>不再信任</strong>这套测试,最终把它关掉或无视——到那一步,测试就彻底失去了存在的意义。锁快照看似严格,实则在系统性地侵蚀测试的可信度。</p>
+<h2>评测：锁不变量，别锁快照</h2>
+<p>研究项目最容易踩的测试坑——把「当前数据」写死进断言。模型每周都在变，这种测试天天挂:</p>
+<p>为什么 change-detector 测试在<strong>研究项目</strong>里格外致命?因为这里的「数据」本就被<strong>设计成天天变</strong>：模型目录每周加新模型、config 版本随结构升级而 bump，产品在边缘上还在激进扩张。把这些当前值写死进断言，等于把 CI 的健康<strong>绑死在例行数据更新上</strong>——发一个模型、改一行配置，测试就集体变红。工程师于是被迫花时间「修测试」而不是修真正的 bug;更糟的是，天天误报会让团队<strong>不再信任</strong>这套测试，最终把它关掉或无视——到那一步，测试就彻底失去了存在的意义。锁快照看似严格，实则在系统性地侵蚀测试的可信度。</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">AGENTS.md · 测试规约(项目纪律)</span><span class="ln">Don't write change-detector tests</span></div>
@@ -652,14 +652,14 @@ LESSON_22 = {
 <span class="kw">assert</span> <span class="st">"gemini-2.5-pro"</span> <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"gemini"</span>]
 <span class="kw">assert</span> DEFAULT_CONFIG[<span class="st">"_config_version"</span>] == 21
 
-<span class="cm"># ✅ 行为契约/不变量:锁「关系」,不锁「快照」</span>
+<span class="cm"># ✅ 行为契约/不变量：锁「关系」,不锁「快照」</span>
 <span class="kw">assert</span> <span class="st">"gemini"</span> <span class="kw">in</span> _PROVIDER_MODELS
 <span class="kw">assert</span> len(_PROVIDER_MODELS[<span class="st">"gemini"</span>]) &gt;= 1
 <span class="kw">assert</span> raw[<span class="st">"_config_version"</span>] == DEFAULT_CONFIG[<span class="st">"_config_version"</span>]
 <span class="kw">for</span> m <span class="kw">in</span> _PROVIDER_MODELS[<span class="st">"huggingface"</span>]:
     <span class="kw">assert</span> m.lower() <span class="kw">in</span> DEFAULT_CONTEXT_LENGTHS_LOWER</pre>
 </div>
-<p>规则一句话:<strong>测试若读起来像「当前数据的快照」,删掉;若读起来像「两份数据必须如何关联」的契约,留下。</strong>「gemini 目录里必须有 gemini-2.5-pro」是快照(下个模型发布就错);「gemini 目录至少有一个模型」「每个模型都有对应的上下文长度」是<strong>不变量</strong>——数据怎么更新都不破。这让测试<strong>抗模型/数据漂移</strong>,routine 更新不再天天红 CI。</p>
+<p>规则一句话:<strong>测试若读起来像「当前数据的快照」，删掉;若读起来像「两份数据必须如何关联」的契约，留下。</strong>「gemini 目录里必须有 gemini-2.5-pro」是快照(下个模型发布就错);「gemini 目录至少有一个模型」「每个模型都有对应的上下文长度」是<strong>不变量</strong>——数据怎么更新都不破。这让测试<strong>抗模型/数据漂移</strong>,routine 更新不再天天红 CI。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 240" role="img" aria-label="评测对比：锁数据快照导致 CI 天天红，锁行为不变量则随系统演化">
@@ -697,11 +697,11 @@ LESSON_22 = {
 </svg>
 <div class="fig-cap"><b>锁不变量，不锁快照</b>：左边把「当前数据」冻进断言——具体模型名 gemini-2.5-pro、config 版本号 21；模型每周发布、config 升级，CI 就<b>天天变红</b>，逼工程师去「修测试」。右边只断言两份数据<b>必须成立的关系</b>（目录至少有一个模型、每个模型都有 context length），数据怎么更新都不破，测试<b>随系统一起演化</b>。</div>
 </div>
-<p>锁不变量换来的是什么?是<strong>能跟着系统一起演化</strong>的测试。「gemini 目录里至少有一个模型」「每个模型都有对应的上下文长度」这类断言,锁的是两份数据之间<strong>必须成立的关系</strong>,数据怎么更新都不破。这恰好和「窄腰」哲学互为表里:核心的契约越稳、越少,系统就越<strong>好测</strong>;反过来,正因为腰部的不变量被牢牢锁住,边缘才敢放心地快速扩张新平台、新模型、新 provider(参见讲工具集与约束的那几章)。所以评测在这里不是给代码拍快照,而是<strong>守护整个系统在持续迭代中的正确性</strong>——它和窄腰一道,让「核心稳、边缘野蛮生长」这件事在工程上可持续。</p>
-<p>再往深一层看,评测的本职其实是<strong>量化误差累积</strong>(约束 F)。agent 在多轮自主里,一个小判断失误会顺着后续步骤滚成雪球;不变量测试守住的,正是「这些必须成立的关系别在迭代里悄悄被破坏」。把它和轨迹的质量门槛并排看会更清楚:质量门槛挡住低质数据流进训练、免得把误差<strong>固化进下一代模型</strong>;不变量测试挡住回归在一次次提交中慢慢累积。一个在数据入口把关、一个在代码演化时把关,前后两道闸,都是在跟<strong>误差累积</strong>这条 LLM 固有约束较劲——这也是本章三件事(批量、轨迹、评测)其实围着同一个根在转的原因。</p>
+<p>锁不变量换来的是什么?是<strong>能跟着系统一起演化</strong>的测试。「gemini 目录里至少有一个模型」「每个模型都有对应的上下文长度」这类断言，锁的是两份数据之间<strong>必须成立的关系</strong>，数据怎么更新都不破。这恰好和「窄腰」哲学互为表里：核心的契约越稳、越少，系统就越<strong>好测</strong>;反过来，正因为腰部的不变量被牢牢锁住，边缘才敢放心地快速扩张新平台、新模型、新 provider(参见讲工具集与约束的那几章)。所以评测在这里不是给代码拍快照，而是<strong>守护整个系统在持续迭代中的正确性</strong>——它和窄腰一道，让「核心稳、边缘野蛮生长」这件事在工程上可持续。</p>
+<p>再往深一层看，评测的本职其实是<strong>量化误差累积</strong>(约束 F)。agent 在多轮自主里，一个小判断失误会顺着后续步骤滚成雪球;不变量测试守住的，正是「这些必须成立的关系别在迭代里悄悄被破坏」。把它和轨迹的质量门槛并排看会更清楚：质量门槛挡住低质数据流进训练、免得把误差<strong>固化进下一代模型</strong>;不变量测试挡住回归在一次次提交中慢慢累积。一个在数据入口把关、一个在代码演化时把关，前后两道闸，都是在跟<strong>误差累积</strong>这条 LLM 固有约束较劲——这也是本章三件事(批量、轨迹、评测)其实围着同一个根在转的原因。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 452" role="img" aria-label="一条真实对话转成一条 ShareGPT 训练样本:用户 prompt 统计当前目录有多少 py 文件,跑两个 API 调用;convert_to_trajectory_format 产出 conversations 数组,依次是 from system 带 tools 标签、from human 原始 prompt、from gpt 带 think 推理块和 tool_call 调用 terminal、from tool 带 tool_response 返回 7;外层 batch_runner 落盘记录含 tool_stats terminal count 1 success 1 failure 0、metadata batch_num 0、api_calls 2;底部质检闸 has_any_reasoning 为真就追加进 jsonl,全程空 think 则 continue 丢弃但仍标记完成">
+<svg viewBox="0 0 680 452" role="img" aria-label="一条真实对话转成一条 ShareGPT 训练样本：用户 prompt 统计当前目录有多少 py 文件，跑两个 API 调用;convert_to_trajectory_format 产出 conversations 数组，依次是 from system 带 tools 标签、from human 原始 prompt、from gpt 带 think 推理块和 tool_call 调用 terminal、from tool 带 tool_response 返回 7;外层 batch_runner 落盘记录含 tool_stats terminal count 1 success 1 failure 0、metadata batch_num 0、api_calls 2;底部质检闸 has_any_reasoning 为真就追加进 jsonl，全程空 think 则 continue 丢弃但仍标记完成">
   <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
   <text x="26" y="30" font-size="11" fill="var(--ink)">输入对话:user prompt <tspan class="mono" font-weight="700" fill="var(--blue)">"统计当前目录有多少 .py 文件"</tspan> · 跑 2 个 API 调用 → 转 ShareGPT 样本</text>
 
@@ -761,46 +761,46 @@ LESSON_22 = {
   <text x="438" y="394" font-size="10" fill="var(--red)">全程空 &lt;think&gt; → <tspan class="mono">=False</tspan></text>
   <text x="438" y="411" font-size="10" font-weight="700" fill="var(--red)">→ continue 丢弃(仍标记完成)</text>
 
-  <text x="16" y="440" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图:一条对话被改写成 {from,value} 的 ShareGPT 帧序列 —— 这是训练样本格式,不是推理时的 OpenAI role。</text>
+  <text x="16" y="440" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图：一条对话被改写成 {from,value} 的 ShareGPT 帧序列 —— 这是训练样本格式，不是推理时的 OpenAI role。</text>
 </svg>
-<div class="fig-cap"><b>一条对话 → 一条 ShareGPT 样本</b>:<span class="mono">convert_to_trajectory_format</span> 把内部 messages 改写成 <span class="mono">conversations[]</span>——<span class="mono">{from:"system"}</span> 带 <span class="mono">&lt;tools&gt;</span>、<span class="mono">{from:"human"}</span> 原始 prompt、<span class="mono">{from:"gpt"}</span> 带 <span class="mono">&lt;think&gt;</span>+<span class="mono">&lt;tool_call&gt;</span>、<span class="mono">{from:"tool"}</span> 带 <span class="mono">&lt;tool_response&gt;</span>。外层 <span class="mono">batch_runner</span> 落盘记录附 <span class="mono">tool_stats={"terminal":{count:1,success:1,failure:0}}</span>、<span class="mono">metadata.batch_num=0</span>、<span class="mono">api_calls=2</span>;质检闸只在 <b>有 <span class="mono">&lt;think&gt;</span> 推理</b>时写盘,空推理 <span class="mono">continue</span> 丢弃。注意是 <b><span class="mono">{from,value}</span> 而非 OpenAI role/content</b>。</div>
+<div class="fig-cap"><b>一条对话 → 一条 ShareGPT 样本</b>:<span class="mono">convert_to_trajectory_format</span> 把内部 messages 改写成 <span class="mono">conversations[]</span>——<span class="mono">{from:"system"}</span> 带 <span class="mono">&lt;tools&gt;</span>、<span class="mono">{from:"human"}</span> 原始 prompt、<span class="mono">{from:"gpt"}</span> 带 <span class="mono">&lt;think&gt;</span>+<span class="mono">&lt;tool_call&gt;</span>、<span class="mono">{from:"tool"}</span> 带 <span class="mono">&lt;tool_response&gt;</span>。外层 <span class="mono">batch_runner</span> 落盘记录附 <span class="mono">tool_stats={"terminal":{count:1,success:1,failure:0}}</span>、<span class="mono">metadata.batch_num=0</span>、<span class="mono">api_calls=2</span>;质检闸只在 <b>有 <span class="mono">&lt;think&gt;</span> 推理</b>时写盘，空推理 <span class="mono">continue</span> 丢弃。注意是 <b><span class="mono">{from,value}</span> 而非 OpenAI role/content</b>。</div>
 </div>
 
 <div class="vflow">
-  <div class="step"><span class="num">1</span><span class="sc">一批 prompt 切分,丢给多个 <span class="mono">_process_batch_worker</span> 并行</span></div>
-  <div class="step"><span class="num">2</span><span class="sc">每个 worker 独立跑 AIAgent(第 7 章核心循环),产出 trajectory</span></div>
-  <div class="step"><span class="num">3</span><span class="sc">质量过滤:零推理样本 <span class="mono">continue</span> 丢弃</span></div>
+  <div class="step"><span class="num">1</span><span class="sc">一批 prompt 切分，丢给多个 <span class="mono">_process_batch_worker</span> 并行</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">每个 worker 独立跑 AIAgent(第 7 章核心循环)，产出 trajectory</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">质量过滤：零推理样本 <span class="mono">continue</span> 丢弃</span></div>
   <div class="step"><span class="num">4</span><span class="sc"><span class="mono">trajectory_entry</span>(conversations + tool_stats + metadata)写 JSONL 一行</span></div>
-  <div class="step"><span class="num">5</span><span class="sc">评测/回归用<strong>不变量</strong>断言(非快照),抗模型漂移</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">评测/回归用<strong>不变量</strong>断言(非快照)，抗模型漂移</span></div>
 </div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「研究数据流水线 + 抗漂移评测」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>_process_batch_worker</strong>(并行批量)、<strong>_save_trajectory</strong>(轨迹落盘)、<strong>trajectory_entry</strong>(JSONL schema)、<strong>不变量测试</strong>(评测哲学)。跨章节配合:批量跑的是 <strong>AIAgent 核心循环</strong>(第 7 章),轨迹里存的 reasoning 也来自那里;<span class="mono">tool_stats</span> 统计的是<strong>工具</strong>(第 8 章)调用;并行 worker 各自<strong>无状态独立</strong>(约束 B,第 2 章);轨迹按完成状态写 JSONL(<span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span>),批量则落进 <span class="mono">data/&lt;run&gt;/</span>。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>_process_batch_worker</strong>(并行批量)、<strong>_save_trajectory</strong>(轨迹落盘)、<strong>trajectory_entry</strong>(JSONL schema)、<strong>不变量测试</strong>(评测哲学)。跨章节配合：批量跑的是 <strong>AIAgent 核心循环</strong>(第 7 章)，轨迹里存的 reasoning 也来自那里;<span class="mono">tool_stats</span> 统计的是<strong>工具</strong>(第 8 章)调用;并行 worker 各自<strong>无状态独立</strong>(约束 B，第 2 章);轨迹按完成状态写 JSONL(<span class="mono">trajectory_samples.jsonl</span> / <span class="mono">failed_trajectories.jsonl</span>)，批量则落进 <span class="mono">data/&lt;run&gt;/</span>。
   <div class="collab-sub">② 数据流时序</div>
-  prompts 切批 → 多 <span class="mono">_process_batch_worker</span> 并行(各跑 AIAgent)→ 质量过滤(零推理丢弃)→ <span class="mono">trajectory_entry</span> 写 JSONL → 聚合 <span class="mono">tool_stats</span>;评测侧:不变量断言抗数据漂移。
+  prompts 切批 → 多 <span class="mono">_process_batch_worker</span> 并行(各跑 AIAgent)→ 质量过滤(零推理丢弃)→ <span class="mono">trajectory_entry</span> 写 JSONL → 聚合 <span class="mono">tool_stats</span>;评测侧：不变量断言抗数据漂移。
   <div class="collab-sub">③ 关键点</div>
-  研究数据流水线 = <strong>并行批量 + 完整轨迹 + 质量过滤</strong>;同一个 agent 核心既服务真实对话又产出训练数据。评测的工程纪律 = <strong>锁行为不变量、不锁数据快照</strong>,让「模型/数据天天变」不再天天破测试。
+  研究数据流水线 = <strong>并行批量 + 完整轨迹 + 质量过滤</strong>;同一个 agent 核心既服务真实对话又产出训练数据。评测的工程纪律 = <strong>锁行为不变量、不锁数据快照</strong>，让「模型/数据天天变」不再天天破测试。
 </div>
 
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>并行批量 + 完整轨迹 + 质量过滤 + 行为契约测试 = 可规模化的研究数据流水线 + 抗漂移评测</strong>。它主要治两条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——研究要规模:成千上万条 prompt 得并行跑、轨迹得标准化落盘、CI 得在「模型每周变」下还能维护。批量 worker、JSONL 轨迹、不变量测试,把「做研究」做成可规模化、低维护的基础设施。</p>
-  <p style="margin:.5rem 0 0"><span class="badge constraint">F·误差累积</span>——评测的本职就是<strong>量化 agent 在多轮自主里误差累积到什么程度</strong>;轨迹的质量门槛(必须有推理)<strong>剔除低质样本</strong>,免得垃圾数据喂进训练、把误差固化进下一代模型。不变量测试也防回归在迭代中悄悄累积。</p>
-  <p style="margin:.5rem 0 0">反模式:写 <strong>change-detector 测试</strong>——把模型目录、config 版本号、枚举数量写死进断言。模型一发布、配置一升级,这些测试就<strong>集体变红</strong>,逼工程师花时间「修测试」而非修 bug。锁不变量,不锁快照。</p>
-  <p style="margin:.5rem 0 0">还有个易被忽略的取舍:批量轨迹落在<strong>运行目录</strong> <span class="mono">data/&lt;run_name&gt;/</span> 下(<span class="mono">batch_runner.py:611</span>),<strong>不走</strong> profile 的 <span class="mono">HERMES_HOME</span> 隔离——因为它是一次<strong>研究运行</strong>的产物,天然以「这一次跑」为单位组织,而非以「哪个用户 profile」为单位,和分布在各 profile 下的会话/记忆是两套语境。续跑机制也做得很务实:不死磕 prompt 的下标,而是按 <strong>prompt 文本内容</strong>扫描已完成项(<span class="mono">_scan_completed_prompts_by_content</span>),即便数据集顺序变了也能稳稳认出哪些跑过。规模化的工程,处处是这种「为真实世界的混乱兜底」的小取舍。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——研究要规模：成千上万条 prompt 得并行跑、轨迹得标准化落盘、CI 得在「模型每周变」下还能维护。批量 worker、JSONL 轨迹、不变量测试，把「做研究」做成可规模化、低维护的基础设施。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">F·误差累积</span>——评测的本职就是<strong>量化 agent 在多轮自主里误差累积到什么程度</strong>;轨迹的质量门槛(必须有推理)<strong>剔除低质样本</strong>，免得垃圾数据喂进训练、把误差固化进下一代模型。不变量测试也防回归在迭代中悄悄累积。</p>
+  <p style="margin:.5rem 0 0">反模式：写 <strong>change-detector 测试</strong>——把模型目录、config 版本号、枚举数量写死进断言。模型一发布、配置一升级，这些测试就<strong>集体变红</strong>，逼工程师花时间「修测试」而非修 bug。锁不变量，不锁快照。</p>
+  <p style="margin:.5rem 0 0">还有个易被忽略的取舍：批量轨迹落在<strong>运行目录</strong> <span class="mono">data/&lt;run_name&gt;/</span> 下(<span class="mono">batch_runner.py:611</span>),<strong>不走</strong> profile 的 <span class="mono">HERMES_HOME</span> 隔离——因为它是一次<strong>研究运行</strong>的产物，天然以「这一次跑」为单位组织，而非以「哪个用户 profile」为单位，和分布在各 profile 下的会话/记忆是两套语境。续跑机制也做得很务实：不死磕 prompt 的下标，而是按 <strong>prompt 文本内容</strong>扫描已完成项(<span class="mono">_scan_completed_prompts_by_content</span>)，即便数据集顺序变了也能稳稳认出哪些跑过。规模化的工程，处处是这种「为真实世界的混乱兜底」的小取舍。</p>
 </div>
 
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
-    <li><strong>并行批量</strong>:<span class="mono">_process_batch_worker</span> 多 worker 各跑独立 prompt(无状态,约束 B),规模化生成数据。</li>
-    <li><strong>完整轨迹</strong>:对话转 JSONL 训练样本,带 <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>;<span class="mono">save_trajectories</span> 开关默认关。</li>
-    <li><strong>质量过滤</strong>:零推理样本 <span class="mono">continue</span> 丢弃,训练集只收有推理的高质数据。</li>
-    <li><strong>一鱼两吃</strong>:同一个 AIAgent 核心,既服务真实对话、又顺手产出研究轨迹。</li>
-    <li><strong>抗漂移评测</strong>:测试锁<strong>行为不变量</strong>(关系)而非<strong>数据快照</strong>(具体值);不写 change-detector,免得模型/config 一变就全红。</li>
+    <li><strong>并行批量</strong>:<span class="mono">_process_batch_worker</span> 多 worker 各跑独立 prompt(无状态，约束 B)，规模化生成数据。</li>
+    <li><strong>完整轨迹</strong>：对话转 JSONL 训练样本，带 <span class="mono">conversations</span>/<span class="mono">tool_stats</span>/<span class="mono">metadata</span>;<span class="mono">save_trajectories</span> 开关默认关。</li>
+    <li><strong>质量过滤</strong>：零推理样本 <span class="mono">continue</span> 丢弃，训练集只收有推理的高质数据。</li>
+    <li><strong>一鱼两吃</strong>：同一个 AIAgent 核心，既服务真实对话、又顺手产出研究轨迹。</li>
+    <li><strong>抗漂移评测</strong>：测试锁<strong>行为不变量</strong>(关系)而非<strong>数据快照</strong>(具体值);不写 change-detector，免得模型/config 一变就全红。</li>
   </ul>
 </div>
 """,
@@ -851,7 +851,7 @@ LESSON_22 = {
 
   <rect x="14" y="54" width="92" height="180" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="60" y="72" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">dataset</text>
-  <g font-size="8.5" text-anchor="middle" fill="var(--muted)">
+  <g font-size="9" text-anchor="middle" fill="var(--muted)">
     <rect x="24" y="80"  width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="94">prompt 1</text>
     <rect x="24" y="104" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="118">prompt 2</text>
     <rect x="24" y="128" width="72" height="20" rx="4" fill="var(--panel)" stroke="var(--line)"/><text x="60" y="142">prompt 3</text>
@@ -869,13 +869,13 @@ LESSON_22 = {
     <line x1="106" y1="209" x2="130" y2="209" stroke="var(--faint)" marker-end="url(#be1arr)"/>
 
     <rect x="132" y="60"  width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="76"  fill="var(--ink)">worker 1</text><text x="184" y="89" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="76"  fill="var(--ink)">worker 1</text><text x="184" y="89" font-size="9" fill="var(--muted)">AIAgent</text>
     <rect x="132" y="104" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="120" fill="var(--ink)">worker 2</text><text x="184" y="133" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="120" fill="var(--ink)">worker 2</text><text x="184" y="133" font-size="9" fill="var(--muted)">AIAgent</text>
     <rect x="132" y="148" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="164" fill="var(--ink)">worker 3</text><text x="184" y="177" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="164" fill="var(--ink)">worker 3</text><text x="184" y="177" font-size="9" fill="var(--muted)">AIAgent</text>
     <rect x="132" y="192" width="104" height="34" rx="7" fill="var(--blue-soft)" stroke="var(--blue)"/>
-    <text x="184" y="208" fill="var(--ink)">worker 4</text><text x="184" y="221" font-size="8.5" fill="var(--muted)">AIAgent</text>
+    <text x="184" y="208" fill="var(--ink)">worker 4</text><text x="184" y="221" font-size="9" fill="var(--muted)">AIAgent</text>
   </g>
 
   <g font-size="9.5" text-anchor="middle">
@@ -897,13 +897,13 @@ LESSON_22 = {
     <line x1="290" y1="209" x2="310" y2="209" stroke="var(--faint)" marker-end="url(#be1arr)"/>
 
     <rect x="310" y="60"  width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="76"  font-size="10" fill="var(--ink)">batch_0.jsonl</text><text x="374" y="88" font-size="8" fill="var(--muted)">append</text>
+    <text x="374" y="76"  font-size="10" fill="var(--ink)">batch_0.jsonl</text><text x="374" y="88" font-size="9" fill="var(--muted)">append</text>
     <rect x="310" y="104" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="120" font-size="10" fill="var(--ink)">batch_1.jsonl</text><text x="374" y="132" font-size="8" fill="var(--muted)">append</text>
+    <text x="374" y="120" font-size="10" fill="var(--ink)">batch_1.jsonl</text><text x="374" y="132" font-size="9" fill="var(--muted)">append</text>
     <rect x="310" y="148" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="164" font-size="10" fill="var(--ink)">batch_2.jsonl</text><text x="374" y="176" font-size="8" fill="var(--muted)">append</text>
+    <text x="374" y="164" font-size="10" fill="var(--ink)">batch_2.jsonl</text><text x="374" y="176" font-size="9" fill="var(--muted)">append</text>
     <rect x="310" y="192" width="128" height="34" rx="6" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="374" y="208" font-size="10" fill="var(--ink)">batch_3.jsonl</text><text x="374" y="220" font-size="8" fill="var(--muted)">append</text>
+    <text x="374" y="208" font-size="10" fill="var(--ink)">batch_3.jsonl</text><text x="374" y="220" font-size="9" fill="var(--muted)">append</text>
   </g>
 
   <line x1="438" y1="77"  x2="452" y2="77"  stroke="var(--accent)" marker-end="url(#be1arr)"/>
@@ -926,7 +926,7 @@ LESSON_22 = {
 
   <rect x="14" y="252" width="270" height="140" rx="10" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="28" y="274" font-size="10.5" font-weight="700" fill="var(--ink)">QC &amp; resume rules</text>
-  <g font-size="8.5">
+  <g font-size="9">
     <text x="28" y="300" fill="var(--accent-ink)">✓ has reasoning → append to batch_&lt;N&gt;.jsonl</text>
     <text x="28" y="326" fill="var(--red)">✗ zero reasoning → dropped, still marked done</text>
     <text x="28" y="352" fill="var(--red)">✗ failed → no separate failed file,</text>
@@ -1120,7 +1120,7 @@ LESSON_22 = {
 
 LESSON_23 = {
     "zh": r"""
-<p class="lead">前面 22 章,Hermes 的核心几乎没怎么"长大"——平台适配器、记忆后端、模型 provider、聊天技能,绝大多数能力都是从<strong>边缘</strong>挂上去的。这一章讲清那条贯穿全书的纪律:<strong>能力在边缘扩展,核心保持窄腰</strong>。机制有三:插件、技能、MCP。</p>
+<p class="lead">前面 22 章,Hermes 的核心几乎没怎么"长大"——平台适配器、记忆后端、模型 provider、聊天技能，绝大多数能力都是从<strong>边缘</strong>挂上去的。这一章讲清那条贯穿全书的纪律:<strong>能力在边缘扩展，核心保持窄腰</strong>。机制有三：插件、技能、MCP。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 372" role="img" aria-label="三种边缘扩展机制都向核心挂载，但都不改动核心">
@@ -1160,20 +1160,20 @@ LESSON_23 = {
   <text x="312" y="279" font-size="10.5" fill="var(--ink)">进 catalog · 核心经内置 MCP client 连</text>
   <text x="312" y="295" font-size="10.5" fill="var(--ink)">零核心 schema footprint</text>
 </svg>
-<div class="fig-cap"><b>三条边缘扩展路,一道不动的窄腰</b>:① <b>插件</b>用 <span class="mono">register(ctx)</span> 把工具/命令/钩子挂进同一个 registry,<b>一行核心文件都不碰</b>(Teknium 铁律);② <b>技能</b>把内容拼成一条 <b>user message</b> 注入,<b>不进 system prompt</b>,整会话缓存前缀不作废;③ <b>MCP server</b> 进 catalog,核心靠内置 MCP client 连接,<b>零核心 schema 足迹</b>。能力全长在边缘,核心那道窄腰始终不动——它的 schema 才是要在<b>每次 API 调用</b>都付钱的东西。</div>
+<div class="fig-cap"><b>三条边缘扩展路，一道不动的窄腰</b>:① <b>插件</b>用 <span class="mono">register(ctx)</span> 把工具/命令/钩子挂进同一个 registry,<b>一行核心文件都不碰</b>(Teknium 铁律);② <b>技能</b>把内容拼成一条 <b>user message</b> 注入,<b>不进 system prompt</b>，整会话缓存前缀不作废;③ <b>MCP server</b> 进 catalog，核心靠内置 MCP client 连接,<b>零核心 schema 足迹</b>。能力全长在边缘，核心那道窄腰始终不动——它的 schema 才是要在<b>每次 API 调用</b>都付钱的东西。</div>
 </div>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 瑞士军刀 vs 工具箱</div>
-  核心只该放最常用的几把刀(核心工具);其余工具放<strong>工具箱</strong>(插件/技能/MCP),用时才取。要是把所有工具都焊死在军刀上,军刀会重得<strong>拿不动</strong>——因为每次出门(每次 API 调用)都得带上<strong>全部工具的说明书</strong>(工具 schema 全进 context)。工具越多,真正要用的那把越<strong>淹没在说明书堆里</strong>。
+  核心只该放最常用的几把刀(核心工具);其余工具放<strong>工具箱</strong>(插件/技能/MCP)，用时才取。要是把所有工具都焊死在军刀上，军刀会重得<strong>拿不动</strong>——因为每次出门(每次 API 调用)都得带上<strong>全部工具的说明书</strong>(工具 schema 全进 context)。工具越多，真正要用的那把越<strong>淹没在说明书堆里</strong>。
 </div>
 
 <div class="card macro">
   <div class="tag">🌍 宏观 · Footprint Ladder(足迹阶梯)</div>
-  加新能力,按<strong>足迹从小到大</strong>选最高那一阶:① 扩展现有代码 → ② CLI 命令 + 技能 → ③ 服务门控工具(<span class="mono">check_fn</span>)→ ④ 插件 → ⑤ MCP server(进 catalog)→ ⑥ 新核心工具(<strong>最后手段</strong>)。越往下,永久占用的核心面越大。绝大多数能力都该停在前几阶。
+  加新能力，按<strong>足迹从小到大</strong>选最高那一阶:① 扩展现有代码 → ② CLI 命令 + 技能 → ③ 服务门控工具(<span class="mono">check_fn</span>)→ ④ 插件 → ⑤ MCP server(进 catalog)→ ⑥ 新核心工具(<strong>最后手段</strong>)。越往下，永久占用的核心面越大。绝大多数能力都该停在前几阶。
 </div>
 
-<h2>插件:挂上核心,但不改核心</h2>
+<h2>插件：挂上核心，但不改核心</h2>
 <p>插件通过一个 <span class="mono">register(ctx)</span> 把工具/命令/钩子挂进 Hermes,<strong>一行核心文件都不碰</strong>:</p>
 
 <div class="codefile">
@@ -1186,13 +1186,13 @@ LESSON_23 = {
         registry.register(name=name, toolset=toolset, schema=schema,
                           handler=handler, check_fn=check_fn, override=override)</pre>
 </div>
-<p><span class="mono">register_tool</span> 只是<strong>委托</strong>给和内置工具<strong>同一个</strong> <span class="mono">tools.registry</span>(第 8 章)——插件工具和核心工具走完全相同的注册/分派/可用性检查路径。<span class="mono">check_fn</span> 让工具<strong>服务门控</strong>(没配凭据就不出现,零足迹);<span class="mono">override</span> 甚至能替换内置工具。铁律(Teknium):<strong>插件绝不能改核心文件</strong>(<span class="mono">run_agent.py</span>/<span class="mono">cli.py</span>…);要更多能力,就把通用插件面拓宽,而非在核心里硬编码插件逻辑。</p>
+<p><span class="mono">register_tool</span> 只是<strong>委托</strong>给和内置工具<strong>同一个</strong> <span class="mono">tools.registry</span>(第 8 章)——插件工具和核心工具走完全相同的注册/分派/可用性检查路径。<span class="mono">check_fn</span> 让工具<strong>服务门控</strong>(没配凭据就不出现，零足迹);<span class="mono">override</span> 甚至能替换内置工具。铁律(Teknium):<strong>插件绝不能改核心文件</strong>(<span class="mono">run_agent.py</span>/<span class="mono">cli.py</span>…);要更多能力，就把通用插件面拓宽，而非在核心里硬编码插件逻辑。</p>
 
-<p>为什么这条"插件绝不能改核心文件"要立成<strong>铁律</strong>,而不是"尽量别改"?因为核心一旦被某个插件的特例逻辑<strong>硬编码</strong>污染,它就被那个插件<strong>绑架</strong>了——下次重构 <span class="mono">run_agent.py</span> 得先担心会不会踩坏某个插件的隐式约定,核心的可演化性就此<strong>冻结</strong>。把规则反过来立:插件需要新能力,不是在核心开一个特例,而是<strong>拓宽通用插件面</strong>(加一个新 hook、加一个新 <span class="mono">ctx</span> 方法)。这样核心面对的永远是<strong>有限、通用</strong>的扩展点,而不是无穷无尽的插件特例。AGENTS.md 记着 PR #5295 删掉 95 行硬编码进 <span class="mono">main.py</span> 的某插件 argparse——就是这条铁律的执行记录。</p>
+<p>为什么这条"插件绝不能改核心文件"要立成<strong>铁律</strong>，而不是"尽量别改"?因为核心一旦被某个插件的特例逻辑<strong>硬编码</strong>污染，它就被那个插件<strong>绑架</strong>了——下次重构 <span class="mono">run_agent.py</span> 得先担心会不会踩坏某个插件的隐式约定，核心的可演化性就此<strong>冻结</strong>。把规则反过来立：插件需要新能力，不是在核心开一个特例，而是<strong>拓宽通用插件面</strong>(加一个新 hook、加一个新 <span class="mono">ctx</span> 方法)。这样核心面对的永远是<strong>有限、通用</strong>的扩展点，而不是无穷无尽的插件特例。AGENTS.md 记着 PR #5295 删掉 95 行硬编码进 <span class="mono">main.py</span> 的某插件 argparse——就是这条铁律的执行记录。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 274" role="img" aria-label="插件需要新能力时，开核心特例与拓宽通用插件面的对比">
-  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">插件需要新能力时,往哪走</text>
+  <text x="340" y="22" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--ink)">插件需要新能力时，往哪走</text>
 
   <rect x="20" y="58" width="118" height="148" rx="9" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="79" y="126" text-anchor="middle" font-size="11.5" fill="var(--ink)">插件需要</text>
@@ -1227,15 +1227,15 @@ LESSON_23 = {
   <rect x="20" y="222" width="640" height="34" rx="8" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="340" y="244" text-anchor="middle" font-size="11" fill="var(--muted)">执行记录 · PR #5295 删掉 95 行硬编码进 main.py 的某插件 argparse</text>
 </svg>
-<div class="fig-cap"><b>为什么插件绝不许碰核心</b>:核心一旦被某插件的特例逻辑<b>硬编码</b>污染,就被那个插件<b>绑架</b>了——下次重构 <span class="mono">run_agent.py</span> 得先担心踩坏它的隐式约定,核心的可演化性就此<b>冻结</b>。正确做法是把规则反过来立:插件要新能力,不在核心开特例,而是<b>拓宽通用插件面</b>(加 hook、加 ctx 方法),核心永远只面对<b>有限、通用</b>的扩展点。PR #5295 删掉 95 行硬编码进 <span class="mono">main.py</span> 的插件 argparse,正是这条铁律的执行记录。</div>
+<div class="fig-cap"><b>为什么插件绝不许碰核心</b>：核心一旦被某插件的特例逻辑<b>硬编码</b>污染，就被那个插件<b>绑架</b>了——下次重构 <span class="mono">run_agent.py</span> 得先担心踩坏它的隐式约定，核心的可演化性就此<b>冻结</b>。正确做法是把规则反过来立：插件要新能力，不在核心开特例，而是<b>拓宽通用插件面</b>(加 hook、加 ctx 方法)，核心永远只面对<b>有限、通用</b>的扩展点。PR #5295 删掉 95 行硬编码进 <span class="mono">main.py</span> 的插件 argparse，正是这条铁律的执行记录。</div>
 </div>
 
-<p>注意 <span class="mono">register_tool</span> 委托的是和内置工具<strong>同一个</strong> <span class="mono">tools.registry</span>——这意味着插件工具不是"二等公民":它走相同的 schema 收集、相同的分派、相同的可用性检查。<span class="mono">check_fn</span> 是其中最关键的一环:工具<strong>只在前置条件满足时才出现</strong>(比如配了某个 API key),否则连 schema 都不进 context,真正做到<strong>零足迹</strong>。这正是 Footprint Ladder 第三阶"服务门控工具"的实现底座——核心工具集里那些 <span class="mono">ha_*</span>（Home Assistant）、<span class="mono">computer_use</span> 用的也是同一招：没配齐前置条件就隐身。</p>
+<p>注意 <span class="mono">register_tool</span> 委托的是和内置工具<strong>同一个</strong> <span class="mono">tools.registry</span>——这意味着插件工具不是"二等公民"：它走相同的 schema 收集、相同的分派、相同的可用性检查。<span class="mono">check_fn</span> 是其中最关键的一环：工具<strong>只在前置条件满足时才出现</strong>(比如配了某个 API key)，否则连 schema 都不进 context，真正做到<strong>零足迹</strong>。这正是 Footprint Ladder 第三阶"服务门控工具"的实现底座——核心工具集里那些 <span class="mono">ha_*</span>（Home Assistant）、<span class="mono">computer_use</span> 用的也是同一招：没配齐前置条件就隐身。</p>
 
-<p>插件能挂的不止工具和钩子,还有 <strong>CLI 子命令</strong>:<span class="mono">ctx.register_cli_command(...)</span> 会把插件的 argparse 子树在启动时<strong>接进</strong> <span class="mono">hermes</span>,于是 <span class="mono">hermes &lt;插件名&gt; &lt;子命令&gt;</span> 直接能用,<span class="mono">main.py</span> 一行不用改。这对应 Footprint Ladder 的<strong>第二阶</strong>"CLI 命令 + 技能":很多管理类能力(订阅、定时任务、服务配置)根本不需要做成模型工具——做成一条 shell 子命令,再写一个技能教 agent 去跑 <span class="mono">hermes &lt;子命令&gt;</span> 就够了,<strong>模型工具足迹为零</strong>。</p>
+<p>插件能挂的不止工具和钩子，还有 <strong>CLI 子命令</strong>:<span class="mono">ctx.register_cli_command(...)</span> 会把插件的 argparse 子树在启动时<strong>接进</strong> <span class="mono">hermes</span>，于是 <span class="mono">hermes &lt;插件名&gt; &lt;子命令&gt;</span> 直接能用,<span class="mono">main.py</span> 一行不用改。这对应 Footprint Ladder 的<strong>第二阶</strong>"CLI 命令 + 技能"：很多管理类能力(订阅、定时任务、服务配置)根本不需要做成模型工具——做成一条 shell 子命令，再写一个技能教 agent 去跑 <span class="mono">hermes &lt;子命令&gt;</span> 就够了,<strong>模型工具足迹为零</strong>。</p>
 
-<h2>钩子:在核心生命周期的关节插手</h2>
-<p>插件还能在 agent 运行的关键节点挂回调,而无需碰核心循环:</p>
+<h2>钩子：在核心生命周期的关节插手</h2>
+<p>插件还能在 agent 运行的关键节点挂回调，而无需碰核心循环:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">hermes_cli/plugins.py</span><span class="ln">128-155 · 节选</span></div>
@@ -1248,14 +1248,14 @@ LESSON_23 = {
     <span class="st">"pre_gateway_dispatch"</span>,         <span class="cm"># 网关分发前(可 skip/rewrite)</span>
 }</pre>
 </div>
-<p>这些是<strong>预留的扩展点</strong>:工具调用前后、LLM 调用前后、会话起止、子代理起止、网关分发前。插件挂一个回调就能<strong>观察或改写</strong>流程(比如 <span class="mono">transform_llm_output</span> 做人格化改写、<span class="mono">pre_gateway_dispatch</span> 拦截消息)。核心在固定位置触发这些钩子,但<strong>不知道也不关心</strong>具体挂了谁——又一次窄腰。</p>
+<p>这些是<strong>预留的扩展点</strong>：工具调用前后、LLM 调用前后、会话起止、子代理起止、网关分发前。插件挂一个回调就能<strong>观察或改写</strong>流程(比如 <span class="mono">transform_llm_output</span> 做人格化改写、<span class="mono">pre_gateway_dispatch</span> 拦截消息)。核心在固定位置触发这些钩子，但<strong>不知道也不关心</strong>具体挂了谁——又一次窄腰。</p>
 
-<p>钩子听起来像"预留扩展点",但 Hermes 对<strong>投机性扩展点</strong>是明确拒绝的:加一个没有真实消费者的 hook 很容易,等插件依赖上了再想删却<strong>极难</strong>。所以 <span class="mono">VALID_HOOKS</span> 里每一个名字背后都该有真实用例——<span class="mono">transform_llm_output</span> 给人格化改写、<span class="mono">pre_gateway_dispatch</span> 在鉴权前拦截/改写消息、<span class="mono">subagent_start</span>/<span class="mono">subagent_stop</span> 围着子代理(第 13 章)的边界。这条纪律和"窄腰"是一体两面:核心暴露的扩展面也要<strong>尽量小且有人用</strong>,而不是无脑预留一堆没人接的回调。</p>
+<p>钩子听起来像"预留扩展点"，但 Hermes 对<strong>投机性扩展点</strong>是明确拒绝的：加一个没有真实消费者的 hook 很容易，等插件依赖上了再想删却<strong>极难</strong>。所以 <span class="mono">VALID_HOOKS</span> 里每一个名字背后都该有真实用例——<span class="mono">transform_llm_output</span> 给人格化改写、<span class="mono">pre_gateway_dispatch</span> 在鉴权前拦截/改写消息、<span class="mono">subagent_start</span>/<span class="mono">subagent_stop</span> 围着子代理(第 13 章)的边界。这条纪律和"窄腰"是一体两面：核心暴露的扩展面也要<strong>尽量小且有人用</strong>，而不是无脑预留一堆没人接的回调。</p>
 
-<p>插件挂载完全靠<strong>发现</strong>而非<strong>注册表登记</strong>:启动时扫四处——仓库自带的 <span class="mono">plugins/</span>、用户的 <span class="mono">~/.hermes/plugins/</span>、项目级 <span class="mono">./.hermes/plugins/</span>(需显式开启)、以及 pip 装的 entry-point 包。你想加一个插件,只要把目录丢进 <span class="mono">~/.hermes/plugins/</span>,<strong>核心文件一行都不用动</strong>,下次启动自动被发现并 <span class="mono">register(ctx)</span>。这就是"边缘扩展"在文件系统层面的样子:能力是<strong>挂上去的</strong>,不是<strong>编译进去的</strong>。</p>
+<p>插件挂载完全靠<strong>发现</strong>而非<strong>注册表登记</strong>：启动时扫四处——仓库自带的 <span class="mono">plugins/</span>、用户的 <span class="mono">~/.hermes/plugins/</span>、项目级 <span class="mono">./.hermes/plugins/</span>(需显式开启)、以及 pip 装的 entry-point 包。你想加一个插件，只要把目录丢进 <span class="mono">~/.hermes/plugins/</span>,<strong>核心文件一行都不用动</strong>，下次启动自动被发现并 <span class="mono">register(ctx)</span>。这就是"边缘扩展"在文件系统层面的样子：能力是<strong>挂上去的</strong>，不是<strong>编译进去的</strong>。</p>
 
-<h2>技能:注入 user message,不破缓存(★缓存线)</h2>
-<p>技能是另一条边缘扩展线,它的注入方式特意守住了缓存:</p>
+<h2>技能：注入 user message，不破缓存(★缓存线)</h2>
+<p>技能是另一条边缘扩展线，它的注入方式特意守住了缓存:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">agent/skill_commands.py</span><span class="ln">245-274 · 节选</span></div>
@@ -1265,20 +1265,20 @@ LESSON_23 = {
     parts = [activation_note, <span class="st">""</span>, content.strip()]
     <span class="kw">if</span> skill_dir:
         parts.append(<span class="st">f"[Skill directory: {skill_dir}]"</span>)
-    ...                                  <span class="cm"># 作为一条 user message 注入,不进 system prompt</span></pre>
+    ...                                  <span class="cm"># 作为一条 user message 注入，不进 system prompt</span></pre>
 </div>
-<p>关键在<strong>注入位置</strong>:技能内容被拼成一条 <strong>user message</strong> 喂进对话,而<strong>不是</strong>塞进 system prompt。这是刻意的——system prompt 一改就<strong>击穿整会话的缓存前缀</strong>(第 6 章铁律);而追加一条 user message 是 append-only,缓存前缀<strong>纹丝不动</strong>。所以你 <span class="mono">/技能名</span> 临时调一个技能,不会让整段对话的缓存作废。边缘扩展,也要对缓存线负责。</p>
+<p>关键在<strong>注入位置</strong>：技能内容被拼成一条 <strong>user message</strong> 喂进对话，而<strong>不是</strong>塞进 system prompt。这是刻意的——system prompt 一改就<strong>击穿整会话的缓存前缀</strong>(第 6 章铁律);而追加一条 user message 是 append-only，缓存前缀<strong>纹丝不动</strong>。所以你 <span class="mono">/技能名</span> 临时调一个技能，不会让整段对话的缓存作废。边缘扩展，也要对缓存线负责。</p>
 
-<p>再把"为什么走 user message"挖深一层。一段长对话每一轮都在<strong>复用</strong>一个缓存前缀(system prompt + 早期消息),命中缓存的那部分 token 又快又便宜。一旦你往 system prompt 里塞技能内容,这个前缀就<strong>变了</strong>,从那一轮起整个前缀<strong>全部 miss</strong>,得按全价重算——而且是<strong>每一轮</strong>都重算,不是一次性的。把技能拼成一条 <strong>user message</strong> 追加在<strong>末尾</strong>,前缀<strong>纹丝不动</strong>,缓存继续命中。这就是为什么"缓存神圣线"(第 6 章)能约束到边缘扩展:不是技能本身不重要,而是<strong>注入位置</strong>直接决定了用户的钱包。</p>
+<p>再把"为什么走 user message"挖深一层。一段长对话每一轮都在<strong>复用</strong>一个缓存前缀(system prompt + 早期消息)，命中缓存的那部分 token 又快又便宜。一旦你往 system prompt 里塞技能内容，这个前缀就<strong>变了</strong>，从那一轮起整个前缀<strong>全部 miss</strong>，得按全价重算——而且是<strong>每一轮</strong>都重算，不是一次性的。把技能拼成一条 <strong>user message</strong> 追加在<strong>末尾</strong>，前缀<strong>纹丝不动</strong>，缓存继续命中。这就是为什么"缓存神圣线"(第 6 章)能约束到边缘扩展：不是技能本身不重要，而是<strong>注入位置</strong>直接决定了用户的钱包。</p>
 
-<p>技能本身也分层:<span class="mono">skills/</span> 是默认就加载的<strong>内置技能</strong>,<span class="mono">optional-skills/</span> 是随仓库发货但<strong>默认不激活</strong>、要 <span class="mono">hermes skills install</span> 显式装的重型/小众技能,再往外是用户自己的插件技能。这套分层和 Footprint Ladder 一个逻辑:<strong>越常用越靠核心,越小众越靠边缘</strong>。MCP 走的是另一条边缘路——外部工具进 <span class="mono">optional-mcps/</span> catalog,默认禁用,<span class="mono">hermes mcp install</span> 才连上,核心通过内置 MCP client 对接,<strong>零核心 schema 足迹</strong>。"进了 catalog = 经过审核",没有社区层、没有自动更新。</p>
+<p>技能本身也分层:<span class="mono">skills/</span> 是默认就加载的<strong>内置技能</strong>,<span class="mono">optional-skills/</span> 是随仓库发货但<strong>默认不激活</strong>、要 <span class="mono">hermes skills install</span> 显式装的重型/小众技能，再往外是用户自己的插件技能。这套分层和 Footprint Ladder 一个逻辑:<strong>越常用越靠核心，越小众越靠边缘</strong>。MCP 走的是另一条边缘路——外部工具进 <span class="mono">optional-mcps/</span> catalog，默认禁用,<span class="mono">hermes mcp install</span> 才连上，核心通过内置 MCP client 对接,<strong>零核心 schema 足迹</strong>。"进了 catalog = 经过审核"，没有社区层、没有自动更新。</p>
 
-<p>顺带说一句发现机制的微妙处:不是所有插件都走同一套发现。通用 <span class="mono">PluginManager</span> 管工具/钩子/CLI 命令;而<strong>模型 provider</strong> 插件走的是<strong>另一套惰性发现</strong>——第一次 <span class="mono">get_provider_profile()</span> 或 <span class="mono">list_providers()</span> 被调用时才扫描,而不是由 <span class="mono">PluginManager</span> 导入(否则会重复实例化 <span class="mono">ProviderProfile</span>)。同名的用户插件会<strong>覆盖</strong>内置 profile(last-writer-wins),第三方不打补丁就能换掉任何内置 provider。同一条"边缘扩展"哲学,落到不同子系统就长出不同的发现路径。</p>
+<p>顺带说一句发现机制的微妙处：不是所有插件都走同一套发现。通用 <span class="mono">PluginManager</span> 管工具/钩子/CLI 命令;而<strong>模型 provider</strong> 插件走的是<strong>另一套惰性发现</strong>——第一次 <span class="mono">get_provider_profile()</span> 或 <span class="mono">list_providers()</span> 被调用时才扫描，而不是由 <span class="mono">PluginManager</span> 导入(否则会重复实例化 <span class="mono">ProviderProfile</span>)。同名的用户插件会<strong>覆盖</strong>内置 profile(last-writer-wins)，第三方不打补丁就能换掉任何内置 provider。同一条"边缘扩展"哲学，落到不同子系统就长出不同的发现路径。</p>
 
-<p>缓存这条线甚至约束到"装技能"本身:会改动 system-prompt 状态的 slash 命令(技能、工具、记忆)都是<strong>缓存感知</strong>的——默认<strong>延迟失效</strong>(改动下个会话才生效),想立刻生效得显式加 <span class="mono">--now</span>。<span class="mono">/skills install --now</span> 就是这条范式的样板。换句话说:边缘扩展不仅要<strong>挂得上</strong>,还要挂得<strong>不打扰正在进行的对话</strong>——能力是边缘的,但缓存纪律是全局的。</p>
+<p>缓存这条线甚至约束到"装技能"本身：会改动 system-prompt 状态的 slash 命令(技能、工具、记忆)都是<strong>缓存感知</strong>的——默认<strong>延迟失效</strong>(改动下个会话才生效)，想立刻生效得显式加 <span class="mono">--now</span>。<span class="mono">/skills install --now</span> 就是这条范式的样板。换句话说：边缘扩展不仅要<strong>挂得上</strong>，还要挂得<strong>不打扰正在进行的对话</strong>——能力是边缘的，但缓存纪律是全局的。</p>
 
 <div class="figure">
-<svg viewBox="0 0 680 418" role="img" aria-label="两个真实 MCP catalog 条目走一遍:左 linear 是远程 OAuth http,manifest 写 name linear、description Find create and update Linear issues、transport type http url mcp.linear.app、auth type oauth,install 后写进 config.yaml 的 mcp_servers,MCP client 连接走 OAuth 浏览器流暴露 find get list 加 create update;右 n8n 是本地 stdio 桥,transport type stdio command INSTALL_DIR 下的 python,install type git,auth type api_key,暴露 11 个工具,default_enabled 只留 8 个只读、剪掉 activate deactivate 和 container_logs 三个 mutating;底部零足迹门控:未 install 工具 schema 不进 context,进 optional-mcps 目录等于经 PR 审核的 Nous 批准">
+<svg viewBox="0 0 680 418" role="img" aria-label="两个真实 MCP catalog 条目走一遍：左 linear 是远程 OAuth http,manifest 写 name linear、description Find create and update Linear issues、transport type http url mcp.linear.app、auth type oauth,install 后写进 config.yaml 的 mcp_servers,MCP client 连接走 OAuth 浏览器流暴露 find get list 加 create update;右 n8n 是本地 stdio 桥,transport type stdio command INSTALL_DIR 下的 python,install type git,auth type api_key，暴露 11 个工具,default_enabled 只留 8 个只读、剪掉 activate deactivate 和 container_logs 三个 mutating;底部零足迹门控：未 install 工具 schema 不进 context，进 optional-mcps 目录等于经 PR 审核的 Nous 批准">
   <rect x="14" y="12" width="652" height="28" rx="7" fill="var(--accent-soft)" stroke="var(--accent)"/>
   <text x="26" y="30" font-size="11" fill="var(--accent-ink)">两个真实 catalog 条目 install 后暴露什么 + 零足迹门控(<tspan class="mono">optional-mcps/&lt;name&gt;/manifest.yaml</tspan>)</text>
 
@@ -1318,56 +1318,56 @@ LESSON_23 = {
   <text x="354" y="233" font-size="9.5" font-weight="700" fill="var(--accent-ink)">暴露 11 工具 · tools.default_enabled 剪枝</text>
   <text x="354" y="251" font-size="9" fill="var(--ink)"><tspan font-weight="700" fill="var(--purple)">✓ 8 只读</tspan> health · list_workflows · get_workflow…</text>
   <text x="354" y="269" font-size="9" fill="var(--ink)"><tspan font-weight="700" fill="var(--red)">✗ 3 剪掉</tspan> activate/deactivate · container_logs</text>
-  <text x="354" y="286" font-size="9" fill="var(--muted)">mutating 默认不启,按威胁模型自行开</text>
+  <text x="354" y="286" font-size="9" fill="var(--muted)">mutating 默认不启，按威胁模型自行开</text>
 
   <text x="16" y="312" font-size="9.5" font-weight="700" fill="var(--muted)">⑤ 零足迹门控 + 「进 catalog = 经审核」</text>
   <rect x="14" y="318" width="652" height="48" rx="7" fill="var(--panel-2)" stroke="var(--line)"/>
   <text x="22" y="336" font-size="10" fill="var(--ink)">未 install → 工具 schema <tspan font-weight="700" fill="var(--purple)">不进 context</tspan>(零核心 schema 足迹);<tspan class="mono">check_fn</tspan> 门控让未配置就不暴露。</text>
-  <text x="22" y="356" font-size="10" fill="var(--ink)">进 <tspan class="mono">optional-mcps/</tspan> 目录 = <tspan font-weight="700" fill="var(--accent-ink)">Nous 批准(经 PR 审核)</tspan>;MCP 永不自动更新,需显式 re-install。</text>
+  <text x="22" y="356" font-size="10" fill="var(--ink)">进 <tspan class="mono">optional-mcps/</tspan> 目录 = <tspan font-weight="700" fill="var(--accent-ink)">Nous 批准(经 PR 审核)</tspan>;MCP 永不自动更新，需显式 re-install。</text>
 
   <text x="16" y="386" class="mono" font-size="9" fill="var(--muted)">mcp_catalog.py:4  &quot;each catalog entry … ships disabled&quot;   ·   plugins.py:367  register_tool(check_fn=…)</text>
-  <text x="16" y="408" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图:同一套 catalog 容两种 transport —— linear 远程 OAuth、n8n 本地 stdio,都零核心 schema 足迹。</text>
+  <text x="16" y="408" font-size="10.5" font-weight="700" fill="var(--muted)">读这张图：同一套 catalog 容两种 transport —— linear 远程 OAuth、n8n 本地 stdio，都零核心 schema 足迹。</text>
 </svg>
 <div class="fig-cap"><b>两个真实 manifest 落地</b>:<span class="mono">linear</span>(<span class="mono">transport:{type:http, url:https://mcp.linear.app/mcp}</span>、<span class="mono">auth:{type:oauth}</span>)install 后写进 <span class="mono">config.yaml</span> 的 <span class="mono">mcp_servers.linear</span>,MCP client 走 OAuth 暴露 <b>find/get/list + create/update</b>;<span class="mono">n8n</span>(<span class="mono">transport:{type:stdio, command:${INSTALL_DIR}/.venv/bin/python}</span>)暴露 <b>11 工具</b>,<span class="mono">tools.default_enabled</span> 只留 8 个只读、剪掉 <span class="mono">activate/deactivate</span> 与 <span class="mono">container_logs</span> 三个 mutating。未 install 则 schema <b>不进 context</b>(零足迹),「进 <span class="mono">optional-mcps/</span> 目录 = 经 PR 审核的 Nous 批准」。</div>
 </div>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">要加新能力 → 沿 Footprint Ladder 选<strong>足迹最小</strong>的一阶</span></div>
-  <div class="step"><span class="num">2</span><span class="sc">插件:<span class="mono">register(ctx)</span> → <span class="mono">register_tool</span>(委托 registry)/<span class="mono">register_hook</span>,不碰核心文件</span></div>
-  <div class="step"><span class="num">3</span><span class="sc">技能:内容拼成 <strong>user message</strong> 注入(不进 system prompt,不破缓存)</span></div>
-  <div class="step"><span class="num">4</span><span class="sc">MCP:外部工具进 catalog,核心经内置 MCP client 连接,零核心 schema 足迹</span></div>
+  <div class="step"><span class="num">2</span><span class="sc">插件:<span class="mono">register(ctx)</span> → <span class="mono">register_tool</span>(委托 registry)/<span class="mono">register_hook</span>，不碰核心文件</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">技能：内容拼成 <strong>user message</strong> 注入(不进 system prompt，不破缓存)</span></div>
+  <div class="step"><span class="num">4</span><span class="sc">MCP：外部工具进 catalog，核心经内置 MCP client 连接，零核心 schema 足迹</span></div>
   <div class="step"><span class="num">5</span><span class="sc">新核心工具 = 最后手段(每个都在<strong>每次 API 调用</strong>发送)</span></div>
 </div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「能力在边缘、核心窄腰」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>PluginContext.register_tool</strong>(插件挂工具)、<strong>VALID_HOOKS</strong>(生命周期扩展点)、<strong>技能 user message 注入</strong>、<strong>MCP catalog</strong>。跨章节配合:插件 <span class="mono">register_tool</span> 委托的就是<strong>工具系统</strong>(第 8 章)那个 registry,服务门控用同一个 <span class="mono">check_fn</span>;技能注入 user message <strong>不进 system prompt = 不破缓存</strong>(第 6 章);钩子在工具/LLM/会话/子代理(第 13 章)的固定节点触发;连<strong>平台适配器</strong>(第 17 章)、记忆后端(第 11 章)、provider 都是插件——印证了全书"核心薄、边缘厚"。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>PluginContext.register_tool</strong>(插件挂工具)、<strong>VALID_HOOKS</strong>(生命周期扩展点)、<strong>技能 user message 注入</strong>、<strong>MCP catalog</strong>。跨章节配合：插件 <span class="mono">register_tool</span> 委托的就是<strong>工具系统</strong>(第 8 章)那个 registry，服务门控用同一个 <span class="mono">check_fn</span>;技能注入 user message <strong>不进 system prompt = 不破缓存</strong>(第 6 章);钩子在工具/LLM/会话/子代理(第 13 章)的固定节点触发;连<strong>平台适配器</strong>(第 17 章)、记忆后端(第 11 章)、provider 都是插件——印证了全书"核心薄、边缘厚"。
   <div class="collab-sub">② 数据流时序</div>
-  新能力 → Footprint Ladder 选阶 → 插件 <span class="mono">register(ctx)</span>(register_tool/register_hook)或技能(user message 注入)或 MCP(catalog)→ 边缘挂载,核心工具 schema 不膨胀。
+  新能力 → Footprint Ladder 选阶 → 插件 <span class="mono">register(ctx)</span>(register_tool/register_hook)或技能(user message 注入)或 MCP(catalog)→ 边缘挂载，核心工具 schema 不膨胀。
   <div class="collab-sub">③ 关键点</div>
-  能力在<strong>边缘</strong>扩展,核心保持<strong>窄腰</strong>:插件不改核心文件(Teknium 铁律)、技能注入 user message 保缓存、MCP 把外部工具关在 catalog。新核心工具是最后手段——因为每个核心工具都在<strong>每次 API 调用</strong>发送,既花 token 又稀释模型注意力。
+  能力在<strong>边缘</strong>扩展，核心保持<strong>窄腰</strong>：插件不改核心文件(Teknium 铁律)、技能注入 user message 保缓存、MCP 把外部工具关在 catalog。新核心工具是最后手段——因为每个核心工具都在<strong>每次 API 调用</strong>发送，既花 token 又稀释模型注意力。
 </div>
 
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
-  主线:<strong>Footprint Ladder——能力推到边缘,核心保持窄腰</strong>。它主要治两条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span>——每个<strong>核心工具的 schema 都进每一次 API 调用的 context</strong>。工具越多,context 越膨胀,真正该用的那个越容易<strong>淹没在工具堆里</strong>(中间遗失)。把能力压到边缘(技能/插件/MCP 按需出现),核心工具集保持精简,模型的注意力才不被几十个用不上的工具稀释。</p>
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——每个核心工具都是<strong>永久的维护负担</strong>(每次 API call 都发、所有平台都带)。边缘扩展几乎<strong>零核心成本</strong>:插件装进 <span class="mono">~/.hermes/plugins/</span>、技能放进 <span class="mono">~/.hermes/skills/</span>、MCP 进 catalog,加一个不用动核心、不影响别的用户。</p>
-  <p style="margin:.5rem 0 0">反模式:什么能力都加成<strong>核心工具</strong>——核心 schema 随能力数量线性膨胀,每次 API 调用都更贵、模型注意力都更散,且每个都得永久维护。Footprint Ladder 的存在,就是逼你先问"能不能停在更高那一阶"。</p>
-  <p style="margin:.5rem 0 0">这条取舍在代码里有个很硬的落点:当 MCP/插件工具的 schema 体积超过阈值(默认约<strong>上下文窗口的 10%</strong>),它们会被<strong>折叠</strong>到三个桥工具(<span class="mono">tool_search</span> / <span class="mono">tool_describe</span> / <span class="mono">tool_call</span>)后面,按需检索;而 <span class="mono">_HERMES_CORE_TOOLS</span> 里的核心工具<strong>永远不被折叠</strong>。这恰恰反证了"核心工具贵":系统宁可把成百上千的边缘工具藏进桥后面,也要保证那几十个核心工具每轮<strong>原样常驻</strong>——因为它们被判定为"几乎每个用户每一轮都要用"。能进这个常驻名单,门槛极高。</p>
-  <p style="margin:.5rem 0 0">还有一层取舍是"<strong>别重复造</strong>":当三个以上的 PR 想接同一类东西(记忆后端、provider、通知器),正确做法不是一个个并进来,而是设计<strong>一个共享接口</strong>(ABC + 编排器),把现有内置实现包成第一个 provider,再让那些 PR 变成这个接口下的插件。记忆后端(第 11 章)、模型 provider 都是这么收口的——核心只认<strong>一个抽象</strong>,具体实现全在边缘。这就是为什么 Hermes 能在核心几乎不动的前提下,支持二十多个平台、一堆记忆后端和 provider:<strong>抽象在腰,实现在边</strong>。</p>
-  <p style="margin:.5rem 0 0">Footprint Ladder 还有个反面清单:<strong>能用终端 + 文件解决的,就别做成新核心工具</strong>;<strong>非密钥的配置,别塞新的 <span class="mono">HERMES_*</span> 环境变量</strong>(<span class="mono">.env</span> 只放密钥,行为开关进 <span class="mono">config.yaml</span>)。这些"不要"和"要走哪一阶"是同一套价值观的两面:核心面每多一个工具、每多一个环境变量,都是<strong>永久的、全局的</strong>负担。把判断前置成一道阶梯,就是让"先问能不能更轻"变成肌肉记忆,而不是事后再来心疼 context 和维护成本。</p>
+  主线:<strong>Footprint Ladder——能力推到边缘，核心保持窄腰</strong>。它主要治两条 LLM 固有约束:
+  <p style="margin:.5rem 0 0"><span class="badge constraint">A·中间遗失</span>——每个<strong>核心工具的 schema 都进每一次 API 调用的 context</strong>。工具越多,context 越膨胀，真正该用的那个越容易<strong>淹没在工具堆里</strong>(中间遗失)。把能力压到边缘(技能/插件/MCP 按需出现)，核心工具集保持精简，模型的注意力才不被几十个用不上的工具稀释。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——每个核心工具都是<strong>永久的维护负担</strong>(每次 API call 都发、所有平台都带)。边缘扩展几乎<strong>零核心成本</strong>：插件装进 <span class="mono">~/.hermes/plugins/</span>、技能放进 <span class="mono">~/.hermes/skills/</span>、MCP 进 catalog，加一个不用动核心、不影响别的用户。</p>
+  <p style="margin:.5rem 0 0">反模式：什么能力都加成<strong>核心工具</strong>——核心 schema 随能力数量线性膨胀，每次 API 调用都更贵、模型注意力都更散，且每个都得永久维护。Footprint Ladder 的存在，就是逼你先问"能不能停在更高那一阶"。</p>
+  <p style="margin:.5rem 0 0">这条取舍在代码里有个很硬的落点：当 MCP/插件工具的 schema 体积超过阈值(默认约<strong>上下文窗口的 10%</strong>)，它们会被<strong>折叠</strong>到三个桥工具(<span class="mono">tool_search</span> / <span class="mono">tool_describe</span> / <span class="mono">tool_call</span>)后面，按需检索;而 <span class="mono">_HERMES_CORE_TOOLS</span> 里的核心工具<strong>永远不被折叠</strong>。这恰恰反证了"核心工具贵"：系统宁可把成百上千的边缘工具藏进桥后面，也要保证那几十个核心工具每轮<strong>原样常驻</strong>——因为它们被判定为"几乎每个用户每一轮都要用"。能进这个常驻名单，门槛极高。</p>
+  <p style="margin:.5rem 0 0">还有一层取舍是"<strong>别重复造</strong>"：当三个以上的 PR 想接同一类东西(记忆后端、provider、通知器)，正确做法不是一个个并进来，而是设计<strong>一个共享接口</strong>(ABC + 编排器)，把现有内置实现包成第一个 provider，再让那些 PR 变成这个接口下的插件。记忆后端(第 11 章)、模型 provider 都是这么收口的——核心只认<strong>一个抽象</strong>，具体实现全在边缘。这就是为什么 Hermes 能在核心几乎不动的前提下，支持二十多个平台、一堆记忆后端和 provider:<strong>抽象在腰，实现在边</strong>。</p>
+  <p style="margin:.5rem 0 0">Footprint Ladder 还有个反面清单:<strong>能用终端 + 文件解决的，就别做成新核心工具</strong>;<strong>非密钥的配置，别塞新的 <span class="mono">HERMES_*</span> 环境变量</strong>(<span class="mono">.env</span> 只放密钥，行为开关进 <span class="mono">config.yaml</span>)。这些"不要"和"要走哪一阶"是同一套价值观的两面：核心面每多一个工具、每多一个环境变量，都是<strong>永久的、全局的</strong>负担。把判断前置成一道阶梯，就是让"先问能不能更轻"变成肌肉记忆，而不是事后再来心疼 context 和维护成本。</p>
 </div>
 
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
-    <li><strong>Footprint Ladder</strong>:扩展现有代码 → CLI+技能 → 服务门控工具 → 插件 → MCP → 新核心工具(最后手段);选足迹最小的一阶。</li>
-    <li><strong>插件不改核心</strong>:<span class="mono">register(ctx)</span> 委托 <span class="mono">tools.registry</span>(第 8 章)挂工具/命令/钩子,绝不碰 <span class="mono">run_agent.py</span> 等核心文件(Teknium 铁律)。</li>
+    <li><strong>Footprint Ladder</strong>：扩展现有代码 → CLI+技能 → 服务门控工具 → 插件 → MCP → 新核心工具(最后手段);选足迹最小的一阶。</li>
+    <li><strong>插件不改核心</strong>:<span class="mono">register(ctx)</span> 委托 <span class="mono">tools.registry</span>(第 8 章)挂工具/命令/钩子，绝不碰 <span class="mono">run_agent.py</span> 等核心文件(Teknium 铁律)。</li>
     <li><strong>生命周期钩子</strong>:<span class="mono">VALID_HOOKS</span> 在工具/LLM/会话/子代理/网关的固定节点开放观察与改写。</li>
-    <li><strong>技能保缓存(★)</strong>:技能内容注入为 <strong>user message</strong>(append-only),不进 system prompt,整会话缓存前缀不作废(第 6 章)。</li>
-    <li><strong>为什么核心工具贵</strong>:每个核心工具的 schema 都在<strong>每次 API 调用</strong>发送——膨胀 context(A·中间遗失)+ 永久维护(G·运维)。</li>
+    <li><strong>技能保缓存(★)</strong>：技能内容注入为 <strong>user message</strong>(append-only)，不进 system prompt，整会话缓存前缀不作废(第 6 章)。</li>
+    <li><strong>为什么核心工具贵</strong>：每个核心工具的 schema 都在<strong>每次 API 调用</strong>发送——膨胀 context(A·中间遗失)+ 永久维护(G·运维)。</li>
   </ul>
 </div>
 """,

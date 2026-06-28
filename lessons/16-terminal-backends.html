@@ -381,8 +381,8 @@ Agent 要「动手」就得跑命令——但跑在<strong>哪里</strong>？你
 </div>
 
 <div class="card macro">
-  <div class="tag">🌍 宏观 · 统一抽象,后端差异在边缘</div>
-  六种执行后端——<strong>local / docker / ssh / singularity / modal / daytona</strong>——共享<strong>同一个接口</strong> <span class="mono">BaseEnvironment</span>(ABC)。每个后端只需实现 <span class="mono">_run_bash()</span> 和 <span class="mono">cleanup()</span> 两个抽象方法；统一的 <span class="mono">execute()</span>(会话快照、CWD 跟踪、中断、超时)由<strong>基类提供</strong>，所有后端复用。一个工厂 <span class="mono">_create_environment</span> 按 <span class="mono">TERMINAL_ENV</span> 配置挑后端。这正是窄腰(第 4 章)在执行层的体现:<strong>核心只认一个 terminal 工具</strong>,六种环境的差异全被关进边缘的 <span class="mono">BaseEnvironment</span> 子类——加一个新后端,核心一行不动。
+  <div class="tag">🌍 宏观 · 统一抽象，后端差异在边缘</div>
+  六种执行后端——<strong>local / docker / ssh / singularity / modal / daytona</strong>——共享<strong>同一个接口</strong> <span class="mono">BaseEnvironment</span>(ABC)。每个后端只需实现 <span class="mono">_run_bash()</span> 和 <span class="mono">cleanup()</span> 两个抽象方法；统一的 <span class="mono">execute()</span>(会话快照、CWD 跟踪、中断、超时)由<strong>基类提供</strong>，所有后端复用。一个工厂 <span class="mono">_create_environment</span> 按 <span class="mono">TERMINAL_ENV</span> 配置挑后端。这正是窄腰(第 4 章)在执行层的体现:<strong>核心只认一个 terminal 工具</strong>，六种环境的差异全被关进边缘的 <span class="mono">BaseEnvironment</span> 子类——加一个新后端，核心一行不动。
 </div>
 
 <h2>统一接口:BaseEnvironment ABC</h2>
@@ -397,7 +397,7 @@ Agent 要「动手」就得跑命令——但跑在<strong>哪里</strong>？你
 <span class="cm">    interrupt handling, and timeout enforcement.&quot;&quot;&quot;</span>
 
     <span class="kw">def</span> <span class="fn">_run_bash</span>(self, cmd_string, ...) -&gt; ProcessHandle:
-        <span class="cm"># 子类必须实现:在各自后端里 spawn 一个 bash 进程</span>
+        <span class="cm"># 子类必须实现：在各自后端里 spawn 一个 bash 进程</span>
         <span class="kw">raise</span> NotImplementedError
 
     <span class="nd">@abstractmethod</span>
@@ -405,8 +405,8 @@ Agent 要「动手」就得跑命令——但跑在<strong>哪里</strong>？你
         <span class="cm"># 释放后端资源(容器/实例/连接)</span>
         ...</pre>
 </div>
-<p>注意分工:<strong>子类只实现 <span class="mono">_run_bash()</span>(怎么 spawn 进程)和 <span class="mono">cleanup()</span>(怎么释放资源)</strong>;而 <span class="mono">execute()</span>——会话快照恢复、CWD 跟踪、中断处理、超时强制——这些<strong>跨后端通用的流程</strong>由基类<strong>统一提供</strong>,六个后端复用同一套。于是 docker 后端只关心「怎么在容器里跑 bash」,ssh 后端只关心「怎么在远程跑」,通用的会话状态管理它们<strong>都不用重写</strong>。</p>
-<p>为什么偏偏让基类握住 <span class="mono">execute()</span>、只把 <span class="mono">_run_bash()</span> 和 <span class="mono">cleanup()</span> 两个洞留给子类?因为会话快照、CWD 跟踪、中断、超时这套流程是<strong>跨后端不变的难点</strong>——一旦写错(CWD 没跟上、超时没强制),六个后端会同时犯病。把它收进基类,等于<strong>写一次、修一次,六个后端同时受益</strong>;新加后端也<strong>无从绕过</strong>这些保护,不会因为作者偷懒就丢掉超时或中断。反过来,若让每个后端各写一份 <span class="mono">execute()</span>,就是六份几乎一样的快照逻辑、六处潜在 bug——这正是「通用骨架沉到基类、可变步骤留给子类」的价值,也是边缘子类能保持<strong>薄而专注</strong>的前提。</p>
+<p>注意分工:<strong>子类只实现 <span class="mono">_run_bash()</span>(怎么 spawn 进程)和 <span class="mono">cleanup()</span>(怎么释放资源)</strong>;而 <span class="mono">execute()</span>——会话快照恢复、CWD 跟踪、中断处理、超时强制——这些<strong>跨后端通用的流程</strong>由基类<strong>统一提供</strong>，六个后端复用同一套。于是 docker 后端只关心「怎么在容器里跑 bash」,ssh 后端只关心「怎么在远程跑」，通用的会话状态管理它们<strong>都不用重写</strong>。</p>
+<p>为什么偏偏让基类握住 <span class="mono">execute()</span>、只把 <span class="mono">_run_bash()</span> 和 <span class="mono">cleanup()</span> 两个洞留给子类?因为会话快照、CWD 跟踪、中断、超时这套流程是<strong>跨后端不变的难点</strong>——一旦写错(CWD 没跟上、超时没强制)，六个后端会同时犯病。把它收进基类，等于<strong>写一次、修一次，六个后端同时受益</strong>;新加后端也<strong>无从绕过</strong>这些保护，不会因为作者偷懒就丢掉超时或中断。反过来，若让每个后端各写一份 <span class="mono">execute()</span>，就是六份几乎一样的快照逻辑、六处潜在 bug——这正是「通用骨架沉到基类、可变步骤留给子类」的价值，也是边缘子类能保持<strong>薄而专注</strong>的前提。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 308" role="img" aria-label="多后端统一抽象：核心只认一个 terminal 工具与 BaseEnvironment.execute()，六种后端差异关进各自子类">
@@ -462,9 +462,9 @@ Agent 要「动手」就得跑命令——但跑在<strong>哪里</strong>？你
 <div class="fig-cap"><b>多后端统一抽象</b>：模型永远只调一个 <span class="mono">terminal</span>，核心也只认一个 <span class="mono">BaseEnvironment.execute()</span> 抽象（会话快照 / CWD / 中断 / 超时由基类统一兜底）；<span class="mono">_create_environment</span> 工厂按 <span class="mono">TERMINAL_ENV</span> 分派到六个子类。这就是<b>窄腰</b>（第 4 章）在执行层的投影——<span class="mono">terminal</span> 是「该进核心」的工具（第 8 章），而六种环境的差异全沉到<b>边缘子类</b>，加一个后端核心一行不动。</div>
 </div>
 
-<p>那么「会话快照」到底是什么?以 local 后端为例,设计很巧:<strong>每次 <span class="mono">execute()</span> 都重新 spawn 一个全新的 bash 进程</strong>(spawn-per-call),命令跑完进程即退。可这样一来,上一条命令 <span class="mono">export</span> 的环境变量、<span class="mono">cd</span> 切换的目录,下一条岂不全丢?基类的「会话快照」正为此:<strong>每条命令结束后把环境变量快照进文件、当前工作目录也写进文件;下一条命令开跑前先回读、source 回来</strong>。于是一串无状态的短命 bash 进程,被串成一个「有记忆」的会话——这正是<strong>约束 B(无状态)</strong>在 shell 执行层的对策:底层进程无状态,靠外部文件快照重建连续性。</p>
-<p>那为何不干脆开一个<strong>常驻的交互式 bash</strong>、让状态天然留住,省去快照这套?因为常驻 shell 是<strong>有状态且脆弱</strong>的:进程可能挂死、被某条命令污染,在 docker/ssh/modal 各后端行为还各不相同,难以统一中断与超时。<span class="mono">spawn-per-call</span> 反其道而行——每条命令一个干净的 <span class="mono">bash -c</span>,跑完即弃,<strong>幂等、可重入、六个后端共用一套模型</strong>;状态不靠进程记忆,而靠外部快照文件重建。这与第 2 章「模型调用本身无状态、状态外置」是<strong>同一招在 shell 层的复刻</strong>:底座越无状态,越好移植、越好恢复——daytona 后端被中断后还能从停止的 sandbox 重启接着跑,正得益于这种「状态不在进程里」的设计。</p>
-<p>快照里还藏着一处「就地取材」的巧思:环境变量好办——<span class="mono">export -p</span> 重导进快照文件即可;但<strong>当前目录</strong>怎么跨进程传?本地后端直接把 <span class="mono">pwd</span> 写进一个临时文件、下条命令开跑前回读;可远程后端(ssh)没有共享文件系统,于是改用<strong>带内 stdout 标记</strong>——命令尾部 <span class="mono">printf</span> 出一对独有标记包住 <span class="mono">pwd</span>,基类再从输出里把它解析、剥离。同一个「记住 CWD」的需求,本地与远程用了<strong>两条物理通道</strong>,却都收敛到基类同一套 CWD 跟踪逻辑——这又是「通用契约在基类、落地差异在子类」的微观一例。</p>
+<p>那么「会话快照」到底是什么?以 local 后端为例，设计很巧:<strong>每次 <span class="mono">execute()</span> 都重新 spawn 一个全新的 bash 进程</strong>(spawn-per-call)，命令跑完进程即退。可这样一来，上一条命令 <span class="mono">export</span> 的环境变量、<span class="mono">cd</span> 切换的目录，下一条岂不全丢?基类的「会话快照」正为此:<strong>每条命令结束后把环境变量快照进文件、当前工作目录也写进文件;下一条命令开跑前先回读、source 回来</strong>。于是一串无状态的短命 bash 进程，被串成一个「有记忆」的会话——这正是<strong>约束 B(无状态)</strong>在 shell 执行层的对策：底层进程无状态，靠外部文件快照重建连续性。</p>
+<p>那为何不干脆开一个<strong>常驻的交互式 bash</strong>、让状态天然留住，省去快照这套?因为常驻 shell 是<strong>有状态且脆弱</strong>的：进程可能挂死、被某条命令污染，在 docker/ssh/modal 各后端行为还各不相同，难以统一中断与超时。<span class="mono">spawn-per-call</span> 反其道而行——每条命令一个干净的 <span class="mono">bash -c</span>，跑完即弃,<strong>幂等、可重入、六个后端共用一套模型</strong>;状态不靠进程记忆，而靠外部快照文件重建。这与第 2 章「模型调用本身无状态、状态外置」是<strong>同一招在 shell 层的复刻</strong>：底座越无状态，越好移植、越好恢复——daytona 后端被中断后还能从停止的 sandbox 重启接着跑，正得益于这种「状态不在进程里」的设计。</p>
+<p>快照里还藏着一处「就地取材」的巧思：环境变量好办——<span class="mono">export -p</span> 重导进快照文件即可;但<strong>当前目录</strong>怎么跨进程传?本地后端直接把 <span class="mono">pwd</span> 写进一个临时文件、下条命令开跑前回读;可远程后端(ssh)没有共享文件系统，于是改用<strong>带内 stdout 标记</strong>——命令尾部 <span class="mono">printf</span> 出一对独有标记包住 <span class="mono">pwd</span>，基类再从输出里把它解析、剥离。同一个「记住 CWD」的需求，本地与远程用了<strong>两条物理通道</strong>，却都收敛到基类同一套 CWD 跟踪逻辑——这又是「通用契约在基类、落地差异在子类」的微观一例。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 312" role="img" aria-label="spawn-per-call 会话快照：每条命令一个全新 bash -c，开跑前 re-source 快照、跑完写回，状态因此延续">
@@ -517,8 +517,8 @@ Agent 要「动手」就得跑命令——但跑在<strong>哪里</strong>？你
 <div class="fig-cap"><b>spawn-per-call 会话快照</b>：模型每轮失忆（第 2 章 B），终端却要维持状态。解法是底层每条命令都起一个<b>全新 <span class="mono">bash -c</span></b>（跑完即退、无状态），但开跑前先 <b>re-source</b> 一份会话快照（env / 函数 / 别名）、跑完把 <span class="mono">env + CWD</span> 写回——一串短命进程因此被串成「有记忆」的连续会话。CWD 经<b>临时文件</b>（本地）或 <b>stdout 标记</b>（远程 ssh）跨进程传递。</div>
 </div>
 
-<h2>工厂:按 TERMINAL_ENV 挑后端</h2>
-<p>选哪个后端,由一个工厂函数按配置分派——这是「换设备只换后端」的开关:</p>
+<h2>工厂：按 TERMINAL_ENV 挑后端</h2>
+<p>选哪个后端，由一个工厂函数按配置分派——这是「换设备只换后端」的开关:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">tools/terminal_tool.py</span><span class="ln">569 / 1225-1372 · 简化</span></div>
@@ -531,13 +531,13 @@ terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st
     <span class="kw">elif</span> env_type == <span class="st">"docker"</span>:
         <span class="kw">return</span> _DockerEnvironment(...)
     <span class="kw">elif</span> env_type == <span class="st">"modal"</span>:
-        <span class="kw">return</span> _ModalEnvironment(...)        <span class="cm"># serverless:按需启动,用完释放</span>
+        <span class="kw">return</span> _ModalEnvironment(...)        <span class="cm"># serverless:按需启动，用完释放</span>
     <span class="kw">elif</span> env_type == <span class="st">"ssh"</span>:
         <span class="kw">return</span> _SSHEnvironment(...)
     ...                                       <span class="cm"># singularity / daytona</span></pre>
 </div>
-<p><span class="mono">TERMINAL_ENV</span> 默认 <span class="mono">local</span>(本地 subprocess + 进程组隔离),改一个配置就切到 docker(容器隔离)、ssh(远程执行)、modal(serverless)。每个 <span class="mono">_XxxEnvironment</span> 都是 <span class="mono">BaseEnvironment</span> 的子类。工厂是唯一的「分派点」——模型和核心循环<strong>完全不知道</strong>命令落到了哪个环境。换环境=改 <span class="mono">TERMINAL_ENV</span>,不改任何调用代码。</p>
-<p>为什么要养这么多后端?因为「跑命令」的真实诉求<strong>各不相同</strong>:本地最快但无隔离、docker/singularity 要容器隔离、ssh 要够到远程主机、modal/daytona 要云端弹性算力。差异不止在「在哪 spawn」,还在<strong>文件怎么可见</strong>:docker/singularity 用 <strong>bind mount</strong> 直接挂宿主目录(实时同主机视图),而 ssh/modal/daytona 是远端、看不到本地文件,于是由 <span class="mono">file_sync</span> 按 mtime+size <strong>事务式同步</strong>本地改动(含删除)过去。所以当远程后端「看不到某个文件」时,正确解法是<strong>修同步/挂载</strong>,而非给核心加一个新工具——这也呼应第 8 章 Footprint Ladder:<span class="mono">terminal</span> 是少数「该进核心」的基础工具,扩能力靠后端在边缘演化,不靠膨胀核心。</p>
+<p><span class="mono">TERMINAL_ENV</span> 默认 <span class="mono">local</span>(本地 subprocess + 进程组隔离)，改一个配置就切到 docker(容器隔离)、ssh(远程执行)、modal(serverless)。每个 <span class="mono">_XxxEnvironment</span> 都是 <span class="mono">BaseEnvironment</span> 的子类。工厂是唯一的「分派点」——模型和核心循环<strong>完全不知道</strong>命令落到了哪个环境。换环境=改 <span class="mono">TERMINAL_ENV</span>，不改任何调用代码。</p>
+<p>为什么要养这么多后端?因为「跑命令」的真实诉求<strong>各不相同</strong>：本地最快但无隔离、docker/singularity 要容器隔离、ssh 要够到远程主机、modal/daytona 要云端弹性算力。差异不止在「在哪 spawn」，还在<strong>文件怎么可见</strong>:docker/singularity 用 <strong>bind mount</strong> 直接挂宿主目录(实时同主机视图)，而 ssh/modal/daytona 是远端、看不到本地文件，于是由 <span class="mono">file_sync</span> 按 mtime+size <strong>事务式同步</strong>本地改动(含删除)过去。所以当远程后端「看不到某个文件」时，正确解法是<strong>修同步/挂载</strong>，而非给核心加一个新工具——这也呼应第 8 章 Footprint Ladder:<span class="mono">terminal</span> 是少数「该进核心」的基础工具，扩能力靠后端在边缘演化，不靠膨胀核心。</p>
 <p>这六个后端各自是 <span class="mono">tools/environments/</span> 下一个独立文件里的类——加一个新后端，只需新增一个文件 + 工厂里加一支 <span class="mono">elif</span>：</p>
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">tools/terminal_tool.py</span><span class="ln">825-831 · 节选</span></div>
@@ -549,47 +549,47 @@ terminal_env = os.getenv(<span class="st">"TERMINAL_ENV"</span>, <span class="st
 <span class="kw">from</span> tools.environments.singularity <span class="kw">import</span> SingularityEnvironment
 <span class="kw">from</span> tools.environments.managed_modal <span class="kw">import</span> ManagedModalEnvironment</pre>
 </div>
-<p style="font-size:.92em;opacity:.85">注:这份顶层 import 与「六个后端」并非一一对应——<span class="mono">daytona</span> 走<strong>惰性导入</strong>(只在被选中时才在工厂分支内 <span class="mono">import</span>),而 <span class="mono">managed_modal</span> 是 modal 的 <strong>Nous 托管模式</strong>(由 <span class="mono">terminal.modal_mode</span> 选),并非独立的 <span class="mono">TERMINAL_ENV</span> 取值。六个 env_type 始终是 local/docker/ssh/singularity/modal/daytona。</p>
+<p style="font-size:.92em;opacity:.85">注：这份顶层 import 与「六个后端」并非一一对应——<span class="mono">daytona</span> 走<strong>惰性导入</strong>(只在被选中时才在工厂分支内 <span class="mono">import</span>)，而 <span class="mono">managed_modal</span> 是 modal 的 <strong>Nous 托管模式</strong>(由 <span class="mono">terminal.modal_mode</span> 选)，并非独立的 <span class="mono">TERMINAL_ENV</span> 取值。六个 env_type 始终是 local/docker/ssh/singularity/modal/daytona。</p>
 
 <h2>serverless 省钱 + 后台进程</h2>
-<p>多后端不只是「能移植」,还能<strong>省钱</strong>。<span class="mono">modal</span> 这类 <strong>serverless</strong> 后端<strong>按需启动</strong>容器、命令跑完就<strong>释放</strong>——你不必常驻一台云服务器,只为偶尔跑几条命令付全天的钱。另外,terminal 支持 <span class="mono">background=True, notify_on_complete=True</span>:长命令在后台跑,gateway 的 watcher 检测到进程完成时<strong>触发一个新 turn</strong>把结果带回——这条「后台完成→新 turn」的路径(和第 13 章委派的完成队列同理)维持了严格角色交替、不破缓存。</p>
-<p>serverless 的「用完释放」背后还有一套<strong>资源生命周期</strong>要兜:modal 在 <span class="mono">cleanup()</span> 里 <span class="mono">terminate</span> 掉 sandbox、daytona 停掉持久 sandbox、local 则用 <span class="mono">os.setsid</span> 把命令关进<strong>独立进程组</strong>、清理时整组 SIGTERM→SIGKILL,杜绝孤儿子进程。docker 更棘手:进程被 SIGKILL/OOM 打断会绕过 <span class="mono">atexit</span> 钩子<strong>漏下容器</strong>,所以加了「孤儿回收器」按 <span class="mono">hermes-agent=1</span> 标签每进程一次性清扫,免得下次按 (task, profile) 复用时捡到脏容器。还有一层安全:命令真正下发前要过 <span class="mono">_check_all_guards(command, env_type)</span> 的危险命令审批(第 24 章)——后端再多,危险命令的拦截都收在这<strong>统一一关</strong>,不会因为换了 docker 或 ssh 就漏掉。</p>
-<p>容器后端还有一对看似矛盾、实为权衡的开关:<span class="mono">persistent_filesystem</span> 与「按 (task, profile) 复用容器」。每次都新建新销毁最干净,但<strong>冷启动慢、装好的依赖全丢</strong>;于是默认让同一任务复用同一容器、保留文件系统,把「环境搭一次、多条命令接着用」做成常态。代价是容器会跨命令、甚至跨进程留存,这才需要前面那套标签 + 孤儿回收来收尾。可见多后端的复杂度并非凭空堆叠——它是在<strong>启动速度、状态保留、资源回收</strong>三者间替用户做的取舍,而这些取舍统统被关进子类,核心始终只面对一个干净的 <span class="mono">terminal</span>。</p>
+<p>多后端不只是「能移植」，还能<strong>省钱</strong>。<span class="mono">modal</span> 这类 <strong>serverless</strong> 后端<strong>按需启动</strong>容器、命令跑完就<strong>释放</strong>——你不必常驻一台云服务器，只为偶尔跑几条命令付全天的钱。另外,terminal 支持 <span class="mono">background=True, notify_on_complete=True</span>：长命令在后台跑,gateway 的 watcher 检测到进程完成时<strong>触发一个新 turn</strong>把结果带回——这条「后台完成→新 turn」的路径(和第 13 章委派的完成队列同理)维持了严格角色交替、不破缓存。</p>
+<p>serverless 的「用完释放」背后还有一套<strong>资源生命周期</strong>要兜:modal 在 <span class="mono">cleanup()</span> 里 <span class="mono">terminate</span> 掉 sandbox、daytona 停掉持久 sandbox、local 则用 <span class="mono">os.setsid</span> 把命令关进<strong>独立进程组</strong>、清理时整组 SIGTERM→SIGKILL，杜绝孤儿子进程。docker 更棘手：进程被 SIGKILL/OOM 打断会绕过 <span class="mono">atexit</span> 钩子<strong>漏下容器</strong>，所以加了「孤儿回收器」按 <span class="mono">hermes-agent=1</span> 标签每进程一次性清扫，免得下次按 (task, profile) 复用时捡到脏容器。还有一层安全：命令真正下发前要过 <span class="mono">_check_all_guards(command, env_type)</span> 的危险命令审批(第 24 章)——后端再多，危险命令的拦截都收在这<strong>统一一关</strong>，不会因为换了 docker 或 ssh 就漏掉。</p>
+<p>容器后端还有一对看似矛盾、实为权衡的开关:<span class="mono">persistent_filesystem</span> 与「按 (task, profile) 复用容器」。每次都新建新销毁最干净，但<strong>冷启动慢、装好的依赖全丢</strong>;于是默认让同一任务复用同一容器、保留文件系统，把「环境搭一次、多条命令接着用」做成常态。代价是容器会跨命令、甚至跨进程留存，这才需要前面那套标签 + 孤儿回收来收尾。可见多后端的复杂度并非凭空堆叠——它是在<strong>启动速度、状态保留、资源回收</strong>三者间替用户做的取舍，而这些取舍统统被关进子类，核心始终只面对一个干净的 <span class="mono">terminal</span>。</p>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">模型调统一的 <span class="mono">terminal</span> 工具(只管「跑这条命令」)</span></div>
   <div class="step"><span class="num">2</span><span class="sc">工厂 <span class="mono">_create_environment</span> 按 <span class="mono">TERMINAL_ENV</span> 挑后端(local/docker/ssh/modal/...)</span></div>
-  <div class="step"><span class="num">3</span><span class="sc">对应 <span class="mono">BaseEnvironment</span> 子类的 <span class="mono">execute()</span>(基类统一:快照/CWD/中断/超时)→ 子类 <span class="mono">_run_bash()</span> 在该后端 spawn 进程</span></div>
+  <div class="step"><span class="num">3</span><span class="sc">对应 <span class="mono">BaseEnvironment</span> 子类的 <span class="mono">execute()</span>(基类统一：快照/CWD/中断/超时)→ 子类 <span class="mono">_run_bash()</span> 在该后端 spawn 进程</span></div>
   <div class="step"><span class="num">4</span><span class="sc">返回统一的 <span class="mono">ProcessHandle</span>——核心循环不感知后端差异</span></div>
   <div class="step"><span class="num">5</span><span class="sc">serverless 用完 <span class="mono">cleanup()</span> 释放资源;background+notify_on_complete 则后台跑、完成时作新 turn</span></div>
 </div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「环境可移植」</div>
-  <div class="collab-sub">① 组件清单（★本章核心,其余跨章节配合）</div>
-  本章核心:<strong>BaseEnvironment ABC</strong>(统一接口 + execute() 通用流程)、<strong>六个后端子类</strong>(各实现 _run_bash/cleanup)、<strong>_create_environment 工厂</strong>(按 TERMINAL_ENV 分派)。跨章节配合:<span class="mono">terminal</span> 是一个核心<strong>工具</strong>(第 8 章),六种后端差异全被关进边缘子类——这正是<strong>窄腰</strong>(第 4 章:核心薄、后端在边缘);子代理委派时拿到<strong>独立的 terminal session</strong>(第 13 章上下文隔离);background+notify_on_complete 的「后台完成→新 turn」与委派完成队列同理(第 13 章),维持严格角色交替不破缓存。
+  <div class="collab-sub">① 组件清单（★本章核心，其余跨章节配合）</div>
+  本章核心:<strong>BaseEnvironment ABC</strong>(统一接口 + execute() 通用流程)、<strong>六个后端子类</strong>(各实现 _run_bash/cleanup)、<strong>_create_environment 工厂</strong>(按 TERMINAL_ENV 分派)。跨章节配合:<span class="mono">terminal</span> 是一个核心<strong>工具</strong>(第 8 章)，六种后端差异全被关进边缘子类——这正是<strong>窄腰</strong>(第 4 章：核心薄、后端在边缘);子代理委派时拿到<strong>独立的 terminal session</strong>(第 13 章上下文隔离);background+notify_on_complete 的「后台完成→新 turn」与委派完成队列同理(第 13 章)，维持严格角色交替不破缓存。
   <div class="collab-sub">② 数据流时序</div>
   模型调 terminal → 工厂按 TERMINAL_ENV 选后端 → BaseEnvironment 子类 execute()(基类统一会话快照/CWD/中断/超时)→ 子类 _run_bash() 在该后端 spawn → 返回统一 ProcessHandle → cleanup() 释放(serverless 用完即放)。
   <div class="collab-sub">③ 关键点</div>
-  「同一个 agent 跑遍各种环境」靠的是<strong>统一抽象 + 工厂分派</strong>:核心只认一个 terminal 工具与一个 BaseEnvironment 接口,六种环境(本地/容器/远程/serverless)的全部差异<strong>沉到边缘的子类</strong>。加新后端=写一个 BaseEnvironment 子类 + 工厂加一支,核心零改动。
+  「同一个 agent 跑遍各种环境」靠的是<strong>统一抽象 + 工厂分派</strong>：核心只认一个 terminal 工具与一个 BaseEnvironment 接口，六种环境(本地/容器/远程/serverless)的全部差异<strong>沉到边缘的子类</strong>。加新后端=写一个 BaseEnvironment 子类 + 工厂加一支，核心零改动。
 </div>
 
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>统一 terminal 抽象 + 多后端 = 环境可移植 + serverless 省钱;后端差异在边缘(窄腰)</strong>。它主要治两条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——真实 agent 要在各种环境里干活:本地开发、容器隔离、远程服务器、serverless 弹性。统一的 <span class="mono">BaseEnvironment</span> 抽象让<strong>同一个 agent 无改动地跑遍它们</strong>,serverless 后端还能<strong>按需启停省钱</strong>;会话快照/CWD/超时等运维细节由基类统一兜底。它也是<strong>窄腰</strong>(第 4 章)的体现:核心只认一个 terminal,环境差异在边缘演化。反模式:为每种环境在核心里写一套 if-else 执行逻辑——那会让核心随后端数量膨胀,违背「核心薄、边缘厚」。</p>
-  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——底层 bash 进程是无状态的(spawn-per-call,每条命令一个新进程),基类的<strong>会话快照</strong>(环境变量 + CWD 经文件快照/回读)把它们串成连续会话。无状态的执行底座靠外部快照重建记忆——与全书反复出现的「无状态内核 + 外部状态」一脉相承。</p>
-  <p style="margin:.5rem 0 0">值得强调的是,这两条约束的解法<strong>共用同一块基座</strong>:正因核心只认一个 <span class="mono">terminal</span> 抽象(窄腰),才能让运维差异(G)与无状态重建(B)<strong>各自在边缘解决而互不打架</strong>——六个后端可以在文件可见性、资源回收、隔离强度上自由分化,核心却始终只看见统一的 <span class="mono">execute()</span> 与 <span class="mono">ProcessHandle</span>。这也是为什么第 8 章把 <span class="mono">terminal</span> 列为「该进核心」的范例:它足够基础、近乎人人要用,且能力扩展不必膨胀核心,只在子类边缘生长。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——真实 agent 要在各种环境里干活：本地开发、容器隔离、远程服务器、serverless 弹性。统一的 <span class="mono">BaseEnvironment</span> 抽象让<strong>同一个 agent 无改动地跑遍它们</strong>,serverless 后端还能<strong>按需启停省钱</strong>;会话快照/CWD/超时等运维细节由基类统一兜底。它也是<strong>窄腰</strong>(第 4 章)的体现：核心只认一个 terminal，环境差异在边缘演化。反模式：为每种环境在核心里写一套 if-else 执行逻辑——那会让核心随后端数量膨胀，违背「核心薄、边缘厚」。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">B·无状态</span>——底层 bash 进程是无状态的(spawn-per-call，每条命令一个新进程)，基类的<strong>会话快照</strong>(环境变量 + CWD 经文件快照/回读)把它们串成连续会话。无状态的执行底座靠外部快照重建记忆——与全书反复出现的「无状态内核 + 外部状态」一脉相承。</p>
+  <p style="margin:.5rem 0 0">值得强调的是，这两条约束的解法<strong>共用同一块基座</strong>：正因核心只认一个 <span class="mono">terminal</span> 抽象(窄腰)，才能让运维差异(G)与无状态重建(B)<strong>各自在边缘解决而互不打架</strong>——六个后端可以在文件可见性、资源回收、隔离强度上自由分化，核心却始终只看见统一的 <span class="mono">execute()</span> 与 <span class="mono">ProcessHandle</span>。这也是为什么第 8 章把 <span class="mono">terminal</span> 列为「该进核心」的范例：它足够基础、近乎人人要用，且能力扩展不必膨胀核心，只在子类边缘生长。</p>
 </div>
 
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
-    <li><strong>统一抽象</strong>:六后端(local/docker/ssh/singularity/modal/daytona)共享 <span class="mono">BaseEnvironment</span> ABC;子类只实现 <span class="mono">_run_bash()</span> + <span class="mono">cleanup()</span>,通用 <span class="mono">execute()</span> 由基类提供。</li>
-    <li><strong>工厂分派</strong>:<span class="mono">_create_environment</span> 按 <span class="mono">TERMINAL_ENV</span>(默认 local)挑后端;换环境只改配置,核心零改动。</li>
-    <li><strong>环境可移植</strong>:同一 agent 无改动跑遍本地/容器/远程/serverless——窄腰(第 4 章)在执行层的落地。</li>
-    <li><strong>serverless 省钱</strong>:modal 等后端按需启动、用完 <span class="mono">cleanup()</span> 释放,不为偶发命令常驻付费。</li>
-    <li><strong>后台进程</strong>:<span class="mono">background=True, notify_on_complete=True</span> 后台跑,完成时作新 turn(同委派完成队列,第 13 章),不破缓存。</li>
+    <li><strong>统一抽象</strong>：六后端(local/docker/ssh/singularity/modal/daytona)共享 <span class="mono">BaseEnvironment</span> ABC;子类只实现 <span class="mono">_run_bash()</span> + <span class="mono">cleanup()</span>，通用 <span class="mono">execute()</span> 由基类提供。</li>
+    <li><strong>工厂分派</strong>:<span class="mono">_create_environment</span> 按 <span class="mono">TERMINAL_ENV</span>(默认 local)挑后端;换环境只改配置，核心零改动。</li>
+    <li><strong>环境可移植</strong>：同一 agent 无改动跑遍本地/容器/远程/serverless——窄腰(第 4 章)在执行层的落地。</li>
+    <li><strong>serverless 省钱</strong>:modal 等后端按需启动、用完 <span class="mono">cleanup()</span> 释放，不为偶发命令常驻付费。</li>
+    <li><strong>后台进程</strong>:<span class="mono">background=True, notify_on_complete=True</span> 后台跑，完成时作新 turn(同委派完成队列，第 13 章)，不破缓存。</li>
   </ul>
 </div>
 

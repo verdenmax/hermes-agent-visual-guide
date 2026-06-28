@@ -371,41 +371,41 @@ html[data-lang="zh"] .lang-en { display: none !important; }
     <h1><span class="lang-zh">网关消息守卫</span><span class="lang-en">Gateway message guards</span></h1>
   </div>
   <div class="lang-zh">
-<p class="lead">当 agent 正在跑一个长任务时,用户又发来一条消息——怎么办?默认<strong>排队</strong>,等 agent 结束再处理。但有几个命令绝不能排队:<span class="mono">/stop</span>(打断)、<span class="mono">/approve</span>(agent 正阻塞着等它批准)。它们若排队,要么<strong>泄漏成对话文本被丢弃</strong>,要么<strong>直接死锁</strong>。这就是网关「两道守卫 + 控制命令旁路」的由来。</p>
+<p class="lead">当 agent 正在跑一个长任务时，用户又发来一条消息——怎么办?默认<strong>排队</strong>，等 agent 结束再处理。但有几个命令绝不能排队:<span class="mono">/stop</span>(打断)、<span class="mono">/approve</span>(agent 正阻塞着等它批准)。它们若排队，要么<strong>泄漏成对话文本被丢弃</strong>，要么<strong>直接死锁</strong>。这就是网关「两道守卫 + 控制命令旁路」的由来。</p>
 
 <div class="card analogy">
   <div class="tag">🔌 类比 · 急诊分诊台</div>
-  普通病人挂号排队(消息进 <span class="mono">_pending_messages</span>),等叫号。但「心脏骤停」(<span class="mono">/stop</span>)必须<strong>插队直达</strong>抢救;而「主治医生正等着的化验结果」(<span class="mono">/approve</span>)如果也去排队,医生就<strong>永远等不到、卡死在那</strong>。分诊台必须能识别这些「不能排队的」并放行。
+  普通病人挂号排队(消息进 <span class="mono">_pending_messages</span>)，等叫号。但「心脏骤停」(<span class="mono">/stop</span>)必须<strong>插队直达</strong>抢救;而「主治医生正等着的化验结果」(<span class="mono">/approve</span>)如果也去排队，医生就<strong>永远等不到、卡死在那</strong>。分诊台必须能识别这些「不能排队的」并放行。
 </div>
 
 <div class="card macro">
-  <div class="tag">🌍 宏观 · 两道顺序守卫,控制命令旁路</div>
-  agent 运行时,消息要过<strong>两道顺序守卫</strong>:① 适配器层(busy 就排队)、② 网关 runner 层(分派 slash 命令)。普通对话老老实实排队;但<strong>任何可解析的 slash 命令必须同时旁路两道、内联派发</strong>——否则被当对话文本丢弃(空响应)或死锁。
+  <div class="tag">🌍 宏观 · 两道顺序守卫，控制命令旁路</div>
+  agent 运行时，消息要过<strong>两道顺序守卫</strong>:① 适配器层(busy 就排队)、② 网关 runner 层(分派 slash 命令)。普通对话老老实实排队;但<strong>任何可解析的 slash 命令必须同时旁路两道、内联派发</strong>——否则被当对话文本丢弃(空响应)或死锁。
 </div>
 
-<h2>第一道守卫:适配器层的 busy 状态</h2>
-<p>每个适配器记三张表,追踪「这个会话是不是正忙」:</p>
+<h2>第一道守卫：适配器层的 busy 状态</h2>
+<p>每个适配器记三张表，追踪「这个会话是不是正忙」:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">2154-2162 · 节选</span></div>
   <pre><span class="cm"># _active_sessions 存每会话的中断 Event;_session_tasks 把</span>
 <span class="cm"># 会话映射到当前处理它的 Task,好让 /stop /new /reset 取消</span>
-<span class="cm"># 正确的任务、确定性地释放守卫。没有这张表,旧任务的 finally</span>
-<span class="cm"># 可能误删新任务的守卫,留下 stale busy 状态。</span>
+<span class="cm"># 正确的任务、确定性地释放守卫。没有这张表，旧任务的 finally</span>
+<span class="cm"># 可能误删新任务的守卫，留下 stale busy 状态。</span>
 self._active_sessions: Dict[str, asyncio.Event] = {}
 self._pending_messages: Dict[str, MessageEvent] = {}
 self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
 </div>
-<p><span class="mono">_active_sessions</span> 里有这个 key,就说明该会话<strong>正在跑 agent</strong>。这时新来的普通消息会被塞进 <span class="mono">_pending_messages</span> 排队,等当前回合结束再喂进去。<span class="mono">_session_tasks</span> 记下「谁在处理这个会话」,这样 <span class="mono">/stop</span> 能精准取消那个任务,而不会误删别人的守卫。</p>
+<p><span class="mono">_active_sessions</span> 里有这个 key，就说明该会话<strong>正在跑 agent</strong>。这时新来的普通消息会被塞进 <span class="mono">_pending_messages</span> 排队，等当前回合结束再喂进去。<span class="mono">_session_tasks</span> 记下「谁在处理这个会话」，这样 <span class="mono">/stop</span> 能精准取消那个任务，而不会误删别人的守卫。</p>
 
-<p>为什么要单独维护 <span class="mono">_session_tasks</span> 这张「会话→任务」映射?注释点破了根:没有它,旧任务结束时的 <span class="mono">finally</span> 可能误删新任务刚装上的守卫,留下 <strong>stale busy</strong> 状态。更糟的是「裂脑」——适配器还以为会话在跑、实际却没人处理,聊天会永远卡在「Interrupting current task...」直到重启网关。所以 <span class="mono">handle_message</span> 一进门就先调 <span class="mono">_heal_stale_session_lock</span>:若 owner task 已 done/cancelled 就判定锁失效,清掉三张表并放行(issue #11016)。这是<strong>运维约束 G</strong> 在会话层的自愈——宁可自己修,也绝不让用户卡死在永久 busy 里。</p>
+<p>为什么要单独维护 <span class="mono">_session_tasks</span> 这张「会话→任务」映射?注释点破了根：没有它，旧任务结束时的 <span class="mono">finally</span> 可能误删新任务刚装上的守卫，留下 <strong>stale busy</strong> 状态。更糟的是「裂脑」——适配器还以为会话在跑、实际却没人处理，聊天会永远卡在「Interrupting current task...」直到重启网关。所以 <span class="mono">handle_message</span> 一进门就先调 <span class="mono">_heal_stale_session_lock</span>：若 owner task 已 done/cancelled 就判定锁失效，清掉三张表并放行(issue #11016)。这是<strong>运维约束 G</strong> 在会话层的自愈——宁可自己修，也绝不让用户卡死在永久 busy 里。</p>
 
-<p>为什么 busy 状态按<strong>每会话</strong>记而不是开一把全局锁?<span class="mono">_active_sessions</span> 以 <span class="mono">session_key</span>(区分用户 / 群 / 线程)为键,不同会话各自独立排队、互不阻塞——一个用户的长任务绝不会冻住整个网关里其他人的对话。而且它存的不是布尔,是一个 <span class="mono">asyncio.Event</span>(中断信号):<span class="mono">/stop</span> 能 <span class="mono">set</span> 这个 Event,通知正在跑的回合「该停了」。这个中断会沿委派链<strong>级联到子代理</strong>(第 13 章),保证一声 <span class="mono">/stop</span> 整棵任务树都停,而不是只停最外层那一个。</p>
+<p>为什么 busy 状态按<strong>每会话</strong>记而不是开一把全局锁?<span class="mono">_active_sessions</span> 以 <span class="mono">session_key</span>(区分用户 / 群 / 线程)为键，不同会话各自独立排队、互不阻塞——一个用户的长任务绝不会冻住整个网关里其他人的对话。而且它存的不是布尔，是一个 <span class="mono">asyncio.Event</span>(中断信号):<span class="mono">/stop</span> 能 <span class="mono">set</span> 这个 Event，通知正在跑的回合「该停了」。这个中断会沿委派链<strong>级联到子代理</strong>(第 13 章)，保证一声 <span class="mono">/stop</span> 整棵任务树都停，而不是只停最外层那一个。</p>
 
-<p>顺带看排队本身的形状:<span class="mono">_pending_messages</span> 是 <span class="mono">Dict[str, MessageEvent]</span>——<strong>每会话只有一个槽位</strong>,而非无限堆积的列表。忙时连发的多条普通消息会经 <span class="mono">merge_pending_message_event</span> <strong>合并</strong>进同一槽:相册照片连拍归并成一条、Telegram 的连续文字补充被<strong>追加</strong>而非互相覆盖。这么设计是因为「等 agent 跑完再处理」时,用户真正想要的是「我攒的这一段完整意思」,而不是几十条割裂消息逐条回放;单槽 + 合并既防了消息洪水冲垮下一回合,又不会把多段同一思路<strong>悄悄截断</strong>成最后一句(这正是被修过的 bug)。</p>
+<p>顺带看排队本身的形状:<span class="mono">_pending_messages</span> 是 <span class="mono">Dict[str, MessageEvent]</span>——<strong>每会话只有一个槽位</strong>，而非无限堆积的列表。忙时连发的多条普通消息会经 <span class="mono">merge_pending_message_event</span> <strong>合并</strong>进同一槽：相册照片连拍归并成一条、Telegram 的连续文字补充被<strong>追加</strong>而非互相覆盖。这么设计是因为「等 agent 跑完再处理」时，用户真正想要的是「我攒的这一段完整意思」，而不是几十条割裂消息逐条回放;单槽 + 合并既防了消息洪水冲垮下一回合，又不会把多段同一思路<strong>悄悄截断</strong>成最后一句(这正是被修过的 bug)。</p>
 
-<h2>旁路:控制命令不能排队</h2>
-<p>会话忙时,先看这条消息是不是个该旁路的命令:</p>
+<h2>旁路：控制命令不能排队</h2>
+<p>会话忙时，先看这条消息是不是个该旁路的命令:</p>
 
 <div class="codefile">
   <div class="cf-head"><span class="dot"></span><span class="path">gateway/platforms/base.py</span><span class="ln">4262-4298 · 简化</span></div>
@@ -423,7 +423,7 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
         <span class="cm"># 其清理会和正在跑的任务抢(见 PR #4926)</span>
         ...</pre>
 </div>
-<p>分两类:<span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> 要<strong>取消在途任务</strong>(走专门的交接路径,序列化「取消 + 回应 + 排空队列」);<span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> 等不取消任务、只需<strong>直接内联派发</strong>。注释点破一个坑:<strong>千万别走 <span class="mono">_process_message_background</span></strong>——它管会话生命周期,清理逻辑会和正在跑的任务发生竞争。</p>
+<p>分两类:<span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> 要<strong>取消在途任务</strong>(走专门的交接路径，序列化「取消 + 回应 + 排空队列」);<span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> 等不取消任务、只需<strong>直接内联派发</strong>。注释点破一个坑:<strong>千万别走 <span class="mono">_process_message_background</span></strong>——它管会话生命周期，清理逻辑会和正在跑的任务发生竞争。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 360" role="img" aria-label="agent 忙时消息要过两道守卫，控制命令必须同时旁路两道">
@@ -466,14 +466,14 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
   <text x="340" y="323" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--red)">⚠ 审批类命令必须同时旁路两道守卫</text>
   <text x="340" y="341" text-anchor="middle" font-size="10" fill="var(--muted)">若排队：被兜底丢弃 = 空响应(zero-char)，或 /approve 等不到 → 死锁</text>
 </svg>
-<div class="fig-cap"><b>两道消息守卫 + 控制命令旁路</b>：agent 忙时,消息先过<b>守卫①</b>(适配器层 <span class="mono">base.py</span>)——普通对话进 <span class="mono">_pending_messages</span> 排队;<b>可解析 slash 命令则旁路守卫①</b>,再进<b>守卫②</b>(网关 runner <span class="mono">run.py</span>)按 <span class="mono">canonical</span> 名分派:<span class="mono">/stop /new /reset</span> 取消在途任务、<span class="mono">/approve /deny /status</span> 内联派发。<b>审批类命令必须同时旁路两道</b>,否则被兜底丢弃(空响应)或死锁。</div>
+<div class="fig-cap"><b>两道消息守卫 + 控制命令旁路</b>：agent 忙时，消息先过<b>守卫①</b>(适配器层 <span class="mono">base.py</span>)——普通对话进 <span class="mono">_pending_messages</span> 排队;<b>可解析 slash 命令则旁路守卫①</b>，再进<b>守卫②</b>(网关 runner <span class="mono">run.py</span>)按 <span class="mono">canonical</span> 名分派:<span class="mono">/stop /new /reset</span> 取消在途任务、<span class="mono">/approve /deny /status</span> 内联派发。<b>审批类命令必须同时旁路两道</b>，否则被兜底丢弃(空响应)或死锁。</div>
 </div>
 
-<p>为什么旁路还要再分「取消任务」和「内联派发」两类?<span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> 会动<strong>会话生命周期</strong>(要终止在途回合),必须走 <span class="mono">_dispatch_active_session_command</span> 这条把「取消 + 回应 + 排空队列」<strong>序列化</strong>的专路;否则旧任务的 <span class="mono">finally</span> 清理会和新命令的清理抢同一把守卫。而 <span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> 不碰生命周期,只发信号或只读状态,直接内联即可。注释之所以严禁走 <span class="mono">_process_message_background</span>,正因它会另起一个管生命周期的 task,清理逻辑和正在跑的任务<strong>赛跑</strong>(PR #4926)——这种竞态在压测下才偶发,极难复现,所以宁可从结构上堵死。</p>
+<p>为什么旁路还要再分「取消任务」和「内联派发」两类?<span class="mono">/stop</span> <span class="mono">/new</span> <span class="mono">/reset</span> 会动<strong>会话生命周期</strong>(要终止在途回合)，必须走 <span class="mono">_dispatch_active_session_command</span> 这条把「取消 + 回应 + 排空队列」<strong>序列化</strong>的专路;否则旧任务的 <span class="mono">finally</span> 清理会和新命令的清理抢同一把守卫。而 <span class="mono">/approve</span> <span class="mono">/deny</span> <span class="mono">/status</span> 不碰生命周期，只发信号或只读状态，直接内联即可。注释之所以严禁走 <span class="mono">_process_message_background</span>，正因它会另起一个管生命周期的 task，清理逻辑和正在跑的任务<strong>赛跑</strong>(PR #4926)——这种竞态在压测下才偶发，极难复现，所以宁可从结构上堵死。</p>
 
-<p>为什么 <span class="mono">/approve</span> 是死锁的重灾区?agent 此刻正阻塞在 <span class="mono">tools/approval.py</span> 里一个 <span class="mono">threading.Event.wait()</span> 上——而普通中断走的是 asyncio 路径,<strong>根本叫不醒</strong>一个卡在线程 Event 上的 agent。所以 runner 把 <span class="mono">/approve</span> <span class="mono">/deny</span> 直接路由到审批处理器去 <span class="mono">set</span> 那个 Event。若让它老实排队:agent 等审批放行、审批却在队列里等 agent 跑完,两边互锁、永久卡死。这正是第 24 章<strong>人在回路</strong>审批能在 agent 阻塞时仍然送达的底座——审批信号必须有一条不经 agent 主循环的旁路才能解锁它自己。</p>
+<p>为什么 <span class="mono">/approve</span> 是死锁的重灾区?agent 此刻正阻塞在 <span class="mono">tools/approval.py</span> 里一个 <span class="mono">threading.Event.wait()</span> 上——而普通中断走的是 asyncio 路径,<strong>根本叫不醒</strong>一个卡在线程 Event 上的 agent。所以 runner 把 <span class="mono">/approve</span> <span class="mono">/deny</span> 直接路由到审批处理器去 <span class="mono">set</span> 那个 Event。若让它老实排队:agent 等审批放行、审批却在队列里等 agent 跑完，两边互锁、永久卡死。这正是第 24 章<strong>人在回路</strong>审批能在 agent 阻塞时仍然送达的底座——审批信号必须有一条不经 agent 主循环的旁路才能解锁它自己。</p>
 
-<p>值得注意的是,runner 这一层的旁路并非「命令 = 一律放行」的二元开关,而是<strong>逐命令</strong>定细则。比如 <span class="mono">/background</span> 旁路守卫去开一个并行任务、绝不打断当前对话;<span class="mono">/kanban</span> 写的是与运行态无关的看板库,<span class="mono">/kanban unblock</span> 甚至常常是解救一个阻塞 worker 的唯一手段,所以必须能在跑动中送达;<span class="mono">/goal</span> 的 <span class="mono">status</span>/<span class="mono">pause</span>/<span class="mono">clear</span> 只读控制面、放行,但「<strong>设新目标</strong>」会和当前回合抢续写,于是被拒、提示先 <span class="mono">/stop</span>。这种细粒度恰恰说明:能否中途执行,取决于该命令<strong>碰不碰运行态</strong>,而不是它是不是命令。</p>
+<p>值得注意的是,runner 这一层的旁路并非「命令 = 一律放行」的二元开关，而是<strong>逐命令</strong>定细则。比如 <span class="mono">/background</span> 旁路守卫去开一个并行任务、绝不打断当前对话;<span class="mono">/kanban</span> 写的是与运行态无关的看板库,<span class="mono">/kanban unblock</span> 甚至常常是解救一个阻塞 worker 的唯一手段，所以必须能在跑动中送达;<span class="mono">/goal</span> 的 <span class="mono">status</span>/<span class="mono">pause</span>/<span class="mono">clear</span> 只读控制面、放行，但「<strong>设新目标</strong>」会和当前回合抢续写，于是被拒、提示先 <span class="mono">/stop</span>。这种细粒度恰恰说明：能否中途执行，取决于该命令<strong>碰不碰运行态</strong>，而不是它是不是命令。</p>
 
 <h2>为什么排队就出事:zero-char 响应</h2>
 <p>旁路判定函数的 docstring 把后果讲透了:</p>
@@ -489,9 +489,9 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
 <span class="cm">    response.&quot;&quot;&quot;</span>
     <span class="kw">return</span> resolve_command(command_name) <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span> <span class="kw">if</span> command_name <span class="kw">else</span> <span class="kw">False</span></pre>
 </div>
-<p>道理很硬:网关 runner 有个兜底,会<strong>丢弃任何漏进排队队列的命令文本</strong>。所以一条跑到一半发的 <span class="mono">/model</span>,若被排队,就会「<strong>既悄悄打断了 agent、又被丢弃</strong>」,用户收到一个<strong>空响应</strong>。结论:只要是能解析的 slash 命令,一律旁路、立即派发,绝不排队。这也正是<strong>缓存线</strong>要守住的危险:控制命令一旦混进对话历史、被当成用户文本,就可能让历史里冒出连续两条用户消息、破坏严格角色交替(第 7 章的不变量),进而动摇被缓存的前缀(第 6 章)。旁路让控制命令走<strong>控制通道</strong>、根本不进历史,正是从源头掐断这条危险。</p>
+<p>道理很硬：网关 runner 有个兜底，会<strong>丢弃任何漏进排队队列的命令文本</strong>。所以一条跑到一半发的 <span class="mono">/model</span>，若被排队，就会「<strong>既悄悄打断了 agent、又被丢弃</strong>」，用户收到一个<strong>空响应</strong>。结论：只要是能解析的 slash 命令，一律旁路、立即派发，绝不排队。这也正是<strong>缓存线</strong>要守住的危险：控制命令一旦混进对话历史、被当成用户文本，就可能让历史里冒出连续两条用户消息、破坏严格角色交替(第 7 章的不变量)，进而动摇被缓存的前缀(第 6 章)。旁路让控制命令走<strong>控制通道</strong>、根本不进历史，正是从源头掐断这条危险。</p>
 
-<p>为什么命令识别要用<strong>显式代码解析</strong>而不交给模型判断?<span class="mono">get_command()</span> 只做纯语法切分:取首词、剥掉 <span class="mono">/</span>、去掉 <span class="mono">@botname</span>、首词里含 <span class="mono">/</span> 的当文件路径直接拒掉;再由 <span class="mono">resolve_command()</span> 查中央 <span class="mono">COMMAND_REGISTRY</span> 的别名表确认。整条链零模型参与——因为模型分不清「这是给系统的指令还是要处理的数据」(约束 <strong>D</strong>)。一旦把判断权交给模型,一段精心构造的对话文本就能伪装成 <span class="mono">/stop</span> 骗它执行。把识别钉死在网关层,注入便没了入口。</p>
+<p>为什么命令识别要用<strong>显式代码解析</strong>而不交给模型判断?<span class="mono">get_command()</span> 只做纯语法切分：取首词、剥掉 <span class="mono">/</span>、去掉 <span class="mono">@botname</span>、首词里含 <span class="mono">/</span> 的当文件路径直接拒掉;再由 <span class="mono">resolve_command()</span> 查中央 <span class="mono">COMMAND_REGISTRY</span> 的别名表确认。整条链零模型参与——因为模型分不清「这是给系统的指令还是要处理的数据」(约束 <strong>D</strong>)。一旦把判断权交给模型，一段精心构造的对话文本就能伪装成 <span class="mono">/stop</span> 骗它执行。把识别钉死在网关层，注入便没了入口。</p>
 
 <div class="figure">
 <svg viewBox="0 0 680 322" role="img" aria-label="网关用显式代码解析识别控制命令，而非交给模型判断">
@@ -524,43 +524,43 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
   <text x="56" y="285" font-size="10" fill="var(--muted)">构造文本可伪装 /stop 触发执行（注入）；命令混入历史 → 历史出现连续两条 user</text>
   <text x="56" y="302" font-size="10" fill="var(--muted)">→ 破坏严格角色交替（第7章）→ 动摇被缓存前缀（第6章）。显式解析 = 从源头堵死。</text>
 </svg>
-<div class="fig-cap"><b>控制命令 vs 数据：显式解析</b>：网关用 <span class="mono">get_command()</span>/<span class="mono">resolve_command()</span> 纯代码识别命令(确定性、零模型)——能解析的走<b>控制通道</b>旁路派发、<b>永不进对话历史</b>;否则当<b>数据</b>进 <span class="mono">_pending_messages</span> 喂给模型。这正是治 <b>D·指令=数据</b>:不让模型判断,既挡注入(伪造指令进不来),又护住第 6 章缓存前缀与第 7 章角色交替。</div>
+<div class="fig-cap"><b>控制命令 vs 数据：显式解析</b>：网关用 <span class="mono">get_command()</span>/<span class="mono">resolve_command()</span> 纯代码识别命令(确定性、零模型)——能解析的走<b>控制通道</b>旁路派发、<b>永不进对话历史</b>;否则当<b>数据</b>进 <span class="mono">_pending_messages</span> 喂给模型。这正是治 <b>D·指令=数据</b>：不让模型判断，既挡注入(伪造指令进不来)，又护住第 6 章缓存前缀与第 7 章角色交替。</div>
 </div>
 
-<p>为什么旁路判据用「<strong>能否解析</strong>」而不是一张写死的白名单?<span class="mono">should_bypass_active_session</span> 直接返回 <span class="mono">resolve_command(cmd) is not None</span>——只要是注册过的 slash 命令一律旁路。<span class="mono">ACTIVE_SESSION_BYPASS_COMMANDS</span> 只是「有专属 Level-2 处理器」的子集;其余命令落到 runner 的 catch-all,回一句「Agent is running,wait or <span class="mono">/stop</span>」而不是被默默丢弃。这层兜底是一串事故堆出来的:<span class="mono">/model</span> <span class="mono">/reasoning</span> <span class="mono">/resume</span> <span class="mono">/undo</span> 等当年都漏过、变成空响应(#5057 #6252 #10370)。所以判据必须是<strong>全集</strong>覆盖,白名单一定会漏掉下一个新加的命令。</p>
+<p>为什么旁路判据用「<strong>能否解析</strong>」而不是一张写死的白名单?<span class="mono">should_bypass_active_session</span> 直接返回 <span class="mono">resolve_command(cmd) is not None</span>——只要是注册过的 slash 命令一律旁路。<span class="mono">ACTIVE_SESSION_BYPASS_COMMANDS</span> 只是「有专属 Level-2 处理器」的子集;其余命令落到 runner 的 catch-all，回一句「Agent is running,wait or <span class="mono">/stop</span>」而不是被默默丢弃。这层兜底是一串事故堆出来的:<span class="mono">/model</span> <span class="mono">/reasoning</span> <span class="mono">/resume</span> <span class="mono">/undo</span> 等当年都漏过、变成空响应(#5057 #6252 #10370)。所以判据必须是<strong>全集</strong>覆盖，白名单一定会漏掉下一个新加的命令。</p>
 
-<p>第二道守卫内部其实是个<strong>两级结构</strong>:有专属处理器的命令(<span class="mono">_DEDICATED_HANDLERS</span>,即 <span class="mono">ACTIVE_SESSION_BYPASS_COMMANDS</span>)被精确分派到 <span class="mono">_handle_approve_command</span>、<span class="mono">_handle_help_command</span> 这类函数;剩下所有「能解析但没专属处理器」的命令统一落到 catch-all,返回一句礼貌的「<span class="mono">/x</span> 不能中途跑,先 <span class="mono">/stop</span>」。关键在于:catch-all 是<strong>优雅拒绝</strong>而非「中断 + 丢弃」。少了它,这些命令会先<strong>悄悄打断</strong> agent、再被安全网吞掉,用户只看到空响应(#5057 #6252 #10370 正是补这个洞)。两级一起保证:认得的命令要么被正确处理,要么被明确告知,绝不静默吃掉。</p>
+<p>第二道守卫内部其实是个<strong>两级结构</strong>：有专属处理器的命令(<span class="mono">_DEDICATED_HANDLERS</span>，即 <span class="mono">ACTIVE_SESSION_BYPASS_COMMANDS</span>)被精确分派到 <span class="mono">_handle_approve_command</span>、<span class="mono">_handle_help_command</span> 这类函数;剩下所有「能解析但没专属处理器」的命令统一落到 catch-all，返回一句礼貌的「<span class="mono">/x</span> 不能中途跑，先 <span class="mono">/stop</span>」。关键在于:catch-all 是<strong>优雅拒绝</strong>而非「中断 + 丢弃」。少了它，这些命令会先<strong>悄悄打断</strong> agent、再被安全网吞掉，用户只看到空响应(#5057 #6252 #10370 正是补这个洞)。两级一起保证：认得的命令要么被正确处理，要么被明确告知，绝不静默吃掉。</p>
 
 <div class="vflow">
   <div class="step"><span class="num">1</span><span class="sc">消息到达,<span class="mono">session_key</span> 在 <span class="mono">_active_sessions</span> 里吗?(该会话正忙?)</span></div>
   <div class="step"><span class="num">2</span><span class="sc">不忙 → 正常处理;忙 → 取 <span class="mono">cmd = get_command()</span></span></div>
   <div class="step"><span class="num">3</span><span class="sc"><span class="mono">should_bypass_active_session(cmd)</span>?不是命令 → 进 <span class="mono">_pending_messages</span> 排队</span></div>
   <div class="step"><span class="num">4</span><span class="sc">是 <span class="mono">/stop /new /reset</span> → 取消在途任务 + 交接;是 <span class="mono">/approve</span> 等 → 直接内联派发</span></div>
-  <div class="step"><span class="num">5</span><span class="sc">旁路两道守卫,不经 <span class="mono">_process_message_background</span>(避免会话生命周期竞争)</span></div>
+  <div class="step"><span class="num">5</span><span class="sc">旁路两道守卫，不经 <span class="mono">_process_message_background</span>(避免会话生命周期竞争)</span></div>
 </div>
 
 <div class="card collab">
   <div class="tag">🧩 协作机制 · 各组分如何咬合实现「并发安全 + 不破缓存」</div>
-  <div class="collab-sub">① 组件清单(★本章核心,其余跨章节配合)</div>
-  本章核心:<strong>_active_sessions</strong>(busy 状态)、<strong>_pending_messages</strong>(排队)、<strong>_session_tasks</strong>(会话→任务)、<strong>should_bypass_active_session</strong>(旁路判定)、<strong>第二道 runner 守卫</strong>(GATEWAY_KNOWN_COMMANDS 分派)。跨章节配合:消息先被适配器归一化成 <strong>MessageEvent</strong>(第 17 章)才进守卫;旁路保证控制命令不污染对话历史、维持严格角色交替=<strong>不破缓存</strong>(第 6 章);<span class="mono">/stop</span> 的中断会<strong>级联到子代理</strong>(第 13 章委派);<span class="mono">/approve</span> 是危险操作的<strong>人在回路审批</strong>(第 24 章安全)。
+  <div class="collab-sub">① 组件清单(★本章核心，其余跨章节配合)</div>
+  本章核心:<strong>_active_sessions</strong>(busy 状态)、<strong>_pending_messages</strong>(排队)、<strong>_session_tasks</strong>(会话→任务)、<strong>should_bypass_active_session</strong>(旁路判定)、<strong>第二道 runner 守卫</strong>(GATEWAY_KNOWN_COMMANDS 分派)。跨章节配合：消息先被适配器归一化成 <strong>MessageEvent</strong>(第 17 章)才进守卫;旁路保证控制命令不污染对话历史、维持严格角色交替=<strong>不破缓存</strong>(第 6 章);<span class="mono">/stop</span> 的中断会<strong>级联到子代理</strong>(第 13 章委派);<span class="mono">/approve</span> 是危险操作的<strong>人在回路审批</strong>(第 24 章安全)。
   <div class="collab-sub">② 数据流时序</div>
   MessageEvent → 第一道守卫(<span class="mono">session_key in _active_sessions</span>?) → <span class="mono">get_command()</span> + <span class="mono">should_bypass</span> → 旁路(<span class="mono">/stop</span> 取消任务 / <span class="mono">/approve</span> 内联派发)或排队(<span class="mono">_pending_messages</span>) → 第二道守卫(runner 按 <span class="mono">canonical</span> 分派)。
   <div class="collab-sub">③ 关键点</div>
-  两道守卫<strong>都必须</strong>放行控制命令;排队一个控制命令 = 被兜底丢弃(空响应)或死锁(<span class="mono">/approve</span> 等不到);旁路必须走<strong>内联派发</strong>而非 <span class="mono">_process_message_background</span>,后者管会话生命周期、清理会和在跑任务抢。
+  两道守卫<strong>都必须</strong>放行控制命令;排队一个控制命令 = 被兜底丢弃(空响应)或死锁(<span class="mono">/approve</span> 等不到);旁路必须走<strong>内联派发</strong>而非 <span class="mono">_process_message_background</span>，后者管会话生命周期、清理会和在跑任务抢。
 </div>
 
 <div class="card design">
   <div class="tag">🎯 设计取舍 · 本章围绕什么</div>
   主线:<strong>两道守卫拦截消息 + 控制命令旁路 = 并发安全 + 不破缓存</strong>。它主要治两条 LLM 固有约束:
-  <p style="margin:.5rem 0 0"><span class="badge constraint">D·指令=数据</span>——模型分不清「这是给系统的指令」还是「这是对话内容」。网关不靠模型判断,而是用<strong>显式的 <span class="mono">get_command()</span> 解析 + 旁路通道</strong>,把 <span class="mono">/stop</span> <span class="mono">/approve</span> 这类<strong>指令</strong>从消息流里拎出来走控制通道,绝不当成对话<strong>数据</strong>喂给模型。这是 D 在网关层的工程对策。</p>
-  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——并发消息、会话生命周期、中断、审批,全是运维复杂度。两道守卫 + 旁路 + owner-task 映射,把「忙时谁能插队、谁该排队、怎么取消」管得确定、无竞争。</p>
-  <p style="margin:.5rem 0 0">反模式:把所有消息一视同仁排队——<span class="mono">/approve</span> 会死锁(agent 阻塞等审批,审批却在队列里等 agent),<span class="mono">/stop</span> 会丢失,跑到一半的 <span class="mono">/model</span> 变成空响应。</p>
-  <p style="margin:.5rem 0 0">把两道守卫连起来看为什么<strong>缺一不可</strong>:第一道(适配器)只管「忙时谁排队、谁旁路」,放行后命令还得有人接;第二道(runner)按 <span class="mono">canonical</span> 名把它精确分派给 <span class="mono">_handle_approve_command</span> 等专属处理器,并对没有处理器的命令兜底拒绝。两道职责正交——一道决定「<strong>要不要排队</strong>」,一道决定「<strong>派给谁</strong>」。少了第一道,<span class="mono">/approve</span> 进队列死锁;少了第二道,旁路出来的命令无人接、又被 catch-all 当文本丢弃,照样是空响应。</p>
-  <p style="margin:.5rem 0 0">为什么说这层就是第 24 章纵深防御里的「<strong>注入隔离</strong>」:控制通道和数据通道在网关就被<strong>物理分开</strong>——能解析的命令走代码识别 + 旁路,永不进对话历史;只有真正的对话才进 <span class="mono">_pending_messages</span> 喂给模型。这条「指令绝不当数据」的边界既挡注入(伪造指令进不了控制通道),又顺手护住第 6 章缓存与第 7 章角色交替:因为历史里<strong>永远不会</strong>冒出一条被误当用户文本的 <span class="mono">/stop</span>,缓存前缀和严格交替自然就稳了。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">D·指令=数据</span>——模型分不清「这是给系统的指令」还是「这是对话内容」。网关不靠模型判断，而是用<strong>显式的 <span class="mono">get_command()</span> 解析 + 旁路通道</strong>，把 <span class="mono">/stop</span> <span class="mono">/approve</span> 这类<strong>指令</strong>从消息流里拎出来走控制通道，绝不当成对话<strong>数据</strong>喂给模型。这是 D 在网关层的工程对策。</p>
+  <p style="margin:.5rem 0 0"><span class="badge constraint">G·运维</span>——并发消息、会话生命周期、中断、审批，全是运维复杂度。两道守卫 + 旁路 + owner-task 映射，把「忙时谁能插队、谁该排队、怎么取消」管得确定、无竞争。</p>
+  <p style="margin:.5rem 0 0">反模式：把所有消息一视同仁排队——<span class="mono">/approve</span> 会死锁(agent 阻塞等审批，审批却在队列里等 agent),<span class="mono">/stop</span> 会丢失，跑到一半的 <span class="mono">/model</span> 变成空响应。</p>
+  <p style="margin:.5rem 0 0">把两道守卫连起来看为什么<strong>缺一不可</strong>：第一道(适配器)只管「忙时谁排队、谁旁路」，放行后命令还得有人接;第二道(runner)按 <span class="mono">canonical</span> 名把它精确分派给 <span class="mono">_handle_approve_command</span> 等专属处理器，并对没有处理器的命令兜底拒绝。两道职责正交——一道决定「<strong>要不要排队</strong>」，一道决定「<strong>派给谁</strong>」。少了第一道,<span class="mono">/approve</span> 进队列死锁;少了第二道，旁路出来的命令无人接、又被 catch-all 当文本丢弃，照样是空响应。</p>
+  <p style="margin:.5rem 0 0">为什么说这层就是第 24 章纵深防御里的「<strong>注入隔离</strong>」：控制通道和数据通道在网关就被<strong>物理分开</strong>——能解析的命令走代码识别 + 旁路，永不进对话历史;只有真正的对话才进 <span class="mono">_pending_messages</span> 喂给模型。这条「指令绝不当数据」的边界既挡注入(伪造指令进不了控制通道)，又顺手护住第 6 章缓存与第 7 章角色交替：因为历史里<strong>永远不会</strong>冒出一条被误当用户文本的 <span class="mono">/stop</span>，缓存前缀和严格交替自然就稳了。</p>
 </div>
 
 <div class="figure">
-<svg viewBox="0 0 680 400" role="img" aria-label="实例图:一条 /approve 在 agent 阻塞于 threading.Event.wait 时如何穿过两道守卫并 set 那个 Event。① agent 阻塞:_ApprovalEntry.event 等于 threading.Event,entry.event.wait 暂停,asyncio 中断叫不醒线程 Event;② 守卫① 适配器层 base.py,session_key in _active_sessions 为真,cmd 等于 event.get_command 得 approve;③ 旁路判定 commands.py,should_bypass_active_session approve 为真,且 cmd 不属于 stop new reset 集合,故内联派发,禁用 _process_message_background;④ 守卫② runner run.py,/approve 绕过 interrupt,直达 _handle_approve_command;⑤ 解锁 approval.py,resolve_gateway_approval 把 entry.result 设为 choice 并 entry.event.set,① 的 wait 返回 agent 续跑;⑥ 反事实红框:若当普通消息排进 _pending_messages,agent 永远阻塞,/approve 进不来形成死锁。">
+<svg viewBox="0 0 680 400" role="img" aria-label="实例图：一条 /approve 在 agent 阻塞于 threading.Event.wait 时如何穿过两道守卫并 set 那个 Event。① agent 阻塞:_ApprovalEntry.event 等于 threading.Event,entry.event.wait 暂停,asyncio 中断叫不醒线程 Event;② 守卫① 适配器层 base.py,session_key in _active_sessions 为真,cmd 等于 event.get_command 得 approve;③ 旁路判定 commands.py,should_bypass_active_session approve 为真，且 cmd 不属于 stop new reset 集合，故内联派发，禁用 _process_message_background;④ 守卫② runner run.py,/approve 绕过 interrupt，直达 _handle_approve_command;⑤ 解锁 approval.py,resolve_gateway_approval 把 entry.result 设为 choice 并 entry.event.set,① 的 wait 返回 agent 续跑;⑥ 反事实红框：若当普通消息排进 _pending_messages,agent 永远阻塞,/approve 进不来形成死锁。">
   <text x="20" y="25" font-size="13.5" font-weight="700" fill="var(--ink)">实例:/approve 穿两道守卫 → set 那个 Event</text>
   <text x="20" y="44" font-size="10" fill="var(--muted)">agent 阻塞在 threading.Event.wait(),asyncio 中断叫不醒它</text>
   <text x="644" y="33" text-anchor="middle" font-size="22">🔓</text>
@@ -618,22 +618,22 @@ self._session_tasks: Dict[str, asyncio.Task] = {}</pre>
   <path d="M434,241 C360,241 160,250 160,170 L160,150 M156,158 L160,150 L164,158" stroke="var(--accent)" stroke-width="1.6" fill="none" stroke-dasharray="3 3"/>
 
   <rect x="10" y="294" width="660" height="44" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
-  <text x="20" y="312" font-size="10" font-weight="700" fill="var(--red)">⑥ 反事实:若当普通消息排队进 _pending_messages</text>
+  <text x="20" y="312" font-size="10" font-weight="700" fill="var(--red)">⑥ 反事实：若当普通消息排队进 _pending_messages</text>
   <text x="20" y="329" font-size="9" fill="var(--red)">agent 永远阻塞在 wait();/approve 永远进不来 → 死锁(且兜底会把命令文本丢弃成空响应)。</text>
 
-  <text x="20" y="360" font-size="9.5" fill="var(--muted)">读这张图:审批命令必须同时旁路两道守卫并直达 runner,才能 set 那个线程 Event,把阻塞的 agent 解锁。</text>
+  <text x="20" y="360" font-size="9.5" fill="var(--muted)">读这张图：审批命令必须同时旁路两道守卫并直达 runner，才能 set 那个线程 Event，把阻塞的 agent 解锁。</text>
 </svg>
-<div class="fig-cap"><b>实例:一条 /approve 的真实解锁链</b>:agent 阻塞在 <span class="mono">_ApprovalEntry.event=threading.Event()</span> 的 <span class="mono">.wait()</span>(asyncio 中断叫不醒线程 Event)。① 阻塞;② <b>守卫①</b>(<span class="mono">base.py:4262</span>)<span class="mono">session_key in _active_sessions</span>→<span class="mono">cmd=&quot;approve&quot;</span>;③ <span class="mono">should_bypass_active_session(&quot;approve&quot;)→True</span> 且 <span class="mono">∉{stop,new,reset}</span>→<b>内联派发</b>(禁 <span class="mono">_process_message_background</span>);④ <b>守卫②</b> runner(<span class="mono">run.py:7764</span>)<span class="mono">/approve</span> 绕过 <span class="mono">interrupt</span>→<span class="mono">_handle_approve_command</span>;⑤ <span class="mono">resolve_gateway_approval</span>→<span class="mono">entry.event.set()</span>→<span class="mono">wait()</span> 返回、agent 续跑;⑥ 反事实:排队即死锁。这正解释了「审批必须同时旁路两道守卫」。</div>
+<div class="fig-cap"><b>实例：一条 /approve 的真实解锁链</b>:agent 阻塞在 <span class="mono">_ApprovalEntry.event=threading.Event()</span> 的 <span class="mono">.wait()</span>(asyncio 中断叫不醒线程 Event)。① 阻塞;② <b>守卫①</b>(<span class="mono">base.py:4262</span>)<span class="mono">session_key in _active_sessions</span>→<span class="mono">cmd=&quot;approve&quot;</span>;③ <span class="mono">should_bypass_active_session(&quot;approve&quot;)→True</span> 且 <span class="mono">∉{stop,new,reset}</span>→<b>内联派发</b>(禁 <span class="mono">_process_message_background</span>);④ <b>守卫②</b> runner(<span class="mono">run.py:7764</span>)<span class="mono">/approve</span> 绕过 <span class="mono">interrupt</span>→<span class="mono">_handle_approve_command</span>;⑤ <span class="mono">resolve_gateway_approval</span>→<span class="mono">entry.event.set()</span>→<span class="mono">wait()</span> 返回、agent 续跑;⑥ 反事实：排队即死锁。这正解释了「审批必须同时旁路两道守卫」。</div>
 </div>
 
 <div class="card key">
   <div class="tag">📌 本课要点</div>
   <ul>
-    <li><strong>两道守卫</strong>:适配器层(busy 排队 <span class="mono">_pending_messages</span>)+ 网关 runner 层(slash 命令分派)。控制命令必须<strong>同时旁路两道</strong>。</li>
+    <li><strong>两道守卫</strong>：适配器层(busy 排队 <span class="mono">_pending_messages</span>)+ 网关 runner 层(slash 命令分派)。控制命令必须<strong>同时旁路两道</strong>。</li>
     <li><strong>旁路两类</strong>:<span class="mono">/stop /new /reset</span> 取消在途任务;<span class="mono">/approve /deny /status</span> 等直接内联派发(不取消)。</li>
-    <li><strong>排队=出事</strong>:控制命令进队列会被兜底<strong>丢弃</strong>(zero-char 响应)或<strong>死锁</strong>(<span class="mono">/approve</span>)。</li>
-    <li><strong>不破缓存</strong>:控制命令走控制通道、不混进对话历史,维持严格角色交替(第 7 章)。</li>
-    <li><strong>避开竞争</strong>:旁路用内联派发,<strong>不走</strong> <span class="mono">_process_message_background</span>(它和会话生命周期清理抢)。</li>
+    <li><strong>排队=出事</strong>：控制命令进队列会被兜底<strong>丢弃</strong>(zero-char 响应)或<strong>死锁</strong>(<span class="mono">/approve</span>)。</li>
+    <li><strong>不破缓存</strong>：控制命令走控制通道、不混进对话历史，维持严格角色交替(第 7 章)。</li>
+    <li><strong>避开竞争</strong>：旁路用内联派发,<strong>不走</strong> <span class="mono">_process_message_background</span>(它和会话生命周期清理抢)。</li>
   </ul>
 </div>
 <div class="selftest">
