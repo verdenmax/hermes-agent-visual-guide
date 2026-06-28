@@ -43,6 +43,7 @@ jobs:
           cp index.html _site/
           cp -r lessons _site/
           cp print_zh.html print_en.html _site/
+          cp og.png _site/
           # Skip Jekyll so files/dirs are served verbatim.
           touch _site/.nojekyll
 

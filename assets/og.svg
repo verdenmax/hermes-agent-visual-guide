@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#161b22" stop-opacity="0"/>
+      <stop offset="1" stop-color="#2e2510" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#0e1116"/>
+  <rect width="1200" height="630" fill="url(#g)"/>
+
+  <!-- top + bottom gold rules -->
+  <rect x="0" y="0" width="1200" height="6" fill="#e3c05a"/>
+  <rect x="80" y="556" width="1040" height="2" fill="#e3c05a" opacity="0.35"/>
+
+  <!-- narrow-waist hourglass mark (brand motif) -->
+  <g transform="translate(978,150)" opacity="0.92">
+    <path d="M0,0 L150,0 L92,90 L150,180 L0,180 L58,90 Z" fill="none" stroke="#e3c05a" stroke-width="3"/>
+    <line x1="58" y1="90" x2="92" y2="90" stroke="#e3c05a" stroke-width="3"/>
+    <circle cx="75" cy="90" r="5" fill="#e3c05a"/>
+    <text x="75" y="214" text-anchor="middle" font-size="17" fill="#8a93a0">narrow waist</text>
+  </g>
+
+  <!-- eyebrow -->
+  <text x="80" y="132" font-size="26" font-weight="600" fill="#e3c05a" letter-spacing="2">HERMES AGENT · 设计图解 / VISUAL GUIDE</text>
+
+  <!-- main title -->
+  <text x="78" y="232" font-size="76" font-weight="800" fill="#e6edf3" letter-spacing="-1">用图解理解</text>
+  <text x="78" y="322" font-size="76" font-weight="800" fill="#e6edf3" letter-spacing="-1">每个<tspan fill="#e3c05a">设计决策</tspan></text>
+  <text x="80" y="372" font-size="30" font-weight="500" fill="#aeb6c0">Understand every hermes-agent design decision, visually</text>
+
+  <!-- three design-line chips -->
+  <g font-size="25" font-weight="700">
+    <rect x="80" y="416" width="206" height="56" rx="28" fill="#161b22" stroke="#e3c05a" stroke-width="1.6"/>
+    <text x="183" y="453" text-anchor="middle" fill="#f0d488">缓存神圣</text>
+    <rect x="304" y="416" width="206" height="56" rx="28" fill="#161b22" stroke="#e3c05a" stroke-width="1.6"/>
+    <text x="407" y="453" text-anchor="middle" fill="#f0d488">自我进化</text>
+    <rect x="528" y="416" width="150" height="56" rx="28" fill="#161b22" stroke="#e3c05a" stroke-width="1.6"/>
+    <text x="603" y="453" text-anchor="middle" fill="#f0d488">窄腰</text>
+  </g>
+
+  <!-- footer stats + url -->
+  <text x="80" y="600" font-size="25" font-weight="600" fill="#c9d1d9">28 章 · 中英双语 · 230+ 张手绘图 + 真实源码</text>
+  <text x="1120" y="600" text-anchor="end" font-size="22" fill="#8a93a0">verdenmax.github.io/hermes-agent-visual-guide</text>
+</svg>

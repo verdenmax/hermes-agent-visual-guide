@@ -29,6 +29,7 @@ def head_meta(title, description, og_type="website"):
     """SEO / social meta tags + favicon for a page <head>."""
     t = esc(title)
     d = esc(description)
+    og_image = "https://verdenmax.github.io/hermes-agent-visual-guide/og.png"
     return (
         f'<meta name="description" content="{d}">\n'
         f'<meta name="theme-color" content="#c2630e">\n'
@@ -37,9 +38,13 @@ def head_meta(title, description, og_type="website"):
         f'<meta property="og:site_name" content="Hermes Agent 设计图解">\n'
         f'<meta property="og:title" content="{t}">\n'
         f'<meta property="og:description" content="{d}">\n'
-        f'<meta name="twitter:card" content="summary">\n'
+        f'<meta property="og:image" content="{og_image}">\n'
+        f'<meta property="og:image:width" content="1200">\n'
+        f'<meta property="og:image:height" content="630">\n'
+        f'<meta name="twitter:card" content="summary_large_image">\n'
         f'<meta name="twitter:title" content="{t}">\n'
-        f'<meta name="twitter:description" content="{d}">'
+        f'<meta name="twitter:description" content="{d}">\n'
+        f'<meta name="twitter:image" content="{og_image}">'
     )
 
 
